@@ -3,42 +3,51 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { getServerUser } from "@/lib/supabase/auth-server";
+import { requireRole, type Papel } from "@/lib/api/require-role";
+
+// Verba e limite de saldo são o trabalho do gestor de tráfego, não só da gestão.
+const PODE_VERBA: Papel[] = ["admin", "manager", "traffic"];
+
+// Configuração de cobrança/verba de uma conta de anúncio (modal de /traffic/budgets).
+// O limite de saldo baixo é client_alert_config.verba_minima — o MESMO que o alerta do servidor lê.
+// As antigas budget_alert_rules (intervalo, máx. avisos, canais) não eram lidas por nenhum job e saíram.
 
 // ── GET /api/traffic/budget-rules?adAccountId=<uuid> ─────────
-// Retorna regras + dados da conta para o modal de configuração.
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const adAccountId = searchParams.get("adAccountId");
+  const gate = await requireRole(req, PODE_VERBA);
+  if (gate instanceof NextResponse) return gate;
+
+  const adAccountId = new URL(req.url).searchParams.get("adAccountId");
   if (!adAccountId) {
     return NextResponse.json({ error: "adAccountId obrigatório" }, { status: 400 });
   }
 
-  const { data: rules, error } = await supabaseAdmin
-    .from("budget_alert_rules")
-    .select("*")
-    .eq("ad_account_id", adAccountId)
-    .order("severity"); // critical antes de warning (c < w)
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  const { data: account } = await supabaseAdmin
+  const { data: account, error } = await supabaseAdmin
     .from("ad_accounts")
-    .select("id, meta_account_id, account_name, is_prepaid, spend_cap, last_balance, account_status")
+    .select("id, client_id, meta_account_id, account_name, is_prepaid, spend_cap, last_balance, account_status")
     .eq("id", adAccountId)
-    .single();
+    .maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!account) return NextResponse.json({ error: "Conta não encontrada" }, { status: 404 });
 
-  return NextResponse.json({ rules: rules ?? [], account });
+  let verbaMinima: number | null = null;
+  if (account.client_id) {
+    const { data: cfg, error: cErr } = await supabaseAdmin
+      .from("client_alert_config").select("verba_minima").eq("client_id", account.client_id).maybeSingle();
+    if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 });
+    verbaMinima = cfg?.verba_minima != null ? Number(cfg.verba_minima) : null;
+  }
+
+  return NextResponse.json({ account, verbaMinima });
 }
 
 // ── POST /api/traffic/budget-rules ───────────────────────────
-// Upsert: cria ou substitui o conjunto de regras de uma conta.
-// Body: { adAccountId, isPrepaid?, spendCap?, rules: [...], phone?, pixKey? }
+// Body: { adAccountId, isPrepaid?, spendCap?, monthlyBudget?, dailyBudget?, paymentMethod?, verbaMinima?, phone?, pixKey? }
 
 export async function POST(req: NextRequest) {
-  const user = await getServerUser(req);
-  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const gate = await requireRole(req, PODE_VERBA);
+  if (gate instanceof NextResponse) return gate;
 
   let body: {
     adAccountId: string;
@@ -47,14 +56,7 @@ export async function POST(req: NextRequest) {
     monthlyBudget?: number | null;
     dailyBudget?: number | null;
     paymentMethod?: string | null;
-    rules: {
-      severity: "warning" | "critical";
-      threshold_value: number;
-      repeat_interval_hours: number;
-      max_notifications: number;
-      channels: string[];
-      is_active: boolean;
-    }[];
+    verbaMinima?: number | null;
     phone?: string | null;
     pixKey?: string | null;
   };
@@ -65,80 +67,47 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
 
-  const { adAccountId, isPrepaid, spendCap, monthlyBudget, dailyBudget, paymentMethod, rules, phone, pixKey } = body;
+  const { adAccountId, isPrepaid, spendCap, monthlyBudget, dailyBudget, paymentMethod, verbaMinima, phone, pixKey } = body;
   if (!adAccountId) return NextResponse.json({ error: "adAccountId obrigatório" }, { status: 400 });
-
-  // ── Validações ───────────────────────────────────────────
-  const warningRule = rules.find((r) => r.severity === "warning");
-  const criticalRule = rules.find((r) => r.severity === "critical");
-
-  if (warningRule && criticalRule) {
-    if (criticalRule.threshold_value >= warningRule.threshold_value) {
-      return NextResponse.json(
-        { error: "Threshold crítico deve ser menor que o de atenção" },
-        { status: 422 },
-      );
-    }
+  if (verbaMinima != null && (!Number.isFinite(verbaMinima) || verbaMinima < 0)) {
+    return NextResponse.json({ error: "Limite de saldo inválido" }, { status: 422 });
   }
 
-  for (const rule of rules) {
-    if (rule.channels.length === 0) {
-      return NextResponse.json({ error: "Ao menos 1 canal de notificação obrigatório" }, { status: 422 });
-    }
-    if (rule.repeat_interval_hours < 1 || rule.repeat_interval_hours > 24) {
-      return NextResponse.json({ error: "Intervalo entre avisos: 1–24h" }, { status: 422 });
-    }
-    if (rule.max_notifications < 1 || rule.max_notifications > 20) {
-      return NextResponse.json({ error: "Máximo de avisos: 1–20" }, { status: 422 });
-    }
-  }
+  const { data: acct, error: aErr } = await supabaseAdmin
+    .from("ad_accounts").select("client_id").eq("id", adAccountId).maybeSingle();
+  if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 });
+  if (!acct) return NextResponse.json({ error: "Conta não encontrada" }, { status: 404 });
 
-  // ── Atualizar ad_account (tipo de cobrança + spend_cap) ──
+  // ── ad_account (tipo de cobrança + spend_cap + verba) ──
   const accountUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (isPrepaid !== undefined) accountUpdate.is_prepaid = isPrepaid;
   if (spendCap !== undefined) accountUpdate.spend_cap = spendCap;
   if (monthlyBudget !== undefined) accountUpdate.monthly_budget = monthlyBudget;
-  await supabaseAdmin.from("ad_accounts").update(accountUpdate).eq("id", adAccountId);
+  const { error: upAccErr } = await supabaseAdmin.from("ad_accounts").update(accountUpdate).eq("id", adAccountId);
+  if (upAccErr) return NextResponse.json({ error: upAccErr.message }, { status: 500 });
 
-  // ── Atualizar dados do cliente (contato + verba sincronizada) ──
-  if (phone !== undefined || pixKey !== undefined || monthlyBudget !== undefined || dailyBudget !== undefined || paymentMethod !== undefined) {
-    const { data: acct } = await supabaseAdmin
-      .from("ad_accounts")
-      .select("client_id")
-      .eq("id", adAccountId)
-      .single();
-    if (acct?.client_id) {
-      const clientUpdate: Record<string, unknown> = {};
-      if (phone !== undefined) clientUpdate.client_finance_phone = phone;
-      if (pixKey !== undefined) clientUpdate.client_pix_key = pixKey;
-      // Sincroniza a verba/pagamento em clients (exibição + cross-device, igual ao Controle de Investimento)
-      if (monthlyBudget !== undefined) clientUpdate.monthly_budget = monthlyBudget;
-      if (dailyBudget !== undefined) clientUpdate.daily_budget = dailyBudget;
-      if (paymentMethod !== undefined) clientUpdate.payment_method = paymentMethod;
-      if (Object.keys(clientUpdate).length > 0) {
-        await supabaseAdmin.from("clients").update(clientUpdate).eq("id", acct.client_id);
-      }
+  if (acct.client_id) {
+    // ── cliente (contato + verba sincronizada) ──
+    const clientUpdate: Record<string, unknown> = {};
+    if (phone !== undefined) clientUpdate.client_finance_phone = phone;
+    if (pixKey !== undefined) clientUpdate.client_pix_key = pixKey;
+    if (monthlyBudget !== undefined) clientUpdate.monthly_budget = monthlyBudget;
+    if (dailyBudget !== undefined) clientUpdate.daily_budget = dailyBudget;
+    if (paymentMethod !== undefined) clientUpdate.payment_method = paymentMethod;
+    if (Object.keys(clientUpdate).length > 0) {
+      const { error: cErr } = await supabaseAdmin.from("clients").update(clientUpdate).eq("id", acct.client_id);
+      if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 });
     }
-  }
 
-  // ── Upsert regras (delete antigas, insert novas) ─────────
-  await supabaseAdmin
-    .from("budget_alert_rules")
-    .delete()
-    .eq("ad_account_id", adAccountId);
-
-  if (rules.length > 0) {
-    const toInsert = rules.map((r) => ({
-      ad_account_id:          adAccountId,
-      severity:               r.severity,
-      threshold_value:        r.threshold_value,
-      repeat_interval_hours:  r.repeat_interval_hours,
-      max_notifications:      r.max_notifications,
-      channels:               r.channels,
-      is_active:              r.is_active,
-    }));
-    const { error } = await supabaseAdmin.from("budget_alert_rules").insert(toInsert);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    // ── limite de saldo: upsert preserva os toggles; 0 vira null (= herda o % da verba) ──
+    if (verbaMinima !== undefined) {
+      const { error: vErr } = await supabaseAdmin.from("client_alert_config").upsert({
+        client_id: acct.client_id,
+        verba_minima: verbaMinima != null && verbaMinima > 0 ? verbaMinima : null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "client_id" });
+      if (vErr) return NextResponse.json({ error: vErr.message }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ ok: true });

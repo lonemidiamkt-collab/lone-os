@@ -17,15 +17,25 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await req.json().catch(() => null);
-  const id = body?.id as string | undefined;
+  const idBody = body?.id as string | undefined;
+  const codigo = (body?.codigo as string | undefined)?.trim();
   const acao = body?.acao as string | undefined;
   const ajuste = (body?.ajuste as string | undefined)?.trim();
-  if (!id || (acao !== "confirmar" && acao !== "descartar")) {
-    return NextResponse.json({ error: "id e acao (confirmar|descartar) obrigatórios" }, { status: 400 });
+  if ((!idBody && !codigo) || (acao !== "confirmar" && acao !== "descartar")) {
+    return NextResponse.json({ error: "id (ou codigo) e acao (confirmar|descartar) obrigatórios" }, { status: 400 });
   }
 
-  const { data: d } = await supabaseAdmin.from("cs_demandas").select("*").eq("id", id).maybeSingle();
-  if (!d) return NextResponse.json({ error: "demanda não encontrada" }, { status: 404 });
+  // O feed de prioridades só conhece o código curto (o mesmo do "ok <código>" no grupo); código só é
+  // único entre as pendentes, então a busca por código filtra status pendente.
+  const busca = supabaseAdmin.from("cs_demandas").select("*");
+  const { data: d, error: buscaErr } = idBody
+    ? await busca.eq("id", idBody).maybeSingle()
+    : await busca.eq("codigo", codigo!).eq("status", "pendente").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (buscaErr) return NextResponse.json({ error: "Não consegui ler a demanda. Tente de novo." }, { status: 500 });
+  if (!d) {
+    return NextResponse.json({ error: idBody ? "demanda não encontrada" : "Essa demanda já foi decidida ou não existe mais." }, { status: 404 });
+  }
+  const id = d.id as string;
   // Idempotente: se já foi decidida (no zap ou por outra pessoa), não refaz nem duplica card.
   if (d.status !== "pendente") return NextResponse.json({ ok: true, jaDecidida: d.status as string });
 

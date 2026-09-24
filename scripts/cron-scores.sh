@@ -1,5 +1,7 @@
 #!/bin/bash
-# Grava a saúde de TODOS os clientes com o breakdown (componentes + sinais do Loninho).
+# Grava a saúde dos clientes ativos (não pausados, não rascunho) com o breakdown — 100 = saudável.
+# É o ÚNICO escritor de client_health_scores e de clients.current_health_* (o compute-health das
+# 6h foi desligado: gravava as mesmas linhas com a escala invertida).
 #
 # A rota /api/scores não fica sob /api/system, então tem script próprio em vez do cron-call.sh.
 # Cron: `20 9 * * *` (6h20 BRT) — depois do ig-snapshots das 6h, que atualiza os posts que

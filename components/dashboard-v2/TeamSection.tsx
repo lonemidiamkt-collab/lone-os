@@ -70,10 +70,11 @@ const TeamSection = React.forwardRef<HTMLDivElement, TeamSectionProps>(
                 name={member.name}
                 role={`${member.clientCount} cliente${member.clientCount !== 1 ? "s" : ""}`}
                 initials={initials(member.name)}
+                // Neutro: o board não registra todo post real, então pouco "publicado" não é culpa da pessoa.
                 metric={{
-                  label: "publicados",
+                  label: "publicados no mês",
                   value: String(member.published),
-                  tone: member.published >= 5 ? "default" : "warning",
+                  tone: "default",
                 }}
                 last={i === socialTeam.length - 1}
               />

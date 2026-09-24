@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import EstiloPerfis from "@/components/agente/EstiloPerfis";
 import FeedPrioridades from "@/components/agente/FeedPrioridades";
 
@@ -15,34 +15,10 @@ interface DashData {
     recorrentesCliente: { cliente: string; recusas: number }[];
   };
   aprendizado: { cliente: string; texto: string; escopo: string; origem: string; created_at: string }[];
-  pendentes: Pendente[];
   recentes: { cliente: string; tipo: string; status: string; resumo: string; created_at: string }[];
   onboardings: { cliente_nome: string; status: string; created_at: string }[];
   roteiros: { cliente_nome: string; scorecard: number | null; created_at: string }[];
 }
-
-interface Pendente {
-  id: string;
-  cliente: string;
-  tipo: string;
-  urgencia: string;
-  resumo: string;
-  responsavel: string | null;
-  created_at: string;
-}
-
-const FUNCOES = [
-  ["👂", "Ouve os grupos", "Texto, áudio (transcreve) e imagem/print (reconhece o conteúdo)"],
-  ["🧠", "Classifica demandas", "4 filtros (origem/papel/contexto/coerência) + autoanálise; silêncio > falso-positivo"],
-  ["📋", "Sugere e cria cards", "Posta no grupo; você responde ok / não / ajustar"],
-  ["🎬", "Gera roteiros", "On-demand ('Lone, roteiro pro X') + proativo na segunda, em PDF"],
-  ["🚪", "Onboarding de cliente novo", "Conduz as perguntas no grupo do cliente e monta o briefing"],
-  ["🔴", "Escala reclamações", "Reclamação vai pra gestão (Julio/Roberto), não pro social"],
-  ["🩺", "Vigia saúde / churn", "Avisa clientes em risco toda segunda"],
-  ["📊", "Mede a própria acurácia", "Relatório de autoavaliação semanal"],
-  ["🌴", "Respeita férias", "Não roteia (avisa) demanda pra quem está fora"],
-  ["📚", "Aprende com você", "Suas recusas viram aprendizado e ele evita repetir"],
-] as const;
 
 function fmtData(iso: string): string {
   const d = new Date(iso);
@@ -57,7 +33,7 @@ function Tile({ label, value, sub, tone }: { label: string; value: string | numb
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={`mt-1 text-2xl font-bold ${cls}`}>{value}</div>
+      <div className={`mt-1 text-lone-hero tracking-tight ${cls}`}>{value}</div>
       {sub && <div className="mt-0.5 text-[11px] text-muted-foreground">{sub}</div>}
     </div>
   );
@@ -66,43 +42,19 @@ function Tile({ label, value, sub, tone }: { label: string; value: string | numb
 export default function AgentePage() {
   const [data, setData] = useState<DashData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busca, setBusca] = useState("");
-  const [pendentes, setPendentes] = useState<Pendente[]>([]);
-  const [busy, setBusy] = useState<string | null>(null); // id da demanda sendo decidida
   const [erro, setErro] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
 
   useEffect(() => {
-    authedFetch("/api/cs/dashboard")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: DashData | null) => {
-        setData(d);
-        setPendentes(d?.pendentes ?? []);
-      })
-      .finally(() => setLoading(false));
+    chamar<DashData>("/api/cs/dashboard").then((r) => {
+      if (r.ok) setData(r.data);
+      else setErro(r.erro);
+      setLoading(false);
+    });
   }, []);
 
-  // Decide uma pendência PELA PLATAFORMA (espelha o "ok/não" do WhatsApp): cria o card ou descarta,
-  // e some da lista na hora (otimista). O agente avisa o grupo interno pra manter os dois lados juntos.
-  async function decidir(id: string, acao: "confirmar" | "descartar") {
-    setBusy(id);
-    setErro(null);
-    try {
-      const r = await authedFetch("/api/cs/decide", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, acao }),
-      });
-      if (r.ok) setPendentes((prev) => prev.filter((p) => p.id !== id));
-      else setErro("Não consegui registrar — tenta de novo.");
-    } catch {
-      setErro("Falha de conexão — tenta de novo.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
   if (loading) return <div className="p-8 text-sm text-muted-foreground">Carregando o agente…</div>;
-  if (!data?.ok) return <div className="p-8 text-sm text-destructive">Não consegui carregar o painel do agente.</div>;
+  if (!data?.ok) return <div className="p-8 text-sm text-destructive">Não consegui carregar o painel do agente{erro ? `: ${erro}` : "."}</div>;
 
   const { config, acuracia: a, aprendizado, recentes } = data;
   const q = busca.trim().toLowerCase();
@@ -114,11 +66,11 @@ export default function AgentePage() {
     <div className="mx-auto max-w-6xl space-y-8 p-6">
       {/* Header */}
       <header>
-        <h1 className="text-2xl font-bold text-foreground">🤖 Agente Lone</h1>
+        <h1 className="text-lone-h1 tracking-tight text-foreground">Agente Lone</h1>
         <p className="text-sm text-muted-foreground">Visão geral, aprendizado e onde melhorar.</p>
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
           <span className={`rounded-full px-2.5 py-1 ${config.modoTeste ? "bg-lone-warning-bg text-lone-warning" : "bg-lone-success-bg text-lone-success"}`}>
-            {config.modoTeste ? "🧪 Modo teste" : "🟢 Produção"}
+            {config.modoTeste ? "Modo teste" : "Produção"}
           </span>
           <span className={`rounded-full px-2.5 py-1 ${config.iaOk ? "bg-lone-success-bg text-lone-success" : "bg-destructive/10 text-destructive"}`}>
             IA {config.iaOk ? "ok" : "off"}
@@ -129,45 +81,6 @@ export default function AgentePage() {
 
       {/* Feed de prioridades (Fase 1): uma lista só, de todas as fontes, com evidência e decisão. */}
       <FeedPrioridades />
-
-      {/* Pendentes — precisam do ok/não da equipe. Decidir aqui espelha o "ok" do WhatsApp. */}
-      {pendentes.length > 0 && (
-        <section className="rounded-xl border border-lone-warning-border bg-lone-warning-bg p-5">
-          <div className="mb-1 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-foreground">⏳ Esperando você ({pendentes.length})</h2>
-            {erro && <span className="text-xs text-destructive">{erro}</span>}
-          </div>
-          <p className="mb-3 text-xs text-muted-foreground">Sugestões que o agente captou e ainda não viraram card. Criar aqui é o mesmo que responder <span className="font-medium">ok</span> no grupo.</p>
-          <div className="space-y-2">
-            {pendentes.map((p) => (
-              <div key={p.id} className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-medium text-foreground">{p.cliente}</span>
-                    {p.urgencia === "alta" && <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] text-destructive">urgente</span>}
-                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{p.tipo}</span>
-                  </div>
-                  <div className="mt-0.5 truncate text-xs text-muted-foreground">{p.resumo}{p.responsavel ? ` · ${p.responsavel}` : ""} · <span className="text-[10px]">{fmtData(p.created_at)}</span></div>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <button
-                    onClick={() => decidir(p.id, "confirmar")}
-                    disabled={busy === p.id}
-                    className="rounded-lg bg-lone-success px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90 disabled:opacity-50">
-                    {busy === p.id ? "…" : "Criar card"}
-                  </button>
-                  <button
-                    onClick={() => decidir(p.id, "descartar")}
-                    disabled={busy === p.id}
-                    className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted disabled:opacity-50">
-                    Descartar
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* Acurácia */}
       <section>
@@ -183,9 +96,9 @@ export default function AgentePage() {
 
       {/* Áreas de melhoria */}
       <section className="rounded-xl border border-border bg-card p-5">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">⚠️ Áreas de melhoria (erros que se repetem)</h2>
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Áreas de melhoria (erros que se repetem)</h2>
         {a.recorrentesTipo.length === 0 && a.recorrentesCliente.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum erro recorrente — recuse ("não") o que estiver errado pra eu aprender. 🎯</p>
+          <p className="text-sm text-muted-foreground">Nenhum erro recorrente — recuse ("não") o que estiver errado pra eu aprender.</p>
         ) : (
           <div className="space-y-1.5 text-sm">
             {a.recorrentesTipo.map((r) => (
@@ -202,7 +115,7 @@ export default function AgentePage() {
         {/* Aprendizado */}
         <section className="rounded-xl border border-border bg-card p-5">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-foreground">📚 O que o agente aprendeu</h2>
+            <h2 className="text-sm font-semibold text-foreground">O que o agente aprendeu</h2>
             <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="filtrar…"
               className="w-32 rounded-lg border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none" />
           </div>
@@ -222,7 +135,7 @@ export default function AgentePage() {
 
         {/* Atividade recente */}
         <section className="rounded-xl border border-border bg-card p-5">
-          <h2 className="mb-3 text-sm font-semibold text-foreground">🕑 Demandas recentes</h2>
+          <h2 className="mb-3 text-sm font-semibold text-foreground">Demandas recentes</h2>
           {recentes.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sem demandas recentes.</p>
           ) : (
@@ -244,18 +157,6 @@ export default function AgentePage() {
       {/* Estilo de comunicação aprendido (passo 2 — revisar antes de ligar no agente) */}
       <EstiloPerfis />
 
-      {/* Funções */}
-      <section>
-        <h2 className="mb-3 text-sm font-semibold text-foreground">🛠️ O que o agente faz</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {FUNCOES.map(([ic, t, d]) => (
-            <div key={t} className="flex gap-3 rounded-xl border border-border bg-card p-3">
-              <span className="text-lg">{ic}</span>
-              <div><div className="text-sm font-medium text-foreground">{t}</div><div className="text-xs text-muted-foreground">{d}</div></div>
-            </div>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }

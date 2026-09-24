@@ -7,13 +7,16 @@ import {
   Eye, Bell,
   CalendarClock, History, ChevronDown,
 } from "lucide-react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { toast } from "sonner";
+import { chamar } from "@/lib/api/chamar";
+import { ehDoQuadro } from "@/lib/design/dono";
+import { useClientsStore } from "@/stores/useClientsStore";
 import EmptyState from "@/components/ui/EmptyState";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
-import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs } from "@/lib/utils";
+import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, todaySP, spDateStr } from "@/lib/utils";
 import Link from "next/link";
 import type { Task, ContentCard, DesignRequest } from "@/lib/types";
 import SignedImage from "@/components/shared/SignedImage";
@@ -24,6 +27,8 @@ export default function MyWorkPage() {
   const tasks = useOperationalStore((s) => s.tasks);
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
+  const clients = useClientsStore((s) => s.clients);
+  const clientesCarregados = useClientsStore((s) => s.initialized);
   const notifications = useNotificationsStore((s) => s.notifications);
   const markNotificationRead = useNotificationsStore((s) => s.markRead);
   const { role, currentUser } = useRole();
@@ -40,25 +45,30 @@ export default function MyWorkPage() {
   }
   const [historico, setHistorico] = useState<Passada[]>([]);
   const [verHistorico, setVerHistorico] = useState(false);
+  const [erroReunioes, setErroReunioes] = useState<string | null>(null);
 
   useEffect(() => {
     let vivo = true;
     // Este mês e o próximo: uma reunião marcada dia 20 para o dia 2 do mês seguinte precisa
     // aparecer, senão some justamente na virada, quando é mais fácil esquecer dela.
-    const hoje = new Date();
+    // Mês de São Paulo: na última noite do mês o relógio UTC já está no mês seguinte.
+    const [ano, mes] = todaySP().split("-").map(Number);
     const meses = [0, 1].map((i) => {
-      const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
+      const d = new Date(ano, mes - 1 + i, 1);
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     });
-    Promise.all(meses.map((m) => authedFetch(`/api/reunioes?mes=${m}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)))
-      .then((rs) => {
+    type RespReunioes = { reunioes?: unknown[]; historico?: Passada[] };
+    Promise.all(meses.map((m) => chamar<RespReunioes>(`/api/reunioes?mes=${m}`)))
+      .then((respostas) => {
         if (!vivo) return;
-        const todas = rs.flatMap((j) => j?.reunioes ?? [])
-          .filter((x: { estado: string; quando: string | null }) => x.estado === "agendada" && x.quando)
-          .filter((x: { quando: string }) => new Date(x.quando) >= new Date(Date.now() - 3600_000))
-          .map((x: { reuniaoId: string; cliente: string; quando: string; responsavel: string | null }) =>
-            ({ id: x.reuniaoId, cliente: x.cliente, quando: x.quando, responsavel: x.responsavel }))
-          .sort((a: { quando: string }, b: { quando: string }) => a.quando.localeCompare(b.quando));
+        const falha = respostas.find((r) => !r.ok);
+        // Falha não é "nenhuma reunião": sem este aviso a pessoa confiava na lista vazia.
+        setErroReunioes(falha ? falha.erro : null);
+        const rs = respostas.map((r) => r.data);
+        const todas = rs.flatMap((j) => (j?.reunioes ?? []) as { estado: string; quando: string | null; reuniaoId: string; cliente: string; responsavel: string | null }[])
+          .filter((x) => x.estado === "agendada" && !!x.quando && new Date(x.quando) >= new Date(Date.now() - 3600_000))
+          .map((x) => ({ id: x.reuniaoId, cliente: x.cliente, quando: x.quando as string, responsavel: x.responsavel }))
+          .sort((a, b) => a.quando.localeCompare(b.quando));
         setReunioes(todas);
         // O histórico vem na mesma resposta; o do mês corrente já cobre os 6 meses para trás.
         const hist = (rs[0]?.historico ?? []) as Passada[];
@@ -90,11 +100,16 @@ export default function MyWorkPage() {
     [contentCards, currentUser, isAdmin]
   );
 
-  // Design requests: Admin = all, Designer = all, Others = requested by me
+  // Design requests: Admin = all, Designer = as do quadro dele (mesma regra do /design), Others = pedidas por mim
   const myDesignReqs = useMemo(() =>
-    designRequests.filter((r) => r.status !== "done" && (isAdmin || role === "designer" || r.requestedBy === currentUser)),
-    [designRequests, currentUser, role, isAdmin]
+    designRequests.filter((r) => r.status !== "done" && (
+      isAdmin
+      || (role === "designer" ? ehDoQuadro(r, clients, currentUser) : r.requestedBy === currentUser)
+    )),
+    [designRequests, clients, currentUser, role, isAdmin]
   );
+  // Sem a carteira, a regra de dono não sabe o que é do designer — não pode afirmar "tudo em dia".
+  const designerSemCarteira = role === "designer" && !clientesCarregados;
 
   // Approvals: Admin/Manager = all, Staff = my cards only
   const pendingApprovals = useMemo(() =>
@@ -175,7 +190,7 @@ export default function MyWorkPage() {
               <div className="space-y-2">
                 {reunioes.map((r) => {
                   const d = new Date(r.quando);
-                  const hoje = new Date().toDateString() === d.toDateString();
+                  const hoje = spDateStr(d) === todaySP();
                   const dia = d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short", timeZone: "America/Sao_Paulo" });
                   const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
                   return (
@@ -195,6 +210,12 @@ export default function MyWorkPage() {
                 })}
               </div>
             </section>
+          )}
+
+          {(filter === "all" || filter === "meetings") && erroReunioes && (
+            <p className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              Não consegui carregar as reuniões: {erroReunioes}
+            </p>
           )}
 
           {/* O HISTÓRICO — fechado por padrão: quem abre o Meu Trabalho quer saber o que fazer
@@ -281,7 +302,7 @@ export default function MyWorkPage() {
                 {myDesignReqs.map((req) => (
                   <div key={req.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-primary/20 transition-all">
                     <span className={`w-2 h-2 rounded-full shrink-0 ${
-                      req.status === "queued" ? "bg-muted" : req.status === "in_progress" ? "bg-primary" : "bg-lone-success-bg"
+                      req.status === "queued" ? "bg-muted-foreground" : req.status === "in_progress" ? "bg-primary" : "bg-lone-success"
                     }`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate">{req.title}</p>
@@ -316,7 +337,10 @@ export default function MyWorkPage() {
           )}
 
           {/* Empty state */}
-          {totalItems === 0 && (
+          {designerSemCarteira && (
+            <p className="text-xs text-muted-foreground">Carregando sua carteira para listar suas demandas de design…</p>
+          )}
+          {totalItems === 0 && !designerSemCarteira && !erroReunioes && (
             <EmptyState icon={<CheckCircle size={20} />} title="Tudo em dia!" subtitle="Nenhuma tarefa ou card pendente no momento." />
           )}
         </div>
@@ -393,7 +417,10 @@ function TaskRow({ task }: { task: Task }) {
   return (
     <Link href={route} className={`card-interactive flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-primary/20 cursor-pointer ${isDone ? "opacity-50" : ""}`}>
       <button
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); updateTask(task.id, { status: isDone ? "pending" : "done" }); }}
+        onClick={(e) => {
+          e.preventDefault(); e.stopPropagation();
+          updateTask(task.id, { status: isDone ? "pending" : "done" }).catch(() => toast.error("Não consegui atualizar a tarefa. Tenta de novo?"));
+        }}
         className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
           isDone ? "bg-primary border-primary text-primary-foreground" : "border-border hover:border-primary"
         }`}
@@ -436,7 +463,7 @@ function CardRow({ card, isApproval }: { card: ContentCard; isApproval?: boolean
   return (
     <Link href={`/social?card=${card.id}`} className={`card-interactive flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${
       isApproval
-        ? "bg-lone-warning-bg/[0.03] border-lone-warning-border hover:border-lone-warning-border"
+        ? "bg-lone-warning-bg border-lone-warning-border hover:border-lone-warning"
         : "bg-muted/30 border-border/50 hover:border-primary/20"
     }`}>
       {card.imageUrl && card.imageUrl.includes("http") ? (

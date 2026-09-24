@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { comExecucao, anotar } from "@/lib/obs/correlacao";
 import { temSocial } from "@/lib/clients/servico";
@@ -13,7 +13,7 @@ import { pautasDoVencedor } from "@/lib/traffic/pauta-do-trafego";
 // contratado: 3 pautas orgânicas no Radar de Oportunidades (radar_pautas), marcadas como vindas
 // do tráfego. Uma leva por (cliente, produto) a cada 14 dias. Cron 07:50.
 export async function POST(req: NextRequest) {
-  const gate = await requireCronOrUser(req);
+  const gate = requireCron(req); // só o cron: qualquer logado disparava lote pesado (IA/Meta)
   if (gate) return gate;
   const max = Math.min(30, Math.max(1, Number(req.nextUrl.searchParams.get("max") ?? 10) || 10));
   return comExecucao({ origem: "cron:creative-social", ator: "cron" }, async () => {

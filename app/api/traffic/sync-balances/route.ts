@@ -22,16 +22,23 @@ export async function GET(req: NextRequest) {
         last_synced_at, currency, account_status, sync_error, last_error_message, monthly_budget,
         clients!inner (
           id, name, nome_fantasia, client_finance_phone, client_pix_key, daily_budget, payment_method
-        ),
-        budget_alert_rules (
-          id, severity, threshold_value, is_active
         )
       `)
       .order("account_name");
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    return NextResponse.json({ accounts: data ?? [] });
+    // Limite de saldo que o alerta do servidor usa de verdade (client_alert_config.verba_minima).
+    const { data: cfgs, error: cfgErr } = await supabaseAdmin
+      .from("client_alert_config").select("client_id, verba_minima");
+    if (cfgErr) return NextResponse.json({ error: cfgErr.message }, { status: 500 });
+    const verbaPorCliente = new Map((cfgs ?? []).map((c) => [c.client_id as string, c.verba_minima as number | null]));
+    const accounts = (data ?? []).map((a) => {
+      const cli = a.clients as unknown as { id: string } | null;
+      return { ...a, verba_minima: cli ? verbaPorCliente.get(cli.id) ?? null : null };
+    });
+
+    return NextResponse.json({ accounts });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

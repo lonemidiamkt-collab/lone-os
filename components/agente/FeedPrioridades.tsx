@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { toast } from "sonner";
+import { chamar } from "@/lib/api/chamar";
 import { ROTULO_FONTE } from "@/lib/priority/motor";
 
 // O FEED — Fase 1 do Lone Agent V2. Uma lista só, ranqueada, com evidência e uma decisão de um
@@ -47,32 +48,37 @@ export default function FeedPrioridades() {
   const [limite, setLimite] = useState(12);
 
   const carregar = useCallback(async (e: "meu" | "todos", lim = 12) => {
-    try {
-      const r = await authedFetch(`/api/priority/feed?escopo=${e}&limite=${lim}`);
-      const d = (await r.json()) as Resposta;
-      if (!r.ok) { setErro(d.error ?? `HTTP ${r.status}`); return; }
-      setDados(d); setErro(null);
-    } catch { setErro("Não consegui carregar o feed."); }
+    const r = await chamar<Resposta>(`/api/priority/feed?escopo=${e}&limite=${lim}`);
+    if (!r.ok || !r.data) { setErro(r.erro ?? "Não consegui carregar o feed."); return; }
+    setDados(r.data); setErro(null);
   }, []);
   useEffect(() => { void carregar(escopo, limite); }, [carregar, escopo, limite]);
 
   const decidir = async (id: string, decisao: "aceita" | "ignorada" | "incorreta" | "executada") => {
     setOcupado(id);
-    try {
-      const r = await authedFetch("/api/priority/decidir", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, decisao }) });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); setErro(d?.error ?? `HTTP ${r.status}`); return; }
-      setDados((prev) => prev ? { ...prev, itens: prev.itens.filter((i) => i.id !== id) } : prev);
-    } finally { setOcupado(null); }
+    const r = await chamar("/api/priority/decidir", { id, decisao });
+    setOcupado(null);
+    if (!r.ok) { toast.error(`Não registrei a decisão: ${r.erro}`); return; }
+    setDados((prev) => prev ? { ...prev, itens: prev.itens.filter((i) => i.id !== id) } : prev);
+  };
+
+  // Sugestão do agente esperando ok/não: decide aqui mesmo (igual a responder no grupo) e fecha o item.
+  const decidirDemanda = async (item: Item, acao: "confirmar" | "descartar") => {
+    const codigo = item.acao_proposta?.codigo;
+    if (typeof codigo !== "string") { toast.error("Item sem código da demanda — decida pelo grupo."); return; }
+    setOcupado(item.id);
+    const r = await chamar<{ jaDecidida?: string }>("/api/cs/decide", { codigo, acao });
+    if (!r.ok) { setOcupado(null); toast.error(`Não consegui ${acao === "confirmar" ? "criar o card" : "descartar"}: ${r.erro}`); return; }
+    toast.success(r.data?.jaDecidida ? `Já estava decidida (${r.data.jaDecidida}).` : acao === "confirmar" ? "Card criado." : "Sugestão descartada.");
+    await decidir(item.id, "executada");
   };
 
   const recalcular = async () => {
     setRecalculando(true);
-    try {
-      const r = await authedFetch("/api/system/priority-recalcular", { method: "POST" });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) setErro(d?.erro ?? d?.error ?? `HTTP ${r.status}`);
-      await carregar(escopo, limite);
-    } finally { setRecalculando(false); }
+    const r = await chamar<{ erro?: string }>("/api/system/priority-recalcular", {});
+    if (!r.ok) toast.error(`Não consegui recalcular: ${r.erro}`);
+    await carregar(escopo, limite);
+    setRecalculando(false);
   };
 
   const itens = dados?.itens ?? [];
@@ -80,9 +86,9 @@ export default function FeedPrioridades() {
   const podeVerTudo = !!dados?.eu && (dados.eu.admin || dados.eu.papel === "manager");
 
   return (
-    <section className="rounded-xl border border-primary/30 bg-primary/[0.03] p-5">
+    <section className="rounded-xl border border-primary/30 bg-primary/5 p-5">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-foreground">🎯 O que precisa de você hoje{dados?.total ? ` (${dados.total})` : ""}</h2>
+        <h2 className="text-lone-h2 text-foreground">O que precisa de você hoje{dados?.total ? ` (${dados.total})` : ""}</h2>
         <div className="flex items-center gap-2 text-xs">
           {podeVerTudo && (
             <div className="flex rounded-lg border border-border p-0.5">
@@ -143,6 +149,12 @@ export default function FeedPrioridades() {
                   )}
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-1.5 sm:flex-col sm:items-stretch">
+                  {i.acao_proposta?.tipo === "decidir_demanda" && (
+                    <>
+                      <button onClick={() => decidirDemanda(i, "confirmar")} disabled={ocupado === i.id} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50">Criar card</button>
+                      <button onClick={() => decidirDemanda(i, "descartar")} disabled={ocupado === i.id} className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-muted disabled:opacity-50">Descartar pedido</button>
+                    </>
+                  )}
                   {link && <a href={link} className="rounded-lg bg-primary px-3 py-1.5 text-center text-xs font-medium text-primary-foreground transition hover:bg-primary/90">Abrir</a>}
                   <button onClick={() => decidir(i.id, "executada")} disabled={ocupado === i.id} className="rounded-lg bg-lone-success px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90 disabled:opacity-50">Feito</button>
                   <button onClick={() => decidir(i.id, "ignorada")} disabled={ocupado === i.id} className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-muted disabled:opacity-50">Ignorar</button>

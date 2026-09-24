@@ -3,13 +3,15 @@
 import { useState, useRef, useCallback } from "react";
 import { X, Plus, Upload, ImageIcon, ChevronLeft, ChevronRight, Download, Loader2, AlertCircle } from "lucide-react";
 import type { CardAttachment } from "@/lib/types";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
 import { trilha } from "@/lib/obs/trilha";
 import { useImagePaste } from "@/lib/hooks/useImagePaste";
 
 const ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+// Mesmo teto do /api/upload-art (carrossel do Instagram).
+export const MAX_ARTES = 20;
+const LEGACY_ID = "legacy";
 
 interface CardArtAttachmentsProps {
   cardId: string;
@@ -33,7 +35,7 @@ interface PendingUpload {
 }
 
 function makeLegacyAttachment(cardId: string, url: string): CardAttachment {
-  return { id: "legacy", card_id: cardId, url, path: "", position: 0, created_at: "" };
+  return { id: LEGACY_ID, card_id: cardId, url, path: "", position: 0, created_at: "" };
 }
 
 function buildVisibleArts(
@@ -183,7 +185,7 @@ export default function CardArtAttachments({
   existingAttachments,
   legacyImageUrl,
   onAttachmentsChange,
-  maxItems = 10,
+  maxItems = MAX_ARTES,
   readOnly = false,
   tipo,
 }: CardArtAttachmentsProps) {
@@ -202,19 +204,10 @@ export default function CardArtAttachments({
   const [marcando, setMarcando] = useState<string | null>(null);
   const marcarTipo = async (att: CardAttachment, tipo: "referencia" | "entrega") => {
     setMarcando(att.id);
-    try {
-      const r = await authedFetch(`/api/cards/${cardId}/attachments/${att.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo }),
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setAttachments((prev) => prev.map((a) => (a.id === att.id ? { ...a, tipo } : a)));
-    } catch {
-      setGlobalError("Não consegui marcar o tipo da arte. Tenta de novo.");
-    } finally {
-      setMarcando(null);
-    }
+    const r = await chamar(`/api/cards/${cardId}/attachments/${att.id}`, { tipo }, { method: "PATCH" });
+    if (r.ok) setAttachments((prev) => prev.map((a) => (a.id === att.id ? { ...a, tipo } : a)));
+    else setGlobalError(`Não consegui marcar o tipo da arte: ${r.erro}`);
+    setMarcando(null);
   };
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -225,12 +218,12 @@ export default function CardArtAttachments({
 
   // ── helpers ────────────────────────────────────────────────────────────────
 
-  const reloadAttachments = useCallback(async (): Promise<CardAttachment[]> => {
-    const res = await authedFetch(`/api/cards/${cardId}/attachments`);
-    if (!res.ok) return attachments;
-    const data = await res.json();
-    return (data.attachments as CardAttachment[]) ?? [];
-  }, [cardId, attachments]);
+  // null = não consegui recarregar (a lista velha na tela esconderia a arte que acabou de subir).
+  const reloadAttachments = useCallback(async (): Promise<CardAttachment[] | null> => {
+    const r = await chamar<{ attachments?: CardAttachment[] }>(`/api/cards/${cardId}/attachments`);
+    if (!r.ok) return null;
+    return r.data?.attachments ?? [];
+  }, [cardId]);
 
   const updateAttachments = useCallback(
     (next: CardAttachment[]) => {
@@ -244,7 +237,7 @@ export default function CardArtAttachments({
 
   function validateFiles(files: File[]): string | null {
     // Conta só attachments reais (ignora a capa legada)
-    const realCount = attachments.filter((a) => a.id !== "legacy").length;
+    const realCount = attachments.filter((a) => a.id !== LEGACY_ID).length;
     if (realCount + files.length > maxItems) {
       return `Limite de ${maxItems} artes por card`;
     }
@@ -300,7 +293,8 @@ export default function CardArtAttachments({
 
         // Upload OK — busca lista atualizada (inclui migração silenciosa se rolou)
         const fresh = await reloadAttachments();
-        updateAttachments(fresh);
+        if (fresh) updateAttachments(fresh);
+        else setGlobalError("A arte subiu, mas não consegui atualizar a lista. Feche e abra o card pra ver.");
       } finally {
         setPending((prev) => prev.filter((p) => !tempIds.includes(p.tempId)));
       }
@@ -322,18 +316,15 @@ export default function CardArtAttachments({
     async (attachmentId: string) => {
       setConfirmRemoveId(null);
 
-      if (attachmentId === "legacy") {
+      if (attachmentId === LEGACY_ID) {
         // Card legado sem attachment real — apenas limpa visualmente (não chama API)
         updateAttachments([]);
         return;
       }
 
-      const res = await authedFetch(`/api/cards/${cardId}/attachments/${attachmentId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setGlobalError(data.error || "Erro ao remover arte");
+      const r = await chamar(`/api/cards/${cardId}/attachments/${attachmentId}`, undefined, { method: "DELETE" });
+      if (!r.ok) {
+        setGlobalError(`Não consegui remover a arte: ${r.erro}`);
         return;
       }
 
@@ -431,7 +422,7 @@ export default function CardArtAttachments({
               />
               {/* Etiqueta: o que esta arte É. Sem classificação aparece em vermelho, porque é o
                   estado que impede a publicação — e o conserto é clicar em "entrega". */}
-              {!art.id.startsWith("legacy_") && !readOnly && (
+              {art.id !== LEGACY_ID && !readOnly && (
                 <div
                   className="absolute top-1 left-1 flex gap-0.5 z-10"
                   onClick={(e) => e.stopPropagation()}
@@ -475,7 +466,7 @@ export default function CardArtAttachments({
                 download={`arte-${idx + 1}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="absolute top-1 left-1 p-1 rounded-full bg-overlay text-overlay-foreground opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary"
+                className={`absolute top-1 ${readOnly ? "right-1" : "right-7"} p-1 rounded-full bg-overlay text-overlay-foreground opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary`}
                 onClick={(e) => e.stopPropagation()}
                 aria-label="Baixar arte"
                 title="Baixar / abrir em tamanho grande"
@@ -497,12 +488,12 @@ export default function CardArtAttachments({
                 🔍 ampliar
               </span>
               {/* Position badge */}
-              {art.id !== "legacy" && (
+              {art.id !== LEGACY_ID && (
                 <span className="absolute bottom-1 left-1 text-[9px] bg-overlay text-overlay-foreground rounded px-1 py-0.5">
                   {art.position + 1}
                 </span>
               )}
-              {art.id === "legacy" && (
+              {art.id === LEGACY_ID && (
                 <span className="absolute bottom-1 left-1 text-[9px] bg-primary text-primary-foreground rounded px-1 py-0.5">
                   capa
                 </span>

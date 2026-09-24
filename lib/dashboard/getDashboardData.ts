@@ -1,5 +1,6 @@
 import type { Client, ContentCard, DesignRequest, Task, TrafficRoutineCheck } from "@/lib/types";
 import { emSetupInicial, onboardingDesatualizado } from "@/lib/clients/operacao";
+import { spDateStr, todaySP } from "@/lib/utils";
 
 function hoursSince(isoString?: string): number {
   if (!isoString) return 9999;
@@ -73,7 +74,13 @@ export function getDashboardData({
   const urgentTasks = tasks.filter((t) => t.priority === "critical" && t.status !== "done");
 
   const pipelineCards = contentCards.filter((c) => c.status !== "published");
-  const publishedThisMonth = contentCards.filter((c) => c.status === "published").length;
+  // "Este mês" = publicado no mês corrente de São Paulo (antes contava todos desde sempre).
+  const mesAtual = todaySP().slice(0, 7);
+  const publicadoNoMes = (c: ContentCard) => {
+    const quando = c.columnEnteredAt?.published ?? c.statusChangedAt;
+    return c.status === "published" && !!quando && spDateStr(quando).slice(0, 7) === mesAtual;
+  };
+  const publishedThisMonth = contentCards.filter(publicadoNoMes).length;
   // Tempo-na-coluna (48h+), de propósito diferente do "atrasados" por due_date que
   // lib/cs/snapshot.ts calcula pro "O que precisa de atenção" — não unificar os dois:
   // um mede SLA de fila, o outro mede prazo prometido ao cliente.
@@ -100,13 +107,13 @@ export function getDashboardData({
     return {
       name,
       clientCount: memberClients.length,
-      published: memberCards.filter((c) => c.status === "published").length,
+      published: memberCards.filter(publicadoNoMes).length,
       inPipeline: memberCards.filter((c) => c.status !== "published").length,
     };
   });
 
   const trafficManagers = [...new Set(clients.map((c) => c.assignedTraffic))];
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todaySP();
   const trafficProductivity: TrafficMemberData[] = trafficManagers.map((name) => {
     const memberClients = clients.filter(
       (c) => c.assignedTraffic === name && c.status !== "onboarding"

@@ -74,7 +74,7 @@ const ClientStatusList = React.forwardRef<HTMLDivElement, ClientStatusListProps>
                   className={cn(
                     "px-2.5 py-1 rounded-lg text-lone-caption font-inter font-medium transition-colors",
                     isActive
-                      ? "bg-lone-brand/15 text-lone-brand border border-lone-brand/25"
+                      ? "bg-lone-brand-bg-soft text-lone-brand border border-lone-border-strong"
                       : "text-lone-text-tertiary hover:text-lone-text-primary hover:bg-lone-bg-elevated"
                   )}
                 >
@@ -120,7 +120,7 @@ const ClientStatusList = React.forwardRef<HTMLDivElement, ClientStatusListProps>
                 return (
                   <tr
                     key={client.id}
-                    className="border-b border-lone-border/50 hover:bg-lone-bg-elevated transition-colors group"
+                    className="border-b border-lone-border hover:bg-lone-bg-elevated transition-colors group"
                   >
                     <td className="py-3 px-3">
                       <Link

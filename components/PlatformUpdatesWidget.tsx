@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Sparkles, X, ArrowRight, GitBranch } from "lucide-react";
 import { useRole } from "@/lib/context/RoleContext";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { toast } from "sonner";
+import { chamar } from "@/lib/api/chamar";
 
 interface Update {
   id: string;
@@ -16,27 +17,8 @@ interface Update {
   read: boolean;
 }
 
-/**
- * Shows unread platform updates on the home dashboard.
- * User can dismiss/mark as read, or go to /sobre for full changelog.
- */
-// Lidos guardados NO DISPOSITIVO (fallback) — garante que "marcar como lido" faça a novidade
-// sumir mesmo se o round-trip pro servidor falhar. O servidor continua sendo a fonte cross-device,
-// mas o localStorage evita o bug de "marquei e voltou".
-const LS_KEY = "lone_read_updates";
-function localReadIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try { return new Set(JSON.parse(localStorage.getItem(LS_KEY) || "[]")); } catch { return new Set(); }
-}
-function addLocalRead(ids: string[]) {
-  if (typeof window === "undefined") return;
-  try {
-    const cur = localReadIds();
-    ids.forEach((id) => cur.add(id));
-    localStorage.setItem(LS_KEY, JSON.stringify([...cur]));
-  } catch { /* ignore */ }
-}
-
+// Novidades não lidas na home. O "lido" mora no servidor (user_read_updates), que vale em
+// qualquer aparelho; se gravar falhar, a novidade volta e a pessoa é avisada.
 export default function PlatformUpdatesWidget() {
   const { currentProfile } = useRole();
   const userEmail = (currentProfile?.email || "").toLowerCase();
@@ -46,16 +28,12 @@ export default function PlatformUpdatesWidget() {
 
   useEffect(() => {
     if (!userEmail) return;
-    // GET usa session do Authorization header pra derivar user_email
-    authedFetch("/api/platform-updates")
-      .then((r) => r.json())
-      .then((data) => {
-        // Read = servidor OU já marcado localmente neste dispositivo (fallback anti "voltou").
-        const local = localReadIds();
-        setUpdates((data.updates ?? []).map((u: Update) => ({ ...u, read: u.read || local.has(u.id) })));
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    chamar<{ updates?: Update[] }>("/api/platform-updates").then((r) => {
+      // Falha ao carregar só esconde o aviso (é um extra da home), mas não finge "nada novo" no log.
+      if (r.ok) setUpdates(r.data?.updates ?? []);
+      else console.warn("[novidades] não carregou:", r.erro);
+      setLoading(false);
+    });
   }, [userEmail]);
 
   const unread = updates.filter((u) => !u.read);
@@ -63,15 +41,14 @@ export default function PlatformUpdatesWidget() {
   const markAllRead = async () => {
     if (unread.length === 0) return;
     const ids = unread.map((u) => u.id);
-    // 1) grava local NA HORA (garante que suma) 2) some da tela 3) tenta persistir no servidor
-    addLocalRead(ids);
-    setUpdates((prev) => prev.map((u) => ({ ...u, read: true })));
     setDismissed(true);
-    authedFetch("/api/platform-updates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "mark_read", update_ids: ids }),
-    }).catch(() => { /* já está marcado local; servidor é best-effort */ });
+    const r = await chamar("/api/platform-updates", { action: "mark_read", update_ids: ids });
+    if (!r.ok) {
+      setDismissed(false);
+      toast.error(`Não consegui marcar como lido: ${r.erro}`);
+      return;
+    }
+    setUpdates((prev) => prev.map((u) => (ids.includes(u.id) ? { ...u, read: true } : u)));
   };
 
   if (loading || dismissed || unread.length === 0) return null;
@@ -104,8 +81,8 @@ export default function PlatformUpdatesWidget() {
 
       <div className="space-y-2">
         {unread.slice(0, 3).map((u) => (
-          <div key={u.id} className="flex items-start gap-3 p-3 rounded-lg bg-background/40 border border-border/50">
-            <span className="text-lg shrink-0 leading-none mt-0.5">{u.icon || "📦"}</span>
+          <div key={u.id} className="flex items-start gap-3 p-3 rounded-lg bg-background/40 border border-border">
+            <Sparkles size={14} className="text-primary shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-foreground">{u.title}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">{u.description}</p>

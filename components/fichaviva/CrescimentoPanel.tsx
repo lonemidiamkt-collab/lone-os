@@ -11,7 +11,7 @@
 // não vaza pro trimestre de 2026 nem o semestre vira 7 meses. Health/insight usam a série contínua
 // (trajetória real do cliente), só os gráficos/KPIs são do ano.
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { TrendingUp, TrendingDown, Minus, Loader2, Check, Link2, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import {
   BarChart, Bar, LabelList, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -19,6 +19,7 @@ import {
 } from "recharts";
 import { supabase } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { Target } from "lucide-react";
 
 interface Props {
@@ -100,6 +101,13 @@ const TT = {
 export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
   const [byMonth, setByMonth] = useState<Map<string, Row>>(new Map());
   const [loading, setLoading] = useState(true);
+  // Grid vazio por FALHA de leitura é perigoso: quem digitar por cima grava zeros no lugar do dado real.
+  const [erroCarga, setErroCarga] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
+  // Só grava o mês que a pessoa MEXEU; e zerar só vale para mês que já existia no banco.
+  const sujos = useRef(new Set<string>());
+  const existentes = useRef(new Set<string>());
+  const [erroMeta, setErroMeta] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>("mes");
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [savingMonth, setSavingMonth] = useState<string | null>(null);
@@ -116,12 +124,20 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const { data } = await supabase
+      setLoading(true); setErroCarga(null);
+      const { data, error } = await supabase
         .from("client_financial_results")
         .select("month, revenue, vendas, investment, roi, strategy_note")
         .eq("client_id", clientId)
         .order("month");
       if (!alive) return;
+      if (error) {
+        setErroCarga(`Não consegui carregar o faturamento deste cliente (${error.message}).`);
+        setLoading(false);
+        return;
+      }
+      existentes.current = new Set((data ?? []).map((r) => r.month as string));
+      sujos.current.clear();
       const map = new Map<string, Row>();
       (data ?? []).forEach((r) => map.set(r.month as string, {
         month: r.month as string,
@@ -138,7 +154,7 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
       setLoading(false);
     })();
     return () => { alive = false; };
-  }, [clientId]);
+  }, [clientId, tentativa]);
 
   // Meta de faturamento do cliente ("bater R$ X até mês Y").
   useEffect(() => {
@@ -150,18 +166,18 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
     return () => { alive = false; };
   }, [clientId]);
 
-  const salvarMeta = async () => {
-    setGoalSaving(true);
-    const value = parseFatBR(goalVal);
-    try {
-      const r = await authedFetch(`/api/clients/${clientId}/growth-goal`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: value > 0 ? value : null, month: goalMonth || null }),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (r.ok) { setGoal(d.goal ?? null); setGoalOpen(false); }
-    } catch { /* silencioso */ }
+  // Valores por parâmetro: "Remover" limpava o estado e chamava na mesma hora, lendo o valor antigo.
+  const salvarMeta = async (valorTxt: string, mes: string) => {
+    setGoalSaving(true); setErroMeta(null);
+    const value = parseFatBR(valorTxt);
+    const r = await chamar<{ goal: Goal | null }>(`/api/clients/${clientId}/growth-goal`, {
+      value: value > 0 ? value : null, month: mes || null,
+    });
     setGoalSaving(false);
+    if (!r.ok) { setErroMeta(r.erro || "Não consegui salvar a meta."); return; }
+    const g = r.data?.goal ?? null;
+    setGoal(g); setGoalOpen(false);
+    setGoalVal(g ? intBR(g.value) : ""); setGoalMonth(g?.month ?? "");
   };
 
   // Anos disponíveis pro seletor (dados + ano atual), crescente.
@@ -188,6 +204,7 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
   );
 
   const setField = (month: string, field: "revenue" | "vendas", value: string) => {
+    sujos.current.add(month);
     setByMonth((prev) => {
       const next = new Map(prev);
       const cur = next.get(month) ?? emptyRow(month);
@@ -200,10 +217,10 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
   const saveMonth = useCallback(async (month: string) => {
     const r = byMonth.get(month);
     if (!r) return;
-    // ZERAR TAMBÉM É INFORMAÇÃO. A guarda antiga (`!r.revenue && r.vendas == null`) fazia o mês
-    // voltar calado quando a pessoa apagava o valor — não dava pra corrigir um número errado
-    // pra vazio. Só ignora quando os DOIS campos estão vazios de verdade.
-    if (r.revenue == null && r.vendas == null) return;
+    // Sair de um campo sem digitar nada gravava revenue 0 / investment 0 em qualquer mês tocado.
+    if (!sujos.current.has(month)) return;
+    // ZERAR TAMBÉM É INFORMAÇÃO — mas só num mês que já existia. Mês novo vazio não vira linha de zero.
+    if (!r.revenue && r.vendas == null && !existentes.current.has(month)) { sujos.current.delete(month); return; }
 
     setSavingMonth(month); setErroSalvar(null);
     // `recorded_by` é NOT NULL e a tela não mandava — por isso mês NOVO nunca era criado (o
@@ -220,6 +237,7 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
     }, { onConflict: "client_id,month" });
 
     setSavingMonth(null);
+    if (!error) { sujos.current.delete(month); existentes.current.add(month); }
     if (error) {
       // Nunca mais mostrar ✓ em cima de falha: a pessoa precisa saber pra digitar de novo.
       setErroSalvar(`Não consegui salvar ${month}: ${error.message}`);
@@ -352,11 +370,22 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
   }, [clientId]);
 
   if (loading) return <div className="flex justify-center py-10"><Loader2 size={20} className="text-primary animate-spin" /></div>;
+  if (erroCarga) {
+    return (
+      <div className="rounded-xl border border-lone-danger-border bg-lone-danger-bg p-4 flex flex-wrap items-center gap-3" role="alert">
+        <p className="flex-1 min-w-[200px] text-sm text-lone-danger">{erroCarga} Nada foi alterado.</p>
+        <button onClick={() => setTentativa((t) => t + 1)} className="rounded-lg bg-primary px-3.5 h-9 text-sm font-medium text-primary-foreground hover:opacity-90">
+          Tentar de novo
+        </button>
+      </div>
+    );
+  }
 
   const healthColor = health.level === "up" ? "var(--lone-success)" : health.level === "risk" ? "var(--destructive)" : health.level === "ok" ? "var(--primary)" : "var(--muted-foreground)";
   const maxFat = Math.max(...serie.map((s) => s.fat), 1);
-  const refFat = goal?.value ?? 1_000_000;
-  const refLabel = goal ? "Meta " + brlBar(goal.value) : "R$ 1M";
+  // Linha de referência só com meta definida: o "R$ 1M" fixo esmagava o gráfico de loja pequena.
+  const refFat = goal?.value ?? null;
+  const refLabel = goal ? "Meta " + brlBar(goal.value) : "";
   const toneColor = insight?.tone === "up" ? "text-lone-success" : insight?.tone === "down" ? "text-destructive" : "text-primary";
 
   // Meta mil vezes menor que o faturamento real é quase sempre o mesmo engano: a pessoa pensa em
@@ -458,7 +487,7 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
               <input type="month" value={goalMonth} onChange={(e) => setGoalMonth(e.target.value)}
                 className="bg-surface border border-border rounded-md px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/50" />
             </div>
-            <button onClick={salvarMeta} disabled={goalSaving} className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-40">{goalSaving ? "Salvando…" : "Salvar"}</button>
+            <button onClick={() => salvarMeta(goalVal, goalMonth)} disabled={goalSaving} className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-40">{goalSaving ? "Salvando…" : "Salvar"}</button>
             {metaSuspeita && (
               <p className="basis-full text-[11px] text-lone-warning">
                 {brl(metaSuspeita.digitado)} é bem abaixo do que este cliente já fatura por mês.
@@ -468,7 +497,8 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
                 </button>?
               </p>
             )}
-            {goal && <button onClick={() => { setGoalVal(""); setGoalMonth(""); salvarMeta(); }} className="rounded-md px-2 py-1.5 text-xs text-destructive hover:underline">Remover</button>}
+            {goal && <button onClick={() => salvarMeta("", "")} disabled={goalSaving} className="rounded-md px-2 py-1.5 text-xs text-destructive hover:underline disabled:opacity-40">Remover</button>}
+            {erroMeta && <p className="basis-full text-[11px] text-destructive" role="alert">{erroMeta}</p>}
           </div>
         ) : goal && goalProgress ? (
           <div className="mt-3">
@@ -545,7 +575,7 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
               </span>
             )}
           </div>
-          <p className="text-lone-caption text-muted-foreground">{period === "mes" ? `Meses de ${year}` : period === "tri" ? `Trimestres de ${year}` : `Semestres de ${year}`} · referência R$ 1M</p>
+          <p className="text-lone-caption text-muted-foreground">{period === "mes" ? `Meses de ${year}` : period === "tri" ? `Trimestres de ${year}` : `Semestres de ${year}`}{goal ? ` · meta ${brlBar(goal.value)}` : ""}</p>
           {serie.length === 0 ? (
             <p className="text-xs text-muted-foreground py-10 text-center">Sem faturamento registrado em {year}. Preencha abaixo pra ver a curva.</p>
           ) : (
@@ -562,7 +592,7 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
                   <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={{ stroke: "var(--border)" }} tickLine={false} />
                   <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => brlk(Number(v))} width={44} />
                   <Tooltip cursor={{ fill: "var(--muted)", opacity: 0.12 }} {...TT} formatter={(v) => [brl(Number(v)), "Faturamento"]} />
-                  {maxFat >= refFat * 0.5 && <ReferenceLine y={refFat} stroke="var(--primary)" strokeDasharray="4 4" strokeOpacity={0.7} label={{ value: refLabel, fill: "var(--primary)", fontSize: 10, position: "insideTopLeft" }} />}
+                  {refFat != null && maxFat >= refFat * 0.5 && <ReferenceLine y={refFat} stroke="var(--primary)" strokeDasharray="4 4" strokeOpacity={0.7} label={{ value: refLabel, fill: "var(--primary)", fontSize: 10, position: "insideTopLeft" }} />}
                   <Bar dataKey="fat" radius={[6, 6, 0, 0]} maxBarSize={64}>
                     {serie.map((_, i) => <Cell key={i} fill="url(#fvFat)" />)}
                     <LabelList dataKey="fat" position="top" formatter={(v) => brlBar(Number(v))} fill="var(--foreground)" fontSize={10} fontWeight={700} />

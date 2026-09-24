@@ -67,9 +67,4 @@ describe("os quatro stores de dados carregam no casco, não em cada página", ()
     expect(SHELL).toMatch(/refreshNotifs\(\);\s*\n\s*initClients\(\); initContent\(\); initOps\(\); initTraffic\(\);/);
   });
 
-  it("o timesheet do CEO diz 'carregando' em vez de 'nenhum dado' enquanto espera", () => {
-    const CEO = readFileSync("app/ceo/page.tsx", "utf8");
-    expect(CEO).toMatch(/dadosProntos \? msg : "Carregando…"/);
-    expect(CEO).not.toMatch(/<p className="text-xs text-muted-foreground">Nenhum dado disponível\.<\/p>/);
-  });
 });

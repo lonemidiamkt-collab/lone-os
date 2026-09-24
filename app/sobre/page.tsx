@@ -29,17 +29,27 @@ export default function SobrePage() {
   const isAdmin = role === "admin" || role === "manager";
   const [updates, setUpdates] = useState<PlatformUpdate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erroUpdates, setErroUpdates] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>("dashboard");
   const [creatorOpen, setCreatorOpen] = useState(false);
 
   useEffect(() => {
     supabase.from("platform_updates").select("*").eq("published", true).order("created_at", { ascending: false })
-      .then(({ data }) => { if (data) setUpdates(data as PlatformUpdate[]); setLoading(false); });
+      .then(({ data, error }) => {
+        // Erro não vira "nenhuma atualização": mostra que o histórico não carregou.
+        if (error) setErroUpdates(error.message);
+        else setUpdates((data ?? []) as PlatformUpdate[]);
+        setLoading(false);
+      });
   }, []);
 
   const activeClients = clients.filter((c) => c.status !== "onboarding" && !c.draftStatus).length;
   const linkedMetaCount = clients.filter((c) => c.metaAdAccountId).length;
   const today = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+  // "Atualizado em" = data da última novidade publicada, não o dia de hoje.
+  const ultimaAtualizacao = updates[0]
+    ? new Date(updates[0].created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
+    : null;
 
   const handlePrint = () => window.print();
   const toggleModule = (id: string) => setExpanded((prev) => (prev === id ? null : id));
@@ -53,7 +63,9 @@ export default function SobrePage() {
       <div className="p-6 max-w-4xl mx-auto w-full space-y-8 animate-fade-in print:p-0 print:max-w-none">
         {/* Action bar */}
         <div className="flex items-center justify-between print:hidden">
-          <p className="text-xs text-muted-foreground">Atualizado em {today} · Banco de estudo do time</p>
+          <p className="text-xs text-muted-foreground">
+            {ultimaAtualizacao ? `Atualizado em ${ultimaAtualizacao}` : loading ? "Carregando…" : "Sem data de atualização"} · Banco de estudo do time
+          </p>
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted text-foreground border border-border hover:border-primary/30 text-xs font-medium transition-colors"
@@ -147,14 +159,16 @@ export default function SobrePage() {
           </div>
           {loading ? (
             <div className="text-center py-8 text-xs text-muted-foreground">Carregando...</div>
+          ) : erroUpdates ? (
+            <div className="text-center py-8 text-xs text-lone-danger">Não consegui carregar o histórico ({erroUpdates}). Recarregue a página.</div>
           ) : updates.length === 0 ? (
             <div className="text-center py-8 text-xs text-muted-foreground">Nenhuma atualização registrada ainda.</div>
           ) : (
             <div className="space-y-3">
               {updates.map((u) => (
                 <div key={u.id} className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/40 print:break-inside-avoid">
-                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 text-lg">
-                    {u.icon || "📦"}
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <Sparkles size={15} className="text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -177,32 +191,6 @@ export default function SobrePage() {
             </div>
           )}
         </Section>
-
-        {/* Roadmap — admin only */}
-        {isAdmin && (
-          <Section title="Roadmap" icon={Rocket}>
-            <div className="mb-3 flex items-center gap-2 text-[10px] text-lone-warning bg-lone-warning-bg border border-lone-warning-border rounded-md px-2 py-1 w-fit print:hidden">
-              <Lock size={10} /> Visível apenas para Admin / Manager
-            </div>
-            <p className="text-sm text-muted-foreground mb-4">O que vem a seguir.</p>
-            <div className="space-y-3">
-              {ROADMAP.map((r) => (
-                <div key={r.title} className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/40">
-                  <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${
-                    r.status === "in_progress" ? "bg-lone-warning" : r.status === "next" ? "bg-primary" : "bg-muted-foreground"
-                  }`} />
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-foreground">{r.title}</p>
-                      <span className="text-[10px] text-muted-foreground">{r.eta}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">{r.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Section>
-        )}
 
         {/* Footer */}
         <div className="text-center pt-8 border-t border-border">
@@ -431,13 +419,13 @@ const MODULES: Module[] = [
       "Menu lateral: os 5 itens mais usados (Dashboard, Meu Trabalho, Tarefas, Processos, Calendário) ficam fixos no topo; o resto está agrupado em Operação, Clientes & Comercial, Time & Sistema e CEO.",
       "Tema claro/escuro: o botão sol/lua no pé do menu (ou em Configurações → Aparência) troca na hora. O escuro agora é grafite, menos fechado que o navy antigo.",
       "Avisos (toasts) aparecem no canto inferior direito: somem em 4s, exceto os de SLA, que ficam até você fechar. 'Ver agora' abre o card ou o cliente do aviso.",
+      "LIMPEZA (23/09): saíram o mural 'Avisos da Empresa', o checklist diário de tráfego (a rotina vive na tela de Tráfego) e o 'Alerta de orçamento' (estimava gasto pelo dia do mês, não pelo gasto real). Se algum dado não carregar, a Dashboard diz isso em vermelho em vez de mostrar zero; 'Publicados' conta só o mês corrente; e 'Meu Desempenho' fica neutro ('sem tarefas') quando ninguém te atribuiu tarefa.",
     ],
     features: [
       "Briefing matinal gerado por IA com urgências e oportunidades",
       "Radar de saúde das contas (score agregado por cliente)",
       "Alertas automáticos: CTR baixo, gasto sem conversão, fadiga de criativo",
       "Card 'Clientes' clicável leva pra aba detalhada",
-      "Avisos broadcast de admin aparecem em destaque no topo",
     ],
     tips: [
       "Comece o dia sempre pela Dashboard — ela já te diz o que importa, sem precisar abrir outras abas.",
@@ -784,6 +772,7 @@ const MODULES: Module[] = [
       "18:30 — relatório do dia no grupo administrativo (abordados, respostas, decisores, reuniões, custo de IA). No fim do piloto, relatório final com o que converteu mais (segmento, cidade, score, distância, horário).",
     ],
     features: [
+      "FUNIL COMERCIAL (/crm, 23/09): conta leads, reuniões, ganhos, conversão e motivos de perda — sem valores em R$ (regra da casa: nada de financeiro da agência). Saíram a meta mensal em R$, 'Em jogo', 'Vendas no mês (R$)', 'Ticket médio' e o campo de valor do orçamento; o relatório final do piloto também não soma mais receita.",
       "Visão geral (cockpit diário): estado do agente, funil por macroetapa com conversão e clique para ver a lista, conversas (quem deve a próxima mensagem), SLA de resposta com semáforo, tempo entre etapas, gargalos calculados, leads por etapa e por tempo parado, fila do dia, eficiência e autonomia do agente",
       "Fila do dia com o resultado do quality gate de cada empresa",
       "Ficha do prospect: dados com fonte e confiança, diagnóstico, score detalhado, conversa e histórico de toda mudança",
@@ -806,60 +795,27 @@ const MODULES: Module[] = [
     ],
   },
   {
-    id: "comunicados",
-    icon: Megaphone,
-    title: "Comunicados (Broadcasts)",
-    shortDesc: "Email em massa pra toda a base com personalização automática",
-    whoUses: "Admin, Manager",
-    context: "Quando o Roberto quer comunicar algo importante pra todos os clientes — lançamento de feature, mudança de processo, pesquisa de satisfação — usa o Comunicados. Escreve 1 email, o sistema manda individualmente pra cada cliente com o nome do responsável substituído automaticamente. Cada cliente recebe parecendo um email pessoal.",
-    howItWorks: [
-      "Em /broadcasts, clica 'Novo Comunicado'.",
-      "Preenche assunto e corpo (editor com negrito, itálico, listas, links).",
-      "Usa tags {{nome_responsavel}} e {{empresa}} pra personalizar.",
-      "Escolhe público: 'Todos ativos' ou filtra por nicho.",
-      "Clica 'Enviar Teste' — recebe no próprio email pra conferir como fica.",
-      "Se tá ok, clica 'Enviar para 32' — sistema manda em lotes de 10 com 300ms de delay.",
-      "Cada envio fica logado com messageId e status (sent/failed).",
-    ],
-    features: [
-      "Editor rich text (bold, itálico, listas, links)",
-      "Personalização automática por destinatário",
-      "Audience: Todos ativos ou filtro por nicho",
-      "Envio em lotes pra não cair em spam",
-      "Botão 'Enviar Teste' com email customizável",
-      "Histórico completo com taxa de sucesso",
-      "Layout Sober Premium (mesmo do welcome email)",
-    ],
-    tips: [
-      "SEMPRE teste antes de enviar pra base — revisar gramática, formatação, nome no lugar certo.",
-      "Use {{nome_responsavel}} em vez de 'Olá cliente' — abertura pessoal triplica a taxa de leitura.",
-      "Comunicados estratégicos (lançamentos, mudanças) funcionam melhor de manhã, terça/quarta/quinta.",
-    ],
-  },
-  {
     id: "ceo",
     icon: Lock,
     title: "Área CEO",
-    shortDesc: "Dashboard executivo protegido por PIN",
-    whoUses: "Admin (apenas Roberto)",
-    context: "Espaço reservado pra Roberto onde ele vê a operação de cima. Tem proteção extra (PIN de 4 dígitos) porque contém relatórios quinzenais, análise de churn e visão financeira consolidada. Ninguém mais da equipe acessa, nem outros admins.",
+    shortDesc: "Visão executiva da operação e gestão da equipe",
+    whoUses: "Admin e Gerente",
+    context: "Espaço da diretoria para ver a operação de cima: resumo do dia, gargalos, desempenho e carga da equipe, e o cadastro de quem trabalha no sistema. O acesso vem do papel do login (admin ou gerente) — o antigo PIN saiu (23/09) porque estava escrito no código do navegador e não protegia nada. Sem métrica financeira da agência.",
     howItWorks: [
-      "Apenas admin vê a aba 'Área CEO' no sidebar.",
-      "Clica → tela de PIN aparece.",
-      "Digita PIN → desbloqueia dashboard executivo.",
-      "Vê relatórios quinzenais, análise de churn, métricas agregadas.",
-      "Fecha a aba → PIN precisa ser digitado de novo na próxima vez.",
+      "Admin e gerente veem a Área CEO no menu; os outros papéis veem 'Área da diretoria' sem conteúdo.",
+      "Abas: Visão Geral, Operação, Desempenho, Gestão da Equipe e Carga de Trabalho.",
+      "Desempenho: quem não tem tarefa atribuída aparece como 'Sem tarefas' (neutro), nunca como 'Crítico'.",
+      "Publicações contam só o mês corrente. O calendário de posts por dia saiu: pintava de vermelho todo dia sem card 'publicado' no quadro, e o quadro não registra a maioria dos posts reais.",
+      "Saíram as abas Retenção, Churn e Timesheet (23/09). Os relatórios quinzenais mudaram para Metas & OKRs (visível para admin e gerente).",
     ],
     features: [
-      "Proteção por PIN 4 dígitos",
+      "Acesso pelo papel do login (admin/gerente), sem PIN",
       "VERIFICAÇÃO EM DUAS ETAPAS (13/09): em Configurações › Segurança, o admin ativa um autenticador (Google Authenticator, 1Password, Authy…). Depois disso a senha sozinha não entra: toda sessão pede o código de 6 dígitos, e o servidor recusa qualquer sessão que não tenha passado por ele. Perdeu o celular: outro admin remove o fator pelo banco.",
       "RASTREABILIDADE (13/09): cada execução do agente (mensagem recebida, cron) tem um id. Tudo que ela tocou responde por ele — a chamada à OpenAI (llm_calls: modelo, tokens, custo em dólar), a linha gravada (audit_log.correlation_id) e a mensagem enviada (cs_outbound). agent_runs guarda a execução inteira: origem, quem disparou, duração, custo, o que saiu e o desfecho. 'Por que o Loninho fez isso?' e 'quanto ele custa por dia?' passam a ter resposta no banco.",
       "FEED DE PRIORIDADES (14/09, Fase 1): em /agente, 'O que precisa de você hoje' junta tráfego, saúde do cliente, produção, atendimento e tarefas numa lista só, ordenada por um score explicável (tamanho × urgência × R$ em jogo × peso do cliente × irreversível, vezes a confiança no dado). Cada item traz o FATO (com número) separado do QUE FAZER, o dono, e três decisões: Feito, Ignorar, Incorreta. 'Incorreta' é o que ensina o motor. No WhatsApp: 'Lone, o que preciso fazer hoje?' devolve o seu top 5 — só em grupo nosso, nunca no do cliente. Recalcula de hora em hora; item que a fonte parou de reportar some sozinho (resolvido). A meta da fase: taxa de decisão acima de 60% em 14 dias (no WhatsApp era 37%).",
       "FILA E OUTBOX (14/09): 'criei o card e avisei o grupo' deixou de ser dois passos que podiam se separar. O card nasce e, na mesma transação, nasce o evento (outbox); uma fila (pg-boss, no próprio Postgres) leva o evento a um consumidor que, 2 minutos depois, confere se o webhook chegou a avisar — se a execução morreu no meio, ele completa o aviso no grupo interno (uma vez só, nunca duplicado). Falhou? Tenta de novo com espera crescente; esgotou? Cai na 'dead-letter', visível em /api/system/fila. Desliga com WORKER_ENABLED vazio.",
       "AUDITORIA COM AUTOR (13/09): o audit_log passa a dizer QUEM mudou (era 'service_role' sem nome em 96% das linhas) e O QUE mudou (antes/depois só das colunas alteradas; update sem mudança não gera linha). Cobre clientes, tarefas, equipe e as regras do agente.",
-      "Relatórios quinzenais (Quinz Reports)",
-      "Análise de churn e saúde do portfolio",
-      "Visão executiva (sem dados operacionais)",
+      "Clientes em risco no resumo do dia",
     ],
     tips: [
       "Se você é CEO, use esta área antes de reuniões estratégicas — a visão agregada ajuda a enxergar tendências.",
@@ -891,38 +847,5 @@ const MODULES: Module[] = [
       "Exporte PDF antes de apresentação pra cliente ou investidor.",
       "Veja o changelog — ele conta a história de evolução do produto.",
     ],
-  },
-];
-
-const ROADMAP = [
-  {
-    title: "Gerador de Criativos por IA",
-    description: "Dado briefing + top creative da conta, GPT gera 5 variações de copy/hook/CTA pro Rodrigo produzir.",
-    eta: "Próximo",
-    status: "next",
-  },
-  {
-    title: "Realocador Inteligente de Verba",
-    description: "IA compara CPA/ROAS entre campanhas e sugere transferências com 1 clique.",
-    eta: "Fase 3",
-    status: "planned",
-  },
-  {
-    title: "Relatório Quinzenal Automatizado",
-    description: "PDF auto-gerado a cada 15 dias com análise IA enviado pro cliente.",
-    eta: "Fase 2",
-    status: "planned",
-  },
-  {
-    title: "Área do Cliente Externa",
-    description: "Cliente final acessa sua própria área pra ver análises, relatórios e aprovar conteúdos.",
-    eta: "Q3 2026",
-    status: "planned",
-  },
-  {
-    title: "App Mobile (PWA)",
-    description: "Experiência otimizada pra celular com notificações push.",
-    eta: "Q4 2026",
-    status: "planned",
   },
 ];

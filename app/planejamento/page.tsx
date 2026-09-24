@@ -9,7 +9,9 @@
 // respeita isso em vez de obrigar a trocar de aba no meio.
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { useClientsStore } from "@/stores/useClientsStore";
 import CalendarioEstrategico from "@/components/client-tabs/CalendarioEstrategico";
 import RadarOportunidades from "@/components/planejamento/RadarOportunidades";
@@ -21,12 +23,17 @@ export default function PlanejamentoPage() {
   const clients = useClientsStore((s) => s.clients);
   const initClients = useClientsStore((s) => s.init);
   const [clientId, setClientId] = useState("");
-  const [recentes, setRecentes] = useState<Recente[]>([]);
+  const [recentes, setRecentes] = useState<Recente[] | null>(null); // null = carregando
+  const [erroRecentes, setErroRecentes] = useState<string | null>(null);
   const [baixando, setBaixando] = useState("");
 
   useEffect(() => { initClients(); }, [initClients]);
   const carregarRecentes = () => {
-    authedFetch("/api/cs/calendario/recentes").then((r) => r.json()).then((d) => setRecentes(d.items ?? [])).catch(() => {});
+    setErroRecentes(null);
+    chamar<{ items?: Recente[] }>("/api/cs/calendario/recentes").then((r) => {
+      if (!r.ok) { setErroRecentes(r.erro); return; }
+      setRecentes(r.data?.items ?? []);
+    });
   };
   useEffect(() => { carregarRecentes(); }, []);
 
@@ -39,19 +46,24 @@ export default function PlanejamentoPage() {
   const baixar = async (jobId: string, cliente: string) => {
     setBaixando(jobId);
     try {
-      const jr = await authedFetch(`/api/cs/calendario?jobId=${jobId}`).then((r) => r.json());
-      const res = jr?.result;
-      if (!res?.pecas?.length) return;
+      type Job = { result?: { cliente?: string; periodo?: string; modo?: string; pecas?: unknown[] } };
+      const jr = await chamar<Job>(`/api/cs/calendario?jobId=${jobId}`);
+      if (!jr.ok) { toast.error(`Não consegui abrir o calendário: ${jr.erro}`); return; }
+      const res = jr.data?.result;
+      if (!res?.pecas?.length) { toast.error("Este calendário não tem peças para gerar o PDF."); return; }
+      // PDF é binário: chamar() só lê JSON, então aqui fica o fetch cru, com cada falha dita.
       const pdf = await authedFetch(`/api/cs/calendario/pdf`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cliente: res.cliente, periodo: res.periodo, modo: res.modo, pecas: res.pecas }),
       });
-      if (!pdf.ok) return;
+      if (!pdf.ok) { toast.error(`Não consegui gerar o PDF (erro ${pdf.status}).`); return; }
       const blob = await pdf.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = `calendario-${cliente || "cliente"}.pdf`; a.click();
       URL.revokeObjectURL(url);
-    } catch { /* noop */ } finally { setBaixando(""); }
+    } catch {
+      toast.error("Sem conexão para baixar o PDF. Tenta de novo?");
+    } finally { setBaixando(""); }
   };
 
   return (
@@ -80,7 +92,11 @@ export default function PlanejamentoPage() {
           <h2 className="text-sm font-semibold">Calendários recentes</h2>
           <button onClick={carregarRecentes} className="text-xs text-muted-foreground hover:text-primary">atualizar</button>
         </div>
-        {recentes.length === 0 ? (
+        {erroRecentes ? (
+          <p className="text-sm text-destructive">Não consegui carregar os calendários recentes: {erroRecentes}</p>
+        ) : recentes === null ? (
+          <p className="text-sm text-muted-foreground">Carregando…</p>
+        ) : recentes.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nenhum calendário gerado ainda.</p>
         ) : (
           <div className="divide-y divide-border rounded-lg border border-border">

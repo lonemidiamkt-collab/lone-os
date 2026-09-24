@@ -152,8 +152,16 @@ export function getLiveTimeSpentMs(workStartedAt?: string, totalTimeSpentMs?: nu
 /** Over-time threshold in ms (8 hours) */
 export const OVERTIME_THRESHOLD_MS = 8 * 60 * 60 * 1000;
 
-/** Unified Health Score calculation (0-100). Single source of truth. */
-export function calcHealthScore(client: Pick<Client, "status" | "attentionLevel" | "lastPostDate">): number {
+/**
+ * Saúde 0-100 (100 = saudável). A fonte é clients.current_health_score, gravado por /api/scores;
+ * a conta abaixo é só o fallback de quando o cache não veio.
+ */
+export function calcHealthScore(
+  client: Pick<Client, "status" | "attentionLevel" | "lastPostDate"> & { currentHealthScore?: number | null },
+): number {
+  if (typeof client.currentHealthScore === "number" && Number.isFinite(client.currentHealthScore)) {
+    return Math.max(0, Math.min(100, Math.round(client.currentHealthScore)));
+  }
   let score = 50;
   // Status
   if (client.status === "good") score += 20;

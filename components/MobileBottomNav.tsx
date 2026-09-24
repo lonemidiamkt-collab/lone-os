@@ -10,6 +10,7 @@ import { MoreHorizontal } from "lucide-react";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
 import { PRIMARY_NAV } from "@/components/Sidebar";
+import type { Role } from "@/lib/types";
 
 // Rótulos curtos pro espaço apertado do mobile.
 const SHORT: Record<string, string> = {
@@ -17,6 +18,16 @@ const SHORT: Record<string, string> = {
   "Defesa Ativa": "Defesa",
   "Área CEO": "CEO",
   "Sobre o Sistema": "Sobre",
+};
+
+// O que cada papel mais abre no celular — a ordem do menu lateral não serve (admin ganhava Processos).
+const PRIORIDADE: Record<Role, string[]> = {
+  admin:     ["/", "/traffic", "/social", "/clients"],
+  manager:   ["/", "/traffic", "/social", "/clients"],
+  traffic:   ["/", "/traffic", "/my-work", "/meus-clientes"],
+  social:    ["/", "/social", "/calendar", "/my-work"],
+  designer:  ["/", "/design", "/my-work", "/calendar"],
+  comercial: ["/crm", "/tarefas", "/processos"],
 };
 
 export default function MobileBottomNav() {
@@ -27,13 +38,17 @@ export default function MobileBottomNav() {
   // Rotas públicas por token (portal/ficha/relatório/onboarding) não têm barra.
   if (/^\/(portal|ficha|relatorio|onboarding)\//.test(pathname)) return null;
 
-  const items = PRIMARY_NAV.filter((i) => i.roles.includes(role)).slice(0, 4);
+  const permitidos = PRIMARY_NAV.filter((i) => i.roles.includes(role));
+  const prioridade = (PRIORIDADE[role] ?? [])
+    .map((href) => permitidos.find((i) => i.href === href))
+    .filter((i): i is (typeof permitidos)[number] => !!i);
+  const items = (prioridade.length > 0 ? prioridade : permitidos).slice(0, 4);
   if (items.length === 0) return null;
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   return (
     <nav
-      className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-[var(--sidebar)]/90 backdrop-blur-xl border-t border-sidebar-border"
+      className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-sidebar border-t border-sidebar-border"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       aria-label="Navegação principal"
     >

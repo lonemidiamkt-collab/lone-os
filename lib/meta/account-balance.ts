@@ -2,12 +2,13 @@
 // Funções puras de cálculo de saldo + fetch batch da Meta API
 
 import { META_CONFIG } from "./config";
-import { toBRTDateStr } from "./timezone";
+import { toBRTDateStr, getDateRangeBRT } from "./timezone";
 import {
   evaluateAccount,
   DEFAULT_ALERT_CONFIG,
   type AlertConfig,
 } from "@/lib/budgets/alert-engine";
+import { metaAccountStatus } from "@/lib/budgets/account-status";
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -17,7 +18,7 @@ export interface MetaAccountFields {
   amount_spent: string;     // já gasto no ciclo, em centavos
   spend_cap: string | null; // teto pós-pago em centavos (null ou "0" = sem cap real)
   currency: string;
-  account_status: number;   // 1=Ativa 2=Desativada 3=Em revisão 7=Pendente 9=Grace period
+  account_status: number;   // ver lib/budgets/account-status.ts
   min_daily_budget?: string;
   funding_source_details?: {
     id?: string;
@@ -359,7 +360,42 @@ export async function fetchBatchMonthlySpend(
 }
 
 // ── Fetch batch de gasto diário via Insights (últimos 7 dias) ─
-// Retorna mapa de act_id → array de gastos diários em reais (mais recente por último)
+// Retorna mapa de act_id → gastos diários em reais (mais recente por último), com ZERO nos dias
+// sem linha. Conta AUSENTE do mapa = a leitura falhou; array presente = a Meta respondeu.
+
+/** Série diária de `since` a `until` (inclusive) preenchendo com 0 os dias que a Meta não devolveu. */
+export function dailySeriesFromRows(
+  rows: Array<{ date_start?: string; spend?: string }>,
+  since: string,
+  until: string,
+): number[] {
+  const porDia = new Map<string, number>();
+  for (const r of rows) {
+    if (!r.date_start) continue;
+    const v = parseFloat(r.spend ?? "0");
+    porDia.set(r.date_start, Number.isFinite(v) && v > 0 ? v : 0);
+  }
+  const out: number[] = [];
+  // Meio-dia UTC: somar dias nunca atravessa a data por causa de fuso.
+  const d = new Date(`${since}T12:00:00Z`);
+  const fim = new Date(`${until}T12:00:00Z`);
+  while (d.getTime() <= fim.getTime() && out.length < 62) {
+    out.push(porDia.get(d.toISOString().slice(0, 10)) ?? 0);
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out;
+}
+
+/**
+ * Resume a série diária da Meta. `undefined` (leitura falhou) → null, para quem chama manter o
+ * último valor bom. Série sem gasto → média 0 (≠ "sem dado").
+ */
+export function gastoDiario(serie: number[] | undefined): { last3: number[]; avg: number } | null {
+  if (!serie) return null;
+  const last3 = serie.filter((v) => v > 0).slice(-3);
+  const avg = last3.length > 0 ? last3.reduce((a, b) => a + b, 0) / last3.length : 0;
+  return { last3, avg };
+}
 
 export async function fetchBatchDailySpend(
   token: string,
@@ -368,13 +404,15 @@ export async function fetchBatchDailySpend(
   const result = new Map<string, number[]>();
   if (accountIds.length === 0) return result;
 
+  const { since, until } = getDateRangeBRT(7); // 7 dias fechados, até ontem (BRT)
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
   const BATCH_SIZE = 50;
 
   for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {
     const batch = accountIds.slice(i, i + BATCH_SIZE);
     const requests = batch.map((id) => ({
       method: "GET",
-      relative_url: `${id}/insights?fields=spend&date_preset=last_7d&time_increment=1`,
+      relative_url: `${id}/insights?fields=spend&time_range=${timeRange}&time_increment=1&limit=31`,
     }));
 
     const body = new URLSearchParams();
@@ -407,13 +445,10 @@ export async function fetchBatchDailySpend(
         const item = responses[j];
         if (!item || item.code !== 200) continue;
         try {
-          const data: { data?: Array<{ spend?: string }> } = JSON.parse(item.body);
-          const days = (data.data ?? [])
-            .map((d) => parseFloat(d.spend ?? "0"))
-            .filter((v) => v > 0);
-          if (days.length > 0) result.set(id, days);
+          const data: { data?: Array<{ date_start?: string; spend?: string }> } = JSON.parse(item.body);
+          result.set(id, dailySeriesFromRows(data.data ?? [], since, until));
         } catch {
-          // ignore parse errors per account
+          // corpo ilegível = leitura falhou; conta fica fora do mapa
         }
       }
     } catch (err) {
@@ -427,12 +462,5 @@ export async function fetchBatchDailySpend(
 // ── Status da conta Meta → label/cor ─────────────────────────
 
 export function getAccountStatusLabel(status: number | null | undefined): string {
-  switch (status) {
-    case 1:  return "Ativa";
-    case 2:  return "Desativada";
-    case 3:  return "Em revisão";
-    case 7:  return "Pendente";
-    case 9:  return "Grace period";
-    default: return "Desconhecido";
-  }
+  return metaAccountStatus(status).label;
 }

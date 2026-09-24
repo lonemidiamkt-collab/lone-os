@@ -5,6 +5,7 @@
 // Lê do cache (rota /api/meta/instagram/[clientId]?token=&period=).
 
 import { useState, useEffect } from "react";
+import { chamar } from "@/lib/api/chamar";
 
 interface Post { id: string; tipo: string; thumb: string | null; permalink: string | null; curtidas: number | null; comentarios: number | null; views: number | null; alcance: number | null; engajamento: number }
 interface Resumo { alcance: number | null; alcanceJanelaDias?: number | null; seguidoresGanhos: number | null; curtidas: number; comentarios: number; engajamento: number; postsNoPeriodo: number }
@@ -31,27 +32,56 @@ const nf = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleStri
 const nfSigned = (n: number | null | undefined) => (n == null ? "—" : (n > 0 ? "+" : "") + n.toLocaleString("pt-BR"));
 const PERIODOS: [Period, string][] = [["7d", "7 dias"], ["14d", "14 dias"], ["30d", "30 dias"]];
 
+// nao_conectado = perfil não vinculado (404); reconectar = vínculo expirou (409); falha = Meta/rede agora.
+type Problema = "nao_conectado" | "reconectar" | "falha" | null;
+
 export default function PortalInstagram({ token, clientId }: { token: string; clientId: string }) {
   const [period, setPeriod] = useState<Period>("7d");
   const [data, setData] = useState<Snap | null>(null);
-  const [hide, setHide] = useState(false);
+  const [problema, setProblema] = useState<Problema>(null);
   const [loading, setLoading] = useState(true);
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
-    let alive = true; setLoading(true);
-    fetch(`/api/meta/instagram/${clientId}?token=${token}&period=${period}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (!alive) return; if (d?.conta) { setData(d); } else if (!data) setHide(true); })
-      .catch(() => { if (alive && !data) setHide(true); })
-      .finally(() => { if (alive) setLoading(false); });
+    let alive = true; setLoading(true); setProblema(null);
+    chamar<Snap>(`/api/meta/instagram/${clientId}?token=${encodeURIComponent(token)}&period=${period}`).then((r) => {
+      if (!alive) return;
+      if (r.ok && r.data?.conta) { setData(r.data); }
+      else {
+        // Nunca deixar os números do período anterior sob o rótulo do novo.
+        setData(null);
+        setProblema(r.status === 404 ? "nao_conectado" : r.status === 409 ? "reconectar" : "falha");
+      }
+      setLoading(false);
+    });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, clientId, period]);
+  }, [token, clientId, period, tentativa]);
+
+  if (problema === "falha" || problema === "reconectar") {
+    return (
+      <div className="mb-6 lg:mb-8 rounded-xl p-5 text-center bg-card border border-border" role="status">
+        <p className="text-sm font-semibold mb-1 text-secondary-foreground">
+          {problema === "reconectar" ? "A conexão com seu Instagram precisa ser renovada" : "Não consegui buscar os números do Instagram agora"}
+        </p>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {problema === "reconectar"
+            ? "Nossa equipe cuida disso — se quiser agilizar, é só chamar a gente no WhatsApp."
+            : "Seus dados continuam guardados. Tente de novo em alguns minutos."}
+        </p>
+        {problema === "falha" && (
+          <button onClick={() => setTentativa((t) => t + 1)}
+            className="mt-3 rounded-lg px-4 text-sm font-semibold min-h-[44px] bg-card border border-border text-foreground">
+            Tentar de novo
+          </button>
+        )}
+      </div>
+    );
+  }
 
   // Sem Instagram vinculado, isto sumia INTEIRO e a aba "Crescimento nas redes" ficava em branco —
   // o cliente clicava e via uma tela vazia, sem entender se era erro, se estava carregando ou se
   // não havia resultado. Agora a aba explica o que falta e dá o caminho.
-  if (hide) {
+  if (problema === "nao_conectado") {
     return (
       <div className="mb-6 lg:mb-8 rounded-xl p-6 text-center bg-card border border-border">
         <p className="text-sm font-semibold mb-1 text-secondary-foreground">
@@ -95,7 +125,7 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
         </div>
         <div className="flex gap-0.5 rounded-full p-0.5 bg-card border border-border">
           {PERIODOS.map(([p, l]) => (
-            <button key={p} onClick={() => setPeriod(p)} className={`rounded-full text-xs font-semibold px-3 py-1.5 min-h-[36px] ${period === p ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>{l}</button>
+            <button key={p} onClick={() => setPeriod(p)} disabled={loading} className={`rounded-full text-xs font-semibold px-4 py-2 min-h-[44px] min-w-[44px] disabled:opacity-60 ${period === p ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>{l}</button>
           ))}
         </div>
       </div>
@@ -105,13 +135,13 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
         {cards.map((k) => (
           <div key={k.l} className="rounded-xl p-4 bg-card border border-border">
             <p className="text-xs mb-1 text-lone-text-tertiary">{k.l}</p>
-            <p className="text-2xl font-bold">{loading && !data ? "…" : k.v}</p>
+            <p className="text-2xl font-bold">{loading ? "…" : k.v}</p>
           </div>
         ))}
       </div>
 
       {isPublico && (
-        <p className="text-[11px] mb-4 text-lone-text-tertiary">
+        <p className="text-xs mb-4 text-lone-text-tertiary">
           📊 Alcance, seguidores ganhos e público (gênero/idade/cidades) ficam disponíveis quando o perfil é conectado ao nosso Business Manager.
         </p>
       )}
@@ -119,14 +149,14 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
       {/* O alcance do perfil conta também quem chegou por anúncio — sem dizer isso, o cliente soma
           com o alcance do relatório de tráfego e conta a mesma pessoa duas vezes. */}
       {!isPublico && r?.alcance != null && (
-        <p className="text-[11px] mb-4 text-lone-text-tertiary">
+        <p className="text-xs mb-4 text-lone-text-tertiary">
           O alcance do perfil inclui quem chegou pelos anúncios — não some com o alcance do tráfego pago.
         </p>
       )}
 
       {/* Sem post no período, os números da conta sozinhos dão a impressão de que houve trabalho. */}
       {!loading && data && (r?.postsNoPeriodo ?? 0) === 0 && (
-        <p className="text-[11px] mb-4 text-muted-foreground">
+        <p className="text-xs mb-4 text-muted-foreground">
           <strong className="text-secondary-foreground">Nenhum post publicado neste período.</strong> Os números acima são do perfil como um todo.
         </p>
       )}

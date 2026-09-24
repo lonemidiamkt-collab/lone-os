@@ -8,7 +8,7 @@ import {
 } from "@/lib/meta/api";
 import { countMessagesFromActions } from "@/lib/meta/messages";
 import { fetchAccountReach } from "@/lib/meta/insights-server";
-import { toBRTDateStr } from "@/lib/meta/timezone";
+import { hojeSP } from "@/lib/clients/pausa";
 import type { PeriodKind, SnapshotData, CreativeItem, DemographicRow, AdsStatus } from "./types";
 
 const THUMBNAIL_BUCKET = "meta-thumbnails";
@@ -48,72 +48,71 @@ async function cacheMetaThumbnail(
   }
 }
 
-function toDateStr(d: Date): string {
-  return toBRTDateStr(d);
+// ── Datas do período ──────────────────────────────────────────────────────
+// Tudo em "YYYY-MM-DD" de São Paulo: o container roda em UTC, e a conta com setDate/setMonth no
+// relógio local fazia "ontem" e "começo do mês" pularem um dia à noite.
+function somaDias(ymd: string, n: number): string {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
-function addDays(d: Date, n: number): Date {
-  const r = new Date(d);
-  r.setDate(r.getDate() + n);
-  return r;
+function inicioDoMes(ymd: string, offset = 0): string {
+  const [y, m] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1 + offset, 1, 12)).toISOString().slice(0, 10);
 }
 
-function startOfMonth(d: Date, offset = 0): Date {
-  const s = new Date(d.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-  s.setMonth(s.getMonth() + offset, 1);
-  s.setHours(0, 0, 0, 0);
-  return s;
+function fimDoMes(ymd: string, offset = 0): string {
+  const [y, m] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m + offset, 0, 12)).toISOString().slice(0, 10);
 }
 
-function endOfMonth(d: Date, offset = 0): Date {
-  const s = new Date(d.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-  s.setMonth(s.getMonth() + offset + 1, 0);
-  s.setHours(0, 0, 0, 0);
-  return s;
+function diasNoIntervalo(inicio: string, fim: string): number {
+  return Math.round((Date.parse(`${fim}T12:00:00Z`) - Date.parse(`${inicio}T12:00:00Z`)) / 86_400_000) + 1;
 }
 
-function calcPeriod(kind: PeriodKind, now: Date) {
-  const yesterday = addDays(now, -1);
+const LABELS: Record<PeriodKind, string> = {
+  last_week: "Últimos 7 dias",
+  last_2_weeks: "Últimas 2 semanas",
+  this_month: "Este mês",
+  last_month: "Mês passado",
+};
 
-  let start: Date, end: Date, prevStart: Date, prevEnd: Date;
+/** Janela do período e a janela de comparação, no calendário de São Paulo. Pura (testada). */
+export function calcPeriod(kind: PeriodKind, now: Date) {
+  const hoje = hojeSP(now);
+  const ontem = somaDias(hoje, -1);
 
-  if (kind === "last_week") {
-    end = yesterday;
-    start = addDays(yesterday, -6);
-    prevEnd = addDays(start, -1);
-    prevStart = addDays(prevEnd, -6);
-  } else if (kind === "last_2_weeks") {
-    end = yesterday;
-    start = addDays(yesterday, -13);
-    prevEnd = addDays(start, -1);
-    prevStart = addDays(prevEnd, -13);
+  let start: string, end: string, prevStart: string, prevEnd: string;
+
+  if (kind === "last_week" || kind === "last_2_weeks") {
+    const dias = kind === "last_week" ? 7 : 14;
+    end = ontem;
+    start = somaDias(ontem, -(dias - 1));
+    prevEnd = somaDias(start, -1);
+    prevStart = somaDias(prevEnd, -(dias - 1));
   } else if (kind === "this_month") {
-    start = startOfMonth(now);
-    end = yesterday;
-    const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000));
-    prevEnd = addDays(start, -1);
-    prevStart = addDays(prevEnd, -(days - 1));
+    start = inicioDoMes(hoje);
+    // Dia 1º: "ontem" é do mês passado — a janela vira só hoje, nunca início depois do fim.
+    end = ontem < start ? hoje : ontem;
+    // Compara com os MESMOS dias do mês passado (1º a N), que é o que "que o mês passado" promete.
+    prevStart = inicioDoMes(hoje, -1);
+    const fimMesPassado = fimDoMes(hoje, -1);
+    const candidato = somaDias(prevStart, diasNoIntervalo(start, end) - 1);
+    prevEnd = candidato < fimMesPassado ? candidato : fimMesPassado;
   } else {
-    // last_month
-    start = startOfMonth(now, -1);
-    end = endOfMonth(now, -1);
-    prevStart = startOfMonth(now, -2);
-    prevEnd = endOfMonth(now, -2);
+    start = inicioDoMes(hoje, -1);
+    end = fimDoMes(hoje, -1);
+    prevStart = inicioDoMes(hoje, -2);
+    prevEnd = fimDoMes(hoje, -2);
   }
 
-  const LABELS: Record<PeriodKind, string> = {
-    last_week: "Últimos 7 dias",
-    last_2_weeks: "Últimas 2 semanas",
-    this_month: "Este mês",
-    last_month: "Mês passado",
-  };
-
   return {
-    start: toDateStr(start),
-    end: toDateStr(end),
+    start,
+    end,
     label: LABELS[kind],
-    previous_start: toDateStr(prevStart),
-    previous_end: toDateStr(prevEnd),
+    previous_start: prevStart,
+    previous_end: prevEnd,
   };
 }
 
@@ -123,17 +122,57 @@ function delta(current: number, previous: number): { delta_pct: number | null; d
   return { delta_pct: Math.round(pct * 10) / 10, direction: pct > 1 ? "up" : pct < -1 ? "down" : "neutral" };
 }
 
-async function getMetaToken(): Promise<string | null> {
-  const { data } = await supabaseAdmin
+/** `erro` = não deu pra saber (banco falhou); `null` = não há token válido (ausente ou vencido). */
+async function getMetaToken(): Promise<{ token: string | null; erro: boolean }> {
+  const { data, error } = await supabaseAdmin
     .from("agency_settings")
     .select("key, value")
     .in("key", ["meta_token", "meta_token_expires_at"]);
+  if (error) return { token: null, erro: true };
   const map = new Map((data ?? []).map((r: { key: string; value: string }) => [r.key, r.value]));
   const token = map.get("meta_token");
   const expiresAt = map.get("meta_token_expires_at") ? parseInt(map.get("meta_token_expires_at")!, 10) : null;
-  if (!token) return null;
-  if (expiresAt && expiresAt < Date.now()) return null;
-  return token;
+  if (!token) return { token: null, erro: false };
+  if (expiresAt && expiresAt < Date.now()) return { token: null, erro: false };
+  return { token, erro: false };
+}
+
+/**
+ * Conta de anúncio do cliente. `indefinida` = existe conta, mas não dá pra afirmar qual/ler agora
+ * (consulta falhou, ou duas contas sem a principal marcada). Isso NÃO é "sem conta".
+ */
+async function contaDoCliente(clientId: string): Promise<{ conta: string | null; indefinida: string | null }> {
+  const [{ data: linhas, error }, { data: cli, error: errCli }] = await Promise.all([
+    supabaseAdmin.from("ad_accounts").select("meta_account_id").eq("client_id", clientId),
+    supabaseAdmin.from("clients").select("meta_ad_account_id").eq("id", clientId).maybeSingle(),
+  ]);
+  if (error || errCli) return { conta: null, indefinida: `consulta: ${(error ?? errCli)?.message}` };
+  const principal = (cli?.meta_ad_account_id as string | null) || null;
+  const contas = [...new Set((linhas ?? []).map((l) => l.meta_account_id as string).filter(Boolean))];
+  if (contas.length === 1) return { conta: contas[0], indefinida: null };
+  if (contas.length === 0) return { conta: principal, indefinida: null };
+  // Duas contas: a do cadastro do cliente é a principal (é ela que o /clients mantém em ad_accounts).
+  if (principal && contas.includes(principal)) return { conta: principal, indefinida: null };
+  return { conta: null, indefinida: `${contas.length} contas sem principal` };
+}
+
+/** Snapshot "não sei agora": números null (nunca 0) para nenhuma tela ler como "não rodou nada". */
+function snapshotIndisponivel(
+  periodKind: PeriodKind,
+  period: ReturnType<typeof calcPeriod>,
+  agency_actions: SnapshotData["agency_actions"],
+): SnapshotData {
+  const nada = { value: null, delta_pct: null, direction: "neutral" as const };
+  return {
+    ads_status: "indisponivel",
+    period: { kind: periodKind, ...period },
+    kpis: { messages: nada, spend: nada, cpa: nada, reach: nada },
+    chart: { days: [], series: { messages: [], clicks: [], spend: [], reach: [] }, peak: null },
+    top_creatives: [],
+    demographics: { gender: null, age_ranges: [] },
+    agency_actions,
+    generated_at: new Date().toISOString(),
+  };
 }
 
 export async function buildSnapshot(params: {
@@ -163,14 +202,11 @@ export async function buildSnapshot(params: {
   }));
 
   // ── Busca conta Meta do cliente ───────────────────────────────────────────
-  const { data: account } = await supabaseAdmin
-    .from("ad_accounts")
-    .select("meta_account_id")
-    .eq("client_id", params.clientId)
-    .single();
-
-  const metaAccountId = account?.meta_account_id as string | undefined;
-  const metaToken = metaAccountId ? await getMetaToken() : null;
+  // Antes: `.single()` + token vencido caíam todos em "sem_conta" (zeros de verdade) e iam pro cache
+  // de 6h. Falha de consulta, duas contas ou token vencido agora são "indisponível": não é zero.
+  const { conta: metaAccountId, indefinida } = await contaDoCliente(params.clientId);
+  const tk = metaAccountId ? await getMetaToken() : { token: null, erro: false };
+  const metaToken = tk.token;
 
   const emptyKpi = { value: 0, delta_pct: null, direction: "neutral" as const };
   const emptyChart = {
@@ -178,6 +214,16 @@ export async function buildSnapshot(params: {
     series: { messages: [], clicks: [], spend: [], reach: [] },
     peak: null,
   };
+
+  if (indefinida || (metaAccountId && !metaToken)) {
+    const motivo = indefinida ?? (tk.erro ? "token: consulta falhou" : "token Meta ausente ou vencido");
+    console.error(`[buildSnapshot] ${params.clientId} ${params.periodKind} → indisponivel: ${motivo}`);
+    Sentry.captureMessage("Portal: snapshot indisponivel", {
+      level: "error",
+      extra: { clientId: params.clientId, periodKind: params.periodKind, motivos: motivo },
+    });
+    return snapshotIndisponivel(params.periodKind, period, agency_actions);
+  }
 
   if (!metaToken || !metaAccountId) {
     return {
@@ -237,6 +283,7 @@ export async function buildSnapshot(params: {
       extra: { clientId: params.clientId, periodKind: params.periodKind, motivos },
     });
   }
+  if (falhouEssencial) return snapshotIndisponivel(params.periodKind, period, agency_actions);
 
   // ── KPIs período atual ────────────────────────────────────────────────────
   const sumNum = (rows: typeof cur, field: keyof typeof cur[0]) =>

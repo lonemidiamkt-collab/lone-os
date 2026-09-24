@@ -467,6 +467,8 @@ export async function fetchCampaignInsights(
           fetch(`https://graph.facebook.com/v21.0/${campaign.id}/insights?${adsetParams}`),
         ]);
 
+        // Falha no insight NÃO é "gastou zero": marca pra UI mostrar "sem dados" em vez de R$0.
+        const insightsFailed = !dailyRes.ok || !totalRes.ok;
         const dailyData = dailyRes.ok ? await dailyRes.json() : { data: [] };
         const totalData = totalRes.ok ? await totalRes.json() : { data: [] };
         const adsetData = adsetRes.ok ? await adsetRes.json() : { data: [] };
@@ -595,11 +597,16 @@ export async function fetchCampaignInsights(
           results,
           costPerResult,
           dailyMetrics,
-          hasData,
+          hasData: hasData && !insightsFailed,
+          insightsFailed,
           lastSyncAt: syncTimestamp,
         };
       } catch {
-        return { id: campaign.id, name: campaign.name, error: true };
+        return {
+          id: campaign.id, name: campaign.name, objective: campaign.objective,
+          status: campaign.status?.toLowerCase() ?? "unknown",
+          error: true, insightsFailed: true, hasData: false, dailyMetrics: [],
+        };
       }
   };
   // Processa em lotes pequenos p/ não estourar a concorrência de fetch (em sync com

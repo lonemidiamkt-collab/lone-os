@@ -7,6 +7,7 @@ import { randomBytes } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { estaPausado } from "@/lib/clients/pausa";
+import { criarLimite } from "@/lib/portal/limite";
 
 // POST /api/portal/[token]/upload — o CLIENTE manda material pelo painel.
 //
@@ -26,14 +27,7 @@ const TIPOS_OK = new Set([
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel", "text/csv",
 ]);
 
-const RATE = new Map<string, { count: number; reset: number }>();
-function limitado(token: string): boolean {
-  const agora = Date.now();
-  const e = RATE.get(token);
-  if (!e || e.reset < agora) { RATE.set(token, { count: 1, reset: agora + 3600_000 }); return false; }
-  if (e.count >= 30) return true;  // 30 arquivos por hora por cliente
-  e.count++; return false;
-}
+const LIMITE = criarLimite(30, 3600_000); // 30 arquivos por hora por cliente
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -45,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at || estaPausado(client)) {
     return NextResponse.json({ error: "Token inválido ou revogado" }, { status: 404 });
   }
-  if (limitado(token)) {
+  if (LIMITE.estourou(client.id as string)) {
     return NextResponse.json({ error: "Muitos envios seguidos. Tente daqui a pouco." }, { status: 429 });
   }
 

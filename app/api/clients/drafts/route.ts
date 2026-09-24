@@ -6,12 +6,18 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerUser } from "@/lib/supabase/auth-server";
+import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { fetchDraftClientsFull } from "@/lib/supabase/queries";
 
+// Só GESTÃO: é o cadastro inteiro (CPF, documentos, endereço) de quem ainda nem foi aprovado.
 export async function GET(req: NextRequest) {
-  const user = await getServerUser(req);
-  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const drafts = await fetchDraftClientsFull();
-  return NextResponse.json({ drafts });
+  const gate = await requireRole(req, GESTAO);
+  if (gate instanceof NextResponse) return gate;
+  try {
+    const drafts = await fetchDraftClientsFull();
+    return NextResponse.json({ drafts });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e);
+    return NextResponse.json({ error: `Não consegui ler os cadastros pendentes: ${msg}` }, { status: 500 });
+  }
 }

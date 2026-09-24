@@ -32,6 +32,7 @@ vi.mock("@/lib/supabase/server", () => {
       chain[m] = () => chain;
     }
     chain.single = async () => resultado;
+    chain.maybeSingle = async () => resultado;
     chain.then = (r: (v: unknown) => unknown) => Promise.resolve(resultado).then(r);
     return chain;
   }
@@ -50,7 +51,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   tabelas.valores = {
     agency_actions: [],
-    ad_accounts: { meta_account_id: "act_123" },
+    ad_accounts: [{ meta_account_id: "act_123" }],
+    clients: { meta_ad_account_id: "act_123" },
     agency_settings: [{ key: "meta_token", value: "tok" }],
   };
   meta.getInsightsByDateRange.mockResolvedValue(DIA);
@@ -68,7 +70,8 @@ describe("buildSnapshot — confiança do dado", () => {
   });
 
   it("cliente sem conta de anúncio → sem_conta (zero aqui é a verdade)", async () => {
-    tabelas.valores.ad_accounts = null;
+    tabelas.valores.ad_accounts = [];
+    tabelas.valores.clients = { meta_ad_account_id: null };
     const s = await buildSnapshot({ clientId: "c1", periodKind: "last_week" });
     expect(s.ads_status).toBe("sem_conta");
     expect(s.kpis.spend.value).toBe(0);
@@ -93,8 +96,34 @@ describe("buildSnapshot — confiança do dado", () => {
     meta.fetchAccountReach.mockResolvedValue(52_669); // o alcance do Império naquele dia
     const s = await buildSnapshot({ clientId: "c1", periodKind: "last_week" });
     expect(s.ads_status).toBe("indisponivel");
-    expect(s.kpis.spend.value).toBe(0); // o número zerado existe...
-    // ...mas agora vem carimbado como não-confiável, e por isso não é gravado nem mostrado.
+    // Indisponível vem com número NULL, não zero: nenhuma tela consegue ler como "gastou R$0".
+    expect(s.kpis.spend.value).toBeNull();
+    expect(s.kpis.messages.value).toBeNull();
+  });
+
+  it("token Meta vencido com conta existente → indisponivel, não sem_conta", async () => {
+    tabelas.valores.agency_settings = [
+      { key: "meta_token", value: "tok" },
+      { key: "meta_token_expires_at", value: String(Date.now() - 1000) },
+    ];
+    const s = await buildSnapshot({ clientId: "c1", periodKind: "last_week" });
+    expect(s.ads_status).toBe("indisponivel");
+    expect(s.kpis.messages.value).toBeNull();
+  });
+
+  it("duas contas, uma é a principal do cadastro → usa a principal (ok)", async () => {
+    tabelas.valores.ad_accounts = [{ meta_account_id: "act_999" }, { meta_account_id: "act_123" }];
+    const s = await buildSnapshot({ clientId: "c1", periodKind: "last_week" });
+    expect(s.ads_status).toBe("ok");
+    expect(meta.getInsightsByDateRange.mock.calls[0][0]).toBe("act_123");
+  });
+
+  it("duas contas sem principal → indisponivel (antes: .single() falhava e virava sem_conta)", async () => {
+    tabelas.valores.ad_accounts = [{ meta_account_id: "act_1" }, { meta_account_id: "act_2" }];
+    tabelas.valores.clients = { meta_ad_account_id: null };
+    const s = await buildSnapshot({ clientId: "c1", periodKind: "last_week" });
+    expect(s.ads_status).toBe("indisponivel");
+    expect(meta.getInsightsByDateRange).not.toHaveBeenCalled();
   });
 
   it("só os criativos falharam → parcial (números valem, seção de criativo não)", async () => {

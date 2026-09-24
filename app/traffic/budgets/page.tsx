@@ -6,7 +6,6 @@ import {
   RefreshCw, Settings, MessageCircle, AlertTriangle, CheckCircle,
   Wifi, WifiOff, Filter, X, Loader2, Plus, Search,
 } from "lucide-react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
 import {
   formatDaysRemaining,
@@ -18,16 +17,10 @@ import {
   type DisplaySeverity,
   type BalanceDisplay,
 } from "@/lib/budgets/display";
+import { metaAccountStatus } from "@/lib/budgets/account-status";
 import { cn } from "@/lib/utils";
 
 // ── Tipos ────────────────────────────────────────────────────
-
-interface AlertRule {
-  id: string;
-  severity: "warning" | "critical";
-  threshold_value: number;
-  is_active: boolean;
-}
 
 interface AdAccountRow {
   id: string;
@@ -56,7 +49,8 @@ interface AdAccountRow {
     daily_budget: number | null;
     payment_method: string | null;
   };
-  budget_alert_rules: AlertRule[];
+  /** client_alert_config.verba_minima — o limite que o alerta do servidor usa. */
+  verba_minima: number | null;
 }
 
 interface EnrichedAccount extends AdAccountRow {
@@ -118,12 +112,9 @@ function enrichAccount(a: AdAccountRow): EnrichedAccount {
     ? available / avgDailySpend
     : null;
 
-  const warningThreshold = a.budget_alert_rules?.find(
-    (r) => r.severity === "warning" && r.is_active,
-  )?.threshold_value ?? null;
-  const criticalThreshold = a.budget_alert_rules?.find(
-    (r) => r.severity === "critical" && r.is_active,
-  )?.threshold_value ?? null;
+  // Mesma regra do servidor (sync-core): só limite positivo vale; senão herda o % da verba.
+  const warningThreshold = a.verba_minima != null && a.verba_minima > 0 ? a.verba_minima : null;
+  const criticalThreshold = null;
 
   const severity = getBalanceSeverity(
     available,
@@ -227,73 +218,17 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
   const [dailyBudget, setDailyBudget] = useState(account.clients?.daily_budget?.toFixed(2) ?? "");
   const [paymentMethod, setPaymentMethod] = useState(account.clients?.payment_method ?? "pix");
 
-  const warningDefault = account.warningThreshold ?? 200;
-  const criticalDefault = account.criticalThreshold ?? 80;
-
-  const [warning, setWarning] = useState({
-    threshold: warningDefault.toFixed(2),
-    interval: "6",
-    maxNotif: "3",
-    channels: ["whatsapp"] as string[],
-    active: !!account.budget_alert_rules?.find((r) => r.severity === "warning"),
-  });
-  const [critical, setCritical] = useState({
-    threshold: criticalDefault.toFixed(2),
-    interval: "4",
-    maxNotif: "5",
-    channels: ["whatsapp"] as string[],
-    active: !!account.budget_alert_rules?.find((r) => r.severity === "critical"),
-  });
+  const [verbaMinima, setVerbaMinima] = useState(account.verba_minima?.toFixed(2) ?? "");
 
   const [saving, setSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const CHANNEL_OPTIONS = ["whatsapp", "slack", "email"];
-
-  function toggleChannel(setter: typeof setWarning, ch: string) {
-    setter((prev) => ({
-      ...prev,
-      channels: prev.channels.includes(ch)
-        ? prev.channels.filter((c) => c !== ch)
-        : [...prev.channels, ch],
-    }));
-  }
-
   async function handleSave() {
     setValidationError(null);
-    const wt = parseFloat(warning.threshold);
-    const ct = parseFloat(critical.threshold);
-
-    if (warning.active && critical.active && ct >= wt) {
-      setValidationError("Threshold crítico deve ser menor que o de atenção");
+    const limite = verbaMinima.trim() ? parseFloat(verbaMinima) : null;
+    if (limite !== null && (!Number.isFinite(limite) || limite < 0)) {
+      setValidationError("Limite de saldo inválido");
       return;
-    }
-    if ((warning.active && warning.channels.length === 0) ||
-        (critical.active && critical.channels.length === 0)) {
-      setValidationError("Selecione ao menos 1 canal de notificação");
-      return;
-    }
-
-    const rules = [];
-    if (warning.active) {
-      rules.push({
-        severity: "warning" as const,
-        threshold_value: wt,
-        repeat_interval_hours: parseInt(warning.interval),
-        max_notifications: parseInt(warning.maxNotif),
-        channels: warning.channels,
-        is_active: true,
-      });
-    }
-    if (critical.active) {
-      rules.push({
-        severity: "critical" as const,
-        threshold_value: ct,
-        repeat_interval_hours: parseInt(critical.interval),
-        max_notifications: parseInt(critical.maxNotif),
-        channels: critical.channels,
-        is_active: true,
-      });
     }
 
     setSaving(true);
@@ -305,117 +240,18 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
           monthlyBudget: monthlyBudget ? parseFloat(monthlyBudget) : null,
           dailyBudget: dailyBudget ? parseFloat(dailyBudget) : null,
           paymentMethod: paymentMethod || null,
-          rules,
+          verbaMinima: limite,
           phone: phone || null,
           pixKey: pixKey || null,
       });
       if (!res.ok) { setValidationError(res.erro ?? "Erro ao salvar"); return; }
+      toast.success(`${account.clientName}: configuração salva`);
       onSaved();
       onClose();
     } finally {
       setSaving(false);
     }
   }
-
-  const RuleBlock = ({
-    color,
-    label,
-    rule,
-    setter,
-  }: {
-    color: "warning" | "critical";
-    label: string;
-    rule: typeof warning;
-    setter: typeof setWarning;
-  }) => {
-    const borderColor = color === "critical" ? "border-destructive/25" : "border-lone-warning/25";
-    const bgColor = color === "critical" ? "bg-lone-danger-bg" : "bg-lone-warning-bg";
-    const textColor = color === "critical" ? "text-destructive" : "text-lone-warning";
-    const dotColor = color === "critical" ? "bg-destructive" : "bg-lone-warning";
-
-    return (
-      <div className={cn("rounded-xl border p-4 space-y-3", borderColor, bgColor)}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className={cn("w-2 h-2 rounded-full", dotColor)} />
-            <p className={cn("text-xs font-semibold", textColor)}>{label}</p>
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <span className="text-[10px] text-muted-foreground">Ativo</span>
-            <div
-              onClick={() => setter((p) => ({ ...p, active: !p.active }))}
-              className={cn(
-                "w-8 h-4 rounded-full transition-colors cursor-pointer",
-                rule.active ? (color === "critical" ? "bg-destructive" : "bg-lone-warning") : "bg-muted",
-              )}
-            >
-              <div className={cn(
-                "w-3 h-3 bg-card rounded-full mt-0.5 transition-transform",
-                rule.active ? "translate-x-4" : "translate-x-0.5",
-              )} />
-            </div>
-          </label>
-        </div>
-
-        {rule.active && (
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Threshold (R$)</p>
-              <input
-                type="number" min="0" step="10"
-                value={rule.threshold}
-                onChange={(e) => setter((p) => ({ ...p, threshold: e.target.value }))}
-                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary/50"
-              />
-            </div>
-            <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Intervalo (h)</p>
-              <input
-                type="number" min="1" max="24"
-                value={rule.interval}
-                onChange={(e) => setter((p) => ({ ...p, interval: e.target.value }))}
-                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary/50"
-              />
-            </div>
-            <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Máx. avisos</p>
-              <input
-                type="number" min="1" max="20"
-                value={rule.maxNotif}
-                onChange={(e) => setter((p) => ({ ...p, maxNotif: e.target.value }))}
-                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary/50"
-              />
-            </div>
-          </div>
-        )}
-
-        {rule.active && (
-          <div className="space-y-1">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Canais</p>
-            <div className="flex gap-2 flex-wrap">
-              {CHANNEL_OPTIONS.map((ch) => (
-                <button
-                  key={ch}
-                  type="button"
-                  onClick={() => toggleChannel(setter, ch)}
-                  className={cn(
-                    "text-[10px] px-2.5 py-1 rounded-full border transition-all capitalize",
-                    rule.channels.includes(ch)
-                      ? color === "critical"
-                        ? "bg-lone-danger-bg border-lone-danger-border text-destructive"
-                        : "bg-lone-warning-bg border-lone-warning-border text-lone-warning"
-                      : "bg-surface border-border text-muted-foreground hover:border-border",
-                  )}
-                >
-                  {ch}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4">
@@ -549,11 +385,19 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
             </div>
           </div>
 
-          {/* Regras */}
-          <div className="space-y-3">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Regras de alerta</p>
-            <RuleBlock color="warning"  label="Atenção"  rule={warning}  setter={setWarning}  />
-            <RuleBlock color="critical" label="Crítico"  rule={critical} setter={setCritical} />
+          {/* Limite de saldo baixo — client_alert_config.verba_minima, lido pelo alerta do servidor */}
+          <div className="space-y-1">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Avisar quando o saldo ficar abaixo de (R$)</p>
+            <input
+              type="number" min="0" step="10"
+              value={verbaMinima}
+              onChange={(e) => setVerbaMinima(e.target.value)}
+              placeholder="em branco = % da verba mensal"
+              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Vale para o aviso de saldo baixo no grupo do tráfego. Em branco, o aviso usa o percentual da verba configurado na agência.
+            </p>
           </div>
 
           {validationError && (
@@ -613,14 +457,12 @@ function AddAccountModal({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    authedFetch("/api/traffic/ad-accounts")
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) { setError(data.error ?? "Erro ao carregar contas"); return; }
-        setMetaAccounts(data.accounts ?? []);
-        setClients(data.clients ?? []);
+    chamar<{ accounts?: MetaAccountOption[]; clients?: ClientOption[] }>("/api/traffic/ad-accounts")
+      .then((res) => {
+        if (!res.ok) { setError(res.erro ?? "Erro ao carregar contas"); return; }
+        setMetaAccounts(res.data?.accounts ?? []);
+        setClients(res.data?.clients ?? []);
       })
-      .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -632,31 +474,20 @@ function AddAccountModal({
     if (!selectedMeta || !selectedClient) return;
     setSaving(true);
     try {
-      const res = await authedFetch("/api/traffic/ad-accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: selectedClient,
-          metaAccountId: selectedMeta.id,
-          accountName: selectedMeta.name,
-        }),
+      const res = await chamar("/api/traffic/ad-accounts", {
+        clientId: selectedClient,
+        metaAccountId: selectedMeta.id,
+        accountName: selectedMeta.name,
       });
-      const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? "Erro ao adicionar conta");
+        toast.error(res.erro ?? "Erro ao adicionar conta");
         return;
       }
       toast.success(`${selectedMeta.name} adicionada — sincronizando...`);
-      // Trigger immediate sync for the new account
-      await authedFetch("/api/traffic/sync-balances", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountIds: [selectedMeta.id] }),
-      });
+      const sync = await chamar("/api/traffic/sync-balances", { accountIds: [selectedMeta.id] });
+      if (!sync.ok) toast.error(`Conta adicionada, mas a sincronização falhou: ${sync.erro}`);
       onAdded();
       onClose();
-    } catch (e) {
-      toast.error(`Erro de rede: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setSaving(false);
     }
@@ -747,7 +578,7 @@ function AddAccountModal({
                         {a.account_status === 1 ? (
                           <span className="text-[10px] text-lone-success font-medium shrink-0 ml-2">Ativa</span>
                         ) : (
-                          <span className="text-[10px] text-muted-foreground shrink-0 ml-2">Status {a.account_status}</span>
+                          <span className="text-[10px] text-muted-foreground shrink-0 ml-2">{metaAccountStatus(a.account_status).label}</span>
                         )}
                       </button>
                     ))}
@@ -822,15 +653,15 @@ export default function BudgetsPage() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60_000);
     try {
-      const res = await authedFetch("/api/traffic/sync-balances", {
-        method: "POST",
-        signal: controller.signal,
-      });
-      const data = await res.json();
+      const res = await chamar<{ synced?: number; errors?: number; total?: number }>(
+        "/api/traffic/sync-balances", {}, { signal: controller.signal },
+      );
       if (!res.ok) {
-        toast.error(`Falha na sincronização: ${data.error ?? "Erro desconhecido"}`);
+        toast.error(controller.signal.aborted
+          ? "Sincronização demorou mais de 60s. Verifique o token Meta."
+          : `Falha na sincronização: ${res.erro}`);
       } else {
-        const { synced = 0, errors: errs = 0, total = 0 } = data;
+        const { synced = 0, errors: errs = 0, total = 0 } = res.data ?? {};
         if (errs > 0) {
           toast.warning(`${synced} de ${total} contas sincronizadas — ${errs} com erro (verifique o token Meta)`);
         } else {
@@ -838,12 +669,6 @@ export default function BudgetsPage() {
         }
       }
       await load();
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === "AbortError") {
-        toast.error("Sincronização demorou mais de 60s. Verifique o token Meta.");
-      } else {
-        toast.error(`Erro de rede: ${err instanceof Error ? err.message : "desconhecido"}`);
-      }
     } finally {
       clearTimeout(timeoutId);
       setSyncing(false);
@@ -856,20 +681,13 @@ export default function BudgetsPage() {
     setTogglingId(account.id);
     try {
       const newIsPrepaid = !account.is_prepaid;
-      const res = await authedFetch("/api/traffic/billing-type", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountId: account.id, isPrepaid: newIsPrepaid }),
-      });
+      const res = await chamar("/api/traffic/billing-type", { accountId: account.id, isPrepaid: newIsPrepaid });
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        toast.error(`Erro: ${d.error ?? "desconhecido"}`);
+        toast.error(`Falha ao alterar tipo de cobrança: ${res.erro}`);
         return;
       }
       toast.success(`${account.clientName} → ${newIsPrepaid ? "Pré-pago (Pix/Boleto)" : "Pós-pago (Cartão)"}`);
       await load();
-    } catch {
-      toast.error("Falha ao alterar tipo de cobrança");
     } finally {
       setTogglingId(null);
     }
@@ -888,26 +706,12 @@ export default function BudgetsPage() {
     : accounts.filter((a) => a.display.severity === filterSeverity);
   const q = clientSearch.trim().toLowerCase();
   const filtered = q
-    ? bySeverity.filter((a) => a.clientName.toLowerCase().includes(q) || a.id.toLowerCase().includes(q))
+    ? bySeverity.filter((a) => a.clientName.toLowerCase().includes(q) || a.meta_account_id.toLowerCase().includes(q))
     : bySeverity;
-
-  // Saldo agregado: contas ativas com saldo calculável (pré-pago + pós com cap)
-  const computedAccounts = accounts.filter(
-    (a) => a.availableBalance !== null && a.account_status === 1,
-  );
-  const totalBalance = computedAccounts.reduce((s, a) => s + (a.availableBalance ?? 0), 0);
 
   const criticalCount  = accounts.filter((a) => a.display.severity === "critical").length;
   const warningCount   = accounts.filter((a) => a.display.severity === "warning").length;
   const reviewCount    = accounts.filter((a) => a.display.severity === "review").length;
-  // Contas cartão ativas sem monitoramento de saldo (marcadas como payment_method=cartao,
-  // ou pós-pago sem verba/cap definido — cartão sem teto).
-  const activeCardCount = accounts.filter(
-    (a) => a.account_status === 1 && (
-      a.clients?.payment_method === "cartao" ||
-      (!a.is_prepaid && a.monthly_budget === null && (a.spend_cap === null || a.spend_cap === 0))
-    ),
-  ).length;
 
   // Alerta de sync desatualizado (>30min)
   const syncStale = lastSyncAt
@@ -920,9 +724,13 @@ export default function BudgetsPage() {
     if (!phone) return "";
     const clientName = account.clientName;
     const balance = account.display.primary;
-    const pix = account.clients?.client_pix_key ?? "—";
+    // Quem paga no cartão não recarrega por Pix: a mensagem pede para conferir o cartão.
+    const pagaNoCartao = !account.is_prepaid || account.clients?.payment_method === "cartao";
+    const pix = account.clients?.client_pix_key;
     const text = encodeURIComponent(
-      `Oi ${clientName}! Sua conta de anúncios está em ${balance}. Pode fazer um Pix pra não pausar as campanhas? Chave: ${pix}`
+      pagaNoCartao
+        ? `Oi ${clientName}! Sua conta de anúncios está em ${balance}. Pode conferir o cartão cadastrado na Meta pra não pausar as campanhas?`
+        : `Oi ${clientName}! Sua conta de anúncios está em ${balance}. Pode fazer um Pix pra não pausar as campanhas?${pix ? ` Chave: ${pix}` : ""}`
     );
     return `https://wa.me/${phone.replace(/\D/g, "")}?text=${text}`;
   }
@@ -981,7 +789,7 @@ export default function BudgetsPage() {
 
         {/* Aviso sync desatualizado */}
         {syncStale && (
-          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-lone-warning-bg/[0.06] border border-lone-warning-border">
+          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-lone-warning-bg border border-lone-warning-border">
             <AlertTriangle size={13} className="text-lone-warning shrink-0" />
             <p className="text-xs text-lone-warning">
               Dados desatualizados há mais de 30 minutos. Clique em "Sincronizar" ou verifique o token Meta.
@@ -990,7 +798,7 @@ export default function BudgetsPage() {
         )}
 
         {/* Cards de resumo */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
             {
               label: "Total de contas",
@@ -1001,17 +809,9 @@ export default function BudgetsPage() {
               color: "text-foreground",
             },
             {
-              label: "Saldo agregado",
-              value: formatCurrency(totalBalance),
-              sub: `${computedAccounts.length} de ${accounts.length} com saldo`,
-              onClick: () => setFilterSeverity("ok"),
-              active: filterSeverity === "ok",
-              color: "text-lone-success",
-            },
-            {
               label: "Atenção",
               value: warningCount + reviewCount,
-              sub: "saldo baixo ou em revisão",
+              sub: "saldo baixo ou pendência na conta",
               onClick: () => setFilterSeverity(filterSeverity === "warning" ? "all" : "warning"),
               active: filterSeverity === "warning",
               color: "text-lone-warning",
@@ -1023,14 +823,6 @@ export default function BudgetsPage() {
               onClick: () => setFilterSeverity(filterSeverity === "critical" ? "all" : "critical"),
               active: filterSeverity === "critical",
               color: "text-destructive",
-            },
-            {
-              label: "Cartão ativo",
-              value: activeCardCount,
-              sub: "sem monitor de saldo",
-              onClick: () => setFilterSeverity("all"),
-              active: false,
-              color: "text-muted-foreground",
             },
           ].map((card) => (
             <button
@@ -1121,9 +913,10 @@ export default function BudgetsPage() {
                   key={account.id}
                   className={cn(
                     "grid grid-cols-[24px_1fr_100px_130px_80px_100px_80px] gap-3 px-4 py-3 border-b border-border last:border-b-0 items-center transition-colors hover:bg-card/[0.02]",
-                    isCritical && "bg-destructive/[0.04] border-l-[3px] border-l-destructive",
-                    isWarning  && "bg-lone-warning-bg border-l-[3px] border-l-lone-warning",
-                    isReview   && "bg-lone-warning-bg border-l-[3px] border-l-lone-warning",
+                    // Crítico é o mais alto: fundo tintado + borda cheia; atenção só a borda.
+                    isCritical && "bg-lone-danger-bg border-l-4 border-l-destructive",
+                    isWarning  && "border-l-[3px] border-l-lone-warning",
+                    isReview   && "border-l-[3px] border-l-lone-warning-border",
                     isPaused   && "opacity-50",
                   )}
                 >
@@ -1259,9 +1052,9 @@ export default function BudgetsPage() {
         {/* Legenda */}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[10px] text-muted-foreground pt-1">
           {[
-            { color: "bg-destructive",  label: "Crítico — saldo abaixo do threshold ou <1d" },
+            { color: "bg-destructive",  label: "Crítico — saldo abaixo do limite, <1d ou pagamento falhou" },
             { color: "bg-lone-warning",  label: "Atenção — saldo baixo ou <3d" },
-            { color: "bg-lone-warning-bg",  label: "Em revisão / Pendente — conta Meta suspensa" },
+            { color: "bg-lone-warning-bg",  label: "Em análise — pendência na conta Meta" },
             { color: "bg-lone-success-bg",label: "Ativa — saldo OK ou cartão sem limite" },
             { color: "bg-muted",   label: "Desativada / fora de operação" },
           ].map((item) => (

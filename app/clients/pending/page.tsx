@@ -7,6 +7,8 @@ import { useRole } from "@/lib/context/RoleContext";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { supabase } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
+import { toast } from "sonner";
 import type { Client } from "@/lib/types";
 import {
   Check, X, Loader2, Clock, Send, ArrowLeft, FileText, Download,
@@ -119,6 +121,8 @@ export default function PendingClientsPage() {
   const [submissions, setSubmissions] = useState<Record<string, Submission>>({});
   const [selected, setSelected] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
+  // Erro de carga ≠ "nenhum cadastro pendente": sem isto um 500 mostrava o check verde de "tudo revisado".
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [reviewChecks, setReviewChecks] = useState({ docs: false, access: false, data: false });
@@ -138,9 +142,16 @@ export default function PendingClientsPage() {
 
   // ─── Load data ────────────────────────────────
   const loadData = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     // Rascunhos COMPLETOS (com PII/docs) via rota gated — a lista magra não traz esses campos.
-    const draftsRes = await authedFetch("/api/clients/drafts").then((r) => (r.ok ? r.json() : { drafts: [] })).catch(() => ({ drafts: [] }));
-    const d = (draftsRes.drafts ?? []) as Client[];
+    const r = await chamar<{ drafts?: Client[] }>("/api/clients/drafts");
+    if (!r.ok) {
+      setLoadError(r.erro ?? "Não consegui carregar os cadastros pendentes.");
+      setLoading(false);
+      return;
+    }
+    const d = r.data?.drafts ?? [];
     setDrafts(d);
 
     const subMap: Record<string, Submission> = {};
@@ -153,17 +164,21 @@ export default function PendingClientsPage() {
         "contact_whatsapp, nome_fantasia, razao_social, cnpj, nicho, endereco_rua, endereco_bairro, endereco_cidade, " +
         "endereco_estado, endereco_cep, doc_contrato_social, doc_identidade, doc_logo, notes, meta_login, meta_status, " +
         "instagram_login, instagram_status, google_login, google_status";
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("client_onboarding_submissions")
         .select(SUB_COLS)
         .in("client_id", d.map((x) => x.id))
         .order("created_at", { ascending: false });
 
-      if (data) {
-        for (const row of data as unknown as Submission[]) {
-          const cid = row.client_id as string;
-          if (!subMap[cid]) subMap[cid] = row as Submission;
-        }
+      // Sem as respostas, a revisão mostraria o rascunho como se fosse o que o cliente preencheu.
+      if (error) {
+        setLoadError(`Não consegui ler as respostas do formulário: ${error.message}`);
+        setLoading(false);
+        return;
+      }
+      for (const row of (data ?? []) as unknown as Submission[]) {
+        const cid = row.client_id as string;
+        if (!subMap[cid]) subMap[cid] = row as Submission;
       }
     }
     setSubmissions(subMap);
@@ -246,7 +261,9 @@ export default function PendingClientsPage() {
 
   const needsTraffic = editForm.serviceType === "lone_growth" || editForm.serviceType === "assessoria_trafego";
   const needsSocial = editForm.serviceType === "lone_growth" || editForm.serviceType === "assessoria_social";
-  const needsDesigner = editForm.serviceType === "lone_growth" || editForm.serviceType === "assessoria_design";
+  // Social sem designer não produz arte (mesma regra do EditClientModal).
+  const needsDesigner = editForm.serviceType === "lone_growth" || editForm.serviceType === "assessoria_design"
+    || editForm.serviceType === "assessoria_social";
 
   // ─── Upload doc on behalf of client (received via WhatsApp) ──────────────
   const handleAdminDocUpload = async (file: File, docType: "contrato_social" | "identidade") => {
@@ -267,7 +284,8 @@ export default function PendingClientsPage() {
       // que o cliente tinha no formulário de cadastro.
       const anterior = (submissions[selected.id] as Submission | undefined)?.[field] as string | undefined;
       const valorFinal = adicionarDoc(anterior, newUrl);
-      await supabase.from("client_onboarding_submissions").update({ [field]: valorFinal }).eq("client_id", selected.id);
+      const { error: subErr } = await supabase.from("client_onboarding_submissions").update({ [field]: valorFinal }).eq("client_id", selected.id);
+      if (subErr) { setUploadError(`Arquivo subiu, mas não ficou salvo no cadastro: ${subErr.message}`); return; }
       setSubmissions((prev) => {
         const existing = prev[selected.id] ?? {} as Submission;
         return { ...prev, [selected.id]: { ...existing, [field]: valorFinal } };
@@ -332,17 +350,15 @@ export default function PendingClientsPage() {
     // Antes a aprovação por esta tela pulava tudo isso (só o botão rápido da lista provisionava) —
     // cliente entrava com onboarding vazio e ninguém era avisado. 'provision' não mexe nos campos
     // que acabamos de salvar (diferente do 'approve', que re-sincroniza a submissão por cima).
-    try {
-      await authedFetch("/api/onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "provision", clientId: selected.id }),
-      });
-    } catch {
-      // setup é best-effort: o cliente já está ativo; se falhar, dá pra reprovisionar
+    const prov = await chamar("/api/onboarding", { action: "provision", clientId: selected.id });
+    if (prov.ok) {
+      pushNotification("system", "Cliente aprovado", `${clientName} foi ativado. Equipe pode iniciar o setup.`);
+      toast.success(`${clientName} aprovado.`);
+    } else {
+      // O cliente já está ativo (draft_status saiu), mas sem checklist/aviso/e-mail — dizer isso.
+      pushNotification("system", "Aprovado sem setup", `${clientName} entrou na carteira, mas o setup falhou: ${prov.erro}. Refaça pelo onboarding do cliente.`, selected.id);
+      toast.error(`${clientName} entrou na carteira, mas o setup falhou: ${prov.erro}`);
     }
-
-    pushNotification("system", "Cliente aprovado", `${clientName} foi ativado. Equipe pode iniciar o setup.`);
 
     // Remove from local list without reload
     setDrafts((prev) => prev.filter((d) => d.id !== selected.id));
@@ -353,11 +369,8 @@ export default function PendingClientsPage() {
   // ─── Reject ───────────────────────────────────
   const handleReject = async () => {
     if (!selected || !confirm("Rejeitar este cadastro? Os dados serao removidos permanentemente.")) return;
-    await authedFetch("/api/onboarding", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "reject", clientId: selected.id }),
-    });
+    const r = await chamar("/api/onboarding", { action: "reject", clientId: selected.id });
+    if (!r.ok) { toast.error(`Não consegui rejeitar: ${r.erro}`); return; }
     setDrafts((prev) => prev.filter((d) => d.id !== selected.id));
     setSelected(null);
   };
@@ -385,7 +398,14 @@ export default function PendingClientsPage() {
             </div>
           )}
 
-          {!loading && drafts.length === 0 && (
+          {!loading && loadError && (
+            <div className="rounded-lg border border-lone-danger-border bg-lone-danger-bg p-3 space-y-2">
+              <p className="text-xs text-lone-danger flex items-start gap-1.5"><AlertTriangle size={12} className="mt-0.5 shrink-0" /> {loadError}</p>
+              <button onClick={loadData} className="btn-ghost text-xs border border-border">Tentar de novo</button>
+            </div>
+          )}
+
+          {!loading && !loadError && drafts.length === 0 && (
             <div className="text-center py-10 space-y-2">
               <Check size={28} className="text-lone-success mx-auto" />
               <p className="text-sm text-muted-foreground">Nenhum cadastro pendente</p>
@@ -497,7 +517,7 @@ export default function PendingClientsPage() {
                 const prog = computeProgress(sub);
                 const done = prog.pct === 100;
                 return (
-                  <div className={`rounded-xl border p-4 ${done ? "border-lone-success-border bg-lone-success-bg/[0.03]" : "border-border bg-card"}`}>
+                  <div className={`rounded-xl border p-4 ${done ? "border-lone-success-border bg-lone-success-bg" : "border-border bg-card"}`}>
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-xs font-semibold text-foreground">
                         {!prog.started && !prog.submitted ? "○ Cliente ainda não começou" : prog.submitted ? "✓ Cadastro enviado pelo cliente" : "Cliente preenchendo…"}
@@ -583,7 +603,7 @@ export default function PendingClientsPage() {
                       <label className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed text-[11px] transition-all cursor-pointer ${
                         resolved.length
                           ? "border-border text-muted-foreground hover:border-border hover:text-muted-foreground"
-                          : "border-lone-warning-border text-lone-warning hover:border-primary/40 hover:text-foreground bg-lone-warning-bg/[0.03]"
+                          : "border-lone-warning-border text-lone-warning hover:border-primary/40 hover:text-foreground bg-lone-warning-bg"
                       }`}>
                         {uploadingDoc === docType ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
                         {uploadingDoc === docType ? "Enviando..." : resolved.length ? "Adicionar outro" : "Enviar do WhatsApp"}

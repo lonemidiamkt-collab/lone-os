@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { useRole } from "@/lib/context/RoleContext";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import type { BriefingWithMeta } from "@/lib/types/briefing";
 import MaterialDoCliente from "@/components/clients/MaterialDoCliente";
 
@@ -198,6 +198,7 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
   const [briefing, setBriefing] = useState<BriefingWithMeta | null>(null);
   const [totalVersions, setTotalVersions] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -205,13 +206,15 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
+    const r = await chamar<{ briefing?: BriefingWithMeta | null; total_versions?: number }>(`/api/clients/${clientId}/briefing`);
     try {
-      const res = await authedFetch(`/api/clients/${clientId}/briefing`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setBriefing(data.briefing ?? null);
-      setTotalVersions(data.total_versions ?? 0);
+      if (!r.ok || !r.data) throw new Error(r.erro ?? "Resposta vazia");
+      setBriefing(r.data.briefing ?? null);
+      setTotalVersions(r.data.total_versions ?? 0);
     } catch (err) {
+      // Falha de carga não é "sem briefing": salvar o form vazio criaria uma versão atual em branco.
+      setLoadError(err instanceof Error ? err.message : "Não consegui carregar o briefing.");
       Sentry.captureException(err, { extra: { client_id: clientId, context: "BriefingTab.load" } });
     } finally {
       setLoading(false);
@@ -221,6 +224,7 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
   useEffect(() => { load(); }, [load]);
 
   const handleEdit = () => {
+    if (loadError) return;
     setForm(briefing ? briefingToForm(briefing) : emptyForm());
     setSaveError(null);
     setEditing(true);
@@ -229,21 +233,15 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
   const handleCancel = () => { setEditing(false); setSaveError(null); };
 
   const handleSave = async () => {
+    if (loading || loadError) return;
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await authedFetch(`/api/clients/${clientId}/briefing`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formToPayload(form)),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? `HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      setBriefing(data.briefing);
-      setTotalVersions(data.total_versions);
+      const r = await chamar<{ briefing: BriefingWithMeta; total_versions: number }>(
+        `/api/clients/${clientId}/briefing`, formToPayload(form));
+      if (!r.ok || !r.data) throw new Error(r.erro ?? "Erro ao salvar");
+      setBriefing(r.data.briefing);
+      setTotalVersions(r.data.total_versions);
       setEditing(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao salvar";
@@ -265,6 +263,16 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
         {[200, 120, 160, 100].map((w, i) => (
           <div key={i} className="h-3 bg-muted rounded" style={{ width: w }} />
         ))}
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-4 rounded-xl border border-lone-danger-border bg-lone-danger-bg space-y-2">
+        <p className="text-sm text-lone-danger">Não consegui carregar o briefing: {loadError}</p>
+        <p className="text-xs text-muted-foreground">A edição fica bloqueada até carregar — salvar agora gravaria uma versão em branco por cima.</p>
+        <button onClick={load} className="btn-ghost text-xs border border-border">Tentar de novo</button>
       </div>
     );
   }

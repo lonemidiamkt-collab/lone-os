@@ -28,9 +28,9 @@ interface Audit {
 }
 
 const STATUS_CONFIG = {
-  otimo:   { color: "text-lone-success", bg: "bg-lone-success-bg/[0.08]", border: "border-lone-success-border", label: "Ótimo" },
+  otimo:   { color: "text-lone-success", bg: "bg-lone-success-bg", border: "border-lone-success-border", label: "Ótimo" },
   bom:     { color: "text-primary", bg: "bg-primary/[0.08]", border: "border-primary/30", label: "Bom" },
-  atencao: { color: "text-lone-warning", bg: "bg-lone-warning-bg/[0.08]", border: "border-lone-warning-border", label: "Atenção" },
+  atencao: { color: "text-lone-warning", bg: "bg-lone-warning-bg", border: "border-lone-warning-border", label: "Atenção" },
   critico: { color: "text-destructive", bg: "bg-destructive/[0.08]", border: "border-destructive/30", label: "Crítico" },
 };
 
@@ -233,7 +233,7 @@ function LatestAuditCard({ audit, daysAgo }: { audit: Audit; daysAgo: string }) 
       </div>
 
       {audit.insights && audit.insights.length > 0 && (
-        <div className="space-y-2 border-t border-border/50 pt-4">
+        <div className="space-y-2 border-t border-border pt-4">
           {audit.insights.map((insight, idx) => (
             <InsightRow key={idx} insight={insight} />
           ))}
@@ -248,7 +248,7 @@ function InsightRow({ insight }: { insight: Insight }) {
   const color = INSIGHT_COLORS[insight.type] ?? "text-primary";
 
   return (
-    <div className="flex items-start gap-3 p-3 rounded-lg bg-background/40 border border-border/50">
+    <div className="flex items-start gap-3 p-3 rounded-lg bg-background/40 border border-border">
       <Icon size={14} className={`${color} shrink-0 mt-0.5`} />
       <div className="flex-1 min-w-0">
         <p className="text-xs font-semibold text-foreground">{insight.title}</p>

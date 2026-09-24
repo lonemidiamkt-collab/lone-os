@@ -8,6 +8,7 @@ import {
   Eye, EyeOff, AlertTriangle, Building2, ChevronRight, MapPin, RefreshCw,
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
+import { chamar } from "@/lib/api/chamar";
 
 // ─── Types ──────────────────────────────────────────────────
 interface SubmissionData {
@@ -16,16 +17,17 @@ interface SubmissionData {
   token: string;
   status: string;
   clients?: { name: string; industry: string; service_type: string };
+  [coluna: string]: unknown;
 }
 
 type Step = "dados" | "documentos" | "acessos" | "review";
 type AccessStatus = "fill_now" | "waiting_client" | "partner_invite";
 
 const STEPS: { key: Step; label: string; icon: typeof User }[] = [
-  { key: "dados", label: "Identificacao", icon: User },
+  { key: "dados", label: "Identificação", icon: User },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "acessos", label: "Acessos", icon: Shield },
-  { key: "review", label: "Revisao", icon: Check },
+  { key: "review", label: "Revisão", icon: Check },
 ];
 
 // ─── Validators ────────────────────────────────────────────
@@ -121,10 +123,10 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
 
   const handleFile = async (file: File) => {
     setError("");
-    if (file.size > 10 * 1024 * 1024) { setError("Maximo 10MB."); return; }
+    if (file.size > 10 * 1024 * 1024) { setError("Máximo 10MB."); return; }
     const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"];
     if (!allowed.includes(file.type) && !file.name.match(/\.(jpg|jpeg|png|webp|heic|heif|pdf)$/i)) {
-      setError("Formato nao suportado. Use JPG, PNG ou PDF."); return;
+      setError("Formato não suportado. Use JPG, PNG ou PDF."); return;
     }
     if (file.type.startsWith("image/")) setPreview(URL.createObjectURL(file));
     setUploading(true);
@@ -144,7 +146,7 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
       setPreview(null);
       onToast?.(`${label} salvo com sucesso${multiplo && jaTem.length ? ` (${jaTem.length + 1} arquivos)` : ""}`);
     } catch {
-      setError("Falha na conexao."); setPreview(null);
+      setError("Falha na conexão."); setPreview(null);
     } finally { setUploading(false); }
   };
 
@@ -163,7 +165,7 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
         {uploaded && <Check size={16} className="text-lone-success" />}
       </div>
       {missing && !uploaded && (
-        <p className="text-[10px] text-lone-danger -mt-1">Este arquivo e essencial para a geracao do seu contrato.</p>
+        <p className="text-[10px] text-lone-danger -mt-1">Este arquivo é essencial para a geração do seu contrato.</p>
       )}
       {(() => {
         const enviados = listaDocs(uploaded);
@@ -174,7 +176,7 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
             {itens.map((src, i) => src.startsWith("legal://") ? (
               <div key={i} className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border">
                 <Check size={14} className="text-lone-success" />
-                <span className="text-xs text-muted-foreground">Arquivo {itens.length > 1 ? i + 1 : ""} salvo com seguranca</span>
+                <span className="text-xs text-muted-foreground">Arquivo {itens.length > 1 ? i + 1 : ""} salvo com segurança</span>
               </div>
             ) : (
               <img key={i} src={src} alt={`${label} ${i + 1}`}
@@ -190,7 +192,7 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
           <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-border bg-background hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all text-xs">
             {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-            {uploading ? "Enviando..." : listaDocs(uploaded).length ? "Adicionar outro arquivo" : (multiplo ? "Selecionar Arquivos" : "Selecionar Arquivo")}
+            {uploading ? "Enviando…" : listaDocs(uploaded).length ? "Adicionar outro arquivo" : (multiplo ? "Selecionar Arquivos" : "Selecionar Arquivo")}
           </button>
           <button type="button" disabled={uploading} onClick={() => {
             const input = document.createElement("input");
@@ -211,7 +213,7 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
       }} />
       {error && <p className="text-xs text-lone-danger">{error}</p>}
       <p className="text-[10px] text-muted-foreground/70">
-        JPG, PNG ou PDF — maximo 10MB{multiplo ? " por arquivo. Pode enviar mais de um (frente e verso, varias paginas)." : ""}
+        JPG, PNG ou PDF — máximo 10MB{multiplo ? " por arquivo. Pode enviar mais de um (frente e verso, várias páginas)." : ""}
       </p>
       {multiplo && listaDocs(uploaded).length > 0 && (
         <p className="text-xs text-lone-success">
@@ -237,7 +239,7 @@ function AccessField({ platform, icon, login, password, status, onLogin, onPassw
       <div className="flex gap-1.5">
         {([
           { v: "fill_now" as const, label: "Preencher", icon: "📥" },
-          { v: "waiting_client" as const, label: "Nao tenho", icon: "⏳" },
+          { v: "waiting_client" as const, label: "Não tenho", icon: "⏳" },
           { v: "partner_invite" as const, label: "Convite Partner", icon: "🤝" },
         ]).map((opt) => (
           <button key={opt.v} type="button" onClick={() => onStatus(opt.v)}
@@ -260,10 +262,10 @@ function AccessField({ platform, icon, login, password, status, onLogin, onPassw
         </div>
       )}
       {status === "waiting_client" && (
-        <div className="flex items-center gap-2 text-xs text-lone-warning/80"><AlertTriangle size={12} /><span>Sera marcado como pendencia</span></div>
+        <div className="flex items-center gap-2 text-xs text-lone-warning/80"><AlertTriangle size={12} /><span>Será marcado como pendência</span></div>
       )}
       {status === "partner_invite" && (
-        <p className="text-xs text-primary">Nos adicionaremos como parceiro via Business Manager.</p>
+        <p className="text-xs text-primary">Nós adicionaremos como parceiro via Business Manager.</p>
       )}
     </div>
   );
@@ -281,6 +283,7 @@ export default function ExternalOnboardingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [autoSaving, setAutoSaving] = useState(false);
+  const [erroRascunho, setErroRascunho] = useState(false);
   const [cnpjError, setCnpjError] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [emailError, setEmailError] = useState("");
@@ -323,7 +326,7 @@ export default function ExternalOnboardingPage() {
 
   // ─── Required fields (integrity gate) ─────────────────────
   // These MUST be filled to enable submit. Missing any → contract + automation break.
-  const REQUIRED_ERROR = "Este campo e essencial para a geracao do seu contrato e ativacao da conta.";
+  const REQUIRED_ERROR = "Este campo é essencial para a geração do seu contrato e ativação da conta.";
 
   const missingRequired: Record<string, boolean> = {
     nomeFantasia: !nomeFantasia.trim(),
@@ -354,37 +357,35 @@ export default function ExternalOnboardingPage() {
   const fieldProgress = Math.round((filledCount / totalFields) * 100);
 
   // ─── Auto-save draft (debounced) ──────────────────────────
+  const rascunho = {
+    contactName, contactCpf, contactWhatsapp, contactEmail, contactPhone,
+    nomeFantasia, razaoSocial, cnpj, nicho, companyPhone, instagramUser,
+    enderecoRua, enderecoBairro, enderecoCidade, enderecoEstado, enderecoCep,
+    metaLogin, metaPassword, metaStatus,
+    instagramLogin: instaLogin, instagramPassword: instaPassword, instagramStatus: instaStatus,
+    googleLogin, googlePassword, googleStatus,
+    docContratoSocial: docContrato, docIdentidade, docLogo, notes,
+  };
+  const rascunhoJson = JSON.stringify(rascunho);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoSave = useCallback(() => {
+  // O que já está no servidor. Nulo até carregar: a primeira passada só memoriza (antes, abrir o link
+  // já disparava um auto-save que regravava tudo — inclusive as senhas em branco).
+  const ultimoSalvo = useRef<string | null>(null);
+
+  useEffect(() => {
     if (!submission) return;
+    if (ultimoSalvo.current === null) { ultimoSalvo.current = rascunhoJson; return; }
+    if (rascunhoJson === ultimoSalvo.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setAutoSaving(true);
-      try {
-        await fetch("/api/onboarding", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "auto_save",
-            token,
-            contactName, contactCpf, contactWhatsapp, contactEmail,
-            nomeFantasia, razaoSocial, cnpj, nicho,
-            enderecoRua, enderecoBairro, enderecoCidade, enderecoEstado, enderecoCep,
-            metaLogin, metaPassword, metaStatus,
-            instagramLogin: instaLogin, instagramPassword: instaPassword, instagramStatus: instaStatus,
-            googleLogin, googlePassword, googleStatus,
-            docContratoSocial: docContrato, docIdentidade, docLogo, notes,
-          }),
-        });
-      } catch {}
+      const r = await chamar("/api/onboarding", { action: "auto_save", token, ...JSON.parse(rascunhoJson) });
       setAutoSaving(false);
+      if (r.ok) { ultimoSalvo.current = rascunhoJson; setErroRascunho(false); }
+      else setErroRascunho(true);
     }, 3000);
-  }, [submission, token, contactName, contactCpf, contactWhatsapp, contactEmail, nomeFantasia, razaoSocial, cnpj, nicho,
-    enderecoRua, enderecoBairro, enderecoCidade, enderecoEstado, enderecoCep,
-    metaLogin, metaPassword, metaStatus, instaLogin, instaPassword, instaStatus,
-    googleLogin, googlePassword, googleStatus, docContrato, docIdentidade, docLogo, notes]);
-
-  useEffect(() => { if (submission) autoSave(); }, [autoSave, submission]);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [rascunhoJson, submission, token]);
 
   // Auto-dismiss upload toast after 3s
   useEffect(() => {
@@ -393,46 +394,50 @@ export default function ExternalOnboardingPage() {
     return () => clearTimeout(t);
   }, [uploadToast]);
 
-  // Load submission + restore backup
+  // Preenche o formulário com o que o servidor já tem (rascunho ou envio anterior).
+  const restaurar = (d: Record<string, unknown>) => {
+    const txt = (k: string) => (typeof d[k] === "string" ? (d[k] as string) : "");
+    const campos: [string, (v: string) => void][] = [
+      ["contact_name", setContactName], ["contact_cpf", setContactCpf], ["contact_whatsapp", setContactWhatsapp],
+      ["contact_email", setContactEmail], ["contact_phone", setContactPhone],
+      ["nome_fantasia", setNomeFantasia], ["razao_social", setRazaoSocial], ["cnpj", setCnpj], ["nicho", setNicho],
+      ["company_phone", setCompanyPhone], ["instagram_user", setInstagramUser],
+      ["endereco_rua", setEnderecoRua], ["endereco_bairro", setEnderecoBairro], ["endereco_cidade", setEnderecoCidade],
+      ["endereco_estado", setEnderecoEstado], ["endereco_cep", setEnderecoCep],
+      ["doc_contrato_social", setDocContrato], ["doc_identidade", setDocIdentidade], ["doc_logo", setDocLogo],
+      ["notes", setNotes],
+    ];
+    for (const [k, set] of campos) if (txt(k)) set(txt(k));
+  };
+
+  // Load submission
   useEffect(() => {
-    fetch(`/api/onboarding?token=${token}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error === "already_submitted") {
+    chamar<Record<string, unknown> & { error?: string; submission?: SubmissionData }>(`/api/onboarding?token=${encodeURIComponent(token)}`)
+      .then((r) => {
+        const data = r.data;
+        if (!r.ok || !data) {
+          setError(r.status === 404 ? "Link inválido ou expirado." : "Erro ao carregar. Tente novamente.");
+        } else if (data.error === "already_submitted") {
           setSubmitted(true);
           if (data.submission) {
+            // Guarda o envio: "Preciso corrigir algo" reabre o formulário com os dados e os documentos.
+            setSubmission(data.submission);
+            restaurar(data.submission);
             setSubmittedData({
-              contactName: data.submission.contact_name || "",
-              nomeFantasia: data.submission.nome_fantasia || "",
-              cnpj: data.submission.cnpj || "",
+              contactName: (data.submission.contact_name as string) || "",
+              nomeFantasia: (data.submission.nome_fantasia as string) || "",
+              cnpj: (data.submission.cnpj as string) || "",
             });
           }
         } else if (data.error) {
           setError(data.error);
         } else {
-          setSubmission(data);
-          // Restore any previously saved fields from the submission
-          if (data.contact_name) setContactName(data.contact_name);
-          if (data.contact_cpf) setContactCpf(data.contact_cpf);
-          if (data.contact_whatsapp) setContactWhatsapp(data.contact_whatsapp);
-          if (data.contact_email) setContactEmail(data.contact_email);
-          if (data.nome_fantasia) setNomeFantasia(data.nome_fantasia);
-          if (data.razao_social) setRazaoSocial(data.razao_social);
-          if (data.cnpj) setCnpj(data.cnpj);
-          if (data.nicho) setNicho(data.nicho);
-          if (data.endereco_rua) setEnderecoRua(data.endereco_rua);
-          if (data.endereco_bairro) setEnderecoBairro(data.endereco_bairro);
-          if (data.endereco_cidade) setEnderecoCidade(data.endereco_cidade);
-          if (data.endereco_estado) setEnderecoEstado(data.endereco_estado);
-          if (data.endereco_cep) setEnderecoCep(data.endereco_cep);
-          if (data.doc_contrato_social) setDocContrato(data.doc_contrato_social);
-          if (data.doc_identidade) setDocIdentidade(data.doc_identidade);
-          if (data.doc_logo) setDocLogo(data.doc_logo);
-          if (data.notes) setNotes(data.notes);
+          setSubmission(data as unknown as SubmissionData);
+          restaurar(data);
         }
       })
-      .catch(() => setError("Erro ao carregar. Tente novamente."))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const currentStep = STEPS.findIndex((s) => s.key === step);
@@ -449,10 +454,12 @@ export default function ExternalOnboardingPage() {
         const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
         const data = await res.json();
         if (!data.erro) {
-          setEnderecoRua(data.logradouro || "");
-          setEnderecoBairro(data.bairro || "");
-          setEnderecoCidade(data.localidade || "");
-          setEnderecoEstado(data.uf || "");
+          // Só completa o que está vazio: antes apagava a rua (com número) que o cliente já tinha digitado.
+          const seVazio = (novo: string) => (atual: string) => (atual.trim() ? atual : novo || "");
+          setEnderecoRua(seVazio(data.logradouro));
+          setEnderecoBairro(seVazio(data.bairro));
+          setEnderecoCidade(seVazio(data.localidade));
+          setEnderecoEstado(seVazio(data.uf));
         }
       } catch {}
     }
@@ -464,7 +471,7 @@ export default function ExternalOnboardingPage() {
     setCnpj(masked);
     const digits = v.replace(/\D/g, "");
     if (digits.length === 14) {
-      setCnpjError(validateCnpj(v) ? "" : "CNPJ invalido");
+      setCnpjError(validateCnpj(v) ? "" : "CNPJ inválido");
     } else {
       setCnpjError("");
     }
@@ -476,7 +483,7 @@ export default function ExternalOnboardingPage() {
     setContactWhatsapp(masked);
     const digits = v.replace(/\D/g, "");
     if (digits.length >= 10) {
-      setPhoneError(validatePhone(v) ? "" : "Numero incompleto");
+      setPhoneError(validatePhone(v) ? "" : "Número incompleto");
     } else {
       setPhoneError("");
     }
@@ -486,14 +493,15 @@ export default function ExternalOnboardingPage() {
   const handleEmailChange = (v: string) => {
     setContactEmail(v);
     if (v.length > 3 && !validateEmail(v)) {
-      setEmailError("E-mail com formato invalido");
+      setEmailError("E-mail com formato inválido");
     } else {
       setEmailError("");
     }
   };
 
+  // O servidor tira o cliente do token — o corpo não carrega clientId.
   const buildPayload = () => ({
-    action: "submit", token, clientId: submission?.client_id,
+    action: "submit", token,
     nomeFantasia: nomeFantasia.trim(), razaoSocial: razaoSocial.trim(), cnpj: cnpj.trim(),
     nicho: nicho.trim(),
     companyPhone: companyPhone.trim(), instagramUser: instagramUser.trim().replace(/^@+/, ""),
@@ -512,7 +520,7 @@ export default function ExternalOnboardingPage() {
     setShowValidation(true);
     if (!isFormComplete) {
       const missingCount = Object.values(missingRequired).filter(Boolean).length;
-      setError(`Existem ${missingCount} campo(s) obrigatorio(s) pendentes. ${REQUIRED_ERROR}`);
+      setError(`Existem ${missingCount} campo(s) obrigatório(s) pendente(s). ${REQUIRED_ERROR}`);
       // Jump to first step with missing field for UX
       if (missingRequired.nomeFantasia || missingRequired.cnpj || missingRequired.contactName ||
           missingRequired.contactEmail || missingRequired.contactWhatsapp ||
@@ -525,28 +533,17 @@ export default function ExternalOnboardingPage() {
       return;
     }
 
-    const payload = buildPayload();
-    try { localStorage.setItem(`onboarding_backup_${token}`, JSON.stringify(payload)); } catch {}
-
+    // Sem cópia local: o backup em localStorage guardava as senhas em texto puro no aparelho.
     setSubmitting(true);
     setError("");
-    try {
-      const res = await fetch("/api/onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || `Erro ${res.status}`);
-      }
-      try { localStorage.removeItem(`onboarding_backup_${token}`); } catch {}
-      setSubmittedData({ contactName: contactName.trim(), nomeFantasia: nomeFantasia.trim(), cnpj: cnpj.trim() });
-      setSubmitted(true);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro desconhecido";
-      setError(`Falha ao enviar: ${msg}. Seus dados foram salvos — tente novamente.`);
-    } finally { setSubmitting(false); }
+    const r = await chamar("/api/onboarding", buildPayload());
+    setSubmitting(false);
+    if (!r.ok) {
+      setError(`Falha ao enviar: ${r.erro}. Seus dados continuam aqui — tente novamente.`);
+      return;
+    }
+    setSubmittedData({ contactName: contactName.trim(), nomeFantasia: nomeFantasia.trim(), cnpj: cnpj.trim() });
+    setSubmitted(true);
   };
 
   const clientName = submission?.clients?.name ?? "Cliente";
@@ -566,25 +563,25 @@ export default function ExternalOnboardingPage() {
         </div>
         <h1 className="text-2xl font-bold text-foreground">Tudo certo!</h1>
         <p className="text-muted-foreground">
-          Seus dados foram recebidos com sucesso. A equipe da <span className="text-foreground font-medium">Lone Midia</span> vai analisar e entrar em contato pelo WhatsApp.
+          Seus dados foram recebidos com sucesso. A equipe da <span className="text-foreground font-medium">Lone Mídia</span> vai analisar e entrar em contato pelo WhatsApp.
         </p>
         {submittedData && (
           <div className="bg-card border border-border rounded-xl p-4 text-left space-y-2">
             <p className="text-xs text-muted-foreground font-medium">Dados recebidos:</p>
             {submittedData.nomeFantasia && <p className="text-xs text-foreground">Empresa: <span className="text-foreground">{submittedData.nomeFantasia}</span></p>}
-            {submittedData.contactName && <p className="text-xs text-foreground">Responsavel: <span className="text-foreground">{submittedData.contactName}</span></p>}
+            {submittedData.contactName && <p className="text-xs text-foreground">Responsável: <span className="text-foreground">{submittedData.contactName}</span></p>}
             {submittedData.cnpj && <p className="text-xs text-foreground">CNPJ: <span className="text-foreground">{submittedData.cnpj}</span></p>}
           </div>
         )}
         <div className="bg-card border border-border rounded-xl p-4 text-left">
-          <p className="text-xs text-muted-foreground mb-1">Proximos passos:</p>
+          <p className="text-xs text-muted-foreground mb-1">Próximos passos:</p>
           <ul className="text-xs text-muted-foreground space-y-1">
-            <li>1. Analise dos documentos pela equipe</li>
-            <li>2. Configuracao das plataformas</li>
-            <li>3. Kickoff e inicio das operacoes</li>
+            <li>1. Análise dos documentos pela equipe</li>
+            <li>2. Configuração das plataformas</li>
+            <li>3. Kickoff e início das operações</li>
           </ul>
         </div>
-        <button onClick={() => { setSubmitted(false); setSubmission(null); setError(""); }}
+        <button onClick={() => { setSubmitted(false); setError(""); setStep("dados"); }}
           className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5 mx-auto">
           <RefreshCw size={12} /> Preciso corrigir algo
         </button>
@@ -596,7 +593,7 @@ export default function ExternalOnboardingPage() {
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <div className="max-w-md w-full text-center space-y-4">
         <AlertTriangle size={40} className="text-lone-warning mx-auto" />
-        <h1 className="text-xl font-bold text-foreground">Link invalido</h1>
+        <h1 className="text-xl font-bold text-foreground">Link inválido</h1>
         <p className="text-muted-foreground text-sm">{error}</p>
       </div>
     </div>
@@ -621,10 +618,11 @@ export default function ExternalOnboardingPage() {
               ) : (
                 <Logo className="w-7 h-7" />
               )}
-              <span className="font-semibold text-foreground text-sm">{nomeFantasia || "Lone Midia"}</span>
+              <span className="font-semibold text-foreground text-sm">{nomeFantasia || "Lone Mídia"}</span>
             </div>
             <div className="flex items-center gap-2">
-              {autoSaving && <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Salvando...</span>}
+              {autoSaving && <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Salvando…</span>}
+              {!autoSaving && erroRascunho && <span className="text-[10px] text-lone-warning" role="status">Rascunho não salvo — confira a conexão</span>}
               <span className="text-[10px] text-primary font-medium">{fieldProgress}%</span>
             </div>
           </div>
@@ -661,9 +659,9 @@ export default function ExternalOnboardingPage() {
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
                 <Building2 size={10} className="text-primary" /> Dados da Empresa
               </p>
-              <InputField label="Nome Fantasia" value={nomeFantasia} onChange={setNomeFantasia} placeholder="Ex: Loja do Joao" required
+              <InputField label="Nome Fantasia" value={nomeFantasia} onChange={setNomeFantasia} placeholder="Ex: Loja do João" required
                 error={showValidation && missingRequired.nomeFantasia ? REQUIRED_ERROR : undefined} />
-              <InputField label="Razao Social" value={razaoSocial} onChange={setRazaoSocial} placeholder="Ex: Joao da Silva LTDA" />
+              <InputField label="Razão Social" value={razaoSocial} onChange={setRazaoSocial} placeholder="Ex: João da Silva LTDA" />
               <InputField label="Telefone da Empresa" value={companyPhone} onChange={setCompanyPhone}
                           placeholder="(22) 2222-2222" />
               <InputField label="Instagram da Empresa" value={instagramUser} onChange={setInstagramUser}
@@ -713,14 +711,14 @@ export default function ExternalOnboardingPage() {
 
             <div className="rounded-xl border border-border bg-card p-4 space-y-4">
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-                <User size={10} className="text-primary" /> Responsavel
+                <User size={10} className="text-primary" /> Responsável
               </p>
-              <InputField label="Nome Completo" value={contactName} onChange={setContactName} placeholder="Ex: Joao da Silva" required
+              <InputField label="Nome Completo" value={contactName} onChange={setContactName} placeholder="Ex: João da Silva" required
                 error={showValidation && missingRequired.contactName ? REQUIRED_ERROR : undefined} />
               <InputField label="E-mail" type="email" value={contactEmail} onChange={handleEmailChange} placeholder="voce@empresa.com" required
                 error={emailError || (showValidation && missingRequired.contactEmail ? REQUIRED_ERROR : undefined)} />
-              <InputField label="CPF do Responsavel" value={contactCpf} onChange={setContactCpf} placeholder="000.000.000-00" mask={maskCpf} />
-              <InputField label="Telefone do Responsavel" value={contactPhone} onChange={setContactPhone}
+              <InputField label="CPF do Responsável" value={contactCpf} onChange={setContactCpf} placeholder="000.000.000-00" mask={maskCpf} />
+              <InputField label="Telefone do Responsável" value={contactPhone} onChange={setContactPhone}
                           placeholder="(22) 99999-9999 — se for diferente do WhatsApp" />
               <InputField label="WhatsApp de Contato" value={contactWhatsapp} onChange={handlePhoneChange} placeholder="(11) 99999-9999" required
                 error={phoneError || (showValidation && missingRequired.contactWhatsapp ? REQUIRED_ERROR : undefined)} />
@@ -728,7 +726,7 @@ export default function ExternalOnboardingPage() {
 
             <div className="rounded-xl border border-border bg-card p-4 space-y-4">
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-                <MapPin size={10} className="text-primary" /> Endereco
+                <MapPin size={10} className="text-primary" /> Endereço
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <InputField label="CEP" value={enderecoCep} onChange={handleCepChange} placeholder="00000-000" required
@@ -739,7 +737,7 @@ export default function ExternalOnboardingPage() {
               <InputField label="Rua / Logradouro" value={enderecoRua} onChange={setEnderecoRua} placeholder="Ex: Rua das Flores, 123" required
                 error={showValidation && missingRequired.enderecoRua ? REQUIRED_ERROR : undefined} />
               <div className="grid grid-cols-2 gap-3">
-                <InputField label="Cidade" value={enderecoCidade} onChange={setEnderecoCidade} placeholder="Ex: Sao Paulo" required
+                <InputField label="Cidade" value={enderecoCidade} onChange={setEnderecoCidade} placeholder="Ex: São Paulo" required
                   error={showValidation && missingRequired.enderecoCidade ? REQUIRED_ERROR : undefined} />
                 <InputField label="Estado (UF)" value={enderecoEstado} onChange={setEnderecoEstado} placeholder="Ex: SP" />
               </div>
@@ -750,10 +748,10 @@ export default function ExternalOnboardingPage() {
         {/* ═══ STEP 2: DOCUMENTOS ═══ */}
         {step === "documentos" && submission && (
           <div className="space-y-4 animate-fade-in">
-            <p className="text-xs text-muted-foreground">Envie os documentos abaixo. Voce pode selecionar um arquivo ou tirar uma foto.</p>
+            <p className="text-xs text-muted-foreground">Envie os documentos abaixo. Você pode selecionar um arquivo ou tirar uma foto.</p>
             <FileUpload label="Logo da Empresa" docType="logo" clientId={submission.client_id} token={token} onUploaded={setDocLogo} uploaded={docLogo} previewRound
               required missing={showValidation && missingRequired.docLogo} onToast={setUploadToast} />
-            <FileUpload label="Contrato Social / Cartao CNPJ (PDF ou Foto)" docType="contrato_social" clientId={submission.client_id} token={token} onUploaded={setDocContrato} uploaded={docContrato}
+            <FileUpload label="Contrato Social / Cartão CNPJ (PDF ou Foto)" docType="contrato_social" clientId={submission.client_id} token={token} onUploaded={setDocContrato} uploaded={docContrato}
               required missing={showValidation && missingRequired.docContrato} onToast={setUploadToast} multiplo />
             <FileUpload label="Documento com Foto (RG ou CNH)" docType="identidade" clientId={submission.client_id} token={token} onUploaded={setDocIdentidade} uploaded={docIdentidade}
               onToast={setUploadToast} multiplo />
@@ -763,7 +761,7 @@ export default function ExternalOnboardingPage() {
         {/* ═══ STEP 3: ACESSOS ═══ */}
         {step === "acessos" && (
           <div className="space-y-4 animate-fade-in">
-            <p className="text-xs text-muted-foreground">Informe os acessos das plataformas. Se nao tiver agora, selecione &quot;Nao tenho&quot;.</p>
+            <p className="text-xs text-muted-foreground">Informe os acessos das plataformas. Se não tiver agora, selecione &quot;Não tenho&quot;.</p>
             <AccessField platform="Facebook / Meta Ads" icon="📘" login={metaLogin} password={metaPassword} status={metaStatus}
               onLogin={setMetaLogin} onPassword={setMetaPassword} onStatus={setMetaStatus} />
             <AccessField platform="Instagram" icon="📷" login={instaLogin} password={instaPassword} status={instaStatus}
@@ -780,13 +778,13 @@ export default function ExternalOnboardingPage() {
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Resumo</p>
               <div className="space-y-2 text-sm">
                 {nomeFantasia && <div className="flex justify-between"><span className="text-muted-foreground">Nome Fantasia</span><span className="text-foreground">{nomeFantasia}</span></div>}
-                {razaoSocial && <div className="flex justify-between"><span className="text-muted-foreground">Razao Social</span><span className="text-foreground">{razaoSocial}</span></div>}
-                {cnpj && <div className="flex justify-between"><span className="text-muted-foreground">CNPJ</span><span className={`${cnpjError ? "text-lone-danger" : "text-foreground"}`}>{cnpj} {cnpjError && "(invalido)"}</span></div>}
+                {razaoSocial && <div className="flex justify-between"><span className="text-muted-foreground">Razão Social</span><span className="text-foreground">{razaoSocial}</span></div>}
+                {cnpj && <div className="flex justify-between"><span className="text-muted-foreground">CNPJ</span><span className={`${cnpjError ? "text-lone-danger" : "text-foreground"}`}>{cnpj} {cnpjError && "(inválido)"}</span></div>}
                 {nicho && <div className="flex justify-between"><span className="text-muted-foreground">Ramo / Nicho</span><span className="text-foreground">{nicho}</span></div>}
-                <div className="flex justify-between"><span className="text-muted-foreground">Responsavel</span><span className="text-foreground">{contactName || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Responsável</span><span className="text-foreground">{contactName || "—"}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">WhatsApp</span><span className="text-foreground">{contactWhatsapp || "—"}</span></div>
                 {(enderecoRua || enderecoCidade) && (
-                  <div className="flex justify-between"><span className="text-muted-foreground">Endereco</span>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Endereço</span>
                     <span className="text-foreground text-right max-w-[60%]">{[enderecoRua, enderecoBairro, enderecoCidade, enderecoEstado, enderecoCep].filter(Boolean).join(", ")}</span>
                   </div>
                 )}
@@ -813,9 +811,9 @@ export default function ExternalOnboardingPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Observacoes (opcional)</label>
+              <label className="text-xs font-medium text-muted-foreground">Observações (opcional)</label>
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
-                placeholder="Alguma informacao adicional..."
+                placeholder="Alguma informação adicional..."
                 className="w-full bg-background border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary/50 transition-colors resize-none" />
             </div>
           </div>
@@ -830,20 +828,20 @@ export default function ExternalOnboardingPage() {
             <div className="flex flex-col items-end gap-2">
               {!isFormComplete && (
                 <p className="text-[10px] text-lone-warning">
-                  {Object.values(missingRequired).filter(Boolean).length} campo(s) obrigatorio(s) pendente(s)
+                  {Object.values(missingRequired).filter(Boolean).length} campo(s) obrigatório(s) pendente(s)
                 </p>
               )}
               <button onClick={handleSubmit} disabled={submitting || !isFormComplete}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-primary hover:bg-primary/80 text-foreground text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                title={!isFormComplete ? "Preencha todos os campos obrigatorios para finalizar" : ""}>
+                className="flex items-center gap-2 px-6 py-2.5 min-h-[44px] rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                title={!isFormComplete ? "Preencha todos os campos obrigatórios para finalizar" : ""}>
                 {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                {submitting ? "Enviando..." : "Finalizar Onboarding"}
+                {submitting ? "Enviando…" : "Finalizar Onboarding"}
               </button>
             </div>
           ) : (
             <button onClick={goNext}
-              className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/80 text-foreground text-sm font-medium transition-colors">
-              Proximo <ChevronRight size={14} />
+              className="flex items-center gap-1.5 px-5 py-2.5 min-h-[44px] rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-medium transition-colors">
+              Próximo <ChevronRight size={14} />
             </button>
           )}
         </div>

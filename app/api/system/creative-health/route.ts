@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { comExecucao, anotar } from "@/lib/obs/correlacao";
 import { temTrafego } from "@/lib/clients/servico";
@@ -15,7 +15,7 @@ import { avaliarCriativo, baselineDaConta, type DiaCriativo } from "@/lib/traffi
 // (útil para preencher o histórico); ?clientId= um só.
 
 export async function POST(req: NextRequest) {
-  const gate = await requireCronOrUser(req);
+  const gate = requireCron(req); // só o cron: qualquer logado disparava lote pesado (IA/Meta)
   if (gate) return gate;
   return comExecucao({ origem: "cron:creative-health", ator: "cron" }, async () => {
     const hoje = req.nextUrl.searchParams.get("dia") || new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });

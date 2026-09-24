@@ -11,8 +11,9 @@ import MobileFAB from "./MobileFAB";
 import PortalContent from "./PortalContent";
 import PortalInstagram from "./PortalInstagram";
 import PortalUpload from "@/components/portal/PortalUpload";
-
-const WA_NUMBER = "5522981530700";
+import { chamar } from "@/lib/api/chamar";
+import { WHATSAPP_EQUIPE, linkWhatsapp } from "@/lib/portal/contato";
+import { formatDelta, resumoConversas, type MetricType } from "@/lib/portal/formatDelta";
 
 const PERIODS: { value: PeriodKind; label: string }[] = [
   { value: "last_week",    label: "7 dias"      },
@@ -45,9 +46,10 @@ function fmt(n: number): string {
 function fmtBrl(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
+// Data pura (YYYY-MM-DD) lida ao meio-dia UTC e formatada em UTC: o mesmo dia no servidor e no celular.
 function fmtDate(d: string): string {
-  return new Date(d + "T00:00:00").toLocaleDateString("pt-BR", {
-    day: "2-digit", month: "short",
+  return new Date(d + "T12:00:00Z").toLocaleDateString("pt-BR", {
+    day: "2-digit", month: "short", timeZone: "UTC",
   });
 }
 /** Timestamp completo (ISO) em horário de Brasília — usado no aviso de dado desatualizado. */
@@ -127,9 +129,11 @@ interface Props {
   hasIg?: boolean;     // Instagram vinculado de verdade (informativo; a seção continua avisando "não conectado" quando há anúncios)
   comecando?: boolean; // nada vinculado ainda (sem conta de anúncio e sem Instagram) → "estamos começando"
   desde?: string | null;
+  /** "MM/AAAA" do rodapé, calculado no servidor em SP (evita divergência de hidratação). */
+  mesRelatorio?: string;
 }
 
-export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, hasAds = true, hasSocial = false, hasIg = false, comecando = false, desde = null, aprovacaoLigada = false }: Props) {
+export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, hasAds = true, hasSocial = false, hasIg = false, comecando = false, desde = null, aprovacaoLigada = false, mesRelatorio = "" }: Props) {
   const [period, setPeriod]         = useState<PeriodKind>("last_week");
   const [data, setData]             = useState<SnapshotData | null>(initialData);
   const [loading, setLoading]       = useState(false);
@@ -149,7 +153,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   const showToggle = hasAds && hasSocial;
   const [view, setView] = useState<"ads" | "social">(hasAds ? "ads" : "social");
 
-  const phone = whatsappPhone || WA_NUMBER;
+  const phone = whatsappPhone || WHATSAPP_EQUIPE;
 
   useEffect(() => {
     function update() {
@@ -169,23 +173,17 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   const fetchPeriod = useCallback(async (p: PeriodKind) => {
     setLoading(true);
     setErro(null);
-    try {
-      const res = await fetch(`/api/portal/${token}/snapshot`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ period_kind: p }),
-      });
-      if (res.ok) {
-        setData(await res.json());
-      } else {
-        const corpo = await res.json().catch(() => ({}));
-        setErro(corpo?.error || "Não consegui buscar os resultados agora.");
-      }
-    } catch {
-      setErro("Não consegui buscar os resultados agora. Verifique sua conexão.");
-    } finally {
-      setLoading(false);
+    const r = await chamar<SnapshotData>(`/api/portal/${token}/snapshot`, { period_kind: p });
+    if (r.ok && r.data) {
+      setData(r.data);
+    } else {
+      // Sem dado novo, o período antigo NÃO pode ficar na tela sob o rótulo novo.
+      setData(null);
+      setErro(r.status === 0
+        ? "Não consegui buscar os resultados agora. Verifique sua conexão."
+        : r.erro || "Não consegui buscar os resultados agora.");
     }
+    setLoading(false);
   }, [token]);
 
   function handlePeriod(p: PeriodKind) {
@@ -193,10 +191,12 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
     fetchPeriod(p);
   }
 
-  const kpis    = data?.kpis;
-  const chart   = data?.chart;
-  const top     = data?.top_creatives ?? [];
-  const demo    = data?.demographics;
+  // Meta não respondeu e não havia dado recente: nada de número, só o aviso.
+  const atualizando = data?.ads_status === "indisponivel";
+  const kpis    = atualizando ? undefined : data?.kpis;
+  const chart   = atualizando ? undefined : data?.chart;
+  const top     = atualizando ? [] : data?.top_creatives ?? [];
+  const demo    = atualizando ? undefined : data?.demographics;
   const actions = data?.agency_actions ?? [];
 
   const chartData = (chart?.days ?? []).map((day, i) => ({
@@ -209,23 +209,21 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
 
   const activeMetric = METRICS.find((m) => m.key === metric)!;
 
-  const genAt = data?.generated_at
-    ? new Date(data.generated_at).toLocaleString("pt-BR", {
-        day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-      })
-    : null;
+  const genAt = data?.generated_at && !atualizando ? fmtDataHora(data.generated_at) : null;
+  const periodoDado: PeriodKind = data?.period?.kind ?? period;
+  const resumo = kpis ? resumoConversas(kpis.messages.value, kpis.messages.delta_pct, periodoDado) : null;
 
   const pulse = reducedMotion ? "" : "animate-pulse";
 
   const kpiItems: Array<{
-    key: string; label: string;
+    key: MetricType; label: string;
     val: { value: number | null; delta_pct: number | null; direction: string } | undefined;
     format: (v: number) => string;
   }> = [
-    { key: "messages", label: "Mensagens", val: kpis?.messages, format: (v) => fmt(v) },
-    { key: "spend",    label: "Investido", val: kpis?.spend,    format: (v) => fmtBrl(v) },
-    { key: "cpa",      label: "Custo/msg", val: kpis?.cpa,      format: (v) => fmtBrl(v) },
-    { key: "reach",    label: "Alcance",   val: kpis?.reach,    format: (v) => fmt(v) },
+    { key: "messages", label: "Mensagens",          val: kpis?.messages, format: (v) => fmt(v) },
+    { key: "spend",    label: "Investido",          val: kpis?.spend,    format: (v) => fmtBrl(v) },
+    { key: "cpa",      label: "Custo por conversa", val: kpis?.cpa,      format: (v) => fmtBrl(v) },
+    { key: "reach",    label: "Pessoas alcançadas", val: kpis?.reach,    format: (v) => fmt(v) },
   ];
 
   return (
@@ -249,12 +247,12 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
               {clientName}
             </h1>
             {genAt && (
-              <p className="text-[11px] mt-1 text-lone-text-tertiary">Atualizado em {genAt}</p>
+              <p className="text-xs mt-1 text-lone-text-tertiary">Atualizado em {genAt}</p>
             )}
           </div>
           {/* Desktop: botão no header / Mobile: FAB */}
           <a
-            href={`https://wa.me/${phone}`}
+            href={linkWhatsapp(phone)}
             target="_blank" rel="noopener noreferrer"
             className="hidden lg:inline-flex shrink-0 items-center gap-2 text-sm px-5 py-2.5 rounded-full font-semibold bg-whatsapp text-primary-foreground"
           >
@@ -336,6 +334,18 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           </div>
         )}
 
+        {/* Meta sem resposta e nenhum dado recente guardado: avisa em vez de pintar zeros. */}
+        {!erro && !loading && atualizando && (
+          <div className="rounded-xl px-4 py-3.5 mb-5 text-sm bg-lone-info-bg border border-lone-info-border text-lone-info" role="status">
+            Seus números estão sendo atualizados — volte em alguns minutos.
+          </div>
+        )}
+
+        {/* Frase de resumo do período (N34): o número que importa, em português. */}
+        {!erro && !loading && resumo && (
+          <p className="text-base font-medium mb-4 text-foreground">{resumo}</p>
+        )}
+
         {/* Caiu de volta no último dado bom porque a Meta não respondeu: mostra, mas datado. */}
         {!erro && data?.stale_since && (
           <div className="rounded-xl px-4 py-3 mb-5 text-sm bg-card border border-border text-muted-foreground">
@@ -343,20 +353,25 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           </div>
         )}
 
-        {/* ── KPIs — sempre 4 colunas no desktop, 2 no tablet, 1 no mobile */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6 lg:mb-7">
-          {kpiItems.map(({ key, label, val, format }) => (
-            <Card key={key} className="p-4">
-              <p className="text-xs mb-3 text-lone-text-tertiary">{label}</p>
-              {loading ? (
-                <div className={`h-8 w-24 rounded bg-border ${pulse}`} />
-              ) : (
-                <p className="text-3xl font-bold leading-none">
-                  {val?.value != null ? format(val.value) : "—"}
-                </p>
-              )}
-            </Card>
-          ))}
+        {/* ── KPIs — 2×2 no celular, 4 colunas no desktop; Mensagens é o destaque */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6 lg:mb-7">
+          {kpiItems.map(({ key, label, val, format }) => {
+            const heroi = key === "messages";
+            const d = !loading && val ? formatDelta(key, val.delta_pct, periodoDado) : null;
+            return (
+              <div key={key} className={`rounded-xl bg-card border p-3.5 sm:p-4 min-w-0 ${heroi ? "border-primary" : "border-border"}`}>
+                <p className={`text-xs mb-2 sm:mb-3 ${heroi ? "font-semibold text-primary" : "text-lone-text-tertiary"}`}>{label}</p>
+                {loading ? (
+                  <div className={`h-8 w-24 max-w-full rounded bg-border ${pulse}`} />
+                ) : (
+                  <p className={`font-bold leading-none break-words ${heroi ? "text-3xl sm:text-4xl" : "text-2xl sm:text-3xl"}`}>
+                    {val?.value != null ? format(val.value) : "—"}
+                  </p>
+                )}
+                {d && <p className="text-xs mt-2 leading-snug" style={{ color: d.color }}>{d.text}</p>}
+              </div>
+            );
+          })}
         </div>
 
         {/* ══════════════════════════════════════════════════════════════
@@ -392,7 +407,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
 
               {loading || chartData.length === 0 ? (
                 <div className="flex items-center justify-center text-lone-text-tertiary" style={{ height: chartHeight }}>
-                  {loading ? "Carregando…" : "Sem dados para o período"}
+                  {loading ? "Carregando…" : !data || atualizando ? "Aguardando os números…" : "Sem dados para o período"}
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={chartHeight}>
@@ -512,7 +527,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                                 <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-1 text-xs text-muted-foreground">
                                   <span><strong className="text-foreground">{fmt(c.messages)}</strong> msgs</span>
                                   <span><strong className="text-foreground">{fmtBrl(c.spend)}</strong></span>
-                                  {c.cpa && <span>CPA <strong className="text-foreground">{fmtBrl(c.cpa)}</strong></span>}
+                                  {c.cpa && <span><strong className="text-foreground">{fmtBrl(c.cpa)}</strong> por conversa</span>}
                                 </div>
                               </div>
                               <svg className="shrink-0 text-lone-text-tertiary" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -524,15 +539,15 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                             <div className="rounded-b-xl px-3 py-2.5 -mt-px bg-muted border border-primary border-t-0">
                               <div className="grid grid-cols-3 gap-2 text-xs">
                                 <div>
-                                  <p className="text-lone-text-tertiary">CTR</p>
+                                  <p className="text-lone-text-tertiary">Taxa de clique</p>
                                   <p className="font-semibold mt-0.5">{c.ctr.toFixed(2)}%</p>
                                 </div>
                                 <div>
-                                  <p className="text-lone-text-tertiary">Frequência</p>
+                                  <p className="text-lone-text-tertiary">Vezes que cada pessoa viu</p>
                                   <p className="font-semibold mt-0.5">{c.frequency.toFixed(1)}x</p>
                                 </div>
                                 <div>
-                                  <p className="text-lone-text-tertiary">Custo/msg</p>
+                                  <p className="text-lone-text-tertiary">Custo por conversa</p>
                                   <p className="font-semibold mt-0.5">{c.cpa ? fmtBrl(c.cpa) : "—"}</p>
                                 </div>
                               </div>
@@ -577,11 +592,10 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
         {/* ── Footer ───────────────────────────────────────────────────── */}
         <div className="text-center mt-10 pb-20 lg:pb-10 space-y-2">
           <img src="/logo.png" alt="Lone Mídia" className="h-6 w-auto mx-auto opacity-50" />
-          <p className="text-[11px] text-lone-text-tertiary">
-            Relatório exclusivo ·{" "}
-            {new Date().toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
+          <p className="text-xs text-lone-text-tertiary">
+            Relatório exclusivo{mesRelatorio ? ` · ${mesRelatorio}` : ""}
           </p>
-          <p className="text-[10px] text-lone-text-disabled">
+          <p className="text-xs text-lone-text-tertiary">
             Atribuição: 7 dias de clique + 1 dia de visualização · Valores podem divergir em até 5% do Gerenciador por atribuição diferida
           </p>
         </div>

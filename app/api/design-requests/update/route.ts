@@ -3,11 +3,12 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { getServerUser } from "@/lib/supabase/auth-server";
+import { requireRole, GESTAO } from "@/lib/api/require-role";
+import { podeAtualizarDemanda } from "../permissao";
 
 export async function POST(req: NextRequest) {
-  const user = await getServerUser(req);
-  if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
+  const gate = await requireRole(req, [...GESTAO, "social", "designer"]);
+  if (gate instanceof NextResponse) return gate;
 
   const body = await req.json().catch(() => null);
   if (!body?.id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
@@ -31,6 +32,23 @@ export async function POST(req: NextRequest) {
   if (Object.keys(row).length === 0) return NextResponse.json({ success: true });
 
   try {
+    const { data: dr, error: erroDr } = await supabaseAdmin.from("design_requests")
+      .select("client_id, assigned_designer, attachments").eq("id", id as string).maybeSingle();
+    if (erroDr) return NextResponse.json({ error: erroDr.message }, { status: 500 });
+    if (!dr) return NextResponse.json({ error: "Demanda não encontrada." }, { status: 404 });
+
+    const [{ data: cli }, { data: membro }] = await Promise.all([
+      supabaseAdmin.from("clients").select("assigned_designer").eq("id", dr.client_id as string).maybeSingle(),
+      supabaseAdmin.from("team_members").select("name").eq("email", (gate.user.email || "").toLowerCase()).maybeSingle(),
+    ]);
+    const decisao = podeAtualizarDemanda(gate.papel, (membro?.name as string) ?? "", {
+      clientId: dr.client_id as string,
+      assignedDesigner: (dr.assigned_designer as string) ?? null,
+      clienteDesigner: (cli?.assigned_designer as string) ?? null,
+      anexosAtuais: (dr.attachments as string[]) ?? [],
+    }, updates);
+    if (!decisao.ok) return NextResponse.json({ error: decisao.erro }, { status: decisao.status });
+
     const { error } = await supabaseAdmin.from("design_requests").update(row).eq("id", id as string);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ success: true });

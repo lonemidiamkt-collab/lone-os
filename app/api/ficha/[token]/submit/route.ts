@@ -10,21 +10,10 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { DIAG_QUESTIONS } from "@/lib/fichaViva/questions";
-import { checkAccessCode } from "@/lib/fichaViva/pin";
+import { checkAccessCode, ipTravado, pinTravado, registrarTentativaPin, mensagemTrava } from "@/lib/fichaViva/pin";
+import { criarLimite, ipDe } from "@/lib/portal/limite";
 
-// Rate-limit simples em memória por token (mesmo padrão da rota de snapshot do portal)
-const RATE_LIMIT = new Map<string, { count: number; reset: number }>();
-function checkRateLimit(token: string): boolean {
-  const now = Date.now();
-  const entry = RATE_LIMIT.get(token);
-  if (!entry || entry.reset < now) {
-    RATE_LIMIT.set(token, { count: 1, reset: now + 60_000 });
-    return true;
-  }
-  if (entry.count >= 5) return false; // no máx. 5 envios/min por token
-  entry.count++;
-  return true;
-}
+const LIMITE = criarLimite(5, 60_000); // no máx. 5 envios/min por link (chave só depois de validada)
 
 const VALID_IDS = new Set(DIAG_QUESTIONS.map((q) => q.id));
 
@@ -33,10 +22,9 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params;
-
-  if (!checkRateLimit(token)) {
-    return NextResponse.json({ error: "Muitas tentativas. Tente em 1 minuto." }, { status: 429 });
-  }
+  const ip = ipDe(req.headers);
+  const esperaIp = ipTravado(ip);
+  if (esperaIp) return NextResponse.json({ error: mensagemTrava(esperaIp) }, { status: 429 });
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
     return NextResponse.json({ error: "Link inválido" }, { status: 404 });
   }
@@ -51,14 +39,21 @@ export async function POST(
   if (!client || !client.ficha_viva_enabled || client.ficha_viva_token_revoked_at) {
     return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
   }
+  if (LIMITE.estourou(token)) {
+    return NextResponse.json({ error: "Muitas tentativas. Tente em 1 minuto." }, { status: 429 });
+  }
 
   const body = await req.json().catch(() => ({}));
 
   // PIN só no link do DONO (full). Link do vendedor (raiox) grava sem código.
   const scope: "full" | "raiox" = client.ficha_viva_raiox_token === token ? "raiox" : "full";
   const nome = (client.nome_fantasia as string) || (client.name as string);
-  if (scope === "full" && !checkAccessCode(nome, String(body?.code ?? ""))) {
-    return NextResponse.json({ error: "Código de acesso incorreto." }, { status: 401 });
+  if (scope === "full") {
+    const espera = pinTravado(token, ip);
+    if (espera) return NextResponse.json({ error: mensagemTrava(espera) }, { status: 429 });
+    const certo = checkAccessCode(nome, String(body?.code ?? ""));
+    registrarTentativaPin(token, ip, certo);
+    if (!certo) return NextResponse.json({ error: "Código de acesso incorreto." }, { status: 401 });
   }
 
   // Sanitiza respostas: só ids conhecidos, string, com teto de tamanho

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import { useRole } from "@/lib/context/RoleContext";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { toast } from "sonner";
 import { chamar } from "@/lib/api/chamar";
 import {
   ShieldAlert, AlertTriangle, CheckCircle, TrendingDown, TrendingUp,
@@ -66,6 +66,8 @@ export default function DefesaAtivaPage() {
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [err, setErr] = useState("");
+  // Carga falhou ≠ lista vazia: sem isso a tela dizia "tudo dentro do esperado" junto do erro.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [filter, setFilter] = useState<FilterStatus>("unack");
   const [ackingId, setAckingId] = useState<string | null>(null);
 
@@ -73,17 +75,11 @@ export default function DefesaAtivaPage() {
     setLoading(true);
     setErr("");
     try {
-      const res = await authedFetch(`/api/defense/alerts?status=${filter}`);
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({ error: "Erro" }));
-        setErr(d.error || "Falha ao carregar");
-        return;
-      }
-      const data = await res.json();
-      setAlerts(data.alerts ?? []);
-      setSummary(data.summary ?? null);
-    } catch {
-      setErr("Falha de conexão");
+      const res = await chamar<{ alerts?: Alert[]; summary?: Summary }>(`/api/defense/alerts?status=${filter}`);
+      if (!res.ok) { setLoadFailed(true); setAlerts([]); setSummary(null); setErr(res.erro ?? "Falha ao carregar"); return; }
+      setLoadFailed(false);
+      setAlerts(res.data?.alerts ?? []);
+      setSummary(res.data?.summary ?? null);
     } finally {
       setLoading(false);
     }
@@ -93,15 +89,10 @@ export default function DefesaAtivaPage() {
     setScanning(true);
     setErr("");
     try {
-      const res = await authedFetch("/api/system/defense-scan", { method: "POST" });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({ error: "Falha no scan" }));
-        setErr(d.error || "Falha no scan");
-        return;
-      }
+      const res = await chamar<{ clients_scanned?: number; new_alerts_created?: number }>("/api/system/defense-scan", {});
+      if (!res.ok) { setErr(res.erro ?? "Falha no scan"); return; }
+      toast.success(`Scan concluído: ${res.data?.clients_scanned ?? 0} contas, ${res.data?.new_alerts_created ?? 0} alerta(s) novo(s)`);
       await load();
-    } catch {
-      setErr("Falha no scan");
     } finally {
       setScanning(false);
     }
@@ -133,16 +124,10 @@ export default function DefesaAtivaPage() {
     <div className="flex-1 min-w-0 overflow-auto">
       <Header title="Defesa Ativa" />
       <div className="p-6 space-y-6 animate-fade-in">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <ShieldAlert size={22} className="text-primary" />
-              Defesa Ativa
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Monitoramento contínuo de anomalias em Meta Ads. Scan automático a cada 15min.
-            </p>
-          </div>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <p className="text-sm text-muted-foreground">
+            Monitoramento contínuo de anomalias em Meta Ads. Scan automático a cada 15min.
+          </p>
           <button
             onClick={scan}
             disabled={scanning}
@@ -179,7 +164,7 @@ export default function DefesaAtivaPage() {
 
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 size={20} className="text-primary animate-spin" /></div>
-        ) : alerts.length === 0 ? (
+        ) : loadFailed ? null : alerts.length === 0 ? (
           <div className="text-center py-16 space-y-2">
             <CheckCircle size={32} className="text-lone-success opacity-60 mx-auto" />
             <p className="text-sm text-foreground">Nenhum alerta {filter === "unack" ? "ativo" : filter === "ack" ? "resolvido" : ""}.</p>

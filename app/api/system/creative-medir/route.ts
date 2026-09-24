@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { comExecucao, anotar } from "@/lib/obs/correlacao";
 import { medirFilhoContraPai, type JanelaMedida } from "@/lib/traffic/medir";
@@ -13,7 +13,7 @@ import { medirFilhoContraPai, type JanelaMedida } from "@/lib/traffic/medir";
 // gasto do filho, até 14 dias). Validada/refutada viram creative_learnings (memória do cliente);
 // inconclusiva fica registrada e segue medindo no dia seguinte. Cron diário 07:45.
 export async function POST(req: NextRequest) {
-  const gate = await requireCronOrUser(req);
+  const gate = requireCron(req); // só o cron: qualquer logado disparava lote pesado (IA/Meta)
   if (gate) return gate;
   return comExecucao({ origem: "cron:creative-medir", ator: "cron" }, async () => {
     const { data: lins, error } = await supabaseAdmin.from("creative_lineage")

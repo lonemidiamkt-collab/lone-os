@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { comExecucao, anotar } from "@/lib/obs/correlacao";
 import { loadRoteiroPrefs } from "@/lib/cs/load-briefing";
@@ -16,7 +16,7 @@ import { analisarVencedor, roteiroDaVariacao } from "@/lib/traffic/vencedor";
 // Cron depois do creative-health. SOMBRA: grava creative_hypotheses, não envia nada.
 
 export async function POST(req: NextRequest) {
-  const gate = await requireCronOrUser(req);
+  const gate = requireCron(req); // só o cron: qualquer logado disparava lote pesado (IA/Meta)
   if (gate) return gate;
   const max = Math.min(30, Math.max(1, Number(req.nextUrl.searchParams.get("max") ?? 8) || 8));
   const soCliente = req.nextUrl.searchParams.get("clientId") || "";

@@ -1,14 +1,18 @@
 "use client";
 
-// Seção de artes do portal do cliente. Mostra as artes ENTREGUES e, pras que estão aguardando o OK
-// do cliente, deixa ele APROVAR ou PEDIR AJUSTE ali mesmo (tira o vai-e-vem do WhatsApp). Público via
-// token. Aprovar → marca no card + notifica o time; ajuste → salva o comentário + notifica.
+// Seção de artes do portal do cliente. Mostra as artes ENTREGUES; nas mais novas, o cliente pode
+// PEDIR AJUSTE por escrito. A aprovação é no WhatsApp com o time (decisão de 31/08) — o botão de
+// aprovar só aparece com PORTAL_APROVACAO_CLIENTE=on.
 
 import { useState, useEffect, useCallback } from "react";
+import { chamar } from "@/lib/api/chamar";
 
 interface Item { id: string; title: string; format: string; status: string; imageUrl: string; date: string | null; pendente: boolean; aprovada: boolean }
 
-const fmtDate = (d: string | null) => d ? new Date(d.length <= 10 ? d + "T00:00:00" : d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "";
+// Data pura lida como dia do calendário; timestamp convertido para São Paulo.
+const fmtDate = (d: string | null) => !d ? "" : d.length <= 10
+  ? new Date(d + "T12:00:00Z").toLocaleDateString("pt-BR", { day: "2-digit", month: "short", timeZone: "UTC" })
+  : new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", timeZone: "America/Sao_Paulo" });
 
 /**
  * `aprovacaoLigada` chega desligado por padrão: o cliente vê a arte e pode PEDIR AJUSTE, mas o
@@ -17,6 +21,8 @@ const fmtDate = (d: string | null) => d ? new Date(d.length <= 10 ? d + "T00:00:
  */
 export default function PortalContent({ token, aprovacaoLigada = false }: { token: string; aprovacaoLigada?: boolean }) {
   const [items, setItems] = useState<Item[] | null>(null);
+  const [erroCarga, setErroCarga] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [ajusteOpen, setAjusteOpen] = useState<string | null>(null);
   const [ajusteText, setAjusteText] = useState("");
@@ -24,28 +30,24 @@ export default function PortalContent({ token, aprovacaoLigada = false }: { toke
 
   useEffect(() => {
     let alive = true;
-    fetch(`/api/portal/${token}/content`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (alive) setItems(d?.items ?? []); })
-      .catch(() => { if (alive) setItems([]); });
+    setErroCarga(null);
+    chamar<{ items: Item[] }>(`/api/portal/${token}/content`).then((r) => {
+      if (!alive) return;
+      // Falha NÃO é "nenhuma arte": antes a seção sumia e o cliente achava que nada tinha sido entregue.
+      if (!r.ok || !r.data) { setErroCarga("Não consegui carregar suas artes agora."); return; }
+      setItems(r.data.items ?? []);
+    });
     return () => { alive = false; };
-  }, [token]);
+  }, [token, tentativa]);
 
   const act = useCallback(async (id: string, action: "approve" | "ajuste", comment?: string) => {
     setBusy(id);
     try {
       // Rota pública por token: `fetch` puro mesmo, mas com o mesmo cuidado — é a tela do CLIENTE,
       // e um "cliquei em aprovar e não aconteceu nada" aqui é pior que em qualquer tela interna.
-      let ok = false;
-      try {
-        const res = await fetch(`/api/portal/${token}/approve`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cardId: id, action, comment }),
-        });
-        ok = res.ok;
-      } catch { ok = false; }
-      if (!ok) {
-        setFlash({ id, msg: "Não consegui enviar agora. Tenta de novo em instantes?" });
+      const r = await chamar(`/api/portal/${token}/approve`, { cardId: id, action, comment });
+      if (!r.ok) {
+        setFlash({ id, msg: r.status === 0 ? "Sem conexão agora. Tenta de novo em instantes?" : (r.erro || "Não consegui enviar agora. Tenta de novo em instantes?") });
         setTimeout(() => setFlash(null), 5000);
         return;
       }
@@ -56,6 +58,18 @@ export default function PortalContent({ token, aprovacaoLigada = false }: { toke
       setTimeout(() => setFlash(null), 4000);
     } finally { setBusy(null); }
   }, [token]);
+
+  if (erroCarga) {
+    return (
+      <div className="mb-6 lg:mb-8 rounded-xl px-4 py-3.5 flex flex-wrap items-center gap-3 text-sm bg-lone-warning-bg border border-lone-warning-border text-lone-warning" role="alert">
+        <span className="flex-1 min-w-[200px]">🎨 {erroCarga}</span>
+        <button onClick={() => setTentativa((t) => t + 1)}
+          className="rounded-lg px-3.5 py-2 text-sm font-semibold min-h-[44px] bg-card border border-border text-foreground">
+          Tentar de novo
+        </button>
+      </div>
+    );
+  }
 
   if (items && items.length === 0) return null;
 
@@ -68,8 +82,8 @@ export default function PortalContent({ token, aprovacaoLigada = false }: { toke
       {pendentes.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">✋</span>
-            <h2 className="text-base font-bold">Aprove suas artes</h2>
+            <span className="text-lg">🆕</span>
+            <h2 className="text-base font-bold">Artes do mês</h2>
             <span className="text-xs font-semibold rounded-full px-2 py-0.5 bg-primary/[.13] text-lone-brand-soft">{pendentes.length}</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -79,7 +93,7 @@ export default function PortalContent({ token, aprovacaoLigada = false }: { toke
                 <img src={it.imageUrl} alt={it.title} className="w-full aspect-square object-cover" loading="lazy" />
                 <div className="p-3">
                   <p className="text-sm font-semibold truncate">{it.title}</p>
-                  <p className="text-[11px] mb-3 text-lone-text-tertiary">{it.format}{it.date ? ` · ${fmtDate(it.date)}` : ""}</p>
+                  <p className="text-xs mb-3 text-lone-text-tertiary">{it.format}{it.date ? ` · ${fmtDate(it.date)}` : ""}</p>
 
                   {flash?.id === it.id ? (
                     <p className="text-sm font-medium py-2 text-lone-success">{flash.msg}</p>
@@ -127,7 +141,7 @@ export default function PortalContent({ token, aprovacaoLigada = false }: { toke
                 <img src={it.imageUrl} alt={it.title} className="w-full aspect-square object-cover" loading="lazy" />
                 <div className="p-2.5">
                   <p className="text-xs font-medium truncate">{it.title}</p>
-                  <p className="text-[10px] mt-0.5 text-lone-text-tertiary">{it.format}{it.date ? ` · ${fmtDate(it.date)}` : ""}</p>
+                  <p className="text-xs mt-0.5 text-lone-text-tertiary">{it.format}{it.date ? ` · ${fmtDate(it.date)}` : ""}</p>
                 </div>
               </div>
             ))}

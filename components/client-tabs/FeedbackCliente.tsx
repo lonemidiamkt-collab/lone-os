@@ -96,7 +96,7 @@ export default function FeedbackCliente({ clientId }: { clientId: string }) {
           {list.slice(0, 8).map((f) => {
             const b = badge(tone(f.mood));
             return (
-              <div key={f.id} className="flex items-center gap-2 text-xs border-t border-border/50 py-1.5">
+              <div key={f.id} className="flex items-center gap-2 text-xs border-t border-border py-1.5">
                 <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] shrink-0 ${b.cls}`}><b.Icon size={10} /></span>
                 <span className="flex-1 text-foreground truncate">{f.note}</span>
                 <span className="text-muted-foreground/50 shrink-0">{fmtDate(f.created_at)}</span>

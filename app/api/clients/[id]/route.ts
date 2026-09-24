@@ -9,16 +9,34 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { fetchClientById } from "@/lib/supabase/queries";
+import { papelDoUsuario, GESTAO, type Papel } from "@/lib/api/require-role";
+
+// Quem vê CPF, endereço, documentos, logins e tokens de link público: gestão e o social (que opera
+// o cofre de acessos). Designer, tráfego e comercial recebem a ficha sem esses campos.
+const VE_SENSIVEL: Papel[] = [...GESTAO, "social"];
+const CAMPOS_SENSIVEIS = [
+  "cpfCnpj", "birthDate", "idade", "docIdentidade", "docContratoSocial",
+  "endereco", "enderecoRua", "enderecoNumero", "enderecoBairro", "enderecoCep",
+  "facebookLogin", "googleAdsLogin", "instagramLogin",
+  "publicReportToken", "publicReportTokenCreatedAt", "publicReportTokenRevokedAt",
+  "fichaVivaToken", "fichaVivaRaioxToken", "fichaVivaTokenCreatedAt", "fichaVivaTokenRevokedAt",
+] as const;
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const papel = await papelDoUsuario(user);
+  if (!papel) return NextResponse.json({ error: "Sem permissão para esta área." }, { status: 403 });
 
   const { id } = await params;
   const client = await fetchClientById(id);
   if (!client) return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
 
-  return NextResponse.json({ client });
+  if (!VE_SENSIVEL.includes(papel)) {
+    const magro = client as unknown as Record<string, unknown>;
+    for (const k of CAMPOS_SENSIVEIS) delete magro[k];
+  }
+  return NextResponse.json({ client, completo: VE_SENSIVEL.includes(papel) });
 }
 
 // DELETE /api/clients/[id] — apaga o cadastro DE VEZ.

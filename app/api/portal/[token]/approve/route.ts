@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { aplicarAjusteNoCard } from "@/lib/cs/card";
 import { estaPausado } from "@/lib/clients/pausa";
+import { criarLimite } from "@/lib/portal/limite";
 
 // POST /api/portal/[token]/approve — o CLIENTE aprova (ou pede ajuste em) uma arte entregue, pelo
 // próprio link do portal. Valida token + que o card é DELE. Aprovar → client_approved_at + notifica o
@@ -21,18 +22,10 @@ import { estaPausado } from "@/lib/clients/pausa";
 
 const APROVACAO_LIGADA = process.env.PORTAL_APROVACAO_CLIENTE === "on";
 
-const RATE = new Map<string, { count: number; reset: number }>();
-function limited(token: string): boolean {
-  const now = Date.now();
-  const e = RATE.get(token);
-  if (!e || e.reset < now) { RATE.set(token, { count: 1, reset: now + 60_000 }); return false; }
-  if (e.count >= 20) return true; // até 20 ações/min por token
-  e.count++; return false;
-}
+const LIMITE = criarLimite(20, 60_000); // até 20 ações/min por cliente
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  if (limited(token)) return NextResponse.json({ error: "Muitas ações. Aguarde 1 minuto." }, { status: 429 });
 
   const { data: client } = await supabaseAdmin
     .from("clients").select("id, name, nome_fantasia, public_report_enabled, public_report_token_revoked_at, active, churned_at, paused_at, paused_until")
@@ -41,6 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at || estaPausado(client)) {
     return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
   }
+  if (LIMITE.estourou(client.id as string)) return NextResponse.json({ error: "Muitas ações. Aguarde 1 minuto." }, { status: 429 });
 
   const body = (await req.json().catch(() => ({}))) as { cardId?: string; action?: string; comment?: string };
   const cardId = (body.cardId || "").trim();

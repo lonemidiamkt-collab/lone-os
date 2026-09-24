@@ -30,7 +30,7 @@ export interface AccountAlertInput {
   /** Verba mensal contratada em R$ (base do cálculo de %). null se não definida. */
   monthlyBudget: number | null;
   daysRemaining: number | null;
-  /** Status Meta: 1=Ativa 2=Desativada 3=Em revisão 7=Pendente 9=Grace. */
+  /** Status Meta (account_status) — significados em ./account-status. */
   accountStatus: number;
   /** Erro do último sync (null = ok). */
   syncError?: string | null;

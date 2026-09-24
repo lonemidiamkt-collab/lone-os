@@ -19,14 +19,16 @@ import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import { MarkdownEditor } from "@/components/Markdown";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
-import type { ContentCard, Client, MoodType, Priority, SocialMonthlyReport, MonthlyDeliveryReport, SocialPerformanceScore, MoodEntry, OnboardingItem, PerformanceLevel } from "@/lib/types";
+import { STATUS_COR } from "@/components/kanban/status-cores";
+import { slotsSegQuaSex, proximoSlot, chaveDaLinha } from "@/components/kanban/lote";
+import type { ContentCard, Client, MoodType, Priority, MonthlyDeliveryReport, MoodEntry, OnboardingItem } from "@/lib/types";
 import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS, spDateStr, todaySP } from "@/lib/utils";
 import {
   AlertTriangle, Calendar, Instagram, ImageIcon,
   Smile, UserPlus, X, ExternalLink,
   Sparkles, Clock, Target, Zap, BarChart2,
   TrendingUp, Hash, Check, Plus, ChevronDown,
-  Key, MessageCircle, Send, Eye, EyeOff, Save,
+  Key, Eye, EyeOff, Save,
   Download, CheckCircle, FileWarning, ShieldCheck, AlertCircle, Layers, Trash2, Copy, Archive,
   Palette, Search,
 } from "lucide-react";
@@ -43,7 +45,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { exportReportAsPdf } from "@/lib/exportPdf";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useClientsStore } from "@/stores/useClientsStore";
@@ -52,18 +53,6 @@ import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function hoursSince(isoString?: string): number {
-  if (!isoString) return 9999;
-  return (Date.now() - new Date(isoString).getTime()) / 3600000;
-}
-
-function getInactivityLevel(client: Client): "none" | "warning" | "urgent" {
-  const h = hoursSince(client.lastKanbanActivity);
-  if (h >= 48) return "urgent";
-  if (h >= 24) return "warning";
-  return "none";
-}
 
 function getDeadlineUrgency(dueDate?: string): "overdue" | "today" | "tomorrow" | "soon" | "ok" | "none" {
   if (!dueDate) return "none";
@@ -93,14 +82,14 @@ function getSlaBadge(status: string, columnEnteredAt?: Record<string, string>, s
 }
 
 const SLA_STYLES = {
-  warning: "text-muted-foreground bg-card border-border",
+  warning: "text-lone-warning bg-lone-warning-bg border-lone-warning-border",
   critical: "text-destructive bg-destructive/10 border-destructive/20",
 };
 
 const DEADLINE_BADGE: Record<string, { label: string; color: string }> = {
   overdue:  { label: "Vencido",  color: "bg-destructive/10 text-destructive border-destructive/20" },
-  today:    { label: "Hoje",     color: "bg-card text-muted-foreground border-border" },
-  tomorrow: { label: "Amanhã",   color: "bg-card text-muted-foreground border-border" },
+  today:    { label: "Hoje",     color: "bg-lone-warning-bg text-lone-warning border-lone-warning-border" },
+  tomorrow: { label: "Amanhã",   color: "bg-muted text-muted-foreground border-border" },
   soon:     { label: "Em breve", color: "bg-primary/15 text-primary border-primary/20" },
 };
 
@@ -108,7 +97,7 @@ const DEADLINE_BADGE: Record<string, { label: string; color: string }> = {
 
 const HEALTH_CONFIG: Record<string, { label: string; led: string; color: string; bg: string; border: string }> = {
   good:       { label: "On Fire",    led: "led led-healthy",  color: "text-primary",       bg: "bg-primary/5",    border: "border-primary/20" },
-  average:    { label: "Atenção",    led: "led led-attention", color: "text-muted-foreground",      bg: "bg-card",     border: "border-border" },
+  average:    { label: "Atenção",    led: "led led-attention", color: "text-lone-warning",      bg: "bg-lone-warning-bg",     border: "border-lone-warning-border" },
   at_risk:    { label: "Crítico",    led: "led led-critical",  color: "text-destructive",       bg: "bg-destructive/5",    border: "border-destructive/20" },
   onboarding: { label: "Onboarding", led: "led led-healthy",  color: "text-primary",       bg: "bg-primary/5",    border: "border-primary/20" },
 };
@@ -124,29 +113,17 @@ const TONE_LABELS: Record<string, string> = {
 };
 
 const CONTENT_COLUMNS = [
-  { id: "ideas",          title: "Ideias",             color: "bg-muted" },
-  { id: "script",         title: "Roteiro",            color: "bg-muted" },
-  { id: "in_production",  title: "Em Producao",        color: "bg-primary" },
-  { id: "blocked",        title: "Bloqueado (Design)", color: "bg-destructive" },
-  { id: "approval",       title: "Aprovação Social Media",  color: "bg-muted" },
-  { id: "client_approval",title: "Aprovacao Cliente",  color: "bg-muted" },
-  { id: "scheduled",      title: "Agendado",           color: "bg-muted" },
-  { id: "published",      title: "Publicado",          color: "bg-primary" },
+  { id: "ideas",          title: "Ideias",             color: STATUS_COR.ideas },
+  { id: "script",         title: "Roteiro",            color: STATUS_COR.script },
+  { id: "in_production",  title: "Em Producao",        color: STATUS_COR.in_production },
+  { id: "blocked",        title: "Bloqueado (Design)", color: STATUS_COR.blocked },
+  { id: "approval",       title: "Aprovação Social Media",  color: STATUS_COR.approval },
+  { id: "client_approval",title: "Aprovacao Cliente",  color: STATUS_COR.client_approval },
+  { id: "scheduled",      title: "Agendado",           color: STATUS_COR.scheduled },
+  { id: "published",      title: "Publicado",          color: STATUS_COR.published },
 ];
 
-const STATUS_DOT: Record<ContentCard["status"], string> = {
-  ideas: "bg-muted",
-  script: "bg-muted",
-  in_production: "bg-primary",
-  blocked: "bg-destructive",
-  approval: "bg-muted",
-  client_approval: "bg-muted",
-  scheduled: "bg-muted",
-  published: "bg-primary",
-};
-
-const MONTHS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
-const WEEKDAYS = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+const STATUS_DOT = STATUS_COR;
 
 // ── Confetti ──────────────────────────────────────────────────────────────────
 
@@ -223,140 +200,6 @@ function OnboardingCompleteModal({ client, onMoveActive, onMoveActiveAndIdeas, o
             Cancelar
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ── CalendarView ──────────────────────────────────────────────────────────────
-
-interface CalendarViewProps {
-  cards: ContentCard[];
-  onDayClick?: (day: number, cards: ContentCard[], year: number, month: number) => void; // month é 0-based
-}
-
-function CalendarView({ cards, onDayClick }: CalendarViewProps) {
-  const today = new Date();
-  // Mês navegável (antes travava no mês atual — impossível planejar o mês que vem).
-  const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const goMonth = (delta: number) => { setViewDate(new Date(year, month + delta, 1)); setSelectedDay(null); };
-
-  const cardsByDay: Record<number, ContentCard[]> = {};
-  cards.forEach((c) => {
-    if (!c.dueDate) return;
-    const [y, m, d] = c.dueDate.split("-").map(Number);
-    if (y === year && m - 1 === month) {
-      if (!cardsByDay[d]) cardsByDay[d] = [];
-      cardsByDay[d].push(c);
-    }
-  });
-
-  const cells: (number | null)[] = [];
-  for (let i = 0; i < firstDay; i++) cells.push(null);
-  for (let i = 1; i <= daysInMonth; i++) cells.push(i);
-
-  const handleDayClick = (day: number) => {
-    setSelectedDay(selectedDay === day ? null : day);
-    if (onDayClick) onDayClick(day, cardsByDay[day] ?? [], year, month);
-  };
-
-  const selectedDayCards = selectedDay ? (cardsByDay[selectedDay] ?? []) : [];
-
-  return (
-    <div className="card">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h3 className="font-semibold text-foreground flex items-center gap-2">
-            <Calendar size={16} className="text-primary" />
-            {MONTHS[month]} {year}
-          </h3>
-          <div className="flex items-center gap-1">
-            <button onClick={() => goMonth(-1)} aria-label="Mês anterior" className="grid h-7 w-7 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground">‹</button>
-            <button onClick={() => { setViewDate(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDay(null); }} className="h-7 rounded-lg border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground">Hoje</button>
-            <button onClick={() => goMonth(1)} aria-label="Próximo mês" className="grid h-7 w-7 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground">›</button>
-          </div>
-        </div>
-        <span className="text-xs text-muted-foreground">
-          {Object.values(cardsByDay).flat().length} posts agendados
-        </span>
-      </div>
-      <div className="grid grid-cols-7 gap-1">
-        {WEEKDAYS.map((d) => (
-          <div key={d} className="text-center text-xs text-muted-foreground font-medium py-1">{d}</div>
-        ))}
-        {cells.map((day, i) => {
-          const dayCards = day ? (cardsByDay[day] ?? []) : [];
-          const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
-          const isSelected = day === selectedDay;
-          return (
-            <div
-              key={i}
-              onClick={() => day && handleDayClick(day)}
-              className={`min-h-[52px] rounded-lg flex flex-col items-center gap-0.5 p-1 text-xs transition-colors ${
-                isToday ? "bg-primary text-primary-foreground font-bold" :
-                isSelected ? "bg-primary/20 border border-primary/40 text-foreground" :
-                day ? "hover:bg-muted text-foreground cursor-pointer" : ""
-              }`}
-            >
-              {day && (
-                <>
-                  <span className="leading-none">{day}</span>
-                  <div className="flex flex-wrap gap-0.5 justify-center mt-0.5">
-                    {dayCards.slice(0, 3).map((c) => (
-                      <span key={c.id} title={`${c.clientName}: ${c.title}`}
-                        className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[c.status]}`} />
-                    ))}
-                    {dayCards.length > 3 && <span className="text-muted-foreground text-[10px]">+{dayCards.length - 3}</span>}
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Day detail panel */}
-      {selectedDay && (
-        <div className="mt-4 pt-4 border-t border-border">
-          <p className="text-xs font-medium text-foreground mb-2">
-            {selectedDay} de {MONTHS[month]}
-            {selectedDayCards.length > 0
-              ? ` — ${selectedDayCards.length} conteúdo(s)`
-              : " — Nenhum conteúdo"}
-          </p>
-          {selectedDayCards.length > 0 ? (
-            <div className="space-y-2">
-              {selectedDayCards.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 p-2 bg-muted rounded-lg">
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[c.status]}`} />
-                  <span className="text-xs text-foreground font-medium truncate">{c.title}</span>
-                  <span className="text-xs text-muted-foreground shrink-0">· {c.clientName}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <button
-              className="text-xs text-primary hover:underline"
-              onClick={() => onDayClick && onDayClick(selectedDay, [], year, month)}
-            >
-              Nenhum conteúdo — clique para criar
-            </button>
-          )}
-        </div>
-      )}
-
-      <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t border-border">
-        {CONTENT_COLUMNS.map((col) => (
-          <div key={col.id} className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${col.color}`} />
-            <span className="text-xs text-muted-foreground">{col.title}</span>
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -455,13 +298,13 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
 
         {/* SLA alerts */}
         <div className={`rounded-xl p-4 border ${
-          slaAlerts.length > 0 ? "bg-card border-border" : "bg-card border-border"
+          slaAlerts.length > 0 ? "bg-lone-warning-bg border-lone-warning-border" : "bg-card border-border"
         }`}>
           <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle size={13} className={slaAlerts.length > 0 ? "text-muted-foreground" : "text-muted-foreground"} />
+            <AlertTriangle size={13} className={slaAlerts.length > 0 ? "text-lone-warning" : "text-muted-foreground"} />
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Gargalos</span>
           </div>
-          <p className={`text-xl font-bold tracking-tight ${slaAlerts.length > 0 ? "text-muted-foreground" : "text-muted-foreground"}`}>
+          <p className={`text-xl font-bold tracking-tight ${slaAlerts.length > 0 ? "text-lone-warning" : "text-muted-foreground"}`}>
             {slaAlerts.length}
           </p>
           <p className="text-[10px] text-muted-foreground">card(s) parado(s) 24h+</p>
@@ -520,7 +363,6 @@ interface ClientCardProps {
 
 function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen360 }: ClientCardProps) {
   const health = HEALTH_CONFIG[client.status] ?? HEALTH_CONFIG.good;
-  const inactivity = getInactivityLevel(client);
   const lastMood = moodEntries?.[0];
   const mood = lastMood ? MOOD_CONFIG[lastMood.mood] : null;
 
@@ -531,9 +373,6 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
   const obItems = onboarding ?? [];
   const obDone = obItems.filter((i) => i.completed).length;
   const obPct = obItems.length > 0 ? Math.round((obDone / obItems.length) * 100) : 0;
-
-  const hoursAgo = hoursSince(client.lastKanbanActivity);
-  const activityLabel = hoursAgo < 1 ? "agora" : hoursAgo < 24 ? `${Math.floor(hoursAgo)}h` : `${Math.floor(hoursAgo / 24)}d`;
 
   const isAtRisk = client.status === "at_risk";
 
@@ -553,9 +392,6 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-foreground text-sm tracking-tight truncate">{client.name}</h3>
             <div className={health.led} title={health.label} />
-            {inactivity === "urgent" && (
-              <span className="text-[10px] text-destructive font-medium animate-pulse">URGENTE</span>
-            )}
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
             <span>{client.industry}</span>
@@ -573,20 +409,20 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
       </div>
 
       {/* Row 2: Metrics row */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-2 gap-3 mb-4">
         {/* Posts progress */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Posts</span>
             <span className="text-[10px] text-muted-foreground font-medium">{postsNow}/{postsGoal}</span>
           </div>
-          <div className="h-1 bg-card rounded-full overflow-hidden">
+          <div className="h-1 bg-muted rounded-full overflow-hidden">
             <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${postsPct}%` }} />
           </div>
         </div>
 
         {/* Mood */}
-        <div className="text-center">
+        <div className="text-right">
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Humor</span>
           {mood ? (
             <span className="text-xs text-muted-foreground mt-1 block">{mood.emoji} {mood.label}</span>
@@ -595,13 +431,6 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
           )}
         </div>
 
-        {/* Activity */}
-        <div className="text-right">
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Atividade</span>
-          <span className={`text-xs mt-1 block ${inactivity === "urgent" ? "text-destructive" : inactivity === "warning" ? "text-muted-foreground" : "text-primary"}`}>
-            {activityLabel}
-          </span>
-        </div>
       </div>
 
       {/* Onboarding progress (only if onboarding) */}
@@ -827,7 +656,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
       dueDate,
       dueTime,
       briefing: briefing.trim() || undefined,
-    } as Omit<ContentCard, "id">).catch((err: unknown) => {
+    } as Omit<ContentCard, "id">, { criadoPor: currentUser }).catch((err: unknown) => {
       // Antes: .catch(() => null) e o modal fechava como se tivesse criado — a pessoa só descobria
       // quando o card não aparecia no quadro.
       toast.error(`Não consegui criar o card${err instanceof Error && err.message ? ` (${err.message})` : ""}. Nada foi salvo — tenta de novo.`);
@@ -1037,36 +866,21 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
   const addContentCard = useContentStore((s) => s.addContentCard);
   const { currentUser, role } = useRole();
 
-  const [clientId, setClientId] = useState(clients[0]?.id ?? "");
+  // Cliente em branco: pré-escolher o primeiro da lista criava o lote no cliente errado.
+  const [clientId, setClientId] = useState("");
   const [priority, setPriority] = useState<ContentCard["priority"]>("medium");
-  const [rows, setRows] = useState<BatchRow[]>(() => {
-    // Pre-fill 5 rows with dates for next week (Mon-Fri)
-    const today = new Date();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + ((8 - today.getDay()) % 7 || 7));
-    return Array.from({ length: 5 }, (_, i) => {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      // Formata a data LOCAL (não toISOString, que desloca pro UTC e pode pular o dia).
-      const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      return {
-        id: `batch-${i}`,
-        title: "",
-        format: "Post",
-        dueDate: ds,
-        dueTime: "10:00",
-      };
-    });
-  });
+  const loteId = useRef(`${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`).current;
+  const [rows, setRows] = useState<BatchRow[]>(() =>
+    // Postagem é seg/qua/sex — a próxima semana já vem nesses dias.
+    slotsSegQuaSex(todaySP()).map((ds, i) => ({ id: `batch-${i}`, title: "", format: "Post", dueDate: ds, dueTime: "10:00" })),
+  );
+  const [criando, setCriando] = useState(false);
 
   const selectedClient = clients.find((c) => c.id === clientId);
   const filledRows = rows.filter((r) => r.title.trim());
 
   const addRow = () => {
-    const lastDate = rows[rows.length - 1]?.dueDate ?? todaySP();
-    const next = new Date(lastDate + "T00:00:00");
-    next.setDate(next.getDate() + 1);
-    const ds = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+    const ds = proximoSlot(rows[rows.length - 1]?.dueDate ?? todaySP());
     setRows([...rows, { id: `batch-${Date.now()}`, title: "", format: "Post", dueDate: ds, dueTime: "10:00" }]);
   };
 
@@ -1079,22 +893,33 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
     setRows(rows.map((r) => r.id === id ? { ...r, [field]: value } : r));
   };
 
-  const handleSubmit = () => {
-    if (!clientId || filledRows.length === 0) return;
-    filledRows.forEach((row) => {
+  const handleSubmit = async () => {
+    if (!clientId || !selectedClient || filledRows.length === 0 || criando) return;
+    setCriando(true);
+    const resultados = await Promise.allSettled(filledRows.map((row) =>
       addContentCard({
         title: row.title.trim(),
         clientId,
-        clientName: selectedClient?.name ?? "",
-        socialMedia: role === "social" ? currentUser : (selectedClient?.assignedSocial ?? currentUser),
+        clientName: selectedClient.name,
+        socialMedia: role === "social" ? currentUser : (selectedClient.assignedSocial ?? currentUser),
         status: "ideas",
         priority,
         format: row.format,
         dueDate: row.dueDate,
         dueTime: row.dueTime,
-      });
-    });
-    onClose();
+      }, { chave: chaveDaLinha(loteId, row.id), criadoPor: currentUser }),
+    ));
+    setCriando(false);
+    const falhas = filledRows.filter((_, i) => resultados[i].status === "rejected");
+    if (falhas.length === 0) {
+      toast.success(`${filledRows.length} card(s) criado(s) para ${selectedClient.name}.`);
+      onClose();
+      return;
+    }
+    // Só as linhas que falharam ficam no modal; reenviar usa a mesma chave e não duplica.
+    const idsFalhos = new Set(falhas.map((r) => r.id));
+    setRows((rs) => rs.filter((r) => idsFalhos.has(r.id)));
+    toast.error(`${falhas.length} de ${filledRows.length} card(s) não foram criados: ${falhas.map((r) => `"${r.title.trim()}"`).join(", ")}. Ficaram no modal pra tentar de novo.`);
   };
 
   return (
@@ -1114,7 +939,7 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
                 Crie varios cards de conteudo de uma vez
               </p>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card/5">
+            <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted">
               <X size={16} />
             </button>
           </div>
@@ -1124,14 +949,15 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
             <div className="space-y-1.5">
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Cliente</label>
               <select value={clientId} onChange={(e) => setClientId(e.target.value)}
-                className="w-full bg-card/[0.03] border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none">
+                className={`w-full bg-background border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none ${clientId ? "border-border" : "border-destructive/40"}`}>
+                <option value="">Selecione um cliente...</option>
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Prioridade (todos)</label>
               <select value={priority} onChange={(e) => setPriority(e.target.value as ContentCard["priority"])}
-                className="w-full bg-card/[0.03] border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none">
+                className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none">
                 <option value="low">Baixa</option>
                 <option value="medium">Media</option>
                 <option value="high">Alta</option>
@@ -1158,24 +984,24 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
                   value={row.title}
                   onChange={(e) => updateRow(row.id, "title", e.target.value)}
                   placeholder={`Card ${i + 1}...`}
-                  className="bg-card/[0.03] border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary/50 outline-none"
+                  className="bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary/50 outline-none"
                 />
                 <select
                   value={row.format}
                   onChange={(e) => updateRow(row.id, "format", e.target.value)}
-                  className="bg-card/[0.03] border border-border rounded-lg px-2 py-2 text-xs text-foreground focus:border-primary/50 outline-none"
+                  className="bg-background border border-border rounded-lg px-2 py-2 text-xs text-foreground focus:border-primary/50 outline-none"
                 >
                   {["Post", "Reels", "Story", "Carrossel", "BTS"].map((f) => <option key={f}>{f}</option>)}
                 </select>
                 <input
                   type="date" value={row.dueDate}
                   onChange={(e) => updateRow(row.id, "dueDate", e.target.value)}
-                  className="bg-card/[0.03] border border-border rounded-lg px-2 py-2 text-xs text-foreground focus:border-primary/50 outline-none"
+                  className="bg-background border border-border rounded-lg px-2 py-2 text-xs text-foreground focus:border-primary/50 outline-none"
                 />
                 <input
                   type="time" value={row.dueTime}
                   onChange={(e) => updateRow(row.id, "dueTime", e.target.value)}
-                  className="bg-card/[0.03] border border-border rounded-lg px-2 py-2 text-xs text-foreground focus:border-primary/50 outline-none"
+                  className="bg-background border border-border rounded-lg px-2 py-2 text-xs text-foreground focus:border-primary/50 outline-none"
                 />
                 <button
                   onClick={() => removeRow(row.id)}
@@ -1187,13 +1013,13 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
               </div>
             ))}
             <button onClick={addRow}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-card/[0.03] transition-all w-full justify-center border border-dashed border-border">
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-background transition-all w-full justify-center border border-dashed border-border">
               <Plus size={12} /> Adicionar linha
             </button>
           </div>
 
           {/* Summary */}
-          <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-card/[0.02] border border-border">
+          <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-muted border border-border">
             <span className="text-xs text-muted-foreground">
               {filledRows.length} card(s) preenchido(s) de {rows.length} total
             </span>
@@ -1205,12 +1031,12 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border shrink-0">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-card/5 transition-all">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-all">
             Cancelar
           </button>
-          <button onClick={handleSubmit} disabled={filledRows.length === 0}
+          <button onClick={handleSubmit} disabled={filledRows.length === 0 || !selectedClient || criando}
             className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/80 transition-all disabled:opacity-30">
-            <Layers size={12} /> Criar {filledRows.length} Card(s)
+            <Layers size={12} /> {criando ? "Criando…" : `Criar ${filledRows.length} Card(s)`}
           </button>
         </div>
       </div>
@@ -1237,22 +1063,32 @@ function QuickTaskBar({ clients }: QuickTaskBarProps) {
   const addContentCard = useContentStore((s) => s.addContentCard);
   const { currentUser, role } = useRole();
 
-  const canCreate = title.trim() && clientId && dueDate && dueTime;
+  const [criando, setCriando] = useState(false);
+  const canCreate = title.trim() && clientId && dueDate && dueTime && !criando;
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!canCreate) return;
     const client = clients.find((c) => c.id === clientId);
-    addContentCard({
-      title: title.trim(),
-      clientId,
-      clientName: client?.name ?? "",
-      socialMedia: role === "social" ? currentUser : (client?.assignedSocial ?? currentUser),
-      status: column,
-      priority,
-      format,
-      dueDate,
-      dueTime,
-    });
+    setCriando(true);
+    try {
+      await addContentCard({
+        title: title.trim(),
+        clientId,
+        clientName: client?.name ?? "",
+        socialMedia: role === "social" ? currentUser : (client?.assignedSocial ?? currentUser),
+        status: column,
+        priority,
+        format,
+        dueDate,
+        dueTime,
+      }, { criadoPor: currentUser });
+    } catch (err) {
+      // "Criado!" só depois do servidor confirmar; em falha os campos ficam preenchidos.
+      toast.error(`Não consegui criar o card${err instanceof Error && err.message ? `: ${err.message}` : ""}.`);
+      return;
+    } finally {
+      setCriando(false);
+    }
     setTitle("");
     setClientId("");
     setFormat("Post");
@@ -1583,156 +1419,6 @@ function AccessTab({ clients, clientAccess, onSave, isAdmin }: AccessTabProps) {
   );
 }
 
-// ── Internal Chat Tab (WhatsApp-style) ──────────────────────────────────────
-
-interface InternalChatTabProps {
-  clients: Client[];
-  clientChats: Record<string, import("@/lib/types").ChatMessage[]>;
-  onSend: (clientId: string, text: string) => void;
-}
-
-function InternalChatTab({ clients, clientChats, onSend }: InternalChatTabProps) {
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(clients[0]?.id ?? null);
-  const [messageText, setMessageText] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const selectedClient = clients.find((c) => c.id === selectedClientId);
-  const messages = selectedClientId ? (clientChats[selectedClientId] ?? []) : [];
-
-  const handleSend = () => {
-    if (!messageText.trim() || !selectedClientId) return;
-    onSend(selectedClientId, messageText.trim());
-    setMessageText("");
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-  };
-
-  return (
-    <div className="animate-fade-in">
-      <div className="flex items-center gap-2 mb-4">
-        <MessageCircle size={15} className="text-primary" />
-        <h3 className="font-semibold text-sm tracking-tight">Chat Interno por Cliente</h3>
-        <span className="text-xs text-muted-foreground ml-auto">Centralize a comunicação da equipe aqui</span>
-      </div>
-
-      <div className="flex gap-4 h-[500px]">
-        {/* Client list sidebar */}
-        <div className="w-56 shrink-0 border border-border rounded-xl overflow-hidden flex flex-col bg-card">
-          <div className="px-3 py-2.5 border-b border-border">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Clientes</p>
-          </div>
-          <div className="flex-1 overflow-auto">
-            {clients.map((client) => {
-              const chatMsgs = clientChats[client.id] ?? [];
-              const lastMsg = chatMsgs[chatMsgs.length - 1];
-              const isActive = client.id === selectedClientId;
-              return (
-                <button
-                  key={client.id}
-                  onClick={() => setSelectedClientId(client.id)}
-                  className={`w-full text-left px-3 py-3 border-b border-border/50 transition-colors ${
-                    isActive ? "bg-primary/10" : "hover:bg-muted"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
-                      isActive ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
-                    }`}>
-                      {client.name[0]}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-medium truncate ${isActive ? "text-primary" : "text-foreground"}`}>
-                        {client.name}
-                      </p>
-                      {lastMsg ? (
-                        <p className="text-[10px] text-muted-foreground truncate mt-0.5">{lastMsg.user}: {lastMsg.text}</p>
-                      ) : (
-                        <p className="text-[10px] text-muted-foreground mt-0.5">Sem mensagens</p>
-                      )}
-                    </div>
-                    {chatMsgs.length > 0 && (
-                      <span className="text-[9px] text-muted-foreground shrink-0">{chatMsgs.length}</span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Chat area */}
-        <div className="flex-1 border border-border rounded-xl overflow-hidden flex flex-col bg-card">
-          {selectedClient ? (
-            <>
-              {/* Chat header */}
-              <div className="px-4 py-3 border-b border-border flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                  {selectedClient.name[0]}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{selectedClient.name}</p>
-                  <p className="text-[10px] text-muted-foreground">{selectedClient.industry} · {selectedClient.assignedSocial}</p>
-                </div>
-                <span className="text-xs text-muted-foreground ml-auto">{messages.length} mensagem(ns)</span>
-              </div>
-
-              {/* Messages */}
-              <div className="flex-1 overflow-auto p-4 space-y-3">
-                {messages.length === 0 && (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-xs text-muted-foreground">Nenhuma mensagem ainda. Inicie a conversa sobre este cliente.</p>
-                  </div>
-                )}
-                {messages.map((msg) => (
-                  <div key={msg.id} className="flex gap-2.5">
-                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-[9px] font-bold text-primary">
-                        {msg.user.split(" ").map((w) => w[0]).join("").slice(0, 2)}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-foreground">{msg.user}</span>
-                        <span className="text-[10px] text-muted-foreground">{msg.timestamp}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{msg.text}</p>
-                    </div>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Input */}
-              <div className="p-3 border-t border-border">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={messageText}
-                    onChange={(e) => setMessageText(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                    placeholder="Escreva uma mensagem sobre este cliente..."
-                    className="flex-1 bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary"
-                  />
-                  <button
-                    onClick={handleSend}
-                    disabled={!messageText.trim()}
-                    className="px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                  >
-                    <Send size={14} />
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-              Selecione um cliente para iniciar o chat.
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Card Status Selector (ClickUp-style) ──────────────────────────────────────
 // Chip colorido no card; ao escolher outro status, move o card de coluna sozinho
 // (reusa o mesmo onMoveCard do drag-and-drop). Portal do Radix escapa do
@@ -1805,9 +1491,21 @@ interface KanbanByClientProps {
   onNewCard?: (client: Client) => void;
   currentUser: string;
   role: string;
+  /** Primeira carga falhou: mostra erro em vez de "nenhum conteúdo". */
+  loadError?: boolean;
 }
 
-function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, onDeleteCard, onSendToDesigner, onNewCard, currentUser, role }: KanbanByClientProps) {
+function ErroDeCarga() {
+  return (
+    <div className="text-center py-12 px-4 rounded-xl border border-destructive/30 bg-destructive/10" role="alert">
+      <AlertTriangle size={24} className="mx-auto mb-3 text-destructive" />
+      <p className="text-sm font-medium text-destructive">Não consegui carregar os cards — tentando de novo</p>
+      <p className="text-xs text-muted-foreground mt-1">O quadro recarrega sozinho assim que a conexão voltar.</p>
+    </div>
+  );
+}
+
+function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, onDeleteCard, onSendToDesigner, onNewCard, currentUser, role, loadError }: KanbanByClientProps) {
   const [activeClientId, setActiveClientId] = useState(clients[0]?.id ?? "");
   const [viewMode, setViewMode] = useState<"single" | "unified">("single"); // cliente único vs visão unificada (todos os clientes em colunas)
   const isReadOnly = role === "designer"; // Designer só visualiza; seletor vira etiqueta estática
@@ -1819,6 +1517,8 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
     ...col,
     items: clientCards.filter((c) => c.status === col.id),
   }));
+
+  if (loadError) return <ErroDeCarga />;
 
   return (
     <div className="space-y-4">
@@ -1913,9 +1613,9 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
       {clientCards.length > 0 ? (
         <KanbanBoard<ContentCard>
           columns={kanbanCols}
-          onMove={(cardId, _from, toStatus) => onMoveCard(cardId, toStatus)}
+          onMove={isReadOnly ? undefined : (cardId, _from, toStatus) => onMoveCard(cardId, toStatus)}
           onEdit={(card) => onCardClick(card)}
-          onDelete={onDeleteCard ? (cardId) => {
+          onDelete={onDeleteCard && !isReadOnly ? (cardId) => {
             const card = contentCards.find((c) => c.id === cardId);
             if (card) onDeleteCard(card);
           } : undefined}
@@ -2219,7 +1919,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function SocialPage() {
-  const [activeTab, setActiveTab] = useState<"carteira" | "kanban" | "calendar" | "onboarding" | "acessos" | "chat" | "metricas" | "entregas" | "relatorios">("carteira"); // SocialTab — kept inline for readability
+  const [activeTab, setActiveTab] = useState<"carteira" | "kanban" | "onboarding" | "acessos" | "metricas" | "entregas" | "aprovacao">("carteira"); // SocialTab — kept inline for readability
   const [adminWorkspace, setAdminWorkspaceRaw] = useState("Todos");
   const setAdminWorkspace = (value: string) => {
     setAdminWorkspaceRaw(value);
@@ -2241,7 +1941,6 @@ export default function SocialPage() {
   const [healthFilter, setHealthFilter] = useState<string>("all");
   const [boardSearch, setBoardSearch] = useState("");
   const [onboardingCompleteClient, setOnboardingCompleteClient] = useState<Client | null>(null);
-  const [calendarSelectedDay, setCalendarSelectedDay] = useState<number | null>(null);
   const [newCardDate, setNewCardDate] = useState<string | null>(null);
   // Cliente já escolhido quando o "novo conteúdo" vem do "+" da coluna dele (visão unificada).
   const [newCardClient, setNewCardClient] = useState<Client | null>(null);
@@ -2254,8 +1953,6 @@ export default function SocialPage() {
 
   // ── Zustand stores (migrado de AppStateContext) ───────────────────────────
   const clients = useClientsStore((s) => s.clients);
-  const clientChats = useClientsStore((s) => s.clientChats);
-  const sendClientMessage = useClientsStore((s) => s.sendClientMessage);
   const updateClientStatus = useClientsStore((s) => s.updateClientStatus);
   const initClients = useClientsStore((s) => s.init);
   const subClients = useClientsStore((s) => s.subscribeRealtime);
@@ -2263,13 +1960,11 @@ export default function SocialPage() {
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
   const contentApprovals = useContentStore((s) => s.contentApprovals);
-  const socialReports = useContentStore((s) => s.socialReports);
+  const contentLoadError = useContentStore((s) => s.loadError);
   const updateContentCard = useContentStore((s) => s.updateContentCard);
   const deleteContentCard = useContentStore((s) => s.deleteContentCard);
   const approveContent = useContentStore((s) => s.approveContent);
   const rejectContent = useContentStore((s) => s.rejectContent);
-  const addSocialReport = useContentStore((s) => s.addSocialReport);
-  const updateSocialReport = useContentStore((s) => s.updateSocialReport);
   const initContent = useContentStore((s) => s.init);
   const refreshContent = useContentStore((s) => s.refresh);
   const addDesignRequest = useContentStore((s) => s.addDesignRequest);
@@ -2318,13 +2013,16 @@ export default function SocialPage() {
 
   // ── NavContext: secondary sidebar tab navigation ──────────────
   const { pendingTab, setPendingTab, setCurrentTab } = useNav();
-  const VALID_SOCIAL_TABS = ["carteira","kanban","calendar","onboarding","acessos","chat","metricas","entregas","relatorios"] as const;
+  const VALID_SOCIAL_TABS = ["carteira","kanban","onboarding","acessos","metricas","entregas","aprovacao"] as const;
   type SocialTab = typeof VALID_SOCIAL_TABS[number];
+  // Links antigos: "relatorios" era a aba da fila de aprovação; chat/calendário saíram.
+  const ABAS_ANTIGAS: Record<string, SocialTab> = { relatorios: "aprovacao", calendar: "kanban", chat: "carteira" };
 
   useEffect(() => {
     if (!pendingTab) return;
-    if ((VALID_SOCIAL_TABS as readonly string[]).includes(pendingTab)) {
-      setActiveTab(pendingTab as SocialTab);
+    const alvo = ABAS_ANTIGAS[pendingTab] ?? pendingTab;
+    if ((VALID_SOCIAL_TABS as readonly string[]).includes(alvo)) {
+      setActiveTab(alvo as SocialTab);
     }
     setPendingTab("");
   }, [pendingTab]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2456,24 +2154,14 @@ export default function SocialPage() {
     onboarding: filteredClients.filter((c) => c.status === "onboarding").length,
   };
 
-  const urgentClients = filteredClients.filter((c) => getInactivityLevel(c) === "urgent");
-
-  // Churn risks: angry mood + >=48h inactivity
-  const churnRisks = filteredClients.filter((c) => {
-    const lastMood = (moodHistory[c.id] ?? [])[0];
-    const hasAngry = lastMood?.mood === "angry";
-    const isInactive = hoursSince(c.lastKanbanActivity) >= 48;
-    return hasAngry && isInactive;
-  });
-
   const monthlyDeliveryReports = useMemo<MonthlyDeliveryReport[]>(() => {
     const reports: MonthlyDeliveryReport[] = [];
     const monthSet = new Set<string>();
     contentCards.forEach((c) => {
       if (c.dueDate) monthSet.add(c.dueDate.slice(0, 7));
-      if (c.statusChangedAt) monthSet.add(c.statusChangedAt.slice(0, 10).slice(0, 7));
+      if (c.statusChangedAt) monthSet.add(spDateStr(c.statusChangedAt).slice(0, 7));
     });
-    const currentMonth = new Date().toISOString().slice(0, 7);
+    const currentMonth = todaySP().slice(0, 7);
     monthSet.add(currentMonth);
     const activeClients = clients.filter((cl) => cl.status !== "onboarding");
     for (const month of Array.from(monthSet).sort()) {
@@ -2508,32 +2196,6 @@ export default function SocialPage() {
     return reports;
   }, [contentCards, clients]);
 
-  const socialPerformanceScores = useMemo<SocialPerformanceScore[]>(() => {
-    const socialPeople = [...new Set(clients.filter((c) => c.status !== "onboarding").map((c) => c.assignedSocial))];
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    return socialPeople.map((person) => {
-      const personClients = clients.filter((c) => c.assignedSocial === person && c.status !== "onboarding");
-      let totalGoal = 0;
-      let totalDelivered = 0;
-      const breakdown = personClients.map((client) => {
-        const goal = client.postsGoal ?? 12;
-        const delivered = contentCards.filter(
-          (c) => c.clientId === client.id && c.status === "published" &&
-            (c.dueDate?.startsWith(currentMonth) || c.statusChangedAt?.startsWith(currentMonth))
-        ).length;
-        totalGoal += goal;
-        totalDelivered += delivered;
-        return { clientId: client.id, clientName: client.name, goal, delivered, rate: goal > 0 ? Math.round((delivered / goal) * 100) : 0 };
-      });
-      const overallRate = totalGoal > 0 ? Math.round((totalDelivered / totalGoal) * 100) : 0;
-      let level: PerformanceLevel = "excellent";
-      if (overallRate < 70) level = "critical";
-      else if (overallRate < 80) level = "warning";
-      else if (overallRate < 95) level = "good";
-      return { socialMedia: person, totalClients: personClients.length, totalPostsGoal: totalGoal, totalPostsDelivered: totalDelivered, overallRate, level, clientBreakdown: breakdown };
-    });
-  }, [contentCards, clients]);
-
   const handleOnboardingToggle = (clientId: string, itemId: string) => {
     const client = clients.find((c) => c.id === clientId);
     if (!client) return;
@@ -2551,7 +2213,7 @@ export default function SocialPage() {
 
   return (
     <div className="flex flex-col flex-1 overflow-auto">
-      <Header title="Social Media" subtitle="CRM de carteira, kanban e calendário de conteúdo" />
+      <Header title="Social Media" subtitle="CRM de carteira, board e aprovação de conteúdo" />
 
       {/* Confetti overlay */}
       {onboardingCompleteClient && <Confetti />}
@@ -2579,10 +2241,10 @@ export default function SocialPage() {
       {/* Delete card confirmation */}
       {cardToDelete && (
         <DeleteConfirmModal
-          title="Apagar este card?"
-          message="Toda informação do card (briefing, comentários, anexo de arte) será removida permanentemente. Esta ação não pode ser desfeita."
+          title="Arquivar este card?"
+          message="O card sai do quadro, mas nada se perde: briefing, comentários e artes ficam guardados em Arquivadas."
           itemLabel={`${cardToDelete.title} — ${cardToDelete.clientName}`}
-          confirmLabel="Apagar card"
+          confirmLabel="Arquivar card"
           onConfirm={() => deleteContentCard(cardToDelete.id)}
           onClose={() => setCardToDelete(null)}
         />
@@ -2608,13 +2270,17 @@ export default function SocialPage() {
             <div className="p-5 border-t border-border flex gap-2">
               <button onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); }} className="btn-ghost flex-1 text-sm">Cancelar</button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (!nonDeliveryReason.trim()) return;
-                  updateContentCard(nonDeliveryCard.id, {
-                    nonDeliveryReason: nonDeliveryReason.trim(),
-                    nonDeliveryReportedBy: currentUser,
-                    nonDeliveryReportedAt: new Date().toISOString(),
-                  });
+                  try {
+                    await updateContentCard(nonDeliveryCard.id, {
+                      nonDeliveryReason: nonDeliveryReason.trim(),
+                      nonDeliveryReportedBy: currentUser,
+                      nonDeliveryReportedAt: new Date().toISOString(),
+                    });
+                  } catch {
+                    return; // modal fica aberto com o motivo; o store já avisou
+                  }
                   setNonDeliveryCard(null);
                   setNonDeliveryReason("");
                 }}
@@ -2671,10 +2337,11 @@ export default function SocialPage() {
             <div className="p-5 border-t border-border flex gap-2">
               <button onClick={() => setVerifyingCard(null)} className="btn-ghost flex-1 text-sm">Cancelar</button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (!verifyChecks.postLive || !verifyChecks.copyCorrect) return;
                   const now = new Date().toISOString();
-                  updateContentCard(verifyingCard.id, {
+                  try {
+                  await updateContentCard(verifyingCard.id, {
                     // publishVerifyChecks NÃO é coluna do banco — mandá-lo quebrava o update inteiro
                     // (coluna inexistente) → o card não saía da "Verificação de Publicação". Removido.
                     publishVerifiedAt: now,
@@ -2686,6 +2353,9 @@ export default function SocialPage() {
                       published: now,
                     },
                   });
+                  } catch {
+                    return;
+                  }
                   setVerifyingCard(null);
                 }}
                 disabled={!verifyChecks.postLive || !verifyChecks.copyCorrect}
@@ -2825,11 +2495,11 @@ export default function SocialPage() {
         )}
 
         <div className="flex gap-1 border-b border-border overflow-x-auto">
-          {(["carteira", "kanban", "calendar", "onboarding", "acessos", "chat", "metricas", "entregas", "relatorios"] as const).map((tab) => {
+          {(["carteira", "kanban", "onboarding", "acessos", "metricas", "entregas", "aprovacao"] as const).map((tab) => {
             const LABELS: Record<typeof tab, string> = {
-              carteira: "Carteira", kanban: "Board", calendar: "Calendário",
-              onboarding: "Onboarding", acessos: "Acessos", chat: "Chat", metricas: "Métricas",
-              entregas: "Entregas", relatorios: "Aprovação & Relatórios",
+              carteira: "Carteira", kanban: "Board",
+              onboarding: "Onboarding", acessos: "Acessos", metricas: "Métricas",
+              entregas: "Entregas", aprovacao: "Inbox de Aprovação",
             };
             // Live badge counts per tab
             const pendingKanban = filteredCards.filter((c) => !["scheduled","published"].includes(c.status)).length;
@@ -2838,10 +2508,10 @@ export default function SocialPage() {
               carteira:   filteredClients.length,
               kanban:     pendingKanban,
               onboarding: counts.onboarding,
-              relatorios: approvalCount,
+              aprovacao: approvalCount,
             };
             const badge = badgeMap[tab];
-            const isApprovalTab = tab === "relatorios" && approvalCount > 0;
+            const isApprovalTab = tab === "aprovacao" && approvalCount > 0;
             return (
               <button
                 key={tab}
@@ -2877,28 +2547,6 @@ export default function SocialPage() {
                 clients={filteredClients}
                 moodHistory={moodHistory}
               />
-            )}
-
-            {/* Alerts strip — compact, top of page */}
-            {(churnRisks.length > 0 || urgentClients.length > 0) && (
-              <div className="flex flex-col gap-2">
-                {churnRisks.length > 0 && (
-                  <div className="flex items-center gap-3 bg-destructive/5 border border-destructive/15 rounded-lg px-4 py-2.5">
-                    <div className="led led-critical" />
-                    <p className="text-xs text-muted-foreground">
-                      <span className="text-destructive font-semibold">Radar de Churn</span> — {churnRisks.map((c) => c.name).join(", ")}
-                    </p>
-                  </div>
-                )}
-                {urgentClients.length > 0 && (
-                  <div className="flex items-center gap-3 bg-card border border-border rounded-lg px-4 py-2.5">
-                    <AlertTriangle size={13} className="text-muted-foreground shrink-0" />
-                    <p className="text-xs text-muted-foreground">
-                      <span className="text-muted-foreground font-medium">{urgentClients.length} cliente(s)</span> sem movimentação há +48h
-                    </p>
-                  </div>
-                )}
-              </div>
             )}
 
             {/* Status overview — minimal stat row */}
@@ -2985,21 +2633,10 @@ export default function SocialPage() {
                   <p className="text-xs text-muted-foreground mb-3">Posts agendados que precisam de confirmação de que foram ao ar corretamente.</p>
                   <div className="space-y-2">
                     {scheduledCards.map((card) => {
-                      const hoursAgo = card.scheduledAt ? Math.round((Date.now() - new Date(card.scheduledAt).getTime()) / 3600000) : 0;
-                      const isUrgent = hoursAgo >= 4;
-                      const isWarning = hoursAgo >= 2;
                       return (
-                        <div key={card.id} className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
-                          isUrgent ? "border-destructive/30 bg-destructive/5 kpi-danger" :
-                          isWarning ? "border-lone-warning-border bg-lone-warning-bg" :
-                          "border-border bg-card/50"
-                        }`}>
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                            isUrgent ? "bg-destructive/15" : isWarning ? "bg-lone-warning-bg" : "bg-primary/10"
-                          }`}>
-                            <AlertCircle size={14} className={
-                              isUrgent ? "text-destructive" : isWarning ? "text-lone-warning" : "text-primary"
-                            } />
+                        <div key={card.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card transition-all">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-primary/10">
+                            <AlertCircle size={14} className="text-primary" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-semibold text-foreground">{card.title}</p>
@@ -3007,21 +2644,13 @@ export default function SocialPage() {
                               <span className="text-[10px] text-muted-foreground">{card.clientName}</span>
                               <span className="text-[10px] text-muted-foreground">· {card.format}</span>
                               {card.platform && <span className="text-[10px] text-muted-foreground">· {card.platform}</span>}
+                              {card.dueDate && <span className="text-[10px] text-muted-foreground">· {card.dueDate}</span>}
                               {card.dueTime && <span className="text-[10px] text-muted-foreground">· {card.dueTime}</span>}
-                              <span className={`text-[10px] font-semibold ${
-                                isUrgent ? "text-destructive" : isWarning ? "text-lone-warning" : "text-muted-foreground"
-                              }`}>
-                                · {hoursAgo > 0 ? `há ${hoursAgo}h` : "agora"}
-                              </span>
                             </div>
                           </div>
                           <button
                             onClick={() => { setVerifyingCard(card); setVerifyChecks({ postLive: false, copyCorrect: false }); }}
-                            className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
-                              isUrgent
-                                ? "bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25"
-                                : "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
-                            }`}
+                            className="text-xs px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
                           >
                             <ShieldCheck size={12} />
                             Verificar
@@ -3040,7 +2669,7 @@ export default function SocialPage() {
                 onClick={() => setShowBatchCreate(true)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all shrink-0"
               >
-                <Layers size={13} /> Batch ({">"}5 cards)
+                <Layers size={13} /> Criar em lote
               </button>
               <button
                 onClick={() => setShowArchived(true)}
@@ -3065,12 +2694,14 @@ export default function SocialPage() {
               onConfirmArt={(card) => {
                 // Confirmar a arte já avança pra Aprovação (Social Media) se ainda estava em produção.
                 const advance = ["ideas", "script", "in_production", "blocked"].includes(card.status);
+                const now = new Date().toISOString();
                 updateContentCard(card.id, {
-                  socialConfirmedAt: new Date().toISOString(),
+                  socialConfirmedAt: now,
                   socialConfirmedBy: currentUser,
-                  ...(advance ? { status: "approval" } : {}),
-                });
-                toast.success(advance ? "Arte confirmada — movida para Aprovação Social Media." : "Arte confirmada.");
+                  ...(advance ? { status: "approval" as const, statusChangedAt: now, columnEnteredAt: { ...(card.columnEnteredAt ?? {}), approval: now } } : {}),
+                })
+                  .then(() => toast.success(advance ? "Arte confirmada — movida para Aprovação Social Media." : "Arte confirmada."))
+                  .catch(() => {}); // o store já avisou e desfez
               }}
               onNonDelivery={setNonDeliveryCard}
               onMoveCard={(cardId, toStatus) => {
@@ -3095,9 +2726,9 @@ export default function SocialPage() {
                     ...(card.columnEnteredAt ?? {}),
                     [toStatus]: now,
                   },
-                }, { bypassWorkflow: true });
+                }, { bypassWorkflow: true }).catch(() => {}); // o store já avisou e desfez
               }}
-              onDeleteCard={(card) => setCardToDelete(card)}
+              onDeleteCard={isReadOnly ? undefined : (card) => setCardToDelete(card)}
               onSendToDesigner={(card) => {
                 // TRAVA: sem data de postagem, não vai pro designer. A data é o prazo que o designer
                 // e o CS usam pra cobrar no momento certo. Abre o card pro social preencher.
@@ -3130,7 +2761,7 @@ export default function SocialPage() {
                 })
                   .then((req) => {
                     trilha("a-fazer:ok", { id: card.id, dr: req.id });
-                    updateContentCard(card.id, { designRequestId: req.id });
+                    updateContentCard(card.id, { designRequestId: req.id }).catch(() => {});
                     pushNotification("content", "A fazer → Designer", `"${card.title}" (${card.clientName}) foi marcado como A fazer e enviado pro designer.`, card.clientId, card.id);
                   })
                   .catch((err: unknown) => {
@@ -3142,26 +2773,9 @@ export default function SocialPage() {
               }}
               currentUser={currentUser}
               role={role}
+              loadError={contentLoadError}
             />
             </KanbanErrorBoundary>
-          </div>
-        )}
-
-        {/* ── CALENDAR TAB ──────────────────────────────────────────────────── */}
-        {activeTab === "calendar" && (
-          <div className="animate-fade-in max-w-lg">
-            <CalendarView
-              cards={filteredCards}
-              onDayClick={(day, dayCards, year, month) => {
-                setCalendarSelectedDay(day);
-                if (dayCards.length === 0) {
-                  // Usa o mês/ano navegado no calendário (month é 0-based) — não o mês atual,
-                  // senão planejar agosto criava o card em julho.
-                  const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                  setNewCardDate(dateStr);
-                }
-              }}
-            />
           </div>
         )}
 
@@ -3249,77 +2863,9 @@ export default function SocialPage() {
           />
         )}
 
-        {/* ── CHAT TAB ────────────────────────────────────────────────────────── */}
-        {activeTab === "chat" && (
-          <InternalChatTab
-            clients={filteredClients.filter((c) => c.status !== "onboarding")}
-            clientChats={clientChats}
-            onSend={(clientId, text) => sendClientMessage(clientId, currentUser, text)}
-          />
-        )}
-
         {/* ── MÉTRICAS TAB ──────────────────────────────────────────────────── */}
         {activeTab === "metricas" && (
           <div className="animate-fade-in space-y-6">
-
-            {/* Performance Meters */}
-            {(role === "admin" || role === "manager") && socialPerformanceScores.length > 0 && (
-              <div className="bg-card border border-border rounded-xl p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <Target size={15} className="text-primary" />
-                  <h3 className="font-semibold text-sm tracking-tight">Avaliação de Performance — Social Media</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {socialPerformanceScores.map((score) => {
-                    const meterColor = score.level === "excellent" ? "bg-primary" : score.level === "good" ? "bg-primary" : score.level === "warning" ? "bg-primary" : "bg-destructive";
-                    const meterBg = score.level === "excellent" ? "bg-primary/10 border-primary/20" : score.level === "good" ? "bg-primary/10 border-primary/20" : score.level === "warning" ? "bg-primary/10 border-primary/15" : "bg-destructive/10 border-destructive/20";
-                    const levelLabel = score.level === "excellent" ? "Excelente" : score.level === "good" ? "Bom" : score.level === "warning" ? "Atenção" : "Reunião Necessária";
-                    const levelColor = score.level === "excellent" ? "text-primary" : score.level === "good" ? "text-primary" : score.level === "warning" ? "text-primary" : "text-destructive";
-                    return (
-                      <div key={score.socialMedia} className={`border rounded-xl p-4 ${meterBg}`}>
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <p className="font-semibold text-foreground text-sm">{score.socialMedia}</p>
-                            <p className="text-xs text-muted-foreground">{score.totalClients} clientes</p>
-                          </div>
-                          <div className="text-right">
-                            <p className={`text-2xl font-bold ${levelColor}`}>{score.overallRate}%</p>
-                            <p className={`text-xs font-medium ${levelColor}`}>{levelLabel}</p>
-                          </div>
-                        </div>
-                        <div className="h-3 bg-muted rounded-full overflow-hidden mb-3">
-                          <div className={`h-full rounded-full transition-all ${meterColor}`} style={{ width: `${Math.min(score.overallRate, 100)}%` }} />
-                        </div>
-                        <div className="space-y-1.5">
-                          {score.clientBreakdown.map((cb) => (
-                            <div key={cb.clientId} className="flex items-center justify-between text-xs">
-                              <span className="text-foreground">{cb.clientName}</span>
-                              <span className={cb.rate >= 80 ? "text-primary" : cb.rate >= 70 ? "text-primary" : "text-destructive"}>
-                                {cb.delivered}/{cb.goal} ({cb.rate}%)
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        {score.level === "critical" && (
-                          <div className="mt-3 p-2 bg-destructive/10 border border-destructive/20 rounded-lg">
-                            <p className="text-xs text-destructive font-medium flex items-center gap-1">
-                              <AlertTriangle size={12} /> Performance abaixo de 70% — agendar reunião
-                            </p>
-                          </div>
-                        )}
-                        {score.level === "warning" && (
-                          <div className="mt-3 p-2 bg-primary/10 border border-primary/15 rounded-lg">
-                            <p className="text-xs text-primary font-medium flex items-center gap-1">
-                              <AlertTriangle size={12} /> Performance em 70-80% — monitorar
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             {/* KPI Cards */}
             <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
@@ -3359,8 +2905,8 @@ export default function SocialPage() {
                         <span className="text-foreground">{col.title}</span>
                         <span className="text-muted-foreground">{count} ({pct}%)</span>
                       </div>
-                      <div className="h-1.5 bg-card rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all bg-primary" style={{ width: `${pct}%` }} />
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${col.color}`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
@@ -3387,7 +2933,7 @@ export default function SocialPage() {
                           <span className="text-foreground font-medium">{client.name}</span>
                           <span className={pct >= 80 ? "text-primary" : "text-muted-foreground"}>{postsNow}/{goal}</span>
                         </div>
-                        <div className="h-1.5 bg-card rounded-full overflow-hidden">
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                           <div className="h-full rounded-full transition-all bg-primary" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
@@ -3487,8 +3033,8 @@ export default function SocialPage() {
                     </div>
                   )}
                   {dueToday.length > 0 && (
-                    <div className="p-3 bg-card border border-border rounded-lg">
-                      <p className="text-xs font-semibold text-muted-foreground mb-2">Vencem hoje ({dueToday.length})</p>
+                    <div className="p-3 bg-lone-warning-bg border border-lone-warning-border rounded-lg">
+                      <p className="text-xs font-semibold text-lone-warning mb-2">Vencem hoje ({dueToday.length})</p>
                       {dueToday.map((c) => (
                         <button key={c.id} onClick={() => setSelectedCard(c)} className="block text-xs text-muted-foreground hover:text-foreground text-left mb-1">
                           · {c.title} <span className="text-muted-foreground">({c.clientName})</span>
@@ -3507,24 +3053,21 @@ export default function SocialPage() {
         {activeTab === "entregas" && (
           <MonthlyDeliveriesTab
             reports={monthlyDeliveryReports}
-            performanceScores={socialPerformanceScores}
             workspace={activeWorkspace}
           />
         )}
 
-        {/* ── RELATORIOS TAB ─────────────────────────────────────────────── */}
-        {activeTab === "relatorios" && (
-          <SocialReportsTab
-            clients={filteredClients}
-            reports={socialReports}
-            contentCards={filteredCards}
-            onAddReport={addSocialReport}
-            onUpdateReport={updateSocialReport}
-            currentUser={currentUser}
-            contentApprovals={contentApprovals}
-            approveContent={approveContent}
-            rejectContent={rejectContent}
-          />
+        {/* ── INBOX DE APROVAÇÃO ─────────────────────────────────────────── */}
+        {activeTab === "aprovacao" && (
+          contentLoadError ? <ErroDeCarga /> : (
+            <ApprovalQueueTab
+              contentCards={filteredCards}
+              currentUser={currentUser}
+              contentApprovals={contentApprovals}
+              approveContent={approveContent}
+              rejectContent={rejectContent}
+            />
+          )
         )}
 
       </div>
@@ -3533,103 +3076,24 @@ export default function SocialPage() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// SOCIAL REPORTS TAB
+// INBOX DE APROVAÇÃO (fila do cliente)
 // ══════════════════════════════════════════════════════════════
 
-function socialPctChange(current: number, previous: number): number {
-  if (previous === 0) return current > 0 ? 100 : 0;
-  return ((current - previous) / previous) * 100;
-}
-
-function socialFormatMonth(month: string): string {
-  const [y, m] = month.split("-");
-  const mNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-  return `${mNames[parseInt(m) - 1]}/${y}`;
-}
-
-function SocialChg({ value, invert }: { value: number; invert?: boolean }) {
-  const isPositive = value > 0;
-  const isNeutral = Math.abs(value) < 1;
-  const isGood = invert ? !isPositive : isPositive;
-  if (isNeutral) return <span className="text-xs text-muted-foreground">0%</span>;
-  return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isGood ? "text-primary" : "text-destructive"}`}>
-      {isPositive ? "+" : ""}{value.toFixed(1)}%
-    </span>
-  );
-}
-
-function SocialMBox({ label, value, change }: { label: string; value: string | number; change?: number }) {
-  return (
-    <div className="bg-card border border-border rounded-lg p-3">
-      <p className="text-xs text-muted-foreground mb-1">{label}</p>
-      <div className="flex items-end justify-between gap-2">
-        <p className="text-lg font-bold text-foreground">{value}</p>
-        {change !== undefined && <SocialChg value={change} />}
-      </div>
-    </div>
-  );
-}
-
-function socialFmtNum(n: number): string {
-  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return n.toString();
-}
-
-function SocialReportsTab({
-  clients,
-  reports,
+function ApprovalQueueTab({
   contentCards: cards,
-  onAddReport,
-  onUpdateReport,
   currentUser,
   contentApprovals,
   approveContent: doApprove,
   rejectContent: doReject,
 }: {
-  clients: Client[];
-  reports: SocialMonthlyReport[];
   contentCards: ContentCard[];
-  onAddReport: (r: Omit<SocialMonthlyReport, "id" | "createdAt">) => SocialMonthlyReport | Promise<SocialMonthlyReport>;
-  onUpdateReport: (id: string, updates: Partial<SocialMonthlyReport>) => void;
   currentUser: string;
   contentApprovals: import("@/lib/types").ContentApproval[];
   approveContent: (cardId: string, reviewer: string) => void;
   rejectContent: (cardId: string, reviewer: string, reason: string) => void;
 }) {
-  const activeClients = clients.filter((c) => c.status !== "onboarding");
-  const [selectedClient, setSelectedClient] = useState<string>(activeClients[0]?.id ?? "");
-  const [showForm, setShowForm] = useState(false);
-  const [editingReport, setEditingReport] = useState<SocialMonthlyReport | null>(null);
   const [rejectCardId, setRejectCardId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
-
-  const clientReports = useMemo(
-    () => reports.filter((r) => r.clientId === selectedClient).sort((a, b) => a.month.localeCompare(b.month)),
-    [reports, selectedClient]
-  );
-
-  const selectedClientData = clients.find((c) => c.id === selectedClient);
-
-  const comparisons = useMemo(() => {
-    return clientReports.map((report, idx) => {
-      const prev = idx > 0 ? clientReports[idx - 1] : null;
-      return {
-        report,
-        changes: prev ? {
-          postsPublished: socialPctChange(report.postsPublished, prev.postsPublished),
-          reach: socialPctChange(report.reach, prev.reach),
-          impressions: socialPctChange(report.impressions, prev.impressions),
-          engagement: socialPctChange(report.engagement, prev.engagement),
-          engagementRate: socialPctChange(report.engagementRate, prev.engagementRate),
-          followersGained: socialPctChange(report.followersGained, prev.followersGained),
-        } : null,
-      };
-    });
-  }, [clientReports]);
-
-  const latest = comparisons.length > 0 ? comparisons[comparisons.length - 1] : null;
 
   // Approval queue
   const approvalCards = cards.filter((c) => c.status === "client_approval");
@@ -3701,251 +3165,9 @@ function SocialReportsTab({
         </div>
       )}
 
-      {/* Client selector */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-sm text-muted-foreground font-medium">Relatórios de:</span>
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5 flex-wrap">
-          {activeClients.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => { setSelectedClient(c.id); setShowForm(false); setEditingReport(null); }}
-              className={`text-xs px-3 py-1.5 rounded-md transition-colors ${
-                selectedClient === c.id ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {c.name}
-            </button>
-          ))}
-        </div>
-        <button onClick={() => { setShowForm(!showForm); setEditingReport(null); }} className="bg-primary hover:bg-primary/80 text-primary-foreground px-3 py-1.5 rounded-lg font-medium text-xs transition-colors flex items-center gap-1.5 ml-auto">
-          <Plus size={13} /> Novo Relatório
-        </button>
-      </div>
-
-      {/* New Report Form */}
-      {showForm && selectedClientData && (
-        <SocialNewReportForm
-          client={selectedClientData}
-          currentUser={currentUser}
-          contentCards={cards}
-          onSubmit={(data) => { onAddReport(data); setShowForm(false); }}
-          onCancel={() => setShowForm(false)}
-        />
+      {approvalCards.length === 0 && (
+        <EmptyState icon={<Check size={20} />} title="Nada aguardando o cliente" subtitle="Cards em Aprovação Cliente aparecem aqui pra aprovar ou recusar." />
       )}
-
-      {/* Edit Report Form */}
-      {editingReport && (
-        <SocialEditReportForm
-          report={editingReport}
-          onSave={(updates) => { onUpdateReport(editingReport.id, updates); setEditingReport(null); }}
-          onCancel={() => setEditingReport(null)}
-        />
-      )}
-
-      {/* Latest Month Summary */}
-      {latest && !editingReport && (
-        <div className="bg-card border border-primary/20 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-foreground">{selectedClientData?.name} — Último Mês</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">{socialFormatMonth(latest.report.month)}</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => exportReportAsPdf({
-                  title: "Relatório Mensal de Social Media",
-                  clientName: selectedClientData?.name ?? "",
-                  period: socialFormatMonth(latest.report.month),
-                  createdBy: latest.report.createdBy,
-                  createdAt: latest.report.createdAt,
-                  sections: [
-                    { label: "Posts Publicados", value: `${latest.report.postsPublished}/${latest.report.postsGoal}`, type: "metric" },
-                    { label: "Reels", value: latest.report.reelsCount, type: "metric" },
-                    { label: "Stories", value: latest.report.storiesCount, type: "metric" },
-                    { label: "Alcance", value: latest.report.reach.toLocaleString("pt-BR"), type: "metric" },
-                    { label: "Impressões", value: latest.report.impressions.toLocaleString("pt-BR"), type: "metric" },
-                    { label: "Engajamento", value: latest.report.engagement.toLocaleString("pt-BR"), type: "metric" },
-                    { label: "Taxa de Engajamento", value: `${latest.report.engagementRate.toFixed(1)}%`, type: "metric" },
-                    { label: "Novos Seguidores", value: `+${latest.report.followersGained}`, type: "metric" },
-                    ...(latest.report.topPost ? [{ label: "Top Post", value: latest.report.topPost, type: "text" as const }] : []),
-                    ...(latest.report.observations ? [{ label: "Observações", value: latest.report.observations, type: "text" as const }] : []),
-                  ],
-                })}
-                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-              >
-                <BarChart2 size={12} /> PDF
-              </button>
-              <button onClick={() => setEditingReport(latest.report)} className="text-xs text-primary hover:underline">Editar</button>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <SocialMBox label="Posts Publicados" value={`${latest.report.postsPublished}/${latest.report.postsGoal}`} change={latest.changes?.postsPublished} />
-            <SocialMBox label="Reels" value={latest.report.reelsCount} />
-            <SocialMBox label="Stories" value={latest.report.storiesCount} />
-            <SocialMBox label="Alcance" value={socialFmtNum(latest.report.reach)} change={latest.changes?.reach} />
-            <SocialMBox label="Impressões" value={socialFmtNum(latest.report.impressions)} change={latest.changes?.impressions} />
-            <SocialMBox label="Engajamento" value={socialFmtNum(latest.report.engagement)} change={latest.changes?.engagement} />
-            <SocialMBox label="Taxa Engaj." value={`${latest.report.engagementRate.toFixed(1)}%`} change={latest.changes?.engagementRate} />
-            <SocialMBox label="Novos Seguidores" value={`+${latest.report.followersGained}`} change={latest.changes?.followersGained} />
-          </div>
-          {latest.report.topPost && (
-            <div className="mt-3 flex items-center gap-2 bg-muted border border-border rounded-lg px-3 py-2">
-              <Sparkles size={13} className="text-primary shrink-0" />
-              <span className="text-xs text-muted-foreground">Top post:</span>
-              <span className="text-xs text-foreground font-medium">{latest.report.topPost}</span>
-            </div>
-          )}
-          {latest.report.observations && (
-            <div className="mt-3 bg-muted border border-border rounded-lg p-3">
-              <p className="text-xs text-muted-foreground font-medium mb-1">Observações</p>
-              <p className="text-sm text-foreground leading-relaxed">{latest.report.observations}</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Historical Comparison Table */}
-      {comparisons.length > 1 && !editingReport && (
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <BarChart2 size={15} className="text-primary" />
-            <h3 className="font-semibold text-sm">Evolução Mensal — {selectedClientData?.name}</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-2.5 px-3 text-muted-foreground font-medium text-xs">Mês</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">Posts</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">Alcance</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">Var.</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">Engaj.</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">Var.</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">Taxa</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">Seguidores</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">Var.</th>
-                  <th className="py-2.5 px-3 w-16"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparisons.map(({ report, changes }) => (
-                  <tr key={report.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
-                    <td className="py-3 px-3 font-medium text-foreground">{socialFormatMonth(report.month)}</td>
-                    <td className="py-3 px-3 text-right text-foreground">{report.postsPublished}/{report.postsGoal}</td>
-                    <td className="py-3 px-3 text-right text-foreground">{socialFmtNum(report.reach)}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.reach} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
-                    <td className="py-3 px-3 text-right text-foreground">{socialFmtNum(report.engagement)}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.engagement} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
-                    <td className="py-3 px-3 text-right text-primary font-medium">{report.engagementRate.toFixed(1)}%</td>
-                    <td className="py-3 px-3 text-right text-foreground">+{report.followersGained}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.followersGained} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
-                    <td className="py-3 px-3 text-center"><button onClick={() => setEditingReport(report)} className="text-xs text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-all">Editar</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {comparisons.length === 0 && !editingReport && (
-        <div className="bg-card border border-border rounded-xl p-10 text-center text-muted-foreground">
-          Nenhum relatório para {selectedClientData?.name}. Clique em &quot;Novo Relatório&quot;.
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Social Report Forms ──────────────────────────────────
-
-function SocialNewReportForm({ client, currentUser, contentCards, onSubmit, onCancel }: {
-  client: Client; currentUser: string; contentCards: ContentCard[];
-  onSubmit: (data: Omit<SocialMonthlyReport, "id" | "createdAt">) => void; onCancel: () => void;
-}) {
-  const now = new Date();
-  const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
-  // Auto-populate from content cards
-  const clientCards = contentCards.filter((c) => c.clientId === client.id);
-  const publishedCount = clientCards.filter((c) => c.status === "published").length;
-  const reelsCount = clientCards.filter((c) => c.status === "published" && c.format.toLowerCase().includes("reel")).length;
-  const [f, setF] = useState({
-    pp: String(publishedCount || ""), pg: String(client.postsGoal ?? 12),
-    rc: String(reelsCount || ""), sc: "", re: "", im: "", en: "", er: "", fg: "", fl: "", tp: "", ob: ""
-  });
-  const u = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }));
-  const inp = (k: string, label: string, ph?: string) => (
-    <div><label className="text-xs text-muted-foreground font-medium">{label}</label>
-    <input type="number" value={(f as Record<string,string>)[k]} onChange={(e) => u(k, e.target.value)} placeholder={ph}
-      className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary" /></div>
-  );
-  return (
-    <div className="bg-card border border-primary/20 rounded-xl p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-foreground">Novo Relatório — {client.name}</h3>
-        <button onClick={onCancel} className="text-muted-foreground hover:text-foreground p-1"><X size={16} /></button>
-      </div>
-      <form onSubmit={(e) => { e.preventDefault(); if (!f.pp) return; onSubmit({
-        clientId: client.id, clientName: client.name, month, createdBy: currentUser,
-        postsPublished: +f.pp, postsGoal: +f.pg, reelsCount: +f.rc, storiesCount: +f.sc,
-        reach: +f.re, impressions: +f.im, engagement: +f.en, engagementRate: +f.er,
-        followersGained: +f.fg, followersLost: +f.fl, topPost: f.tp || undefined, observations: f.ob || undefined,
-      }); }} className="space-y-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div><label className="text-xs text-muted-foreground font-medium">Mês *</label><input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" /></div>
-          {inp("pp", "Posts Publicados *", "12")}{inp("pg", "Meta")}{inp("rc", "Reels", "4")}
-          {inp("sc", "Stories", "20")}{inp("re", "Alcance", "28000")}{inp("im", "Impressões", "62000")}{inp("en", "Engajamento", "3800")}
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {inp("er", "Taxa Engaj. (%)", "6.1")}{inp("fg", "Novos Seguidores", "550")}{inp("fl", "Perdidos", "30")}
-          <div><label className="text-xs text-muted-foreground font-medium">Top Post</label><input value={f.tp} onChange={(e) => u("tp", e.target.value)} placeholder="Nome do destaque..." className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary" /></div>
-        </div>
-        <div><label className="text-xs text-muted-foreground font-medium">Observações</label><input value={f.ob} onChange={(e) => u("ob", e.target.value)} placeholder="Notas do mês..." className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary" /></div>
-        <div className="flex gap-2 pt-2">
-          <button type="button" onClick={onCancel} className="btn-ghost flex-1">Cancelar</button>
-          <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-1.5"><Save size={14} /> Salvar</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function SocialEditReportForm({ report, onSave, onCancel }: {
-  report: SocialMonthlyReport; onSave: (u: Partial<SocialMonthlyReport>) => void; onCancel: () => void;
-}) {
-  const [f, setF] = useState({ pp: String(report.postsPublished), pg: String(report.postsGoal), rc: String(report.reelsCount), sc: String(report.storiesCount), re: String(report.reach), im: String(report.impressions), en: String(report.engagement), er: String(report.engagementRate), fg: String(report.followersGained), fl: String(report.followersLost), tp: report.topPost ?? "", ob: report.observations ?? "" });
-  const u = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }));
-  const inp = (k: string, label: string) => (
-    <div><label className="text-xs text-muted-foreground font-medium">{label}</label>
-    <input type="number" value={(f as Record<string,string>)[k]} onChange={(e) => u(k, e.target.value)}
-      className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" /></div>
-  );
-  return (
-    <div className="bg-card border border-border rounded-xl p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div><h3 className="font-semibold text-foreground">Editar — {report.clientName}</h3><p className="text-xs text-muted-foreground mt-0.5">{socialFormatMonth(report.month)}</p></div>
-        <button onClick={onCancel} className="text-muted-foreground hover:text-foreground p-1"><X size={16} /></button>
-      </div>
-      <form onSubmit={(e) => { e.preventDefault(); onSave({
-        postsPublished: +f.pp, postsGoal: +f.pg, reelsCount: +f.rc, storiesCount: +f.sc,
-        reach: +f.re, impressions: +f.im, engagement: +f.en, engagementRate: +f.er,
-        followersGained: +f.fg, followersLost: +f.fl, topPost: f.tp || undefined, observations: f.ob || undefined,
-      }); }} className="space-y-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div><label className="text-xs text-muted-foreground font-medium">Mês</label><div className="w-full mt-1 bg-muted/50 rounded-lg p-2.5 text-sm text-muted-foreground">{socialFormatMonth(report.month)}</div></div>
-          {inp("pp", "Posts")}{inp("pg", "Meta")}{inp("rc", "Reels")}
-          {inp("sc", "Stories")}{inp("re", "Alcance")}{inp("im", "Impressões")}{inp("en", "Engajamento")}
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {inp("er", "Taxa (%)")}{inp("fg", "Novos Seg.")}{inp("fl", "Perdidos")}
-          <div><label className="text-xs text-muted-foreground font-medium">Top Post</label><input value={f.tp} onChange={(e) => u("tp", e.target.value)} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" /></div>
-        </div>
-        <div><label className="text-xs text-muted-foreground font-medium">Observações</label><input value={f.ob} onChange={(e) => u("ob", e.target.value)} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary" /></div>
-        <div className="flex gap-2 pt-2">
-          <button type="button" onClick={onCancel} className="btn-ghost flex-1">Cancelar</button>
-          <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-1.5"><Save size={14} /> Salvar</button>
-        </div>
-      </form>
     </div>
   );
 }
@@ -3962,11 +3184,9 @@ function formatMonthLabel(month: string): string {
 
 function MonthlyDeliveriesTab({
   reports,
-  performanceScores,
   workspace,
 }: {
   reports: MonthlyDeliveryReport[];
-  performanceScores: SocialPerformanceScore[];
   workspace: string;
 }) {
   const months = [...new Set(reports.map((r) => r.month))].sort().reverse();
@@ -3975,11 +3195,6 @@ function MonthlyDeliveriesTab({
   const filteredReports = useMemo(
     () => reports.filter((r) => r.month === selectedMonth && (workspace === "Todos" || r.socialMedia === workspace)),
     [reports, selectedMonth, workspace]
-  );
-
-  const filteredScores = useMemo(
-    () => performanceScores.filter((s) => workspace === "Todos" || s.socialMedia === workspace),
-    [performanceScores, workspace]
   );
 
   const totalGoal = filteredReports.reduce((s, r) => s + r.postsGoal, 0);
@@ -4000,30 +3215,6 @@ function MonthlyDeliveriesTab({
         </div>
       </div>
 
-      {/* Performance Score Cards */}
-      {filteredScores.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredScores.map((score) => {
-            const meterColor = score.level === "excellent" ? "bg-primary" : score.level === "good" ? "bg-primary" : score.level === "warning" ? "bg-primary" : "bg-destructive";
-            const levelColor = score.level === "excellent" ? "text-primary" : score.level === "good" ? "text-primary" : score.level === "warning" ? "text-primary" : "text-destructive";
-            const levelLabel = score.level === "excellent" ? "Excelente" : score.level === "good" ? "Bom" : score.level === "warning" ? "Atenção — Monitorar" : "Crítico — Agendar Reunião";
-            return (
-              <div key={score.socialMedia} className="bg-card border border-border rounded-xl p-5">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold text-foreground">{score.socialMedia}</p>
-                  <p className={`text-3xl font-bold ${levelColor}`}>{score.overallRate}%</p>
-                </div>
-                <p className={`text-xs font-medium mb-3 ${levelColor}`}>{levelLabel}</p>
-                <div className="h-4 bg-muted rounded-full overflow-hidden mb-1">
-                  <div className={`h-full rounded-full transition-all ${meterColor}`} style={{ width: `${Math.min(score.overallRate, 100)}%` }} />
-                </div>
-                <p className="text-[10px] text-muted-foreground text-right">{score.totalPostsDelivered}/{score.totalPostsGoal} posts entregues</p>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       {/* Summary */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-card border border-border rounded-xl p-4 text-center">
@@ -4036,19 +3227,21 @@ function MonthlyDeliveriesTab({
         </div>
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Taxa</p>
-          <p className={`text-2xl font-bold ${overallRate >= 80 ? "text-primary" : overallRate >= 70 ? "text-primary" : "text-destructive"}`}>{overallRate}%</p>
+          <p className="text-2xl font-bold text-foreground">{overallRate}%</p>
         </div>
       </div>
 
       {/* Per-client reports */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Entregas por Cliente — {selectedMonth && formatMonthLabel(selectedMonth)}</h3>
+        {/* Conta só card movido pra "Publicado" no quadro — post feito fora do quadro não entra. Não é nota de ninguém. */}
+        <p className="text-[11px] text-muted-foreground">Conta só o que foi marcado como Publicado no quadro. Para o que foi ao ar de fato, veja a Meta de Posts (Instagram) em Métricas.</p>
         {filteredReports.length === 0 && (
           <div className="bg-card border border-border rounded-xl p-10 text-center text-muted-foreground text-sm">Nenhum dado de entregas para este mês.</div>
         )}
         {filteredReports.map((report) => {
-          const rateColor = report.completionRate >= 80 ? "text-primary" : report.completionRate >= 70 ? "text-primary" : "text-destructive";
-          const barColor = report.completionRate >= 80 ? "bg-primary" : report.completionRate >= 70 ? "bg-primary" : "bg-destructive";
+          const rateColor = "text-foreground";
+          const barColor = "bg-primary";
           return (
             <div key={report.id} className="bg-card border border-border rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
@@ -4075,11 +3268,6 @@ function MonthlyDeliveriesTab({
                   {report.formats.map((f) => (
                     <span key={f.format} className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">{f.format}: {f.count}</span>
                   ))}
-                </div>
-              )}
-              {report.completionRate < 70 && (
-                <div className="mt-2 p-2 bg-destructive/10 border border-destructive/20 rounded-lg">
-                  <p className="text-xs text-destructive font-medium">⚠ Entrega abaixo de 70% — ação necessária</p>
                 </div>
               )}
             </div>

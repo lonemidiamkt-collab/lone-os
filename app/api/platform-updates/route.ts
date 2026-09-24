@@ -28,10 +28,12 @@ export async function GET(req: NextRequest) {
   // Marca quais o usuario ja leu
   let readIds = new Set<string>();
   if (userEmail && updates) {
-    const { data: reads } = await supabaseAdmin
+    const { data: reads, error: readsError } = await supabaseAdmin
       .from("user_read_updates")
       .select("update_id")
       .eq("user_email", userEmail);
+    // Sem a lista de lidos, tudo pareceria "novo" de novo — melhor falhar do que mentir.
+    if (readsError) return NextResponse.json({ error: readsError.message }, { status: 500 });
     readIds = new Set((reads ?? []).map((r: { update_id: string }) => r.update_id));
   }
 

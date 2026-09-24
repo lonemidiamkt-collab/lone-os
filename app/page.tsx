@@ -2,15 +2,13 @@
 
 import Header from "@/components/Header";
 import MetricCard from "@/components/MetricCard";
-import MorningBriefing from "@/components/MorningBriefing";
 import {
-  Users, TrendingUp, AlertTriangle, UserPlus,
-  Activity, Megaphone, Clock, Bell, Send, X,
-  AlertCircle, ZapOff, LayoutList,
-  Check, CheckCircle, CheckCircle2, Palette, Instagram, BarChart2,
+  Users, AlertTriangle, UserPlus,
+  Activity, Check, CheckCircle, Palette, Instagram,
   Target, Zap, FileText, ChevronRight, Plus, Inbox,
 } from "lucide-react";
-import { getStatusLed, getStatusLabel } from "@/lib/utils";
+import { toast } from "sonner";
+import { getStatusLed, getStatusLabel, todaySP, spDateStr } from "@/lib/utils";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
@@ -21,8 +19,7 @@ import SectionHeader from "@/components/ui/SectionHeader";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect } from "react";
-import type { ClientStatus } from "@/lib/types";
-import { mockAdCampaigns } from "@/lib/mockData";
+import type { ClientStatus, ContentCard } from "@/lib/types";
 import { supabase } from "@/lib/supabase/client";
 import { emOperacao } from "@/lib/clients/operacao";
 import { getDashboardData } from "@/lib/dashboard/getDashboardData";
@@ -35,10 +32,8 @@ import {
   ClientStatusList,
 } from "@/components/dashboard-v2";
 import { KPICard, PillBadge } from "@/components/lone-ui";
-import TrafficChecklist from "@/components/sector/TrafficChecklist";
 import PostCounter from "@/components/sector/PostCounter";
 import DesignQueue from "@/components/sector/DesignQueue";
-import BudgetAlert from "@/components/sector/BudgetAlert";
 import DesignDeliveriesAlert from "@/components/DesignDeliveriesAlert";
 import SmartAlerts from "@/components/SmartAlerts";
 import SystemAlertBanner from "@/components/SystemAlertBanner";
@@ -46,166 +41,23 @@ import ClientHealthRadar from "@/components/ClientHealthRadar";
 import PlatformUpdatesWidget from "@/components/PlatformUpdatesWidget";
 
 
-function hoursSince(isoString?: string): number {
-  if (!isoString) return 9999;
-  return (Date.now() - new Date(isoString).getTime()) / 3600000;
+// Publicado no mês corrente (SP) — antes contava o acumulado de sempre como "este mês".
+function publicadoNoMes(c: ContentCard): boolean {
+  if (c.status !== "published") return false;
+  const quando = c.publishVerifiedAt ?? c.statusChangedAt;
+  return !!quando && spDateStr(quando).slice(0, 7) === todaySP().slice(0, 7);
 }
 
-const STATUS_FILTER_CONFIG = [
-  { key: "all",        label: "Todos" },
-  { key: "good",       label: "On Fire" },
-  { key: "average",    label: "Atenção" },
-  { key: "at_risk",    label: "Crítico" },
-  { key: "onboarding", label: "Onboarding" },
-];
-
-// ── Notice Form (Admin/Manager only) ──
-function NoticeFormBlock() {
-  const notices = useOperationalStore((s) => s.notices);
-  const addNotice = useOperationalStore((s) => s.addNotice);
-  const deleteNotice = useOperationalStore((s) => s.deleteNotice);
-  const { role, currentUser } = useRole();
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    title: "", body: "", urgent: false, scheduledAt: "", category: "general" as "general" | "meeting" | "deadline" | "reminder",
-  });
-
-  const [formSuccess, setFormSuccess] = useState(false);
-
-  const handleAdd = () => {
-    if (!form.title.trim()) return;
-    if (form.scheduledAt && new Date(form.scheduledAt) <= new Date()) return;
-    addNotice({
-      title: form.title,
-      body: form.body,
-      urgent: form.urgent,
-      createdBy: currentUser,
-      scheduledAt: form.scheduledAt || undefined,
-      category: form.category,
-    });
-    setForm({ title: "", body: "", urgent: false, scheduledAt: "", category: "general" });
-    setFormSuccess(true);
-    setTimeout(() => { setFormSuccess(false); setShowForm(false); }, 1200);
-  };
-
-  return (
-    <div className="card">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-foreground flex items-center gap-2">
-          <Megaphone size={15} className="text-muted-foreground" />
-          Avisos da Empresa
-        </h3>
-        {(role === "admin" || role === "manager") && (
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="text-xs text-primary hover:text-foreground transition-colors flex items-center gap-1"
-          >
-            + Novo Aviso
-          </button>
-        )}
-      </div>
-      {showForm && (role === "admin" || role === "manager") && (
-        <div className="mb-3 p-3 bg-primary/10 border border-primary/20 rounded-xl space-y-2">
-          <input
-            value={form.title}
-            onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-            placeholder="Título do aviso (ex: Reunião às 14h)"
-            className="w-full bg-muted rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary"
-          />
-          <textarea
-            value={form.body}
-            onChange={(e) => setForm((p) => ({ ...p, body: e.target.value }))}
-            rows={2}
-            placeholder="Mensagem (opcional)"
-            className="w-full bg-muted rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary resize-none"
-          />
-          <div className="flex gap-2 flex-wrap">
-            <select
-              value={form.category}
-              onChange={(e) => setForm((p) => ({ ...p, category: e.target.value as typeof form.category }))}
-              className="bg-muted rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="general">Geral</option>
-              <option value="meeting">Reunião</option>
-              <option value="deadline">Prazo</option>
-              <option value="reminder">Lembrete</option>
-            </select>
-            <input
-              type="datetime-local"
-              value={form.scheduledAt}
-              onChange={(e) => setForm((p) => ({ ...p, scheduledAt: e.target.value }))}
-              min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-              className={`bg-muted rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary flex-1 min-w-[160px] ${form.scheduledAt && new Date(form.scheduledAt) <= new Date() ? "ring-1 ring-destructive/60" : ""}`}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.urgent}
-                onChange={(e) => setForm((p) => ({ ...p, urgent: e.target.checked }))}
-                className="w-3.5 h-3.5 accent-destructive"
-              />
-              <span className="text-xs text-lone-danger">Urgente</span>
-            </label>
-            <div className="flex items-center gap-2">
-              {formSuccess && <span className="text-xs text-primary font-medium flex items-center gap-1"><CheckCircle2 size={12} /> Publicado!</span>}
-              <button onClick={() => setShowForm(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
-              <button onClick={handleAdd} disabled={formSuccess} className="btn-primary text-xs flex items-center gap-1 disabled:opacity-50"><Send size={11} /> Publicar</button>
-            </div>
-          </div>
-        </div>
-      )}
-      <div className="space-y-2 max-h-64 overflow-auto">
-        {notices.length === 0 && (
-          <p className="text-xs text-muted-foreground/70 text-center py-5">Nenhum aviso. Tudo sob controle.</p>
-        )}
-        {notices.slice(0, 8).map((notice) => {
-          const catIcon = notice.category === "meeting" ? "📅" : notice.category === "deadline" ? "⏰" : notice.category === "reminder" ? "🔔" : "";
-          return (
-            <div key={notice.id} className={`p-3 rounded-lg border text-sm ${
-              notice.urgent ? "bg-lone-danger-bg border-lone-danger-border"
-              : notice.category === "meeting" ? "bg-primary/5 border-primary/20"
-              : "bg-muted border-transparent"
-            }`}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-1.5">
-                  {catIcon && <span className="text-xs">{catIcon}</span>}
-                  <p className={`font-medium text-xs ${notice.urgent ? "text-lone-danger" : "text-foreground"}`}>{notice.title}</p>
-                </div>
-                {(role === "admin" || role === "manager") && (
-                  <button
-                    onClick={() => { if (window.confirm("Tem certeza que deseja excluir este aviso?")) deleteNotice(notice.id); }}
-                    className="text-muted-foreground/50 hover:text-lone-danger transition-colors shrink-0 p-0.5"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-              {notice.body && <p className="text-muted-foreground text-xs mt-0.5">{notice.body}</p>}
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-muted-foreground/50 text-xs">por {notice.createdBy} · {notice.createdAt}</p>
-                {notice.scheduledAt && (
-                  <span className="text-xs text-primary bg-primary/10 px-1.5 py-0.5 rounded">
-                    {new Date(notice.scheduledAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+// O que não carregou. Falha de carga nunca pode aparecer como zero de verdade.
+interface Falhas { clientes: boolean; tarefas: boolean; conteudo: boolean }
 
 // ── Employee Dashboard (Traffic/Social/Designer) ──
-function EmployeeDashboard() {
+function EmployeeDashboard({ falhas }: { falhas: Falhas }) {
   const clients = useClientsStore((s) => s.clients);
+  const opsPronto = useOperationalStore((s) => s.initialized);
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
   const tasks = useOperationalStore((s) => s.tasks);
-  const notices = useOperationalStore((s) => s.notices);
   const timeline = useOperationalStore((s) => s.timeline);
   const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
   const { role, currentUser } = useRole();
@@ -244,19 +96,20 @@ function EmployeeDashboard() {
     const totalTasks = tasks.filter((t) => t.assignedTo === currentUser);
     const done = totalTasks.filter((t) => t.status === "done").length;
     const total = totalTasks.length;
-    const rate = total > 0 ? Math.round((done / total) * 100) : 0;
+    // Sem tarefa atribuída = sem dado, não 0% vermelho.
+    const rate: number | null = total > 0 ? Math.round((done / total) * 100) : null;
 
     let published = 0;
     let inPipeline = 0;
     if (role === "social") {
-      published = contentCards.filter((c) => c.socialMedia === currentUser && c.status === "published").length;
+      published = contentCards.filter((c) => c.socialMedia === currentUser && publicadoNoMes(c)).length;
       inPipeline = contentCards.filter((c) => c.socialMedia === currentUser && c.status !== "published").length;
     }
 
     let supportDone = 0;
     let supportTotal = 0;
     if (role === "traffic") {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todaySP();
       const memberClients = clients.filter((c) => c.assignedTraffic === currentUser && emOperacao(c));
       supportTotal = memberClients.length;
       supportDone = trafficRoutineChecks.filter((c) => c.date === today && c.completedBy === currentUser && c.type === "support").length;
@@ -296,7 +149,7 @@ function EmployeeDashboard() {
         <MetricCard
           icon={Target}
           label="Tarefas Pendentes"
-          value={myTasks.length}
+          value={opsPronto ? myTasks.length : "—"}
           sub={`${myCompletedTasks.length} concluídas`}
           iconColor="text-primary"
           iconBg="bg-primary/10"
@@ -305,10 +158,10 @@ function EmployeeDashboard() {
         <MetricCard
           icon={CheckCircle}
           label="Taxa de Conclusão"
-          value={`${performance.rate}%`}
-          sub={`${performance.done}/${performance.total} tarefas`}
-          iconColor={performance.rate >= 80 ? "text-primary" : performance.rate >= 50 ? "text-primary" : "text-lone-danger"}
-          iconBg={performance.rate >= 80 ? "bg-primary/10" : performance.rate >= 50 ? "bg-primary/10" : "bg-lone-danger-bg"}
+          value={performance.rate === null ? "—" : `${performance.rate}%`}
+          sub={performance.rate === null ? "sem tarefas atribuídas" : `${performance.done}/${performance.total} tarefas`}
+          iconColor={performance.rate === null || performance.rate >= 50 ? "text-primary" : "text-lone-danger"}
+          iconBg={performance.rate === null || performance.rate >= 50 ? "bg-primary/10" : "bg-lone-danger-bg"}
           href="/calendar"
         />
         {role === "social" && (
@@ -340,9 +193,6 @@ function EmployeeDashboard() {
       </div>
 
       {/* Sector-specific widgets */}
-      {role === "traffic" && myClients.length > 0 && (
-        <TrafficChecklist clients={myClients.filter(emOperacao)} currentUser={currentUser} />
-      )}
       {role === "social" && (
         <DesignDeliveriesAlert cards={contentCards.filter((c) => c.socialMedia === currentUser)} />
       )}
@@ -365,7 +215,12 @@ function EmployeeDashboard() {
             <span className="text-xs text-muted-foreground">{myTasks.length} pendentes</span>
           </div>
           <div className="space-y-2">
-            {myTasks.length === 0 && (
+            {!opsPronto && (
+              <p className={`text-xs text-center py-8 ${falhas.tarefas ? "text-lone-danger" : "text-muted-foreground"}`}>
+                {falhas.tarefas ? "Não consegui carregar suas tarefas. Recarregue a página." : "Carregando tarefas…"}
+              </p>
+            )}
+            {opsPronto && myTasks.length === 0 && (
               <div className="flex flex-col items-center py-8">
                 <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center mb-3">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-muted-foreground/50"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -411,25 +266,24 @@ function EmployeeDashboard() {
             <div className="relative w-24 h-24 mx-auto mb-3">
               <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
                 <circle cx="50" cy="50" r="40" fill="none" stroke="var(--muted)" strokeWidth="8" />
-                <circle
-                  cx="50" cy="50" r="40" fill="none"
-                  stroke={performance.rate >= 80 ? "var(--lone-success)" : performance.rate >= 50 ? "var(--lone-warning)" : "var(--lone-danger)"}
-                  strokeWidth="8"
-                  strokeLinecap="round"
-                  strokeDasharray={`${performance.rate * 2.51} 251`}
-                />
+                {performance.rate !== null && (
+                  <circle
+                    cx="50" cy="50" r="40" fill="none"
+                    stroke={performance.rate >= 80 ? "var(--lone-success)" : performance.rate >= 50 ? "var(--lone-warning)" : "var(--lone-danger)"}
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    strokeDasharray={`${performance.rate * 2.51} 251`}
+                  />
+                )}
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-xl font-black text-foreground">{performance.rate}%</span>
+                <span className="text-xl font-black text-foreground">{performance.rate === null ? "—" : `${performance.rate}%`}</span>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              {performance.done} de {performance.total} tarefas concluídas
+              {performance.rate === null ? "Sem tarefas atribuídas" : `${performance.done} de ${performance.total} tarefas concluídas`}
             </p>
           </div>
-
-          {/* Notices */}
-          <NoticeFormBlock />
 
           {/* My Recent Activity */}
           <div className="card">
@@ -483,8 +337,10 @@ function EmployeeDashboard() {
 }
 
 // ── Admin/Manager/CEO Dashboard (Full view) ──
-function AdminDashboard() {
+function AdminDashboard({ falhas }: { falhas: Falhas }) {
   const clients = useClientsStore((s) => s.clients);
+  const clientesProntos = useClientsStore((s) => s.initialized);
+  const opsPronto = useOperationalStore((s) => s.initialized);
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
   const tasks = useOperationalStore((s) => s.tasks);
@@ -494,11 +350,13 @@ function AdminDashboard() {
 
   const [statusFilter, setStatusFilter] = useState<ClientStatus | "all">("all");
   const [contractStats, setContractStats] = useState({ active: 0, pending: 0, expiring: 0 });
+  const [contratosErro, setContratosErro] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    supabase.from("contracts").select("id, status, end_date").then(({ data }) => {
-      if (!mounted || !data) return;
+    supabase.from("contracts").select("id, status, end_date").then(({ data, error }) => {
+      if (!mounted) return;
+      if (error || !data) { setContratosErro(true); return; }
       const now = Date.now();
       const in30d = now + 30 * 86400000;
       setContractStats({
@@ -512,13 +370,23 @@ function AdminDashboard() {
 
   const {
     activeClients, atRiskClients, onboardingClients, onboardingEsquecidos, urgentTasks,
-    pipelineCards, publishedThisMonth, stuckCards, pendingApproval,
-    designQueued, designInProg, teamProductivity, trafficProductivity,
+    pipelineCards, stuckCards, pendingApproval,
+    designQueued, designInProg, teamProductivity: teamProductivityTotal, trafficProductivity,
     inactiveSevenDays,
   } = useMemo(
     () => getDashboardData({ clients, contentCards, designRequests, tasks, trafficRoutineChecks }),
     [clients, contentCards, designRequests, tasks, trafficRoutineChecks]
   );
+  // "Publicados" = mês corrente de verdade (o helper conta o acumulado).
+  const publishedThisMonth = useMemo(() => contentCards.filter(publicadoNoMes).length, [contentCards]);
+  const teamProductivity = useMemo(
+    () => teamProductivityTotal.map((m) => ({
+      ...m,
+      published: contentCards.filter((c) => c.socialMedia === m.name && publicadoNoMes(c)).length,
+    })),
+    [teamProductivityTotal, contentCards],
+  );
+  const kpi = (n: number, pronto: boolean) => (pronto ? n : "—");
 
   const tableClients = useMemo(
     () => statusFilter === "all" ? clients : clients.filter((c) => c.status === statusFilter),
@@ -536,18 +404,14 @@ function AdminDashboard() {
   }, [contentCards]);
 
 
-  const dateLabel = new Date().toLocaleDateString("pt-BR", {
-    weekday: "long", day: "numeric", month: "short", year: "numeric",
-  });
-
   return (
     <>
       {/* KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-        <KPICard label="Clientes Ativos" value={activeClients.length} caption="em operação" tone="default" accent icon={<Users size={12} />} onClick={() => router.push("/clients")} />
-        <KPICard label="Em Risco" value={atRiskClients.length} caption="precisam atenção" tone={atRiskClients.length > 0 ? "danger" : "default"} accent icon={<AlertTriangle size={12} />} onClick={() => router.push("/clients?filter=at_risk")} />
-        <KPICard label="Onboarding" value={onboardingClients.length} caption="novos clientes" tone={onboardingClients.length > 0 ? "warning" : "default"} accent icon={<UserPlus size={12} />} onClick={() => router.push("/clients?filter=onboarding")} />
-        <KPICard label="Tarefas Urgentes" value={urgentTasks.length} caption="prioridade crítica" tone={urgentTasks.length > 0 ? "warning" : "default"} accent icon={<Zap size={12} />} onClick={() => router.push("/my-work")} />
+        <KPICard label="Clientes Ativos" value={kpi(activeClients.length, clientesProntos)} caption={clientesProntos ? "em operação" : falhas.clientes ? "não carregou" : "carregando…"} tone="default" accent icon={<Users size={12} />} onClick={() => router.push("/clients")} />
+        <KPICard label="Em Risco" value={kpi(atRiskClients.length, clientesProntos)} caption="precisam atenção" tone={atRiskClients.length > 0 ? "danger" : "default"} accent icon={<AlertTriangle size={12} />} onClick={() => router.push("/clients?filter=at_risk")} />
+        <KPICard label="Onboarding" value={kpi(onboardingClients.length, clientesProntos)} caption="novos clientes" tone={onboardingClients.length > 0 ? "warning" : "default"} accent icon={<UserPlus size={12} />} onClick={() => router.push("/clients?filter=onboarding")} />
+        <KPICard label="Tarefas Urgentes" value={kpi(urgentTasks.length, opsPronto)} caption={opsPronto ? "prioridade crítica" : falhas.tarefas ? "não carregou" : "carregando…"} tone={urgentTasks.length > 0 ? "warning" : "default"} accent icon={<Zap size={12} />} onClick={() => router.push("/my-work")} />
       </div>
 
       {/* Status parado no tempo: cliente marcado como "onboarding" que já opera há semanas. Some
@@ -580,10 +444,10 @@ function AdminDashboard() {
 
       {/* Onboarding pendente */}
       {onboardingClients.length > 0 && (
-        <Link href="/clients/pending" className="block rounded-xl border border-lone-brand/20 bg-lone-brand/[0.03] p-4 hover:bg-lone-brand/[0.06] transition-all group">
+        <Link href="/clients/pending" className="block rounded-xl border border-lone-border bg-lone-brand-bg-soft p-4 hover:border-lone-border-strong transition-all group">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-lone-brand/15 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-lg bg-lone-bg-card flex items-center justify-center">
                 <UserPlus size={18} className="text-lone-brand" aria-hidden="true" />
               </div>
               <div>
@@ -600,9 +464,6 @@ function AdminDashboard() {
           </div>
         </Link>
       )}
-
-      {/* Alertas de orçamento */}
-      <BudgetAlert clients={clients} />
 
       {/* Banner de urgências */}
       <CriticalAlertBanner
@@ -623,6 +484,12 @@ function AdminDashboard() {
         <ClientHealthRadar />
         <SmartAlerts />
       </div>
+
+      {contratosErro && (
+        <p className="rounded-xl border border-lone-danger-border bg-lone-danger-bg px-4 py-3 text-lone-caption text-lone-danger">
+          Não consegui ler os contratos — o resumo e o aviso de vencimento ficaram de fora.
+        </p>
+      )}
 
       {/* Resumo de contratos — somente admin */}
       {(contractStats.active > 0 || contractStats.pending > 0 || contractStats.expiring > 0) && (
@@ -664,11 +531,8 @@ function AdminDashboard() {
       {/* Equipes */}
       <TeamSection socialTeam={teamProductivity} trafficTeam={trafficProductivity} />
 
-      {/* Avisos + Tarefas Urgentes */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2">
-          <NoticeFormBlock />
-        </div>
+      {/* Tarefas Urgentes */}
+      <div>
         <div className="rounded-xl border border-lone-border bg-lone-bg-card p-4">
           <h3 className="text-lone-h2 font-inter font-medium text-lone-text-primary flex items-center gap-2 mb-3">
             <AlertTriangle size={14} className="text-lone-brand" aria-hidden="true" />
@@ -681,7 +545,11 @@ function AdminDashboard() {
               .map((task) => (
                 <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-lone-bg-elevated transition-colors group">
                   <button
-                    onClick={() => updateTask(task.id, { status: task.status === "done" ? "pending" : "done" })}
+                    onClick={() => {
+                      // O store desfaz a marcação se o servidor recusar; aqui a pessoa fica sabendo.
+                      updateTask(task.id, { status: task.status === "done" ? "pending" : "done" })
+                        .catch(() => toast.error(`Não consegui atualizar "${task.title}". Tente de novo.`));
+                    }}
                     className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
                       task.status === "done"
                         ? "bg-lone-brand border-lone-brand text-primary-foreground"
@@ -705,8 +573,8 @@ function AdminDashboard() {
                 </div>
               ))}
             {tasks.filter((t) => ["critical", "high"].includes(t.priority) && t.status !== "done").length === 0 && (
-              <p className="text-lone-caption font-inter text-lone-text-disabled text-center py-4">
-                Nenhuma tarefa urgente
+              <p className={`text-lone-caption font-inter text-center py-4 ${falhas.tarefas ? "text-lone-danger" : "text-lone-text-tertiary"}`}>
+                {!opsPronto ? (falhas.tarefas ? "Não consegui carregar as tarefas" : "Carregando…") : "Nenhuma tarefa urgente"}
               </p>
             )}
           </div>
@@ -737,7 +605,8 @@ function AdminDashboard() {
 // ── Main Dashboard Page ──
 export default function DashboardPage() {
   const { role, currentUser } = useRole();
-  const notices = useOperationalStore((s) => s.notices);
+  const conteudoFalhou = useContentStore((s) => s.loadError);
+  const [falhasInit, setFalhasInit] = useState({ clientes: false, tarefas: false });
   const initClients = useClientsStore((s) => s.init);
   const initContent = useContentStore((s) => s.init);
   const initOps = useOperationalStore((s) => s.init);
@@ -747,12 +616,24 @@ export default function DashboardPage() {
   const subOps = useOperationalStore((s) => s.subscribeRealtime);
 
   useEffect(() => {
-    initClients(); initContent(); initOps(); initTraffic();
+    // Os stores de clientes e operação não têm flag de erro: init terminou sem "initialized" = falhou.
+    initClients().then(() => {
+      if (!useClientsStore.getState().initialized) setFalhasInit((f) => ({ ...f, clientes: true }));
+    });
+    initOps().then(() => {
+      if (!useOperationalStore.getState().initialized) setFalhasInit((f) => ({ ...f, tarefas: true }));
+    });
+    initContent(); initTraffic();
     const u1 = subClients(); const u2 = subContent(); const u3 = subOps();
     return () => { u1(); u2(); u3(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isAdmin = role === "admin" || role === "manager";
+  const falhas: Falhas = { ...falhasInit, conteudo: conteudoFalhou };
+  const oQueFalhou = [falhas.clientes && "clientes", falhas.tarefas && "tarefas", falhas.conteudo && "cards de conteúdo"].filter(Boolean).join(", ");
+  useEffect(() => {
+    if (oQueFalhou) toast.error(`Não consegui carregar: ${oQueFalhou}.`);
+  }, [oQueFalhou]);
 
   return (
     <div className="flex flex-col flex-1 overflow-auto">
@@ -770,19 +651,12 @@ export default function DashboardPage() {
             considerava sync com mais de 2h como falha, e o sync roda 1×/dia às 6h. O componente
             continua existindo pra /settings; o alarme de token vencido chega por outro caminho. */}
 
-        {/* Urgent broadcast banner — visible to all */}
-        {notices.filter((n) => n.urgent).length > 0 && (
-          <div className="space-y-2">
-            {notices.filter((n) => n.urgent).slice(0, 2).map((n) => (
-              <div key={n.id} className="flex items-start gap-3 bg-lone-danger-bg border border-lone-danger-border rounded-xl px-4 py-3">
-                <Megaphone size={15} className="text-lone-danger shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-lone-danger">{n.title}</p>
-                  {n.body && <p className="text-xs text-lone-danger opacity-80 mt-0.5">{n.body}</p>}
-                  <p className="text-xs text-muted-foreground/50 mt-1">por {n.createdBy} · {n.createdAt}</p>
-                </div>
-              </div>
-            ))}
+        {oQueFalhou && (
+          <div className="flex items-start gap-3 rounded-xl border border-lone-danger-border bg-lone-danger-bg px-4 py-3">
+            <AlertTriangle size={15} className="text-lone-danger shrink-0 mt-0.5" />
+            <p className="text-lone-body text-lone-danger">
+              Não consegui carregar {oQueFalhou}. Os números abaixo estão incompletos — recarregue a página.
+            </p>
           </div>
         )}
 
@@ -793,7 +667,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Role-based content */}
-        {isAdmin ? <AdminDashboard /> : <EmployeeDashboard />}
+        {isAdmin ? <AdminDashboard falhas={falhas} /> : <EmployeeDashboard falhas={falhas} />}
       </div>
     </div>
   );

@@ -3,18 +3,18 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { getServerUser } from "@/lib/supabase/auth-server";
+import { requireRole, GESTAO } from "@/lib/api/require-role";
 
 /**
  * POST /api/content-cards/delete
  * Body: { id: string }
  *
- * Deleta um content_card. Auth via session (Supabase real ou LocalSession).
- * Bypassa RLS via service_role — confiando na confirmação UI (DeleteConfirmModal).
+ * "Excluir" ARQUIVA (archived_at) — não apaga mais. Designer conseguia apagar card de vez e o
+ * briefing/comentários/artes sumiam sem volta. Recuperável em "Arquivadas".
  */
 export async function POST(req: NextRequest) {
-  const user = await getServerUser(req);
-  if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
+  const gate = await requireRole(req, [...GESTAO, "social"]);
+  if (gate instanceof NextResponse) return gate;
 
   const body = await req.json().catch(() => ({}));
   const id = (body as { id?: string }).id;
@@ -23,12 +23,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { error } = await supabaseAdmin.from("content_cards").delete().eq("id", id);
+    const { data, error } = await supabaseAdmin
+      .from("content_cards")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("id", id)
+      .is("archived_at", null)
+      .select("id");
     if (error) {
       console.error("[content-cards/delete] error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    return NextResponse.json({ success: true, deletedBy: user.email });
+    return NextResponse.json({ success: true, archived: true, jaArquivado: !data?.length, archivedBy: gate.user.email });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
     console.error("[content-cards/delete] unhandled:", err);

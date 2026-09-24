@@ -1,29 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/context/RoleContext";
+import type { Role } from "@/lib/types";
 
-const SHORTCUTS = [
-  { keys: ["g", "d"], label: "Dashboard", href: "/" },
-  { keys: ["g", "t"], label: "Tráfego Pago", href: "/traffic" },
-  { keys: ["g", "s"], label: "Social Media", href: "/social" },
-  { keys: ["g", "c"], label: "Clientes", href: "/clients" },
+const SHORTCUTS: { keys: [string, string]; label: string; href: string; roles: Role[] }[] = [
+  { keys: ["g", "d"], label: "Dashboard", href: "/", roles: ["admin", "manager", "traffic", "social", "designer"] },
+  { keys: ["g", "t"], label: "Tráfego Pago", href: "/traffic", roles: ["admin", "manager", "traffic"] },
+  { keys: ["g", "s"], label: "Social Media", href: "/social", roles: ["admin", "manager", "social", "designer"] },
+  { keys: ["g", "c"], label: "Clientes", href: "/clients", roles: ["admin", "manager"] },
 ];
+
+// Editor de e-mail/legenda é contentEditable: sem isso, digitar "g" e "d" num texto tirava a pessoa da página.
+function estaDigitando(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || typeof el.closest !== "function") return false;
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return el.isContentEditable || !!el.closest("[contenteditable]:not([contenteditable='false'])");
+}
 
 export default function KeyboardShortcuts() {
   const router = useRouter();
   const { role } = useRole();
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const atalhos = useMemo(() => SHORTCUTS.filter((s) => s.roles.includes(role)), [role]);
 
   useEffect(() => {
     let timeout: NodeJS.Timeout;
 
     const handler = (e: KeyboardEvent) => {
-      // Ignore if typing in input/textarea
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "Escape") {
+        setShowHelp(false);
+        setPendingKey(null);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      if (estaDigitando(e.target)) return;
 
       // ? = show help
       if (e.key === "?") {
@@ -34,9 +49,10 @@ export default function KeyboardShortcuts() {
 
       // Two-key shortcuts (g + key)
       if (pendingKey === "g") {
-        const shortcut = SHORTCUTS.find((s) => s.keys[1] === e.key);
+        const shortcut = atalhos.find((s) => s.keys[1] === e.key);
         if (shortcut) {
           e.preventDefault();
+          setShowHelp(false);
           router.push(shortcut.href);
         }
         setPendingKey(null);
@@ -55,7 +71,7 @@ export default function KeyboardShortcuts() {
       window.removeEventListener("keydown", handler);
       clearTimeout(timeout);
     };
-  }, [pendingKey, router, role]);
+  }, [pendingKey, router, atalhos]);
 
   if (!showHelp) return null;
 
@@ -68,9 +84,9 @@ export default function KeyboardShortcuts() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">Busca global</span>
-            <kbd className="px-2 py-0.5 rounded bg-muted border border-border text-[10px] font-mono text-foreground">Cmd+K</kbd>
+            <kbd className="px-2 py-0.5 rounded bg-muted border border-border text-[10px] font-mono text-foreground">⌘K / Ctrl+K</kbd>
           </div>
-          {SHORTCUTS.map((s) => (
+          {atalhos.map((s) => (
             <div key={s.href} className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">{s.label}</span>
               <div className="flex items-center gap-1">

@@ -14,6 +14,7 @@ import {
   calculateAvailableBalance,
   estimateDaysRemaining,
   detectAccountType,
+  gastoDiario,
   type MetaAccountFields,
 } from "@/lib/meta/account-balance";
 import {
@@ -29,6 +30,7 @@ import {
   type ClientAlertConfig,
 } from "@/lib/budgets/operational-alerts";
 import { fetchActiveCampaignCount } from "@/lib/meta/insights-server";
+import { toBRTDateStr } from "@/lib/meta/timezone";
 import { sendGroupText } from "@/lib/whatsapp/evolution";
 
 // ── Config de alerta (agency_settings) ───────────────────────
@@ -105,6 +107,9 @@ type AccountRow = {
   spend_cap: number | null;
   monthly_budget: number | null;
   billing_type_source: string | null;
+  current_month_spend: number | null;
+  daily_spend_3d: number[] | null;
+  last_3d_avg_spend: number | null;
   clients: { id: string; name: string; nome_fantasia: string | null; client_pix_key: string | null } | null;
 };
 
@@ -150,6 +155,7 @@ export async function runBalanceSync(opts?: {
     .from("ad_accounts")
     .select(`
       id, meta_account_id, account_name, is_prepaid, spend_cap, monthly_budget, billing_type_source,
+      current_month_spend, daily_spend_3d, last_3d_avg_spend,
       clients!inner ( id, name, nome_fantasia, client_pix_key, paused_at, paused_until )
     `)
     .neq("clients.active", false); // não sincroniza contas de ex-clientes (churned)
@@ -189,17 +195,27 @@ export async function runBalanceSync(opts?: {
 
     if (!raw || "error" in raw) {
       const errRaw = raw as { error: string; errorJson?: string } | undefined;
-      await supabaseAdmin.from("ad_accounts").update({
-        sync_error: errRaw?.error ?? "Erro desconhecido",
+      const syncError = errRaw?.error ?? "Erro desconhecido";
+      // Só marca o erro; saldo/gasto gravados antes continuam valendo (leitura falha não zera dado).
+      const { error: updErr } = await supabaseAdmin.from("ad_accounts").update({
+        sync_error: syncError,
         last_error_message: errRaw?.errorJson ?? errRaw?.error ?? null,
         last_synced_at: now,
       }).eq("id", account.id);
+      if (updErr) console.error(`[sync] UPDATE (erro) failed for ${account.meta_account_id}:`, updErr.message);
       errors++;
+      const opAlerts = detectClientAlerts(
+        {
+          available: null, monthlyBudget: account.monthly_budget, avgDailySpend: account.last_3d_avg_spend,
+          accountStatus: 1, syncError,
+        },
+        acfg, settings.warningPct, settings.criticalPct,
+      );
       snapshots.push({
         clientName, metaAccountId: account.meta_account_id, isPrepaid: account.is_prepaid,
-        available: null, daysRemaining: null, avgDailySpend: null, currency: "BRL", pixKey,
-        alert: { severity: "error", reason: errRaw?.error ?? "Erro de sync", pctRemaining: null },
-        clientId,
+        available: null, daysRemaining: null, avgDailySpend: account.last_3d_avg_spend, currency: "BRL", pixKey,
+        alert: { severity: "error", reason: syncError, pctRemaining: null },
+        adAccountId: account.id, clientId, opAlerts,
       });
       continue;
     }
@@ -218,13 +234,18 @@ export async function runBalanceSync(opts?: {
       }
     }
 
-    const dailyInsights = dailySpendMap.get(account.meta_account_id) ?? [];
-    const last3 = dailyInsights.slice(-3).filter((v) => v > 0);
-    const avg3dSpend = last3.length > 0 ? last3.reduce((a, b) => a + b, 0) / last3.length : null;
+    // Leitura de Insights que falhou NÃO sobrescreve o último valor bom; 0 só quando a Meta disse 0.
+    const daily = gastoDiario(dailySpendMap.get(account.meta_account_id));
+    const dailyOk = daily !== null;
+    const last3 = dailyOk ? daily.last3 : (account.daily_spend_3d ?? []);
+    const avg3dSpend = dailyOk ? daily.avg : account.last_3d_avg_spend;
 
     const currentSpent = parseFloat(meta.amount_spent) / 100;
     const balanceFromMeta = calculateAvailableBalance(isPrepaid, account.spend_cap, meta);
-    const currentMonthSpend = monthlySpendMap.get(account.meta_account_id) ?? null;
+    const monthlyOk = monthlySpendMap.has(account.meta_account_id);
+    const currentMonthSpend = monthlyOk
+      ? (monthlySpendMap.get(account.meta_account_id) as number)
+      : account.current_month_spend;
 
     // Saldo "efetivo" — mesma regra da página (enrichAccount): pós-pago com verba
     // contratada usa verba − gasto do mês; demais usam o saldo calculado da Meta.
@@ -270,7 +291,8 @@ export async function runBalanceSync(opts?: {
         campaignsActive,
         campaignsTotal,
       },
-      acfg,
+      // Sem leitura do gasto diário não dá pra afirmar "sem gasto" — valor guardado é velho.
+      dailyOk ? acfg : { ...acfg, alertSemGasto: false },
       settings.warningPct,
       settings.criticalPct,
     );
@@ -278,9 +300,6 @@ export async function runBalanceSync(opts?: {
     const updatePayload: Record<string, unknown> = {
       last_balance: balanceFromMeta,
       last_amount_spent: currentSpent,
-      current_month_spend: currentMonthSpend,
-      daily_spend_3d: last3.length > 0 ? last3 : null,
-      last_3d_avg_spend: avg3dSpend,
       currency: meta.currency ?? "BRL",
       account_status: meta.account_status,
       spend_cap: meta.spend_cap ? parseFloat(meta.spend_cap) / 100 : account.spend_cap,
@@ -288,6 +307,11 @@ export async function runBalanceSync(opts?: {
       last_error_message: null,
       last_synced_at: now,
     };
+    if (monthlyOk) updatePayload.current_month_spend = currentMonthSpend;
+    if (dailyOk) {
+      updatePayload.daily_spend_3d = last3;
+      updatePayload.last_3d_avg_spend = avg3dSpend;
+    }
     if (detectedType !== null) {
       updatePayload.is_prepaid = isPrepaid;
       updatePayload.billing_type_source = "auto";
@@ -303,7 +327,9 @@ export async function runBalanceSync(opts?: {
       adAccountId: account.id, clientId, opAlerts, // anti-spam + config por cliente
     });
 
-    synced++;
+    // Leu da Meta mas não gravou = não sincronizou (a tela continua com o dado velho).
+    if (updErr) errors++;
+    else synced++;
   }
 
   let alertsDispatched = 0;
@@ -325,7 +351,7 @@ async function dispatchRealtimeAlerts(
 ): Promise<number> {
   if (!settings.enabled || !settings.groupJid) return 0;
 
-  const today = now.slice(0, 10);
+  const today = toBRTDateStr(new Date(now)); // dia de São Paulo — UTC virava o dia às 21h
   let sent = 0;
 
   for (const snap of snapshots) {

@@ -49,19 +49,36 @@ export interface SaudeCliente {
   score: number | null;
   nivel: "saudavel" | "atencao" | "risco" | "sem_dado";
   componentes: { chave: ComponenteSaude; nome: string; valor: number | null; peso: number }[];
+  /** A conta com o que foi medido, mesmo abaixo da cobertura mínima (histórico; não vira nível). */
+  scoreParcial: number | null;
   /** Os componentes que mais custaram pontos — é o "por quê" que faltava. */
   motivos: string[];
   cobertura: number;
 }
 
-function nivelDe(score: number | null): SaudeCliente["nivel"] {
-  if (score === null) return "sem_dado";
-  if (score >= 75) return "saudavel";
-  if (score >= 60) return "atencao";
+/** Faixas únicas da saúde (100 = saudável). Tela, cron e Loninho usam estas — nada de 70/45 local. */
+export const LIMIAR_SAUDAVEL = 75;
+export const LIMIAR_ATENCAO = 60;
+/** Abaixo disto, o que foi medido não sustenta uma nota: vira "sem dado", nunca 0. */
+export const COBERTURA_MINIMA = 40;
+
+export type NivelSaude = SaudeCliente["nivel"];
+
+export function nivelDaSaude(score: number | null | undefined): NivelSaude {
+  if (score === null || score === undefined || !Number.isFinite(score)) return "sem_dado";
+  if (score >= LIMIAR_SAUDAVEL) return "saudavel";
+  if (score >= LIMIAR_ATENCAO) return "atencao";
   return "risco";
 }
 // Risco abaixo de 60, calibrado pelo exemplo do Roberto ("Cliente X — 54 🔴"). Um cliente com
 // resultado 40 e sentimento 45 não é "atenção": é conversa esta semana.
+
+export const ROTULO_NIVEL_SAUDE: Record<NivelSaude, string> = {
+  saudavel: "Saudável",
+  atencao: "Atenção",
+  risco: "Em risco",
+  sem_dado: "Sem dado suficiente",
+};
 
 export function calcularSaude(p: {
   clientId: string; cliente: string; componentes: Componentes;
@@ -78,11 +95,13 @@ export function calcularSaude(p: {
   const pesoMedido = comDado.reduce((s, l) => s + l.peso, 0);
   const pesoTotal = chaves.reduce((s, k) => s + PESOS_SAUDE[k], 0);
 
-  // Sem nada medido, `null` — nunca 0. Um cliente sem dado não é um cliente em risco; é um
-  // cliente que a gente não está olhando, e a diferença muda o que se faz a respeito.
-  const score = pesoMedido > 0
+  const cobertura = Math.round((pesoMedido / pesoTotal) * 100);
+  const parcial = pesoMedido > 0
     ? Math.round(comDado.reduce((s, l) => s + (l.valor as number) * l.peso, 0) / pesoMedido)
     : null;
+  // Pouco medido → `null`, nunca 0. Um cliente sem dado não é um cliente em risco; é um cliente que
+  // a gente não está olhando, e a diferença muda o que se faz a respeito.
+  const score = cobertura >= COBERTURA_MINIMA ? parcial : null;
 
   // O "por quê": componentes abaixo de 60, do mais pesado para o mais leve.
   const fracos = comDado
@@ -91,10 +110,10 @@ export function calcularSaude(p: {
     .map((l) => `${l.nome} em ${l.valor}`);
 
   return {
-    clientId: p.clientId, cliente: p.cliente, score, nivel: nivelDe(score),
+    clientId: p.clientId, cliente: p.cliente, score, scoreParcial: parcial, nivel: nivelDaSaude(score),
     componentes: linhas,
     motivos: [...(p.observacoes ?? []), ...fracos].slice(0, 5),
-    cobertura: Math.round((pesoMedido / pesoTotal) * 100),
+    cobertura,
   };
 }
 
@@ -139,3 +158,42 @@ export function situacaoDaDistribuicao(d: Distribuicao): Situacao {
   if (pctRisco > 0 || d.atencao / d.total >= 0.3) return "atencao";
   return d.saudaveis / d.total >= 0.8 ? "otimo" : "no_alvo";
 }
+
+/**
+ * O que vai para o banco. `client_health_scores.score` é NOT NULL: sem dado medido nenhum não há
+ * linha de histórico, mas o cache em `clients` é zerado para a tela não mostrar a nota de ontem.
+ */
+export function gravacaoDaSaude(s: SaudeCliente): {
+  historico: { score: number; level: NivelSaude } | null;
+  cache: { current_health_score: number | null; current_health_level: NivelSaude };
+} {
+  return {
+    historico: s.scoreParcial === null ? null : { score: s.score ?? s.scoreParcial, level: s.nivel },
+    cache: { current_health_score: s.score, current_health_level: s.nivel },
+  };
+}
+
+/**
+ * A saúde que a TELA mostra. Com o cache do escritor único (current_health_*), usa ele — inclusive
+ * "sem dado", que não pode virar número. Sem cache, cai na conta local (calcHealthScore).
+ */
+export function saudeExibida(
+  c: { currentHealthScore?: number | null; currentHealthLevel?: string | null },
+  fallback: () => number,
+): { score: number | null; nivel: NivelSaude; doCache: boolean } {
+  const nivelCache = c.currentHealthLevel as NivelSaude | null | undefined;
+  if (nivelCache && nivelCache in ROTULO_NIVEL_SAUDE) {
+    const score = typeof c.currentHealthScore === "number" ? Math.round(c.currentHealthScore) : null;
+    return { score: nivelCache === "sem_dado" ? null : score, nivel: nivelCache, doCache: true };
+  }
+  const score = fallback();
+  return { score, nivel: nivelDaSaude(score), doCache: false };
+}
+
+/** Classes de token por nível — uma só tabela para lista, ficha e termômetro. */
+export const COR_NIVEL_SAUDE: Record<NivelSaude, { texto: string; barra: string }> = {
+  saudavel: { texto: "text-lone-success", barra: "bg-lone-success" },
+  atencao: { texto: "text-lone-warning", barra: "bg-lone-warning" },
+  risco: { texto: "text-destructive", barra: "bg-destructive" },
+  sem_dado: { texto: "text-muted-foreground", barra: "bg-muted-foreground" },
+};

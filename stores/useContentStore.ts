@@ -4,6 +4,7 @@ import { devtools, subscribeWithSelector } from "zustand/middleware";
 import type { ContentCard, DesignRequest, ContentApproval, SocialMonthlyReport, CardComment, Role } from "@/lib/types";
 import { supabase, REALTIME_ENABLED } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { trilha } from "@/lib/obs/trilha";
 import { avisoDeAtribuicao, type MotivoEscolha } from "@/lib/design/atribuicao";
 
@@ -14,13 +15,15 @@ interface ContentState {
   socialReports: SocialMonthlyReport[];
   loading: boolean;
   initialized: boolean;
+  /** A primeira carga falhou: a tela mostra erro (não "nenhum card") e o polling tenta de novo. */
+  loadError: boolean;
   versao?: string;
 
   init: (filter?: { socialMedia?: string }) => Promise<void>;
   refresh: (filter?: { socialMedia?: string }) => Promise<void>;
   subscribeRealtime: (socialMediaFilter?: string) => () => void;
 
-  addContentCard: (card: Omit<ContentCard, "id">) => Promise<ContentCard>;
+  addContentCard: (card: Omit<ContentCard, "id">, opcoes?: { chave?: string; criadoPor?: string }) => Promise<ContentCard>;
   updateContentCard: (id: string, updates: Partial<ContentCard>, options?: { bypassWorkflow?: boolean }) => Promise<void>;
   deleteContentCard: (id: string) => Promise<void>;
 
@@ -72,26 +75,28 @@ export const useContentStore = create<ContentState>()(
       socialReports: [],
       loading: false,
       initialized: false,
+      loadError: false,
 
       init: async (filter) => {
         if (get().initialized || get().loading) return;
         set({ loading: true }, false, "content/init/start");
-        try {
-          const params = filter?.socialMedia ? `?socialMedia=${encodeURIComponent(filter.socialMedia)}` : "";
-          const res = await authedFetch(`/api/data/content${params}`);
-          if (!res.ok) { trilha("init:erro", { status: res.status }); throw new Error(`HTTP ${res.status}`); }
-          const { contentCards, designRequests, contentApprovals, socialReports, versao } = await res.json();
-          trilha("init:ok", { cards: contentCards.length, demandas: designRequests.length });
-          set({ contentCards, designRequests, contentApprovals, socialReports, versao, loading: false, initialized: true }, false, "content/init/done");
-        } catch {
-          set({ loading: false }, false, "content/init/error");
+        const params = filter?.socialMedia ? `?socialMedia=${encodeURIComponent(filter.socialMedia)}` : "";
+        const r = await chamar<{ contentCards?: ContentCard[]; designRequests?: DesignRequest[]; contentApprovals?: ContentApproval[]; socialReports?: SocialMonthlyReport[]; versao?: string }>(`/api/data/content${params}`);
+        if (!r.ok || !r.data || !Array.isArray(r.data.contentCards)) {
+          trilha("init:erro", { status: r.status });
+          set({ loading: false, loadError: true }, false, "content/init/error");
+          return;
         }
+        const { contentCards, designRequests = [], contentApprovals = [], socialReports = [], versao } = r.data;
+        trilha("init:ok", { cards: contentCards.length, demandas: designRequests.length });
+        set({ contentCards, designRequests, contentApprovals, socialReports, versao, loading: false, initialized: true, loadError: false }, false, "content/init/done");
       },
 
       refresh: async (filter) => {
         // Refetch silencioso p/ polling do board: SEM flag de loading (não pisca a tela) e
         // sem o guard de init (serve justamente pra atualizar depois de já inicializado).
-        if (!get().initialized) return;            // antes do init, o init é quem carrega
+        // Primeira carga falhou? O polling tenta o init de novo — antes o board ficava vazio até o F5.
+        if (!get().initialized) { if (!get().loading) await get().init(filter); return; }
         if (refreshEmVoo) return;                  // uma busca por vez
         if (Date.now() - ultimoRefresh < 3000) return; // foco + tick no mesmo segundo = uma busca só
         if (criacoesEmVoo.size > 0) return;        // alguém está criando: não atropela
@@ -185,21 +190,26 @@ export const useContentStore = create<ContentState>()(
         return () => { supabase.removeChannel(channel); };
       },
 
-      addContentCard: async (card) => {
+      addContentCard: async (card, opcoes) => {
         // Em voo: segundo clique no mesmo cliente+título devolve a criação que já está rodando.
-        const chave = `card|${card.clientId}|${card.title.trim().toLowerCase()}`;
+        // No lote cada linha traz a própria chave — títulos iguais são cards diferentes.
+        const chave = opcoes?.chave ?? `card|${card.clientId}|${card.title.trim().toLowerCase()}`;
         const emVoo = criacoesEmVoo.get(chave) as Promise<ContentCard> | undefined;
         if (emVoo) return emVoo;
         const p = (async () => {
         trilha("card:criar:inicio", { titulo: card.title, clientId: card.clientId });
-        const tempId = `temp-cc-${Date.now()}`;
+        const tempId = `temp-cc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const optimistic: ContentCard = { ...card, id: tempId };
         marcarMutacao();
         set((s) => ({ contentCards: [...s.contentCards, optimistic] }), false, "content/card/add/optimistic");
         try {
-          const r = await authedFetch("/api/content-cards/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(card) });
-          if (!r.ok) { trilha("card:criar:erro", { titulo: card.title, status: r.status }); throw new Error(`HTTP ${r.status}`); }
-          const { id, dedupe } = await r.json() as { id: string; dedupe?: boolean };
+          const r = await chamar<{ id: string; dedupe?: boolean }>("/api/content-cards/create", {
+            ...card,
+            ...(opcoes?.chave ? { idempotencyKey: opcoes.chave } : {}),
+            ...(opcoes?.criadoPor ? { createdBy: opcoes.criadoPor } : {}),
+          });
+          if (!r.ok || !r.data?.id) { trilha("card:criar:erro", { titulo: card.title, status: r.status }); throw new Error(r.erro ?? "Resposta sem id"); }
+          const { id, dedupe } = r.data;
           trilha("card:criar:ok", { titulo: card.title, id, dedupe: !!dedupe });
           const confirmed = { ...optimistic, id };
           marcarMutacao();
@@ -223,16 +233,13 @@ export const useContentStore = create<ContentState>()(
         set((s) => ({
           contentCards: s.contentCards.map((c) => c.id === id ? { ...c, ...updates } : c),
         }), false, "content/card/update/optimistic");
-        try {
-          const res = await authedFetch("/api/content-cards/update", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id, ...updates }),
-          });
-          if (!res.ok) { trilha("card:update:erro", { id, campos: Object.keys(updates), status: res.status }); throw new Error(`HTTP ${res.status}`); }
-        } catch (err) {
+        const r = await chamar("/api/content-cards/update", { id, ...updates });
+        if (!r.ok) {
+          trilha("card:update:erro", { id, campos: Object.keys(updates), status: r.status });
           if (prev) set((s) => ({ contentCards: s.contentCards.map((c) => c.id === id ? prev : c) }), false, "content/card/update/rollback");
-          throw err;
+          // O aviso mora AQUI: metade dos chamadores não tinha catch e a falha passava calada.
+          toast.error(`Não salvei${prev ? ` "${prev.title}"` : " o card"}: ${r.erro} A tela voltou ao que estava.`);
+          throw new Error(r.erro ?? `HTTP ${r.status}`);
         }
       },
 
@@ -240,19 +247,11 @@ export const useContentStore = create<ContentState>()(
         const prev = get().contentCards.find((c) => c.id === id);
         marcarMutacao();
         set((s) => ({ contentCards: s.contentCards.filter((c) => c.id !== id) }), false, "content/card/delete/optimistic");
-        try {
-          const res = await authedFetch("/api/content-cards/delete", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id }),
-          });
-          if (!res.ok) {
-            if (prev) set((s) => ({ contentCards: s.contentCards.some((c) => c.id === id) ? s.contentCards : [...s.contentCards, prev] }), false, "content/card/delete/rollback");
-            throw new Error(`HTTP ${res.status}`);
-          }
-        } catch (err) {
+        // O servidor ARQUIVA (archived_at) — recuperável em "Arquivadas".
+        const r = await chamar("/api/content-cards/delete", { id });
+        if (!r.ok) {
           if (prev) set((s) => ({ contentCards: s.contentCards.some((c) => c.id === id) ? s.contentCards : [...s.contentCards, prev] }), false, "content/card/delete/rollback");
-          throw err;
+          throw new Error(r.erro ?? `HTTP ${r.status}`);
         }
       },
 

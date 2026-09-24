@@ -1,8 +1,14 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
 import type { Client, ClientStatus, ChatMessage } from "@/lib/types";
 import { supabase, REALTIME_ENABLED } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
+import { rotuloResultadoAnuncio, TITULO_RESULTADO_ANUNCIO } from "@/lib/scores/resultado-anuncio";
+
+/** Patch de cliente: `null` apaga o campo no banco (undefined = não mexe). */
+export type ClientPatch = { [K in keyof Client]?: Client[K] | null };
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Types
@@ -19,7 +25,9 @@ interface ClientsState {
   subscribeRealtime: () => () => void;
 
   addClient: (data: Omit<Client, "id" | "status" | "attentionLevel" | "tags" | "joinDate" | "lastPostDate"> & Partial<Pick<Client, "status" | "attentionLevel" | "tags" | "joinDate" | "lastPostDate">>) => Promise<Client>;
-  updateClient: (id: string, updates: Partial<Client>) => Promise<void>;
+  updateClient: (id: string, updates: ClientPatch) => Promise<void>;
+  /** Só o estado local — para quem já gravou por rota própria (portal, ficha viva, pausa). */
+  patchClientLocal: (id: string, patch: ClientPatch) => void;
   updateClientStatus: (id: string, status: ClientStatus, actor: string) => Promise<void>;
   sendClientMessage: (clientId: string, user: string, text: string) => void;
 }
@@ -141,15 +149,11 @@ export const useClientsStore = create<ClientsState>()(
       updateClient: async (id, updates) => {
         const prev = get().clients.find((c) => c.id === id);
         set((s) => ({
-          clients: s.clients.map((c) => c.id === id ? { ...c, ...updates } : c),
+          clients: s.clients.map((c) => c.id === id ? ({ ...c, ...updates } as Client) : c),
         }), false, "clients/update/optimistic");
         try {
-          const res = await authedFetch("/api/clients/update", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id, ...updates }),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const r = await chamar("/api/clients/update", { id, ...updates });
+          if (!r.ok) throw new Error(r.erro ?? "Não consegui salvar o cliente.");
         } catch (err) {
           if (prev) {
             set((s) => ({
@@ -160,31 +164,39 @@ export const useClientsStore = create<ClientsState>()(
         }
       },
 
+      patchClientLocal: (id, patch) => {
+        set((s) => ({
+          clients: s.clients.map((c) => c.id === id ? ({ ...c, ...patch } as Client) : c),
+        }), false, "clients/patch/local");
+      },
+
       // ── updateClientStatus ────────────────────────────────────────────────
       updateClientStatus: async (id, status, actor) => {
         const prev = get().clients.find((c) => c.id === id);
         set((s) => ({
           clients: s.clients.map((c) => c.id === id ? { ...c, status } : c),
         }), false, "clients/status/optimistic");
-        try {
-          await authedFetch("/api/clients/update", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id, status }),
-          });
-          await authedFetch("/api/data/operational/mutations", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "insertTimeline", entry: { clientId: id, type: "status", actor, description: `Status atualizado para ${status}`, timestamp: new Date().toISOString() } }),
-          });
-        } catch (err) {
+        const r = await chamar("/api/clients/update", { id, status });
+        if (!r.ok) {
           if (prev) {
             set((s) => ({
               clients: s.clients.map((c) => c.id === id ? prev : c),
             }), false, "clients/status/rollback");
           }
-          throw err;
+          // Sem throw: nenhum chamador trata, e o toast já conta o que houve.
+          toast.error(r.erro ?? "Não consegui mudar o resultado do anúncio.");
+          return;
         }
+        // O status já está salvo; falhar só o histórico não desfaz a mudança, mas avisa.
+        const t = await chamar("/api/data/operational/mutations", {
+          action: "insertTimeline",
+          entry: {
+            clientId: id, type: "status", actor,
+            description: `${TITULO_RESULTADO_ANUNCIO}: ${rotuloResultadoAnuncio(prev?.status)} → ${rotuloResultadoAnuncio(status)}`,
+            timestamp: new Date().toISOString(),
+          },
+        });
+        if (!t.ok) toast.error("Status salvo, mas não entrou no histórico do cliente.");
       },
 
       // ── sendClientMessage ─────────────────────────────────────────────────

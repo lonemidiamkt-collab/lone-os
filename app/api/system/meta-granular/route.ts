@@ -7,6 +7,7 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { escolherProvider, type NivelEntidade } from "@/lib/meta/gateway";
 import { guardarCriativos } from "@/lib/meta/criativos";
+import { toBRTDateStr } from "@/lib/meta/timezone";
 
 // POST /api/system/meta-granular — coleta desempenho por CAMPANHA, CONJUNTO e ANÚNCIO.
 //
@@ -42,25 +43,27 @@ export async function POST(req: NextRequest) {
 
   const ate = new Date();
   const desde = new Date(ate.getTime() - dias * 864e5);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const iso = (d: Date) => toBRTDateStr(d); // dia de São Paulo, não UTC
 
   // Quem responde é decidido pelo gateway, não escolhido aqui: hoje é a Marketing API porque o MCP
   // devolve 401 para esta conta, e no dia em que liberar esta rota não muda uma linha.
   const { provider, capacidade } = await escolherProvider(token);
 
   let linhas = 0, contasLidas = 0, criativos = 0, periodos = 0;
-  const erros: string[] = [];
+  // Falha por cliente/nível/etapa, para o log dizer exatamente o que ficou sem dado.
+  const falhas: { clienteId: string; cliente: string; nivel: string; etapa: string; erro: string }[] = [];
+  const falhou = (c: { id: unknown; name: unknown }, nivel: string, etapa: string, e: unknown) =>
+    falhas.push({ clienteId: c.id as string, cliente: c.name as string, nivel, etapa, erro: (e instanceof Error ? e.message : String(e)).slice(0, 160) });
 
   for (const c of clientes ?? []) {
     const acc = c.meta_ad_account_id as string;
-    let algumNivelOk = false;
+    const falhasAntes = falhas.length;
 
     for (const nivel of NIVEIS) {
       try {
         const insights = await provider.insightsPorEntidade({
           token, accountId: acc, nivel, desde: iso(desde), ate: iso(ate),
         });
-        algumNivelOk = true;
 
         const registros = insights.map((r) => ({
           client_id: c.id, meta_ad_account_id: acc, nivel,
@@ -82,7 +85,7 @@ export async function POST(req: NextRequest) {
           // alguns dias depois do clique.
           const { error: e } = await supabaseAdmin.from("meta_entity_snapshots")
             .upsert(registros, { onConflict: "entity_id,metric_date" });
-          if (e) erros.push(`${c.name} [${nivel}] gravar: ${e.message.slice(0, 60)}`);
+          if (e) falhou(c, nivel, "gravar", e.message);
         }
         linhas += registros.length;
 
@@ -98,10 +101,10 @@ export async function POST(req: NextRequest) {
             }));
             if (regs.length && !dry) {
               const { error: e } = await supabaseAdmin.from("meta_ad_period").upsert(regs, { onConflict: "ad_id,ate,dias" });
-              if (e) erros.push(`${c.name} [período]: ${e.message.slice(0, 60)}`); else periodos += regs.length;
+              if (e) falhou(c, "ad", "periodo_gravar", e.message); else periodos += regs.length;
             }
           } catch (e) {
-            erros.push(`${c.name} [período]: ${String(e).slice(0, 70)}`);
+            falhou(c, "ad", "periodo", e);
           }
         }
 
@@ -113,22 +116,27 @@ export async function POST(req: NextRequest) {
             const r = await guardarCriativos({ provider, token, clientId: c.id as string, accountId: acc, adIds, dry });
             criativos += r.gravados;
           } catch (e) {
-            erros.push(`${c.name} [criativos]: ${String(e).slice(0, 70)}`);
+            falhou(c, "ad", "criativos", e);
           }
         }
       } catch (e) {
         // Conta sem acesso não derruba as outras — foi o que já derrubou o digest inteiro antes.
-        erros.push(`${c.name} [${nivel}]: ${String(e).slice(0, 70)}`);
+        falhou(c, nivel, "ler", e);
       }
     }
-    if (algumNivelOk) contasLidas++;
+    // Conta só é "lida" se TODOS os níveis vieram e foram gravados.
+    if (falhas.length === falhasAntes) contasLidas++;
   }
 
+  const total = clientes?.length ?? 0;
+  const status = falhas.length === 0 ? "ok" : contasLidas > 0 ? "parcial" : "falhou";
+  if (falhas.length) console.error(`[meta-granular] ${status}: ${falhas.length} falha(s) em ${total - contasLidas} conta(s)`);
+
   return NextResponse.json({
-    ok: erros.length === 0, dry,
+    ok: falhas.length === 0, status, dry,
     fonte: capacidade.fonte, fonte_detalhe: capacidade.detalhe,
-    contas: clientes?.length ?? 0, contas_lidas: contasLidas,
+    contas: total, contas_lidas: contasLidas, contas_com_falha: total - contasLidas,
     linhas, criativos, periodos, janela_dias: dias,
-    erros: erros.slice(0, 8),
-  });
+    falhas,
+  }, { status: status === "falhou" && total > 0 ? 502 : 200 });
 }

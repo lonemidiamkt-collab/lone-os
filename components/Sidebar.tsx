@@ -5,21 +5,20 @@ import Link from "next/link";
 import {
   LayoutDashboard, TrendingUp, Instagram, Palette, Users, Lock,
   MessageCircle, Calendar, LogOut, Sun,
-  ClipboardCheck, BarChart2, Megaphone, Brain, FileText,
+  ClipboardCheck, BarChart2, Megaphone, FileSignature, Info, UserCheck, History,
   ChevronLeft, Activity, Layers, AlertTriangle, Settings,
-  Users2, Globe, Target, Inbox, ShieldCheck, ShieldAlert, Package, Zap, PanelLeftClose, PanelLeft, Thermometer, Bot, Handshake, CalendarClock, HeartPulse,  BookOpen,
+  Users2, Target, Inbox, ShieldCheck, ShieldAlert, Zap, PanelLeftClose, PanelLeft, Thermometer, Bot, Handshake, CalendarClock, HeartPulse,  BookOpen,
   Radar, ListOrdered, Building2, MessageSquare, Settings2, BarChart3,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/lib/context/RoleContext";
 import MedievalAvatar, { getUserAvatar } from "@/components/MedievalAvatars";
-import { Logo } from "@/components/ui/Logo";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
-import { useTrafficStore } from "@/stores/useTrafficStore";
+import { ehDoQuadro } from "@/lib/design/dono";
 import { useNav, SIDEBAR_W, SIDEBAR_W_EXPANDED } from "@/lib/context/NavContext";
 import { useState, useEffect, useMemo } from "react";
 
@@ -52,7 +51,7 @@ export const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/calendar",      icon: Calendar,        label: "Calendário", roles: ["admin","manager","traffic","social","designer"] },
   { href: "/traffic",       icon: TrendingUp,      label: "Tráfego",    roles: ["admin","manager","traffic"],                    hasSecondary: true, group: "operacao" },
   { href: "/social",        icon: Instagram,       label: "Social",     roles: ["admin","manager","social","designer"],          hasSecondary: true, group: "operacao" },
-  { href: "/meus-clientes", icon: Users,           label: "Meus Clientes", roles: ["traffic","social","designer"],               group: "operacao" },
+  { href: "/meus-clientes", icon: UserCheck,       label: "Meus Clientes", roles: ["traffic","social","designer"],               group: "operacao" },
   // O Radar mora DENTRO daqui: olhar o que o mercado mostra faz parte de planejar a semana, não é
   // outra área. Uma aba a menos pra quem já trabalha com Social, Design e Tarefas abertas.
   { href: "/planejamento",  icon: CalendarClock,   label: "Planejamento", roles: ["admin","manager","social","designer"],        group: "operacao" },
@@ -61,12 +60,11 @@ export const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/clients",       icon: Users,           label: "Clientes",   roles: ["admin","manager"],                              hasSecondary: true, group: "clientes" },
   { href: "/crm",           icon: Handshake,       label: "Comercial",  roles: ["admin","manager","comercial"], hasSecondary: true, group: "clientes" },
   { href: "/prospeccao",    icon: Radar,           label: "Prospecção", roles: ["admin","manager"], hasSecondary: true,           group: "clientes" },
-  { href: "/contratos",     icon: FileText,        label: "Contratos",  roles: ["admin","manager"],                              group: "clientes" },
+  { href: "/contratos",     icon: FileSignature,   label: "Contratos",  roles: ["admin","manager"],                              group: "clientes" },
   { href: "/churn",         icon: Thermometer,     label: "Termômetro",  roles: ["admin","manager"],                             group: "clientes" },
   { href: "/jornada",       icon: HeartPulse,      label: "Jornada CS",  roles: ["admin","manager","social"],                    group: "clientes" },
   { href: "/carteira",      icon: Layers,          label: "Carteira",    roles: ["admin","manager"],                             group: "clientes" },
-  { href: "/broadcasts",    icon: Megaphone,       label: "Comunicados", roles: ["admin","manager"],                             group: "time" },
-  { href: "/sobre",         icon: FileText,        label: "Sobre o Sistema", roles: ["admin","manager","traffic","social","designer"], group: "time" },
+  { href: "/sobre",         icon: Info,            label: "Sobre o Sistema", roles: ["admin","manager","traffic","social","designer"], group: "time" },
   { href: "/automations",   icon: Zap,             label: "Automações", roles: ["admin","manager"],                              group: "time" },
   { href: "/agente",        icon: Bot,             label: "Agente Lone", roles: ["admin","manager"],                             group: "time" },
   { href: "/goals",         icon: Target,          label: "Metas & OKRs", roles: ["admin","manager"],                            group: "ceo" },
@@ -93,15 +91,14 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
     sections: [
       {
         items: [
-          { label: "Rotina Diária",    icon: ClipboardCheck, tab: "rotina",      badgeKey: "trafficPending" },
+          { label: "Rotina Diária",    icon: ClipboardCheck, tab: "rotina" },
           { label: "Status Clientes",  icon: Users2,         tab: "status" },
-          { label: "Kanban Tarefas",   icon: Layers,         tab: "kanban",      badgeKey: "trafficTasks" },
         ],
       },
       {
         title: "Verba",
         items: [
-          { label: "Anúncios Meta",            icon: Megaphone,   tab: "anuncios",   badgeKey: "activeCampaigns" },
+          { label: "Anúncios Meta",            icon: Megaphone,   tab: "anuncios" },
           { label: "Saldos, Verba & Alertas",  icon: Activity,    href: "/traffic/budgets" },
           { label: "Saúde dos Criativos",      icon: HeartPulse,  href: "/traffic/criativos" },
         ],
@@ -109,8 +106,6 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
       {
         title: "Relatórios",
         items: [
-          { label: "Relatórios Mensais",  icon: BarChart2,     tab: "relatorios" },
-          { label: "Análise AI",          icon: Brain,         tab: "report" },
           { label: "Grupos dos Clientes", icon: MessageCircle, href: "/settings/grupos" },
         ],
       },
@@ -123,8 +118,7 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
         items: [
           { label: "Clientes",           icon: Users2,        tab: "carteira",   badgeKey: "socialClients" },
           { label: "Board de Produção",  icon: Layers,        tab: "kanban",     badgeKey: "socialPending" },
-          { label: "Calendário Editorial",icon: Calendar,     tab: "calendar" },
-          { label: "Inbox de Aprovação", icon: Inbox,         tab: "relatorios", badgeKey: "socialApproval" },
+          { label: "Inbox de Aprovação", icon: Inbox,         tab: "aprovacao",  badgeKey: "socialApproval" },
         ],
       },
       {
@@ -132,7 +126,6 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
         items: [
           { label: "Métricas",           icon: BarChart2,     tab: "metricas" },
           { label: "Entregas Mensais",   icon: Activity,      tab: "entregas" },
-          { label: "Relatórios",         icon: FileText,      tab: "relatorios" },
         ],
       },
       {
@@ -140,7 +133,6 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
         items: [
           { label: "Onboarding",         icon: ClipboardCheck,tab: "onboarding", badgeKey: "socialOnboarding" },
           { label: "Acessos & Senhas",   icon: ShieldCheck,   tab: "acessos" },
-          { label: "Chat Interno",       icon: MessageCircle, tab: "chat" },
         ],
       },
     ],
@@ -150,10 +142,11 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
     sections: [
       {
         items: [
-          { label: "Quadro de Tarefas", icon: Layers,        tab: "requests", badgeKey: "designQueued" },
-          { label: "Meus Clientes",    icon: Users,          tab: "clientes" },
-          { label: "Minhas Tarefas",   icon: ClipboardCheck, tab: "kanbans" },
-          { label: "Performance",      icon: Activity,       tab: "performance" },
+          { label: "Kanbans Social Media", icon: Instagram,      tab: "kanbans" },
+          { label: "Quadro de Tarefas",    icon: Layers,         tab: "requests", badgeKey: "designQueued" },
+          { label: "Meus Clientes",        icon: UserCheck,      tab: "clientes" },
+          { label: "Performance",          icon: Activity,       tab: "performance" },
+          { label: "Histórico",            icon: History,        tab: "history" },
         ],
       },
     ],
@@ -229,13 +222,11 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
 export default function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
-  const { role, currentProfile, roleLabel, logout } = useRole();
+  const { role, currentUser, currentProfile, roleLabel, logout } = useRole();
   const clients = useClientsStore((s) => s.clients);
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
-  const tasks = useOperationalStore((s) => s.tasks);
   const onboarding = useOperationalStore((s) => s.onboarding);
-  const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
   const { secondaryOpen, setSecondaryOpen, sidebarExpanded: expanded, setSidebarExpanded: setExpanded, setPendingTab, currentTab, mobileOpen, setMobileOpen } = useNav();
 
   const visibleItems = useMemo(
@@ -281,13 +272,6 @@ export default function Sidebar() {
   const secondaryConfig = activePrimary ? SECONDARY_NAV[activePrimary] : null;
 
   // ── Badge values ──────────────────────────────────────────────
-  const today          = new Date().toISOString().slice(0, 10);
-  const activeClients  = clients.filter((c) => c.status !== "onboarding");
-  const todayChecks    = trafficRoutineChecks.filter((c) => c.date === today);
-  const trafficPending = activeClients.filter(
-    (c) => !todayChecks.some((ch) => ch.clientId === c.id && ch.type === "support")
-  ).length;
-  const trafficTasks   = tasks.filter((t) => t.role === "traffic" && t.status !== "done").length;
   const atRisk         = clients.filter((c) => c.status === "at_risk").length;
 
   // Social badges
@@ -295,19 +279,21 @@ export default function Sidebar() {
   const socialPending     = contentCards.filter(
     (c) => !["scheduled", "published"].includes(c.status)
   ).length;
+  // Card já aprovado pelo cliente continua em client_approval até alguém agendar — não é pendência.
   const socialApproval    = contentCards.filter(
-    (c) => c.status === "approval" || c.status === "client_approval"
+    (c) => c.status === "approval" || (c.status === "client_approval" && !c.clientApprovedAt)
   ).length;
   const socialOnboarding  = Object.values(onboarding).reduce(
     (sum, items) => sum + items.filter((it) => !it.completed).length, 0
   );
 
   // Design badges
-  const designQueued = designRequests.filter((r) => r.status === "queued").length;
+  // Designer vê a fila do próprio quadro (mesma regra de dono do /design), não a da agência inteira.
+  const designQueued = designRequests.filter(
+    (r) => r.status === "queued" && (role !== "designer" || ehDoQuadro(r, clients, currentUser))
+  ).length;
 
   const badges: Record<string, number> = {
-    trafficPending,
-    trafficTasks,
     atRisk,
     socialClients,
     socialPending,
@@ -372,7 +358,7 @@ export default function Sidebar() {
           "relative shrink-0 rounded-xl flex items-center transition-all duration-200 ease-out group",
           expanded ? "w-full gap-3 px-3 h-10" : "w-10 h-10 justify-center",
           isPage
-            ? "text-primary bg-lone-brand-bg-soft border border-primary"
+            ? "text-primary bg-lone-brand-bg-soft"
             : isSection
             ? "text-primary bg-lone-brand-bg-soft"
             : "text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -413,19 +399,17 @@ export default function Sidebar() {
       )}
 
       <aside className={cn(
-        "fixed left-0 top-0 bottom-0 z-50 flex flex-col justify-between py-5 bg-sidebar transition-all duration-[400ms]",
+        "fixed left-0 top-0 bottom-0 z-50 flex flex-col justify-between py-5 bg-sidebar border-r border-sidebar-border transition-all duration-[400ms]",
         "ease-[cubic-bezier(0.16,1,0.3,1)]",
         expanded ? "w-[200px] items-start px-3" : "w-[72px] items-center",
         mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
-        {/* Right-edge — ultra subtle gradient border */}
-        <div className="absolute top-0 right-0 bottom-0 w-px bg-gradient-to-b from-transparent via-border to-transparent pointer-events-none" />
-
-        {/* Logo */}
-        <Link href="/" className="group shrink-0">
-          <div className="w-10 h-10 rounded-2xl bg-card border border-border flex items-center justify-center group-hover:scale-[1.02] transition-all duration-300 overflow-hidden">
-            <Logo className="w-6 h-6" priority />
-          </div>
+        {/* Logo — o tailwind.config não tem darkMode:"class", então `dark:` seguiria o SO e não o tema escolhido. */}
+        <Link href="/" className="group shrink-0 w-10 h-10 flex items-center justify-center" aria-label="Lone Mídia — início">
+          <img src="/brand/logo-mark-on-light.png" alt="Lone Mídia" width={192} height={239}
+            className="w-7 h-auto [.dark_&]:hidden group-hover:scale-[1.04] transition-transform duration-300" />
+          <img src="/brand/logo-mark-on-dark.png" alt="" aria-hidden width={192} height={239}
+            className="w-7 h-auto hidden [.dark_&]:block group-hover:scale-[1.04] transition-transform duration-300" />
         </Link>
 
         {/* Expand/Collapse toggle */}

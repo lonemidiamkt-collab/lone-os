@@ -24,28 +24,29 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { requireCron } from "@/lib/api/cron-guard";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { responsavelDeTrafego } from "@/lib/cs/mencao";
 import { temTrafego } from "@/lib/clients/servico";
 import { statusPorResultado, saiDeOnboarding, ROTULO, type Veredito } from "@/lib/traffic/status-resultado";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
+import { estaPausado } from "@/lib/clients/pausa";
 
 const MANUAL_VALE_DIAS = 7;
 
 interface Mudanca { cliente: string; de: string; para: string; motivo: string }
 
 export async function POST(req: NextRequest) {
-  const denied = await requireCronOrUser(req);
+  const denied = requireCron(req);
   if (denied) return denied;
   const preview = req.nextUrl.searchParams.get("preview") !== null;
 
   const hoje = ymd(spNow());
-  const desde = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const desde = ymd(spNow(new Date(Date.now() - 7 * 86400000)));
 
   const [cliRes, metRes, polRes, contasRes] = await Promise.all([
     supabaseAdmin.from("clients")
-      .select("id, name, nome_fantasia, status, status_origem, status_atualizado_em, service_type, created_at")
+      .select("id, name, nome_fantasia, status, status_origem, status_atualizado_em, service_type, created_at, paused_at, paused_until")
       .eq("lifecycle", "ativo"),
     supabaseAdmin.from("metric_snapshots")
       .select("client_id, spend, conversions")
@@ -54,7 +55,12 @@ export async function POST(req: NextRequest) {
       .select("client_id, cpl_alerta, cpl_critico, conversas_minimas"),
     supabaseAdmin.from("ad_accounts").select("client_id"),
   ]);
-  if (cliRes.error) return NextResponse.json({ error: cliRes.error.message }, { status: 500 });
+  // Qualquer leitura falha = aborta. Sem métricas todo mundo virava "Em risco" e o grupo era avisado.
+  const falha = cliRes.error ?? metRes.error ?? polRes.error ?? contasRes.error;
+  if (falha) {
+    console.error("[status-clientes] leitura falhou, nada gravado nem avisado:", falha.message);
+    return NextResponse.json({ ok: false, error: falha.message }, { status: 500 });
+  }
 
   // Agrega 7 dias por cliente.
   const gasto = new Map<string, { gasto: number; conv: number }>();
@@ -74,6 +80,7 @@ export async function POST(req: NextRequest) {
   const escritas: { id: string; status: string; motivo: string }[] = [];
 
   for (const c of cliRes.data ?? []) {
+    if (estaPausado(c)) continue; // pausado não anuncia de propósito — não se julga resultado
     const nome = (c.nome_fantasia as string) || (c.name as string) || "Cliente";
     const id = c.id as string;
     const atual = (c.status as string) || "good";

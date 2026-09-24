@@ -3,6 +3,8 @@ import typography from "@tailwindcss/typography";
 import tailwindcssAnimate from "tailwindcss-animate";
 
 const config: Config = {
+  // next-themes põe .dark no <html>; sem isto `dark:` seguia o sistema operacional, não o botão de tema.
+  darkMode: "class",
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",

@@ -2,6 +2,7 @@
 // Centraliza o que mostrar na coluna "Saldo disponível" conforme tipo de conta.
 
 import { type BalanceSeverity } from "@/lib/meta/account-balance";
+import { metaAccountStatus } from "./account-status";
 
 export type DisplaySeverity = "ok" | "warning" | "critical" | "paused" | "review";
 
@@ -46,12 +47,10 @@ export function getBalanceDisplay(a: AccountForDisplay): BalanceDisplay {
 
   // 1. Status da conta (prioridade máxima — antes de qualquer lógica de saldo)
   const st = a.account_status;
-  if (st === 2) return { primary: "Desativada",   secondary: "—",              severity: "paused"   };
-  if (st === 3) return { primary: "Em revisão",   secondary: "—",              severity: "review"   };
-  if (st === 7) return { primary: "Pendente",     secondary: "—",              severity: "review"   };
-  if (st === 9) return { primary: "Grace period", secondary: "Risco de pausa", severity: "critical" };
   if (st !== null && st !== 1) {
-    return { primary: `Status ${st}`, secondary: "—", severity: "paused" };
+    const s = metaAccountStatus(st);
+    const secondary = st === 3 || st === 8 ? "Regularizar pagamento na Meta" : st === 9 ? "Risco de pausa" : "—";
+    return { primary: s.label, secondary, severity: s.gravidade === "ok" ? "paused" : s.gravidade };
   }
 
   // 1.5. CARTÃO DE CRÉDITO: a Meta cobra direto no cartão — a conta não "esvazia" saldo, então

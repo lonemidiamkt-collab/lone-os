@@ -4,22 +4,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
-
-const KEY_MAP: Record<string, string> = {
-  status: "status", priority: "priority", imageUrl: "image_url",
-  statusChangedAt: "status_changed_at", columnEnteredAt: "column_entered_at",
-  designRequestId: "design_request_id", designerDeliveredAt: "designer_delivered_at",
-  designerDeliveredBy: "designer_delivered_by", socialConfirmedAt: "social_confirmed_at",
-  socialConfirmedBy: "social_confirmed_by", caption: "caption", hashtags: "hashtags",
-  observations: "observations", platform: "platform", dueDate: "due_date", dueTime: "due_time",
-  nonDeliveryReason: "non_delivery_reason", nonDeliveryReportedBy: "non_delivery_reported_by",
-  nonDeliveryReportedAt: "non_delivery_reported_at", workStartedAt: "work_started_at",
-  totalTimeSpentMs: "total_time_spent_ms", publishVerifiedAt: "publish_verified_at",
-  publishVerifiedBy: "publish_verified_by", blockedReason: "blocked_reason",
-  blockedBy: "blocked_by", blockedAt: "blocked_at", scheduledAt: "scheduled_at",
-  requestedByTraffic: "requested_by_traffic", trafficSuggestion: "traffic_suggestion",
-  lastKanbanActivity: "last_kanban_activity", archivedAt: "archived_at",
-};
+import { papelDoUsuario, GESTAO } from "@/lib/api/require-role";
+import { montarUpdate } from "../campos";
 
 export async function POST(req: NextRequest) {
   const user = await getServerUser(req);
@@ -38,14 +24,11 @@ export async function POST(req: NextRequest) {
     | undefined;
   delete updates.contentApproval;
 
-  const row: Record<string, unknown> = {};
-  for (const [key, val] of Object.entries(updates)) {
-    const col = KEY_MAP[key];
-    if (col) row[col] = val;
-    else if (!/[A-Z]/.test(key)) row[key] = val; // já é snake_case → passa direto
-    // camelCase não-mapeado = coluna inexistente: DESCARTA (antes quebrava o update inteiro → 500).
-    else console.warn("[content-cards/update] campo não mapeado ignorado:", key);
-  }
+  const papel = await papelDoUsuario(user);
+  const gestao = !!papel && GESTAO.includes(papel);
+  const montado = montarUpdate(updates, { gestao, podeArquivar: gestao || papel === "social" });
+  if (!montado.ok) return NextResponse.json({ error: montado.erro }, { status: montado.status });
+  const row = montado.row;
 
   if (Object.keys(row).length === 0 && !contentApproval) {
     return NextResponse.json({ success: true });
@@ -70,14 +53,11 @@ export async function POST(req: NextRequest) {
         .catch((e) => console.error("[content-cards] verificação de arte falhou (ignorado):", e));
     }
 
-    // Sincroniza briefing E prazo pro card do DESIGNER: ele lê design_requests.briefing/deadline
-    // (uma CÓPIA feita quando a arte foi solicitada). Sem isso, o social edita o briefing ou remarca
-    // a data e o designer continua vendo o texto/prazo antigo — foi o bug reportado. O card mostra a
-    // data nova e a fila do designer a antiga → duas datas divergentes. Best-effort: não derruba o save.
-    if (row.briefing !== undefined || row.due_date !== undefined || row.title !== undefined) {
+    // Sincroniza PRAZO e título pro card do DESIGNER (design_requests guarda uma cópia). O briefing
+    // NÃO: o do designer é o briefing da arte (IA/revisado) e o save do card o sobrescrevia.
+    if (row.due_date !== undefined || row.title !== undefined) {
       try {
         const drUpdate: Record<string, unknown> = {};
-        if (row.briefing !== undefined) drUpdate.briefing = row.briefing;
         if (row.due_date !== undefined) drUpdate.deadline = row.due_date;
         // O design_request guarda o título como "Arte: <título do card>" — espelha ao renomear.
         if (row.title !== undefined) drUpdate.title = `Arte: ${row.title}`;
@@ -90,7 +70,7 @@ export async function POST(req: NextRequest) {
           await supabaseAdmin.from("design_requests").update(drUpdate).eq("content_card_id", id as string);
         }
       } catch (e) {
-        console.error("[content-cards/update] sync briefing/prazo→design_request falhou (ignorado):", e);
+        console.error("[content-cards/update] sync prazo/título→design_request falhou (ignorado):", e);
       }
     }
 

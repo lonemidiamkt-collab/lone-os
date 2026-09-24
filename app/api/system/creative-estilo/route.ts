@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { comExecucao, anotar } from "@/lib/obs/correlacao";
 import { lerEstiloDasArtes } from "@/lib/traffic/estilo-ler";
@@ -13,7 +13,7 @@ import { lerEstiloDasArtes } from "@/lib/traffic/estilo-ler";
 // venceu (45 dias) ou ganhou 6+ artes novas. Print subido por gente prevalece enquanto vale.
 // Erro de um cliente não para os outros; a resposta lista cada um e vai para agent_runs.
 export async function POST(req: NextRequest) {
-  const gate = await requireCronOrUser(req);
+  const gate = requireCron(req); // só o cron: qualquer logado disparava lote pesado (IA/Meta)
   if (gate) return gate;
   const max = Math.min(60, Math.max(1, Number(req.nextUrl.searchParams.get("max") ?? 12) || 12));
   const forcar = req.nextUrl.searchParams.get("forcar") === "1";

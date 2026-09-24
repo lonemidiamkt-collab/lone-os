@@ -13,6 +13,9 @@ import {
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { DIAG_QUESTIONS } from "@/lib/fichaViva/questions";
 import type { GrowthSummary } from "@/lib/fichaViva/growth";
+import { chamar } from "@/lib/api/chamar";
+import { linkWhatsapp } from "@/lib/portal/contato";
+import { mesesPermitidosCliente, inicioJanelaMeses } from "@/lib/portal/mesesCliente";
 
 interface SeriePonto { month: string; revenue: number; vendas: number | null; ticket: number | null }
 interface AccessData {
@@ -30,13 +33,16 @@ const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "O
 const mLabel = (ym: string) => { const [y, m] = ym.split("-"); return `${MESES[+m - 1]}/${y.slice(2)}`; };
 
 /** Agrega a série por Mês / Trimestre (calendário) / Semestre — ticket = ΣfatΣvendas. */
-function aggregate(series: SeriePonto[], period: Period): { label: string; fat: number; ticket: number | null }[] {
+function aggregate(series: SeriePonto[], period: Period, agora: Date = new Date()): { label: string; fat: number; ticket: number | null }[] {
   const data = series.filter((r) => r.revenue > 0);
   if (period === "mes") return data.map((r) => ({ label: mLabel(r.month), fat: r.revenue, ticket: r.vendas ? r.revenue / r.vendas : null }));
   if (period === "sem") {
-    const fat = data.reduce((s, r) => s + r.revenue, 0);
-    const ven = data.reduce((s, r) => s + (r.vendas || 0), 0);
-    return data.length ? [{ label: "Semestre", fat, ticket: ven ? fat / ven : null }] : [];
+    // Semestre = os últimos 6 meses; antes somava o histórico inteiro sob o nome "Semestre".
+    const desde = inicioJanelaMeses(6, agora);
+    const janela = data.filter((r) => r.month >= desde);
+    const fat = janela.reduce((s, r) => s + r.revenue, 0);
+    const ven = janela.reduce((s, r) => s + (r.vendas || 0), 0);
+    return janela.length ? [{ label: "Últimos 6 meses", fat, ticket: ven ? fat / ven : null }] : [];
   }
   const map = new Map<string, SeriePonto[]>();
   data.forEach((r) => { const [y, m] = r.month.split("-").map(Number); const k = `${y}-Q${Math.ceil(m / 3)}`; (map.get(k) ?? map.set(k, []).get(k)!).push(r); });
@@ -71,26 +77,17 @@ export default function FichaVivaClient({ token, scope }: { token: string; scope
     e?.preventDefault();
     if (scope === "full" && !code.trim()) return; // raiox não exige código
     setUnlocking(true); setGateError("");
-    try {
-      const res = await fetch(`/api/ficha/${token}/access`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || "Não foi possível entrar.");
-      setData(j as AccessData);
-    } catch (err) {
-      setGateError(err instanceof Error ? err.message : "Não foi possível entrar.");
-    } finally { setUnlocking(false); }
+    const r = await chamar<AccessData>(`/api/ficha/${token}/access`, { code });
+    if (r.ok && r.data) setData(r.data);
+    else setGateError(r.status === 0 ? "Sem conexão agora. Tente de novo." : (r.erro || "Não foi possível entrar."));
+    setUnlocking(false);
   }
 
-  async function refresh() {
-    try {
-      const res = await fetch(`/api/ficha/${token}/access`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }),
-      });
-      if (res.ok) setData(await res.json());
-    } catch { /* silencioso */ }
+  /** Recarrega os números depois de salvar. `false` = não conseguiu (a tela avisa). */
+  async function refresh(): Promise<boolean> {
+    const r = await chamar<AccessData>(`/api/ficha/${token}/access`, { code });
+    if (r.ok && r.data) { setData(r.data); return true; }
+    return false;
   }
 
   // ── Sem dados ainda ────────────────────────────────────────────────────
@@ -125,7 +122,7 @@ export default function FichaVivaClient({ token, scope }: { token: string; scope
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
             {unlocking ? <Loader2 size={16} className="animate-spin" /> : <Lock size={15} />} Entrar
           </button>
-          <a href={`https://wa.me/5522981530700`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors">
+          <a href={linkWhatsapp()} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 min-h-[44px] text-xs text-muted-foreground hover:text-primary transition-colors">
             <MessageCircle size={12} /> Não sabe seu código? Fale com a Lone
           </a>
         </form>
@@ -153,7 +150,7 @@ export default function FichaVivaClient({ token, scope }: { token: string; scope
             {([["crescimento", "01", "Meu Crescimento", <LineIcon key="i" size={13} />],
                ["raiox", "02", "Raio-X Comercial", <Sparkles key="i" size={13} />]] as [Sub, string, string, React.ReactNode][]).map(([id, num, label, icon]) => (
               <button key={id} onClick={() => setSub(id)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${sub === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                className={`flex items-center gap-2 px-3.5 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${sub === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
                 <span className={`text-[10px] font-bold ${sub === id ? "opacity-70" : "opacity-50"}`}>{num}</span>{icon}{label}
               </button>
             ))}
@@ -165,7 +162,7 @@ export default function FichaVivaClient({ token, scope }: { token: string; scope
           : <RaioX token={token} code={code} alreadyAnswered={data.alreadyAnswered} whatsappPhone={data.whatsappPhone} />}
 
         <footer className="pt-2 text-center">
-          <a href={`https://wa.me/${data.whatsappPhone}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors">
+          <a href={linkWhatsapp(data.whatsappPhone)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 min-h-[44px] text-xs text-muted-foreground hover:text-primary transition-colors">
             <MessageCircle size={12} /> Falar com a equipe da Lone
           </a>
         </footer>
@@ -175,9 +172,10 @@ export default function FichaVivaClient({ token, scope }: { token: string; scope
 }
 
 // ── 01 · Meu Crescimento ──────────────────────────────────────────────────
-function Crescimento({ token, code, growth, series, onSaved }: { token: string; code: string; growth: GrowthSummary; series: SeriePonto[]; onSaved: () => void }) {
-  const now = new Date();
-  const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+function Crescimento({ token, code, growth, series, onSaved }: { token: string; code: string; growth: GrowthSummary; series: SeriePonto[]; onSaved: () => Promise<boolean> }) {
+  // Só mês atual ou anterior (SP) — é o que o servidor aceita pelo link.
+  const [mesAnterior, mesAtual] = mesesPermitidosCliente();
+  const [month, setMonth] = useState(mesAtual);
   const [fat, setFat] = useState("");
   const [vendas, setVendas] = useState("");
   const [saving, setSaving] = useState(false);
@@ -191,18 +189,12 @@ function Crescimento({ token, code, growth, series, onSaved }: { token: string; 
   async function save() {
     if (!fat.trim()) { setErr("Informe o faturamento do mês."); return; }
     setSaving(true); setErr("");
-    try {
-      const res = await fetch(`/api/ficha/${token}/growth`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, month, revenue: Number(fat), vendas: vendas ? Number(vendas) : null }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || "Não foi possível salvar.");
-      setSaved(true); setFat(""); setVendas("");
-      setTimeout(() => setSaved(false), 2000);
-      onSaved();
-    } catch (e) { setErr(e instanceof Error ? e.message : "Não foi possível salvar."); }
-    finally { setSaving(false); }
+    const r = await chamar(`/api/ficha/${token}/growth`, { code, month, revenue: Number(fat), vendas: vendas ? Number(vendas) : null });
+    setSaving(false);
+    if (!r.ok) { setErr(r.status === 0 ? "Sem conexão agora. Tente de novo." : (r.erro || "Não foi possível salvar.")); return; }
+    setSaved(true); setFat(""); setVendas("");
+    setTimeout(() => setSaved(false), 2000);
+    if (!(await onSaved())) setErr("Salvo! Só não consegui atualizar o gráfico — recarregue a página para ver.");
   }
 
   return (
@@ -240,7 +232,7 @@ function Crescimento({ token, code, growth, series, onSaved }: { token: string; 
               <div className="flex bg-card border border-border rounded-lg p-0.5">
                 {([["mes", "Mês"], ["tri", "Trimestre"], ["sem", "Semestre"]] as [Period, string][]).map(([p, l]) => (
                   <button key={p} onClick={() => setPeriod(p)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${period === p ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}>{l}</button>
+                    className={`px-3 py-1.5 min-h-[44px] rounded-md text-xs font-medium transition-colors ${period === p ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}>{l}</button>
                 ))}
               </div>
             </div>
@@ -307,12 +299,15 @@ function Crescimento({ token, code, growth, series, onSaved }: { token: string; 
       {/* Lançar faturamento */}
       <section className="card space-y-3">
         <h2 className="text-lone-h2 font-semibold">Lançar meu faturamento</h2>
-        <p className="text-lone-caption text-muted-foreground">Informe o mês que você quer registrar. O ticket médio a Lone calcula.</p>
+        <p className="text-lone-caption text-muted-foreground">Dá pra lançar o mês atual ou o anterior. O ticket médio a Lone calcula.</p>
         <div className="grid sm:grid-cols-3 gap-3">
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Mês</label>
-            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-              className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
+            <select value={month} onChange={(e) => setMonth(e.target.value)}
+              className="w-full min-h-[44px] bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50">
+              <option value={mesAtual}>{mLabel(mesAtual)} (este mês)</option>
+              <option value={mesAnterior}>{mLabel(mesAnterior)} (mês passado)</option>
+            </select>
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Faturamento (R$)</label>
@@ -346,16 +341,10 @@ function RaioX({ token, code, alreadyAnswered, whatsappPhone }: { token: string;
   async function submit() {
     if (Object.values(answers).every((v) => !v.trim())) { setErr("Responda pelo menos uma pergunta."); return; }
     setSending(true); setErr("");
-    try {
-      const res = await fetch(`/api/ficha/${token}/submit`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, respostas: answers }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || "Não foi possível enviar.");
-      setSent(true);
-    } catch (e) { setErr(e instanceof Error ? e.message : "Não foi possível enviar."); }
-    finally { setSending(false); }
+    const r = await chamar(`/api/ficha/${token}/submit`, { code, respostas: answers });
+    setSending(false);
+    if (r.ok) setSent(true);
+    else setErr(r.status === 0 ? "Sem conexão agora. Suas respostas continuam aqui — tente de novo." : (r.erro || "Não foi possível enviar."));
   }
 
   if (sent) return (
@@ -363,7 +352,7 @@ function RaioX({ token, code, alreadyAnswered, whatsappPhone }: { token: string;
       <Check size={18} className="text-lone-success shrink-0 mt-0.5" />
       <div>
         <p className="text-sm font-semibold text-lone-success">Recebemos, obrigado!</p>
-        <p className="text-xs text-muted-foreground mt-0.5">Nosso time comercial vai analisar e falar com você. Qualquer coisa, chame no <a href={`https://wa.me/${whatsappPhone}`} target="_blank" rel="noreferrer" className="text-primary underline">WhatsApp</a>.</p>
+        <p className="text-xs text-muted-foreground mt-0.5">Nosso time comercial vai analisar e falar com você. Qualquer coisa, chame no <a href={linkWhatsapp(whatsappPhone)} target="_blank" rel="noreferrer" className="text-primary underline">WhatsApp</a>.</p>
       </div>
     </div>
   );
@@ -400,7 +389,7 @@ function RaioX({ token, code, alreadyAnswered, whatsappPhone }: { token: string;
 function Mini({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border p-3">
-      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-sm font-bold">{value}</p>
     </div>
   );

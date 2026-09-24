@@ -17,15 +17,12 @@ function useColaboradores() {
   const { profiles } = useRole();
   return profiles.map((p) => ({ name: p.name, role: p.role }));
 }
-import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
+import { getPriorityColor, getPriorityLabel, todaySP } from "@/lib/utils";
 import type { Priority, Role, Task } from "@/lib/types";
 import { toast } from "sonner";
 
-// data local YYYY-MM-DD (fuso do navegador — BRT), pra comparar com due_date (date seca)
-const hoje = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
+// Dia de São Paulo, não o do navegador: quem abre de fora do fuso via "atrasada" um dia antes.
+const hoje = () => todaySP();
 const fmtData = (iso?: string) => {
   if (!iso) return "";
   const [y, m, d] = iso.slice(0, 10).split("-");
@@ -200,11 +197,14 @@ function NovaTarefaModal({
   clients, currentUser, onClose, onCriar,
 }: {
   clients: { id: string; name: string }[]; currentUser: string;
-  onClose: () => void; onCriar: (t: Omit<Task, "id">) => void;
+  onClose: () => void; onCriar: (t: Omit<Task, "id">) => Promise<void>;
 }) {
   const COLABORADORES = useColaboradores();
   const [title, setTitle] = useState("");
-  const [assignedTo, setAssignedTo] = useState(COLABORADORES[0]?.name ?? "");
+  // Padrão = quem está criando (o caso mais comum é anotar pra si). O 1º da lista era um nome
+  // qualquer, e a tarefa ia pra pessoa errada sem ninguém perceber.
+  const [assignedTo, setAssignedTo] = useState(currentUser);
+  const [erro, setErro] = useState<string | null>(null);
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [clientId, setClientId] = useState("");
@@ -212,14 +212,21 @@ function NovaTarefaModal({
   const [salvando, setSalvando] = useState(false);
 
   const submit = async () => {
-    if (!title.trim() || !assignedTo) return;
-    setSalvando(true);
+    if (!title.trim()) return;
     const prof = COLABORADORES.find((c) => c.name === assignedTo);
+    if (!assignedTo || !prof) {
+      setErro(COLABORADORES.length === 0
+        ? "A lista da equipe não carregou — recarregue a página para escolher o colaborador."
+        : "Escolha um colaborador da equipe.");
+      return;
+    }
+    setErro(null);
+    setSalvando(true);
     const cli = clients.find((c) => c.id === clientId);
     await onCriar({
       title: title.trim(),
       assignedTo,
-      role: (prof?.role ?? "social") as Role,
+      role: prof.role as Role,
       status: "pending",
       priority,
       dueDate: dueDate || undefined,
@@ -252,8 +259,9 @@ function NovaTarefaModal({
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-foreground">Colaborador *</label>
-            <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}
+            <select value={assignedTo} onChange={(e) => { setAssignedTo(e.target.value); setErro(null); }}
               className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground focus:border-primary/40 outline-none">
+              {!COLABORADORES.some((c) => c.name === assignedTo) && <option value={assignedTo}>{assignedTo || "— Escolha —"}</option>}
               {COLABORADORES.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
             </select>
           </div>
@@ -292,6 +300,7 @@ function NovaTarefaModal({
             className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary/40 outline-none resize-none" />
         </div>
 
+        {erro && <p className="text-xs text-destructive">{erro}</p>}
         <div className="flex items-center justify-end gap-2 pt-1">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors">Cancelar</button>
           <button onClick={submit} disabled={!title.trim() || salvando}

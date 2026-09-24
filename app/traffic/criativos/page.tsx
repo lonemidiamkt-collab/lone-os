@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { toast } from "sonner";
 import { chamar } from "@/lib/api/chamar";
 import { useRole } from "@/lib/context/RoleContext";
 import OperacaoCriativa from "@/components/traffic/OperacaoCriativa";
@@ -63,24 +63,25 @@ export default function CriativosPage() {
     setPrevia((p) => ({ ...p, [chave]: r.ok && r.data?.url ? { url: r.data.url } : { erro: r.ok ? (r.data?.error ?? "não gerou") : (r.erro ?? "não gerou") } }));
   }
 
-  const replicar = async (adId: string, variacao: { nome: string; muda: string; mantem: string; testa: string }) => {
+  // Um pedido ao designer por vez: dois cliques (ou chaves diferentes) criavam demanda duplicada.
+  const replicar = async (adId: string, variacao: { nome: string; muda: string; mantem: string; testa: string }): Promise<boolean> => {
+    if (replicando) return false;
     const chave = `${adId}|${variacao.nome}`;
     setReplicando(chave); setErro(null);
     try {
-      const r = await authedFetch("/api/traffic/criativos/replicar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adId, variacao }) });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) { setErro(d?.error ?? `HTTP ${r.status}`); return; }
+      const r = await chamar<{ demandaId: string; designer: string | null; prazo: string }>("/api/traffic/criativos/replicar", { adId, variacao });
+      if (!r.ok || !r.data) { toast.error(`Não consegui mandar pro designer: ${r.erro ?? "resposta vazia"}`); return false; }
+      const d = r.data;
       setCriadas((prev) => ({ ...prev, [chave]: { demandaId: d.demandaId, designer: d.designer, prazo: d.prazo } }));
+      toast.success(`Demanda criada${d.designer ? ` para ${d.designer}` : " (cliente sem designer)"} · prazo ${d.prazo.split("-").reverse().join("/")}`);
+      return true;
     } finally { setReplicando(null); }
   };
 
   const carregar = useCallback(async () => {
-    try {
-      const r = await authedFetch("/api/traffic/criativos");
-      const d = (await r.json()) as Resposta;
-      if (!r.ok) { setErro(d.error ?? `HTTP ${r.status}`); return; }
-      setDados(d); setErro(null);
-    } catch { setErro("Não consegui carregar."); }
+    const r = await chamar<Resposta>("/api/traffic/criativos");
+    if (!r.ok || !r.data) { setErro(r.erro ?? "Não consegui carregar."); return; }
+    setDados(r.data); setErro(null);
   }, []);
   useEffect(() => { void carregar(); }, [carregar]);
 
@@ -88,8 +89,8 @@ export default function CriativosPage() {
     if (!dados?.dia) return;
     setOcupado(adId);
     try {
-      const r = await authedFetch("/api/traffic/criativos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adId, dia: dados.dia, rotulo }) });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); setErro(d?.error ?? `HTTP ${r.status}`); return; }
+      const r = await chamar("/api/traffic/criativos", { adId, dia: dados.dia, rotulo });
+      if (!r.ok) { toast.error(`Não consegui salvar o rótulo: ${r.erro}`); return; }
       setDados((prev) => prev ? { ...prev, itens: prev.itens.map((i) => (i.ad_id === adId ? { ...i, rotulo } : i)) } : prev);
     } finally { setOcupado(null); }
   };
@@ -205,9 +206,15 @@ export default function CriativosPage() {
                         <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                           <span className="text-muted-foreground">Outra variável:</span>
                           <input id={`livre-${i.ad_id}`} value={livre[i.ad_id] ?? ""} onChange={(e) => setLivre({ ...livre, [i.ad_id]: e.target.value })} placeholder="ex.: trocar o cenário por loja" className="h-7 min-w-[220px] rounded-lg border border-input bg-background px-2 text-[11px] text-foreground outline-none focus:border-primary" />
-                          <button disabled={!livre[i.ad_id]?.trim() || replicando === `${i.ad_id}|${livre[i.ad_id]}`}
-                            onClick={() => replicar(i.ad_id, { nome: livre[i.ad_id].trim().slice(0, 60), muda: livre[i.ad_id].trim(), mantem: "todo o resto do vencedor (oferta, texto, hierarquia, CTA)", testa: `se "${livre[i.ad_id].trim()}" melhora o resultado mantendo o resto` })}
-                            className="rounded-lg border border-border px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-50">🧬 Replicar com essa</button>
+                          <button disabled={!livre[i.ad_id]?.trim() || replicando !== null}
+                            onClick={async () => {
+                              const txt = livre[i.ad_id].trim();
+                              const ok = await replicar(i.ad_id, { nome: txt.slice(0, 60), muda: txt, mantem: "todo o resto do vencedor (oferta, texto, hierarquia, CTA)", testa: `se "${txt}" melhora o resultado mantendo o resto` });
+                              if (ok) setLivre((prev) => ({ ...prev, [i.ad_id]: "" }));
+                            }}
+                            className="rounded-lg border border-border px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-50">
+                            {replicando === `${i.ad_id}|${(livre[i.ad_id] ?? "").trim().slice(0, 60)}` ? "Criando…" : "🧬 Replicar com essa"}
+                          </button>
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
                           {i.analise.variacoes.map((v, k) => {
@@ -223,7 +230,7 @@ export default function CriativosPage() {
                                   return feita ? (
                                     <p className="mt-1 text-[10px] text-lone-success">✓ Demanda criada{feita.designer ? ` para ${feita.designer}` : " (cliente sem designer — cai em \"sem designer\")"} · prazo {feita.prazo.split("-").reverse().join("/")} · <a href="/design" className="underline">abrir quadro</a></p>
                                   ) : (
-                                    <button onClick={() => replicar(i.ad_id, v)} disabled={replicando === chave}
+                                    <button onClick={() => replicar(i.ad_id, v)} disabled={replicando !== null}
                                       className="mt-1 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
                                       {replicando === chave ? "Criando…" : "🧬 Replicar: mandar pro designer"}
                                     </button>

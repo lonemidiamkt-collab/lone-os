@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Flag, Sparkles, Heart } from "lucide-react";
+import { todaySP } from "@/lib/utils";
 
 type HolidayCategory = "national" | "estadual" | "municipal" | "comercial" | "cultural" | "awareness_month" | "profissao";
 
@@ -43,6 +44,10 @@ interface Props {
   compact?: boolean;
   /** Título customizado. Default: "Datas do mês — {mês}". */
   title?: string;
+  /** Janela móvel a partir de hoje (ignora year/month): só datas de alcance nacional, numa linha. */
+  proximosDias?: number;
+  /** Cidades da carteira: no modo proximosDias, feriado municipal/estadual só entra se casar com uma delas. */
+  cidades?: string[];
 }
 
 function normalizeKey(s: string | undefined): string {
@@ -50,10 +55,20 @@ function normalizeKey(s: string | undefined): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim().replace(/\s+/g, " ");
 }
 
-export default function MonthObservancesAlert({ year, month, nichos = [], uf, city, only, compact = false, title }: Props) {
-  const today = useMemo(() => new Date(), []);
-  const targetYear = year ?? today.getFullYear();
-  const targetMonth = month ?? today.getMonth() + 1;
+/** Soma dias a um "YYYY-MM-DD" sem passar por fuso (meio-dia UTC não vira o dia vizinho). */
+function somarDias(ymd: string, n: number): string {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+export default function MonthObservancesAlert({ year, month, nichos = [], uf, city, only, compact = false, title, proximosDias, cidades }: Props) {
+  // Dia de São Paulo: à noite o relógio UTC já está no dia seguinte (e às vezes no mês seguinte).
+  const hoje = useMemo(() => todaySP(), []);
+  const targetYear = year ?? Number(hoje.slice(0, 4));
+  const targetMonth = month ?? Number(hoje.slice(5, 7));
+  const fimJanela = proximosDias ? somarDias(hoje, proximosDias) : null;
+  const anoFim = fimJanela ? Number(fimJanela.slice(0, 4)) : targetYear;
 
   const [observances, setObservances] = useState<ObservanceFromApi[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -61,13 +76,35 @@ export default function MonthObservancesAlert({ year, month, nichos = [], uf, ci
   useEffect(() => {
     let cancelled = false;
     // Pega tudo na API; filtragem por uf/city é feita client-side pra performance
-    // (1 fetch/ano cacheado pra todas as variações)
-    fetch(`/api/holidays/${targetYear}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (!cancelled && data?.holidays) { setObservances(data.holidays); setLoaded(true); } })
+    // (1 fetch/ano cacheado pra todas as variações). A janela móvel pode virar o ano.
+    const anos = anoFim !== targetYear ? [targetYear, anoFim] : [targetYear];
+    Promise.all(anos.map((a) => fetch(`/api/holidays/${a}`).then((r) => (r.ok ? r.json() : null))))
+      .then((lista) => {
+        if (cancelled) return;
+        setObservances(lista.flatMap((d) => (d?.holidays as ObservanceFromApi[] | undefined) ?? []));
+        setLoaded(true);
+      })
+      // Faixa informativa: sem a API ela só não aparece — não há dado sendo afirmado como vazio.
       .catch(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
-  }, [targetYear]);
+  }, [targetYear, anoFim]);
+
+  const proximas = useMemo(() => {
+    if (!proximosDias || !fimJanela) return [];
+    const minhas = new Set((cidades ?? []).map(normalizeKey).filter(Boolean));
+    return observances
+      .filter((o) => !o.monthLong && o.date >= hoje && o.date <= fimJanela)
+      .filter((o) => {
+        if (o.category === "estadual" || o.category === "municipal") {
+          return (o.cities ?? []).some((c) => minhas.has(normalizeKey(c)));
+        }
+        if (o.category === "profissao") {
+          return nichos.length > 0 && (o.nichos ?? []).some((n) => nichos.includes(n));
+        }
+        return o.category !== "awareness_month";
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [observances, proximosDias, fimJanela, hoje, cidades, nichos]);
 
   const filtered = useMemo(() => {
     const prefix = `${targetYear}-${String(targetMonth).padStart(2, "0")}-`;
@@ -105,6 +142,11 @@ export default function MonthObservancesAlert({ year, month, nichos = [], uf, ci
     return list.sort((a, b) => a.date.localeCompare(b.date));
   }, [observances, targetYear, targetMonth, only, nichos, uf, city]);
 
+  if (proximosDias) {
+    if (!loaded || proximas.length === 0) return null;
+    return <LinhaDeDatas rotulo={title ?? "Próximas datas"} datas={proximas} />;
+  }
+
   if (!loaded || filtered.length === 0) return null;
 
   const monthLabel = MONTHS_PT[targetMonth - 1];
@@ -115,36 +157,11 @@ export default function MonthObservancesAlert({ year, month, nichos = [], uf, ci
   const dailyDates = filtered.filter((o) => !o.monthLong);
 
   if (compact) {
-    return (
-      <div className="rounded-xl border border-border bg-card/[0.02] p-3 mb-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{headerTitle}</span>
-          {awarenessMonths.map((o) => {
-            const v = CATEGORY_VISUAL[o.category];
-            return (
-              <span key={o.name} className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded ${v.bg} ${v.color} border ${v.border}`}>
-                <v.Icon size={10} />
-                <span className="font-medium">{o.name}</span>
-              </span>
-            );
-          })}
-          {dailyDates.map((o) => {
-            const v = CATEGORY_VISUAL[o.category];
-            const day = parseInt(o.date.slice(8, 10), 10);
-            return (
-              <span key={`${o.date}-${o.name}`} className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded ${v.bg} ${v.color} border ${v.border}`}>
-                <strong className="font-bold">{String(day).padStart(2, "0")}</strong>
-                <span>{o.name}</span>
-              </span>
-            );
-          })}
-        </div>
-      </div>
-    );
+    return <LinhaDeDatas rotulo={headerTitle} datas={[...awarenessMonths, ...dailyDates]} />;
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card/[0.02] p-4 mb-4">
+    <div className="rounded-xl border border-border bg-card p-4 mb-4">
       <div className="flex items-center gap-2 mb-3">
         <Sparkles size={14} className="text-primary" />
         <h3 className="text-sm font-semibold text-foreground">{headerTitle}</h3>
@@ -182,5 +199,21 @@ export default function MonthObservancesAlert({ year, month, nichos = [], uf, ci
         </div>
       )}
     </div>
+  );
+}
+
+/** Uma linha discreta: "Próximas datas: 07 Independência · 15 Dia do Cliente". */
+function LinhaDeDatas({ rotulo, datas }: { rotulo: string; datas: ObservanceFromApi[] }) {
+  return (
+    <p className="text-xs text-muted-foreground leading-relaxed">
+      <span className="font-medium">{rotulo}:</span>{" "}
+      {datas.map((o, i) => (
+        <span key={`${o.date}-${o.name}`}>
+          {i > 0 && " · "}
+          {!o.monthLong && <span className="tabular-nums">{o.date.slice(8, 10)} </span>}
+          {o.name}
+        </span>
+      ))}
+    </p>
   );
 }

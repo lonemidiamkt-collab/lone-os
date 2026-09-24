@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { chamar } from "@/lib/api/chamar";
 
 // O cliente manda material pelo painel (Roberto, 31/08). Hoje foto de produto, logo e tabela de
 // preço chegam pelo WhatsApp e somem na rolagem do grupo — quem vai fazer a arte precisa caçar a
@@ -37,10 +38,9 @@ export default function PortalUpload({ token, clientName }: { token: string; cli
         if (observacao.trim()) fd.append("observacao", observacao.trim());
         if (enviadoPor.trim()) fd.append("enviado_por", enviadoPor.trim());
 
-        const res = await fetch(`/api/portal/${token}/upload`, { method: "POST", body: fd });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          setErro(d?.error || `Não consegui enviar "${arquivo.name}".`);
+        const r = await chamar(`/api/portal/${token}/upload`, fd);
+        if (!r.ok) {
+          setErro(r.status === 0 ? "Falha de conexão. Tente de novo." : (r.erro || `Não consegui enviar "${arquivo.name}".`));
           continue;
         }
         ok.push(arquivo.name);

@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { buildSnapshot } from "@/lib/portal/buildSnapshot";
+import { obterSnapshot } from "@/lib/portal/snapshotCache";
+import type { SnapshotData } from "@/lib/portal/types";
+import { WHATSAPP_EQUIPE } from "@/lib/portal/contato";
 import PortalDashboard from "@/components/portal/PortalDashboard";
 import { estaPausado } from "@/lib/clients/pausa";
 
@@ -63,30 +65,19 @@ export default async function PortalPage({
     was_valid: true,
   });
 
-  // Busca snapshot inicial (last_week) — com fallback para dados vazios
-  let initialData = null;
-  try {
-    const { data: cached } = await supabaseAdmin
-      .from("client_report_snapshots")
-      .select("data")
-      .eq("client_id", client.id as string)
-      .eq("period_kind", "last_week")
-      .order("generated_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (cached) {
-      initialData = cached.data;
-    } else {
-      // Sem cache: gera na hora. Se a Meta não responder o essencial, é melhor abrir sem dado
-      // (o painel pede pra tentar de novo) do que abrir uma tela de zeros que o cliente lê como
-      // "não rodou anúncio nenhum".
-      const fresco = await buildSnapshot({ clientId: client.id as string, periodKind: "last_week" });
-      initialData = fresco.ads_status === "indisponivel" ? null : fresco;
+  // Snapshot inicial (last_week) pelo MESMO caminho da rota: respeita a idade do cache. Antes pegava
+  // o último gravado, de qualquer idade. Falhou a Meta → vem "indisponivel" e a tela diz "atualizando".
+  let initialData: SnapshotData | null = null;
+  if (hasAds) {
+    try {
+      initialData = await obterSnapshot(client.id as string, "last_week");
+    } catch (err) {
+      console.error("[portal] falhou o snapshot inicial:", client.id, String(err));
     }
-  } catch (err) {
-    console.error("[portal] falhou o snapshot inicial:", client.id, String(err));
   }
+
+  // Data do rodapé calculada aqui, em SP: `new Date()` no render divergia entre servidor (UTC) e celular.
+  const mesRelatorio = new Date().toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo" });
 
   return (
     <>
@@ -95,7 +86,7 @@ export default async function PortalPage({
         token={token}
         clientId={client.id as string}
         clientName={(client.nome_fantasia as string) || (client.name as string)}
-        whatsappPhone={(client.whatsapp_team_phone as string) || "5522981530700"}
+        whatsappPhone={(client.whatsapp_team_phone as string) || WHATSAPP_EQUIPE}
         welcomeMessage={(client.portal_welcome_message as string) || null}
         initialData={initialData}
         hasAds={hasAds}
@@ -104,6 +95,7 @@ export default async function PortalPage({
         comecando={!hasAds && !client.ig_business_account_id}
         desde={(client.join_date as string) ?? null}
         aprovacaoLigada={process.env.PORTAL_APROVACAO_CLIENTE === "on"}
+        mesRelatorio={mesRelatorio}
       />
     </>
   );

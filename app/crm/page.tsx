@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
 import KanbanBoard, { type KanbanColumn } from "@/components/KanbanBoard";
 import { Button } from "@/components/ui/button";
-import { CRM_ESTAGIOS, type CrmEstagio, type CrmLead, type CrmLeadActivity, type CrmAtividadeTipo, type CrmMeta } from "@/lib/types";
-import { Plus, X, Search, TrendingUp, Wallet, Trophy, Percent, Receipt, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3, Sun } from "lucide-react";
+import { CRM_ESTAGIOS, type CrmEstagio, type CrmLead, type CrmLeadActivity, type CrmAtividadeTipo } from "@/lib/types";
+import { Plus, X, Search, TrendingUp, Trophy, Percent, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3, Sun } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 // ─── Metadados do funil ──────────────────────────────────────────────
@@ -27,10 +28,6 @@ const ABERTOS: CrmEstagio[] = ["lead", "orcamento", "proposta", "reuniao"];
 const CANAIS = ["Indicação", "Tráfego pago", "Instagram", "Prospecção ativa", "Site / formulário", "WhatsApp", "Evento / networking", "Parceria", "Outro"];
 
 // ─── Formatação ──────────────────────────────────────────────────────
-const brl = (v: number | null | undefined) =>
-  v == null ? "—" : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
-const brlCompact = (v: number) =>
-  v >= 1000 ? `R$ ${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(v / 1000)}k` : brl(v);
 const fmtData = (d: string | null) => (d ? new Date(d.length === 10 ? `${d}T12:00:00` : d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : null);
 const hojeYmd = () => new Date().toLocaleDateString("en-CA");
 const diasDesde = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -85,6 +82,7 @@ export default function CrmPage() {
   const { role, currentUser } = useRole();
   const [leads, setLeads] = useState<CrmLead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erroCarga, setErroCarga] = useState<string | null>(null);
   const [tab, setTab] = useState<"hoje" | "dashboard" | "funil" | "agenda" | "relatorios">("hoje");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -97,24 +95,17 @@ export default function CrmPage() {
   const [loadingAtiv, setLoadingAtiv] = useState(false);
   const [novaTipo, setNovaTipo] = useState<CrmAtividadeTipo>("nota");
   const [novoTexto, setNovoTexto] = useState("");
-  // Meta mensal (dashboard).
-  const [meta, setMeta] = useState<CrmMeta | null>(null);
-  const [editMeta, setEditMeta] = useState(false);
-  const [metaInput, setMetaInput] = useState("");
 
   const podeVer = role === "admin" || role === "manager" || role === "comercial";
-  const mesAtualYm = hojeYmd().slice(0, 7);
 
   useEffect(() => {
     if (!podeVer) { setLoading(false); return; }
-    authedFetch("/api/crm/leads")
-      .then((r) => (r.ok ? r.json() : { leads: [] }))
-      .then((d) => setLeads(d.leads ?? []))
-      .finally(() => setLoading(false));
-    authedFetch(`/api/crm/metas?mes=${mesAtualYm}`)
-      .then((r) => (r.ok ? r.json() : { meta: null }))
-      .then((d) => setMeta(d.meta ?? null))
-      .catch(() => {});
+    chamar<{ leads?: CrmLead[] }>("/api/crm/leads").then((r) => {
+      // Falha não vira funil vazio: mostra o erro no lugar dos números.
+      if (!r.ok) { setErroCarga(r.erro); toast.error(r.erro ?? "Não consegui carregar os leads."); }
+      else setLeads(r.data?.leads ?? []);
+      setLoading(false);
+    });
   }, [podeVer]);
 
   // Sidebar secundária nativa: clicar num item seta pendingTab → troca a aba aqui;
@@ -129,15 +120,6 @@ export default function CrmPage() {
     setPendingTab("");
   }, [pendingTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function salvarMeta() {
-    const val = metaInput.trim() === "" ? null : Number(metaInput);
-    const r = await authedFetch("/api/crm/metas", {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mes: mesAtualYm, metaValor: val, metaLeads: meta?.metaLeads ?? null }),
-    }).catch(() => null);
-    if (r?.ok) { const { meta: m } = await r.json(); setMeta(m); setEditMeta(false); }
-  }
-
   // ─── KPIs ──────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     const abertos = leads.filter((l) => ABERTOS.includes(l.estagio));
@@ -145,13 +127,10 @@ export default function CrmPage() {
     const perdidos = leads.filter((l) => l.estagio === "perdido");
     const mesAtual = hojeYmd().slice(0, 7);
     const vendasMes = ganhos.filter((l) => l.fechadoEm && mesDe(l.fechadoEm) === mesAtual);
-    const valorMes = vendasMes.reduce((s, l) => s + (l.valorOrcamento ?? 0), 0);
-    const emJogo = abertos.reduce((s, l) => s + (l.valorOrcamento ?? 0), 0);
+    const reunioesMes = leads.filter((l) => l.reuniaoData && mesDe(l.reuniaoData) === mesAtual);
     const fechados = ganhos.length + perdidos.length;
     const conversao = fechados ? Math.round((ganhos.length / fechados) * 100) : null;
-    const comValor = ganhos.filter((l) => l.valorOrcamento != null);
-    const ticket = comValor.length ? comValor.reduce((s, l) => s + (l.valorOrcamento ?? 0), 0) / comValor.length : null;
-    return { abertos: abertos.length, emJogo, vendasMes: vendasMes.length, valorMes, conversao, ticket };
+    return { abertos: abertos.length, vendasMes: vendasMes.length, reunioesMes: reunioesMes.length, conversao };
   }, [leads]);
 
   // ─── Relatórios ────────────────────────────────────────────────────
@@ -166,24 +145,24 @@ export default function CrmPage() {
     const ganhos = leads.filter((l) => l.estagio === "ganho" && l.fechadoEm);
     const porMes = meses.map((ym) => {
       const vs = ganhos.filter((l) => mesDe(l.fechadoEm!) === ym);
-      return { ym, qtd: vs.length, valor: vs.reduce((s, l) => s + (l.valorOrcamento ?? 0), 0) };
+      return { ym, qtd: vs.length };
     });
-    const maxValor = Math.max(1, ...porMes.map((m) => m.valor));
+    const maxQtd = Math.max(1, ...porMes.map((m) => m.qtd));
 
     // Leads que ENTRARAM em cada mês (por created_at) — captação mês a mês, relatório separado.
     const leadsPorMes = meses.map((ym) => ({ ym, qtd: leads.filter((l) => (l.createdAt || "").slice(0, 7) === ym).length }));
     const maxLeadsMes = Math.max(1, ...leadsPorMes.map((m) => m.qtd));
 
     const agrupa = (chave: (l: CrmLead) => string | null) => {
-      const grupos = new Map<string, { total: number; ganhos: number; valor: number }>();
+      const grupos = new Map<string, { total: number; ganhos: number }>();
       for (const l of leads) {
         const k = (chave(l) || "").trim() || "(sem)";
-        const g = grupos.get(k) ?? { total: 0, ganhos: 0, valor: 0 };
+        const g = grupos.get(k) ?? { total: 0, ganhos: 0 };
         g.total++;
-        if (l.estagio === "ganho") { g.ganhos++; g.valor += l.valorOrcamento ?? 0; }
+        if (l.estagio === "ganho") g.ganhos++;
         grupos.set(k, g);
       }
-      return [...grupos.entries()].sort((a, b) => b[1].valor - a[1].valor || b[1].total - a[1].total);
+      return [...grupos.entries()].sort((a, b) => b[1].ganhos - a[1].ganhos || b[1].total - a[1].total);
     };
     const motivos = new Map<string, number>();
     for (const l of leads.filter((x) => x.estagio === "perdido")) {
@@ -191,7 +170,7 @@ export default function CrmPage() {
       motivos.set(m, (motivos.get(m) ?? 0) + 1);
     }
     return {
-      porMes, maxValor, leadsPorMes, maxLeadsMes,
+      porMes, maxQtd, leadsPorMes, maxLeadsMes,
       porOrigem: agrupa((l) => l.origem),
       porResponsavel: agrupa((l) => l.responsavel),
       motivos: [...motivos.entries()].sort((a, b) => b[1] - a[1]),
@@ -264,10 +243,9 @@ export default function CrmPage() {
     () =>
       CRM_ESTAGIOS.map((e) => {
         const items = filtrados.filter((l) => l.estagio === e);
-        const valor = items.reduce((s, l) => s + (l.valorOrcamento ?? 0), 0);
         return {
           id: e,
-          title: `${ESTAGIO_META[e].title}${valor > 0 ? ` · ${brlCompact(valor)}` : ""}`,
+          title: ESTAGIO_META[e].title,
           color: ESTAGIO_META[e].color,
           items,
         };
@@ -412,6 +390,7 @@ export default function CrmPage() {
 
   if (!podeVer) return <div className="p-8 text-sm text-destructive">Esta área é do time comercial.</div>;
   if (loading) return <div className="p-8 text-sm text-muted-foreground">Carregando o funil…</div>;
+  if (erroCarga) return <div className="p-8 text-sm text-lone-danger">Não consegui carregar os leads: {erroCarga}</div>;
 
   const hoje = hojeYmd();
 
@@ -476,44 +455,12 @@ export default function CrmPage() {
 
       {tab === "dashboard" && (
         <div className="space-y-5">
-          {/* Meta do mês */}
-          <section className="rounded-xl border border-border bg-card p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-lone-eyebrow uppercase text-muted-foreground">Meta do mês</p>
-                <p className="mt-1 text-lone-hero tracking-tight text-foreground">{brl(kpis.valorMes)} <span className="text-lone-body text-muted-foreground">/ {meta?.metaValor ? brl(meta.metaValor) : "sem meta"}</span></p>
-              </div>
-              {editMeta ? (
-                <div className="flex items-center gap-2">
-                  <input type="number" autoFocus value={metaInput} onChange={(e) => setMetaInput(e.target.value)} placeholder="Meta em R$" className={`${inputCls} w-36`} onKeyDown={(e) => { if (e.key === "Enter") salvarMeta(); }} />
-                  <Button size="sm" onClick={salvarMeta}>Salvar</Button>
-                  <button onClick={() => setEditMeta(false)} className="text-lone-caption text-muted-foreground hover:text-foreground">cancelar</button>
-                </div>
-              ) : (
-                <button onClick={() => { setEditMeta(true); setMetaInput(meta?.metaValor != null ? String(meta.metaValor) : ""); }} className="rounded-lg border border-border px-3 py-1.5 text-lone-caption text-muted-foreground transition-colors hover:text-foreground">
-                  {meta?.metaValor ? "Editar meta" : "Definir meta"}
-                </button>
-              )}
-            </div>
-            {meta?.metaValor ? (() => {
-              const pct = Math.min(100, Math.round((kpis.valorMes / meta.metaValor!) * 100));
-              const falta = Math.max(0, meta.metaValor! - kpis.valorMes);
-              return (
-                <div className="mt-4">
-                  <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} /></div>
-                  <p className="mt-2 text-lone-caption text-muted-foreground">{pct}% da meta{falta > 0 ? ` · faltam ${brl(falta)}` : " · meta batida!"}</p>
-                </div>
-              );
-            })() : null}
-          </section>
-
           {/* KPIs */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Kpi icon={TrendingUp} label="Leads ativos" value={String(kpis.abertos)} sub="no funil agora" />
-            <Kpi icon={Wallet} label="Em jogo" value={brl(kpis.emJogo)} sub="orçamentos em aberto" />
-            <Kpi icon={Trophy} label="Vendas no mês" value={brl(kpis.valorMes)} sub={`${kpis.vendasMes} ${kpis.vendasMes === 1 ? "venda fechada" : "vendas fechadas"}`} tone="good" />
+            <Kpi icon={CalendarClock} label="Reuniões no mês" value={String(kpis.reunioesMes)} sub="marcadas neste mês" />
+            <Kpi icon={Trophy} label="Ganhos no mês" value={String(kpis.vendasMes)} sub={kpis.vendasMes === 1 ? "lead fechado" : "leads fechados"} tone="good" />
             <Kpi icon={Percent} label="Conversão" value={kpis.conversao == null ? "—" : `${kpis.conversao}%`} sub="dos leads fechados" />
-            <Kpi icon={Receipt} label="Ticket médio" value={brl(kpis.ticket)} sub="das vendas ganhas" />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
@@ -638,9 +585,6 @@ export default function CrmPage() {
                       <div className="truncate text-lone-body font-medium text-foreground">{l.contatoNome}</div>
                       {l.empresa && <div className="truncate text-xs text-muted-foreground">{l.empresa}</div>}
                     </div>
-                    {l.valorOrcamento != null && (
-                      <span className="shrink-0 rounded-md bg-lone-success-bg px-1.5 py-0.5 text-lone-caption font-semibold text-lone-success">{brlCompact(l.valorOrcamento)}</span>
-                    )}
                   </div>
                   {(l.reuniaoData || l.proximoContato || l.origem) && (
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -753,45 +697,22 @@ export default function CrmPage() {
 
       {tab === "relatorios" && (
         <div className="grid gap-4 lg:grid-cols-2">
-          {/* Vendas por mês — barras (valores rotulados; hover = detalhe) */}
+          {/* Ganhos por mês (quantidade, pelo mês do fechamento) */}
           <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
-            <h2 className="text-sm font-semibold text-foreground">Vendas por mês (R$)</h2>
-            <p className="text-xs text-muted-foreground">Soma dos orçamentos dos leads GANHOS, pelo mês do fechamento — últimos 6 meses</p>
-            <div className="mt-4 flex h-44 items-end gap-4 border-b border-border pb-px">
+            <h2 className="text-lone-h2 text-foreground">Ganhos por mês</h2>
+            <p className="text-lone-caption text-muted-foreground">Leads fechados como ganho, pelo mês do fechamento — últimos 6 meses</p>
+            <div className="mt-4 flex h-32 items-end gap-4 border-b border-border pb-px">
               {relatorio.porMes.map((m) => {
                 const atual = m.ym === hoje.slice(0, 7);
                 return (
-                  <div key={m.ym} className="flex h-full flex-1 flex-col items-center justify-end gap-1"
-                    title={`${mesLabel(m.ym)}/${m.ym.slice(0, 4)} — ${brl(m.valor)} · ${m.qtd} ${m.qtd === 1 ? "venda" : "vendas"}`}>
-                    {m.valor > 0 && <span className={`text-[10px] ${atual ? "font-bold text-foreground" : "text-muted-foreground"}`}>{brlCompact(m.valor)}</span>}
-                    <div
-                      className={`w-full max-w-12 rounded-t ${m.valor > 0 ? "bg-primary" : "bg-muted"}`}
-                      style={{ height: m.valor > 0 ? `${Math.max(4, (m.valor / relatorio.maxValor) * 100)}%` : "2px" }}
-                    />
-                    <span className={`text-[11px] ${atual ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{mesLabel(m.ym)}</span>
+                  <div key={m.ym} className="flex h-full flex-1 flex-col items-center justify-end gap-1" title={`${mesLabel(m.ym)}/${m.ym.slice(0, 4)} — ${m.qtd} ganho(s)`}>
+                    {m.qtd > 0 && <span className={`text-lone-caption ${atual ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{m.qtd}</span>}
+                    <div className={`w-full max-w-12 rounded-t ${m.qtd > 0 ? "bg-lone-success" : "bg-muted"}`} style={{ height: m.qtd > 0 ? `${Math.max(6, (m.qtd / relatorio.maxQtd) * 100)}%` : "3px" }} />
+                    <span className={`text-lone-caption capitalize ${atual ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{mesLabel(m.ym)}</span>
                   </div>
                 );
               })}
             </div>
-            {/* Tabela (visão acessível dos mesmos dados) */}
-            <table className="mt-4 w-full text-xs">
-              <thead>
-                <tr className="text-left text-muted-foreground">
-                  <th className="py-1 font-medium">Mês</th><th className="py-1 font-medium">Vendas</th>
-                  <th className="py-1 font-medium">Valor</th><th className="py-1 font-medium">Ticket médio</th>
-                </tr>
-              </thead>
-              <tbody>
-                {relatorio.porMes.map((m) => (
-                  <tr key={m.ym} className="border-t border-border text-foreground">
-                    <td className="py-1.5 capitalize">{mesLabel(m.ym)}/{m.ym.slice(2, 4)}</td>
-                    <td className="py-1.5">{m.qtd}</td>
-                    <td className="py-1.5 font-medium">{brl(m.valor)}</td>
-                    <td className="py-1.5">{m.qtd ? brl(m.valor / m.qtd) : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </section>
 
           {/* Leads por mês (captação) */}
@@ -817,13 +738,12 @@ export default function CrmPage() {
             <h2 className="mb-3 text-sm font-semibold text-foreground">Por origem</h2>
             {relatorio.porOrigem.length === 0 ? <p className="text-xs text-muted-foreground">Sem leads ainda.</p> : (
               <table className="w-full text-xs">
-                <thead><tr className="text-left text-muted-foreground"><th className="py-1 font-medium">Origem</th><th className="py-1 font-medium">Leads</th><th className="py-1 font-medium">Ganhos</th><th className="py-1 font-medium">Valor ganho</th></tr></thead>
+                <thead><tr className="text-left text-muted-foreground"><th className="py-1 font-medium">Origem</th><th className="py-1 font-medium">Leads</th><th className="py-1 font-medium">Ganhos</th></tr></thead>
                 <tbody>
                   {relatorio.porOrigem.map(([k, g]) => (
                     <tr key={k} className="border-t border-border text-foreground">
                       <td className="py-1.5">{k}</td><td className="py-1.5">{g.total}</td>
                       <td className="py-1.5">{g.ganhos}{g.total ? ` (${Math.round((g.ganhos / g.total) * 100)}%)` : ""}</td>
-                      <td className="py-1.5 font-medium">{brl(g.valor)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -836,13 +756,12 @@ export default function CrmPage() {
             <h2 className="mb-3 text-sm font-semibold text-foreground">Por responsável</h2>
             {relatorio.porResponsavel.length === 0 ? <p className="text-xs text-muted-foreground">Sem leads ainda.</p> : (
               <table className="w-full text-xs">
-                <thead><tr className="text-left text-muted-foreground"><th className="py-1 font-medium">SDR</th><th className="py-1 font-medium">Leads</th><th className="py-1 font-medium">Ganhos</th><th className="py-1 font-medium">Valor ganho</th></tr></thead>
+                <thead><tr className="text-left text-muted-foreground"><th className="py-1 font-medium">SDR</th><th className="py-1 font-medium">Leads</th><th className="py-1 font-medium">Ganhos</th></tr></thead>
                 <tbody>
                   {relatorio.porResponsavel.map(([k, g]) => (
                     <tr key={k} className="border-t border-border text-foreground">
                       <td className="py-1.5">{k}</td><td className="py-1.5">{g.total}</td>
                       <td className="py-1.5">{g.ganhos}{g.total ? ` (${Math.round((g.ganhos / g.total) * 100)}%)` : ""}</td>
-                      <td className="py-1.5 font-medium">{brl(g.valor)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -879,15 +798,9 @@ export default function CrmPage() {
                 <label className="mb-1 block text-xs text-muted-foreground">Contato *</label>
                 <input className={inputCls} value={draft.contatoNome ?? ""} onChange={(e) => setDraft({ ...draft, contatoNome: e.target.value })} placeholder="Nome de quem você falou" autoFocus />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Empresa</label>
-                  <input className={inputCls} value={draft.empresa ?? ""} onChange={(e) => setDraft({ ...draft, empresa: e.target.value })} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Valor do orçamento (R$)</label>
-                  <input type="number" className={inputCls} value={draft.valorOrcamento ?? ""} onChange={(e) => setDraft({ ...draft, valorOrcamento: e.target.value === "" ? null : Number(e.target.value) })} placeholder="0,00" />
-                </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">Empresa</label>
+                <input className={inputCls} value={draft.empresa ?? ""} onChange={(e) => setDraft({ ...draft, empresa: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

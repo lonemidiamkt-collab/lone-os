@@ -7,34 +7,24 @@ import { OperationalKpisPanel } from "@/components/ceo/OperationalKpisPanel";
 import CoberturaReunioes from "@/components/CoberturaReunioes";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
-import { getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS, todaySP } from "@/lib/utils";
-import { exportReportAsPdf } from "@/lib/exportPdf";
+import { getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel, todaySP, spDateStr } from "@/lib/utils";
 import {
-  Lock, Unlock, BarChart2, TrendingUp, TrendingDown, FileText, Clock, AlertTriangle,
-  Eye, EyeOff, Shield, Download, Users, CheckCircle, Target,
+  Lock, BarChart2, TrendingUp, AlertTriangle,
+  Eye, EyeOff, Users, CheckCircle, Target,
   Instagram, Palette, Zap, UserPlus, Trash2, Edit3, Save, X,
-  KeyRound, Mail, UserCog, AlertCircle, ChevronRight,
-  Calendar as CalendarIcon, ShieldCheck, Smartphone,
+  KeyRound, Mail, UserCog, ShieldCheck, Smartphone,
 } from "lucide-react";
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/context/RoleContext";
 
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import MedievalAvatar, { AVATAR_OPTIONS, getUserAvatar, setUserAvatar, type AvatarType } from "@/components/MedievalAvatars";
 import type { Role, Client } from "@/lib/types";
-import { fetchChurnedClients } from "@/lib/supabase/queries";
 
-const CORRECT_PIN = "8822";
-const PIN_SESSION_KEY = "lone-os-ceo-unlocked";
-const CEO_SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
-
-function isCeoSessionValid(): boolean {
-  if (typeof window === "undefined") return false;
-  const ts = sessionStorage.getItem(PIN_SESSION_KEY);
-  if (!ts) return false;
-  return Date.now() - parseInt(ts, 10) < CEO_SESSION_TIMEOUT_MS;
-}
+// Mês corrente em SP ("YYYY-MM") — "este mês" é o mês de verdade, não o acumulado.
+const mesSP = () => todaySP().slice(0, 7);
+const noMesSP = (iso?: string | null) => !!iso && spDateStr(iso).slice(0, 7) === mesSP();
 
 // Score de risco de churn (0-100, maior = pior) — extraído pra dar pra ORDENAR a lista.
 function churnRiskScore(client: Client): number {
@@ -57,91 +47,30 @@ function churnRiskScore(client: Client): number {
 }
 
 export default function CEOPage() {
-  const { profiles } = useRole();   // equipe do banco, não lista em arquivo
+  const { profiles, role, hydrated } = useRole();   // equipe do banco, não lista em arquivo
   const router = useRouter();
   const clients = useClientsStore((s) => s.clients);
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
   const tasks = useOperationalStore((s) => s.tasks);
-  const quinzReports = useOperationalStore((s) => s.quinzReports);
   const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
 
 
-  const [pin, setPin] = useState("");
-  const [unlocked, setUnlocked] = useState(() => isCeoSessionValid());
-  const [pinError, setPinError] = useState(false);
-  const [showPin, setShowPin] = useState(false);
-  const [activeSection, setActiveSection] = useState<"overview" | "operacao" | "team" | "reports" | "ltv" | "manage" | "timesheet" | "workload" | "churn">("overview");
+  // O acesso vem do papel da sessão (o PIN antigo estava escrito no bundle e não protegia nada).
+  const permitido = hydrated && (role === "admin" || role === "manager");
+  const [activeSection, setActiveSection] = useState<"overview" | "operacao" | "team" | "manage" | "workload">("overview");
 
-  // Ex-clientes (churned) — o store só traz ativos; carregamos os arquivados aqui p/ métricas.
-  const [churnedClients, setChurnedClients] = useState<Client[]>([]);
-  useEffect(() => {
-    if (!unlocked) return;
-    fetchChurnedClients().then(setChurnedClients).catch(() => {});
-  }, [unlocked]);
-
-  // Cockpit: anomalias de Meta abertas. (Métricas financeiras da agência — MRR/ticket — removidas
-  // a pedido; a rota /api/ceo/mrr fica dormante pra quando o Roberto quiser reativar.)
+  // Cockpit: anomalias de Meta abertas. (Sem financeiro da agência — regra da casa.)
   const [openAnomalies, setOpenAnomalies] = useState<number | null>(null);
   useEffect(() => {
-    if (!unlocked) return;
+    if (!permitido) return;
     authedFetch("/api/defense/alerts").then((r) => (r.ok ? r.json() : null)).then((d) => {
       if (d?.summary) setOpenAnomalies(d.summary.open ?? d.summary.total ?? (Array.isArray(d.alerts) ? d.alerts.length : 0));
       else if (Array.isArray(d?.alerts)) setOpenAnomalies(d.alerts.length);
     }).catch(() => {});
-  }, [unlocked]);
+  }, [permitido]);
 
-  // Métricas de carteira/churn (mês corrente + série de 6 meses).
-  const churnMetrics = useMemo(() => {
-    const now = new Date();
-    const mk = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const cur = mk(now);
-    const createdIn = (c: Client, k: string) => !!c.createdAt && mk(new Date(c.createdAt)) === k;
-    const churnedIn = (c: Client, k: string) => !!c.churnedAt && mk(new Date(c.churnedAt)) === k;
-
-    const activeCount = clients.length;
-    const churnedTotal = churnedClients.length;
-    const newThisMonth = clients.filter((c) => createdIn(c, cur)).length + churnedClients.filter((c) => createdIn(c, cur)).length;
-    const churnedThisMonth = churnedClients.filter((c) => churnedIn(c, cur)).length;
-    const netThisMonth = newThisMonth - churnedThisMonth;
-    const churnBase = Math.max(0, activeCount - newThisMonth) + churnedThisMonth; // ativos no INÍCIO do mês (não infla com quem entrou no mês)
-    const churnRate = churnBase > 0 ? (churnedThisMonth / churnBase) * 100 : 0;
-
-    const months: { label: string; novos: number; churn: number; net: number }[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const k = mk(d);
-      const novos = clients.filter((c) => createdIn(c, k)).length + churnedClients.filter((c) => createdIn(c, k)).length;
-      const churn = churnedClients.filter((c) => churnedIn(c, k)).length;
-      months.push({ label: d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", ""), novos, churn, net: novos - churn });
-    }
-    const maxBar = Math.max(1, ...months.map((m) => Math.max(m.novos, m.churn)));
-    const recentChurns = [...churnedClients].sort((a, b) => (b.churnedAt ?? "").localeCompare(a.churnedAt ?? "")).slice(0, 8);
-
-    return { activeCount, churnedTotal, newThisMonth, churnedThisMonth, netThisMonth, churnRate, months, maxBar, recentChurns };
-  }, [clients, churnedClients]);
-
-  useEffect(() => {
-    if (!unlocked) return;
-    const interval = setInterval(() => {
-      if (!isCeoSessionValid()) {
-        setUnlocked(false);
-        sessionStorage.removeItem(PIN_SESSION_KEY);
-      }
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, [unlocked]);
-
-  const handleUnlock = () => {
-    if (pin === CORRECT_PIN) {
-      setUnlocked(true);
-      setPinError(false);
-      try { sessionStorage.setItem(PIN_SESSION_KEY, String(Date.now())); } catch {}
-    } else {
-      setPinError(true);
-      setPin("");
-    }
-  };
+  const novosNoMes = useMemo(() => clients.filter((c) => noMesSP(c.createdAt)).length, [clients]);
 
   // Employee delivery metrics
   const teamMetrics = useMemo(() => {
@@ -153,7 +82,8 @@ export default function CEOPage() {
       const doneTasks = memberTasks.filter((t) => t.status === "done").length;
       const pendingTasks = memberTasks.filter((t) => t.status === "pending").length;
       const inProgressTasks = memberTasks.filter((t) => t.status === "in_progress").length;
-      const taskRate = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+      // Sem tarefa atribuída não é 0%: é "sem dado" — ninguém fica vermelho por lacuna do sistema.
+      const taskRate: number | null = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : null;
 
       let published = 0;
       let totalCards = 0;
@@ -182,18 +112,14 @@ export default function CEOPage() {
         supportDone = trafficRoutineChecks.filter((c) => c.date === today && c.completedBy === profile.name && c.type === "support").length;
       }
 
-      // Overall score: weighted average of task completion + role-specific
-      let overallScore = taskRate;
-      if (profile.role === "social" && totalCards > 0) {
-        const publishRate = Math.round((published / totalCards) * 100);
-        overallScore = Math.round((taskRate * 0.5) + (publishRate * 0.5));
-      }
-      if (profile.role === "traffic" && supportTotal > 0) {
-        const supportRate = Math.round((supportDone / supportTotal) * 100);
-        overallScore = Math.round((taskRate * 0.5) + (supportRate * 0.5));
-      }
+      // Nota = média só do que existe. "Publicado" no board não entra: o board não registra a
+      // maioria dos posts reais, então puniria quem postou sem arrastar o card.
+      const partes: number[] = [];
+      if (taskRate !== null) partes.push(taskRate);
+      if (profile.role === "traffic" && supportTotal > 0) partes.push(Math.round((supportDone / supportTotal) * 100));
+      const overallScore: number | null = partes.length ? Math.round(partes.reduce((a, b) => a + b, 0) / partes.length) : null;
 
-      const level = overallScore >= 80 ? "excellent" : overallScore >= 60 ? "good" : overallScore >= 40 ? "warning" : "critical";
+      const level = overallScore === null ? "none" : overallScore >= 80 ? "excellent" : overallScore >= 60 ? "good" : overallScore >= 40 ? "warning" : "critical";
 
       return {
         ...profile,
@@ -439,106 +365,34 @@ export default function CEOPage() {
     }
   }, []);
 
-  // OTP-style PIN input refs
-  const pinRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
-  const [pinDigits, setPinDigits] = useState(["", "", "", ""]);
-  const [shake, setShake] = useState(false);
-
-  const handleDigitChange = useCallback((index: number, value: string) => {
-    const digit = value.replace(/\D/g, "").slice(-1); // only last digit
-    const newDigits = [...pinDigits];
-    newDigits[index] = digit;
-    setPinDigits(newDigits);
-    setPinError(false);
-
-    // Auto-focus next
-    if (digit && index < 3) {
-      pinRefs.current[index + 1]?.focus();
-    }
-
-    // Auto-submit when all 4 filled
-    const fullPin = newDigits.join("");
-    if (fullPin.length === 4 && newDigits.every((d) => d)) {
-      if (fullPin === CORRECT_PIN) {
-        setUnlocked(true);
-        try { sessionStorage.setItem(PIN_SESSION_KEY, String(Date.now())); } catch {}
-      } else {
-        setPinError(true);
-        setShake(true);
-        setTimeout(() => {
-          setPinDigits(["", "", "", ""]);
-          setShake(false);
-          pinRefs.current[0]?.focus();
-        }, 600);
-      }
-    }
-  }, [pinDigits]);
-
-  const handleKeyDown = useCallback((index: number, e: React.KeyboardEvent) => {
-    if (e.key === "Backspace" && !pinDigits[index] && index > 0) {
-      const newDigits = [...pinDigits];
-      newDigits[index - 1] = "";
-      setPinDigits(newDigits);
-      pinRefs.current[index - 1]?.focus();
-    }
-  }, [pinDigits]);
-
-  if (!unlocked) {
+  if (!hydrated) {
+    return (
+      <div className="flex flex-col flex-1 overflow-auto">
+        <Header title="Diretoria" subtitle="Carregando…" />
+      </div>
+    );
+  }
+  if (!permitido) {
     return (
       <div className="flex flex-col flex-1 overflow-auto">
         <Header title="Diretoria" subtitle="Acesso restrito" />
         <div className="flex-1 flex items-center justify-center p-6">
-          <div className="max-w-xs w-full text-center space-y-8">
-            <div>
-              <Lock size={20} className="text-muted-foreground mx-auto mb-3" />
-              <h2 className="text-lg font-semibold text-foreground">Cofre Executivo</h2>
-              <p className="text-xs text-muted-foreground mt-1">PIN de 4 digitos</p>
-            </div>
-
-            {/* 4 real OTP inputs */}
-            <div className={`flex items-center justify-center gap-3 ${shake ? "animate-shake" : ""}`}>
-              {[0, 1, 2, 3].map((i) => (
-                <input
-                  key={i}
-                  ref={(el) => { pinRefs.current[i] = el; }}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={pinDigits[i]}
-                  onChange={(e) => handleDigitChange(i, e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(i, e)}
-                  onFocus={(e) => e.target.select()}
-                  autoFocus={i === 0}
-                  className={`w-12 h-14 rounded-lg bg-transparent text-center text-xl font-bold text-foreground outline-none transition-all ${
-                    pinError
-                      ? "border border-destructive/60"
-                      : pinDigits[i]
-                      ? "border border-primary/50"
-                      : "border border-border focus:border-primary focus:ring-1 focus:ring-primary/30"
-                  }`}
-                />
-              ))}
-            </div>
-
-            {pinError && (
-              <p className="text-xs text-destructive">PIN incorreto</p>
-            )}
-
-            <div className="flex items-center justify-center gap-2 text-muted-foreground text-[10px]">
-              <Shield size={10} />
-              <span>Acesso monitorado</span>
-            </div>
+          <div className="max-w-xs w-full text-center">
+            <Lock size={20} className="text-muted-foreground mx-auto mb-3" />
+            <h2 className="text-lone-h2 text-foreground">Área da diretoria</h2>
+            <p className="text-lone-caption text-muted-foreground mt-1">Disponível para CEO e gerência.</p>
           </div>
         </div>
       </div>
     );
   }
 
-  const LEVEL_CONFIG: Record<string, { color: string; bg: string; ring: string; label: string }> = {
-    excellent: { color: "text-lone-success", bg: "bg-lone-success", ring: "var(--lone-success)", label: "Excelente" },
-    good:      { color: "text-primary",      bg: "bg-primary",      ring: "var(--primary)",      label: "Bom" },
-    warning:   { color: "text-lone-warning", bg: "bg-lone-warning", ring: "var(--lone-warning)", label: "Atenção" },
-    critical:  { color: "text-destructive",  bg: "bg-destructive",  ring: "var(--destructive)",  label: "Crítico" },
+  const LEVEL_CONFIG: Record<string, { color: string; badge: string; ring: string; label: string }> = {
+    excellent: { color: "text-lone-success", badge: "bg-lone-success-bg border-lone-success-border", ring: "var(--lone-success)", label: "Excelente" },
+    good:      { color: "text-primary",      badge: "bg-primary/10 border-primary/20",               ring: "var(--primary)",      label: "Bom" },
+    warning:   { color: "text-lone-warning", badge: "bg-lone-warning-bg border-lone-warning-border", ring: "var(--lone-warning)", label: "Atenção" },
+    critical:  { color: "text-lone-danger",  badge: "bg-lone-danger-bg border-lone-danger-border",   ring: "var(--lone-danger)",  label: "Crítico" },
+    none:      { color: "text-muted-foreground", badge: "bg-muted border-border",                    ring: "var(--muted)",        label: "Sem tarefas" },
   };
 
   const ROLE_ICON: Record<string, typeof Users> = {
@@ -553,18 +407,6 @@ export default function CEOPage() {
       <Header title="Área da Diretoria" subtitle="Visão confidencial da operação" />
 
       <div className="p-6 space-y-6 animate-fade-in">
-        {/* Unlock banner */}
-        <div className="bg-primary/10 border border-primary/30 rounded-xl px-4 py-3 flex items-center gap-3">
-          <Unlock size={16} className="text-primary" />
-          <span className="text-sm text-primary font-medium">Acesso CEO ativo</span>
-          <button
-            onClick={() => { setUnlocked(false); setPin(""); }}
-            className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Sair da área restrita
-          </button>
-        </div>
-
         {/* KPIs */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="card">
@@ -594,7 +436,7 @@ export default function CEOPage() {
         {/* Tabs */}
         <div>
           <div className="flex gap-1 mb-5 border-b border-border overflow-x-auto">
-            {(["overview", "operacao", "team", "manage", "timesheet", "workload", "churn", "reports", "ltv"] as const).map((tab) => (
+            {(["overview", "operacao", "team", "manage", "workload"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveSection(tab)}
@@ -605,9 +447,8 @@ export default function CEOPage() {
                 }`}
               >
                 {tab === "manage" && <UserCog size={14} />}
-                {tab === "timesheet" && <Clock size={14} />}
                 {tab === "workload" && <BarChart2 size={14} />}
-                {tab === "overview" ? "Visão Geral" : tab === "operacao" ? "Operação" : tab === "team" ? "Desempenho" : tab === "manage" ? "Gestão da Equipe" : tab === "timesheet" ? "Timesheet" : tab === "workload" ? "Carga de Trabalho" : tab === "churn" ? "Risco de Churn" : tab === "reports" ? "Relatórios" : "Retenção"}
+                {tab === "overview" ? "Visão Geral" : tab === "operacao" ? "Operação" : tab === "team" ? "Desempenho" : tab === "manage" ? "Gestão da Equipe" : "Carga de Trabalho"}
               </button>
             ))}
           </div>
@@ -644,15 +485,11 @@ export default function CEOPage() {
                       <span className="text-[11px] text-muted-foreground">Atualizado agora</span>
                     </div>
                     {/* Tiles da carteira (sem financeiro da agência — removido a pedido) */}
-                    <div className="grid grid-cols-3 gap-2.5">
+                    <div className="grid grid-cols-2 gap-2.5">
                       <div className="rounded-xl border border-border bg-background p-3">
                         <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Novos no mês</p>
-                        <p className="text-lg font-bold text-primary tabular-nums mt-0.5">{churnMetrics.newThisMonth}</p>
+                        <p className="text-lg font-bold text-primary tabular-nums mt-0.5">{novosNoMes}</p>
                       </div>
-                      <button onClick={() => setActiveSection("churn")} className="rounded-xl border border-border bg-background p-3 text-left transition-colors hover:border-primary/40">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Churn no mês</p>
-                        <p className={`text-lg font-bold tabular-nums mt-0.5 ${churnMetrics.churnedThisMonth > 0 ? "text-destructive" : "text-foreground"}`}>{churnMetrics.churnedThisMonth}</p>
-                      </button>
                       <button onClick={() => router.push("/defesa")} className="rounded-xl border border-border bg-background p-3 text-left transition-colors hover:border-primary/40">
                         <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Anomalias Meta</p>
                         <p className={`text-lg font-bold tabular-nums mt-0.5 ${openAnomalies ? "text-destructive" : "text-foreground"}`}>{openAnomalies ?? "—"}</p>
@@ -851,53 +688,15 @@ export default function CEOPage() {
 
                       {/* ── POST VERIFICATION METRICS + CALENDAR ── */}
                       {(() => {
-                        const now = new Date();
-                        const year = now.getFullYear();
-                        const month = now.getMonth();
-                        const daysInMonth = new Date(year, month + 1, 0).getDate();
-                        const firstDayOfWeek = new Date(year, month, 1).getDay(); // 0=Sun
-                        const today = now.getDate();
-                        const monthStr = now.toLocaleString("pt-BR", { month: "long" });
-
-                        // Build per-client per-day map
-                        const publishedCards = contentCards.filter((c) => c.status === "published");
+                        const monthStr = new Date().toLocaleString("pt-BR", { month: "long", timeZone: "America/Sao_Paulo" });
+                        // Só o mês corrente (SP). Calendário por dia saiu: pintava de vermelho todo dia
+                        // sem card "publicado" no board, e o board não registra a maioria dos posts reais.
+                        const publishedCards = contentCards.filter((c) => c.status === "published" && noMesSP(c.publishVerifiedAt ?? c.statusChangedAt));
                         const scheduledCards = contentCards.filter((c) => c.status === "scheduled");
+                        const scheduledNoMes = scheduledCards.filter((c) => noMesSP(c.dueDate));
                         const unverifiedScheduled = scheduledCards.filter((c) => !c.publishVerifiedAt);
                         const verifiedCount = publishedCards.filter((c) => c.publishVerifiedAt).length;
                         const publishedWithoutVerify = publishedCards.filter((c) => !c.publishVerifiedAt).length;
-
-                        // Per-client daily post map
-                        const clientPostDays = new Map<string, Set<number>>();
-                        clients.filter((c) => c.status !== "onboarding").forEach((client) => {
-                          const days = new Set<number>();
-                          const cards = publishedCards.filter((c) => c.clientId === client.id);
-                          cards.forEach((card) => {
-                            if (card.statusChangedAt) {
-                              const d = new Date(card.statusChangedAt);
-                              if (d.getMonth() === month && d.getFullYear() === year) {
-                                days.add(d.getDate());
-                              }
-                            }
-                          });
-                          // Also count scheduled
-                          scheduledCards.filter((c) => c.clientId === client.id).forEach((card) => {
-                            if (card.dueDate) {
-                              const d = new Date(card.dueDate);
-                              if (d.getMonth() === month && d.getFullYear() === year) {
-                                days.add(d.getDate());
-                              }
-                            }
-                          });
-                          clientPostDays.set(client.id, days);
-                        });
-
-                        // Global day map: any client posted
-                        const globalPostDays = new Set<number>();
-                        for (const days of clientPostDays.values()) {
-                          days.forEach((d) => globalPostDays.add(d));
-                        }
-
-                        const weekDays = ["D", "S", "T", "Q", "Q", "S", "S"];
 
                         return (
                           <>
@@ -921,7 +720,7 @@ export default function CEOPage() {
                                   <p className="text-[10px] text-muted-foreground">Agendados pendentes</p>
                                 </div>
                                 <div className="bg-muted rounded-lg p-3 text-center">
-                                  <p className="text-2xl font-bold text-foreground">{publishedCards.length + scheduledCards.length}</p>
+                                  <p className="text-2xl font-bold text-foreground">{publishedCards.length + scheduledNoMes.length}</p>
                                   <p className="text-[10px] text-muted-foreground">Total posts mês</p>
                                 </div>
                               </div>
@@ -933,16 +732,16 @@ export default function CEOPage() {
                                   <div className="space-y-1.5 mt-2">
                                     <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Por membro</p>
                                     {members.map((name) => {
-                                      const cards = contentCards.filter((c) => c.socialMedia === name);
-                                      const pub = cards.filter((c) => c.status === "published").length;
-                                      const verified = cards.filter((c) => c.publishVerifiedAt).length;
-                                      const sched = cards.filter((c) => c.status === "scheduled" && !c.publishVerifiedAt).length;
+                                      const pubCards = publishedCards.filter((c) => c.socialMedia === name);
+                                      const pub = pubCards.length;
+                                      const verified = pubCards.filter((c) => c.publishVerifiedAt).length;
+                                      const sched = unverifiedScheduled.filter((c) => c.socialMedia === name).length;
                                       const rate = pub > 0 ? Math.round((verified / pub) * 100) : 100;
                                       return (
                                         <div key={name} className="flex items-center gap-3 bg-muted/50 rounded-lg p-2.5">
                                           <span className="text-xs font-medium text-foreground w-32 shrink-0">{name}</span>
                                           <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                                            <div className={`h-full rounded-full ${rate >= 80 ? "bg-primary" : rate >= 50 ? "bg-lone-warning-bg" : "bg-destructive"}`} style={{ width: `${rate}%` }} />
+                                            <div className={`h-full rounded-full ${rate >= 80 ? "bg-primary" : rate >= 50 ? "bg-lone-warning" : "bg-destructive"}`} style={{ width: `${rate}%` }} />
                                           </div>
                                           <span className={`text-xs font-bold w-10 text-right ${rate >= 80 ? "text-primary" : rate >= 50 ? "text-lone-warning" : "text-destructive"}`}>{rate}%</span>
                                           <span className="text-[10px] text-muted-foreground w-20 text-right">{pub} pub · {sched} pend</span>
@@ -954,72 +753,6 @@ export default function CEOPage() {
                               })()}
                             </div>
 
-                            {/* Post Calendar Grid — per client */}
-                            <div className="card space-y-3 lg:col-span-2">
-                              <div className="flex items-center gap-2 mb-1">
-                                <CalendarIcon size={14} className="text-primary" />
-                                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Calendário de Posts — {monthStr} {year}</p>
-                              </div>
-                              <div className="space-y-3">
-                                {clients.filter((c) => c.status !== "onboarding").map((client) => {
-                                  const days = clientPostDays.get(client.id) ?? new Set();
-                                  const totalDays = Math.min(today, daysInMonth);
-                                  const daysWithPost = [...days].filter((d) => d <= today).length;
-                                  const daysWithout = totalDays - daysWithPost;
-                                  return (
-                                    <div key={client.id}>
-                                      <div className="flex items-center justify-between mb-1.5">
-                                        <span className="text-xs font-medium text-foreground">{client.name}</span>
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-[10px] text-primary font-semibold">{daysWithPost}d com post</span>
-                                          <span className="text-[10px] text-destructive font-semibold">{daysWithout}d sem post</span>
-                                        </div>
-                                      </div>
-                                      {/* Compact: no week header needed */}
-                                      {/* Calendar grid — compact */}
-                                      <div className="flex flex-wrap gap-[2px]">
-                                        {Array.from({ length: daysInMonth }).map((_, i) => {
-                                          const day = i + 1;
-                                          const hasPost = days.has(day);
-                                          const isFuture = day > today;
-                                          const isToday = day === today;
-                                          return (
-                                            <div
-                                              key={day}
-                                              title={`Dia ${day}: ${isFuture ? "futuro" : hasPost ? "com post" : "sem post"}`}
-                                              className={`w-[18px] h-[18px] rounded-[3px] flex items-center justify-center text-[7px] font-bold ${
-                                                isFuture
-                                                  ? "bg-muted/30 text-muted-foreground/30"
-                                                  : hasPost
-                                                    ? "bg-primary/25 text-primary"
-                                                    : "bg-destructive/15 text-destructive"
-                                              } ${isToday ? "ring-1 ring-foreground/40" : ""}`}
-                                            >
-                                              {day}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                              {/* Legend */}
-                              <div className="flex items-center gap-4 pt-2 border-t border-border">
-                                <div className="flex items-center gap-1.5">
-                                  <div className="w-3 h-3 rounded-sm bg-primary/20 border border-primary/30" />
-                                  <span className="text-[10px] text-muted-foreground">Com post</span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <div className="w-3 h-3 rounded-sm bg-destructive/10 border border-destructive/20" />
-                                  <span className="text-[10px] text-muted-foreground">Sem post</span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <div className="w-3 h-3 rounded-sm bg-muted/30" />
-                                  <span className="text-[10px] text-muted-foreground">Futuro</span>
-                                </div>
-                              </div>
-                            </div>
                           </>
                         );
                       })()}
@@ -1080,7 +813,7 @@ export default function CEOPage() {
                 </div>
                 <div className="bg-card border border-border rounded-xl p-4 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Posts Publicados</p>
-                  <p className="text-2xl font-bold text-primary mt-1">{contentCards.filter((c) => c.status === "published").length}</p>
+                  <p className="text-2xl font-bold text-primary mt-1">{contentCards.filter((c) => c.status === "published" && noMesSP(c.publishVerifiedAt ?? c.statusChangedAt)).length}</p>
                   <p className="text-xs text-muted-foreground">este mês</p>
                 </div>
                 <div className="bg-card border border-border rounded-xl p-4 text-center">
@@ -1110,11 +843,11 @@ export default function CEOPage() {
                                 stroke={levelConfig.ring}
                                 strokeWidth="6"
                                 strokeLinecap="round"
-                                strokeDasharray={`${member.overallScore * 2.64} 264`}
+                                strokeDasharray={`${(member.overallScore ?? 0) * 2.64} 264`}
                               />
                             </svg>
                             <div className="absolute inset-0 flex items-center justify-center">
-                              <span className={`text-lg font-black ${levelConfig.color}`}>{member.overallScore}</span>
+                              <span className={`text-lg font-black ${levelConfig.color}`}>{member.overallScore ?? "—"}</span>
                             </div>
                           </div>
                         </div>
@@ -1127,7 +860,7 @@ export default function CEOPage() {
                               <RoleIcon size={12} className="text-muted-foreground" />
                               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{roleLabel}</span>
                             </div>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${levelConfig.color} ${levelConfig.bg}/15 border border-current/20`}>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${levelConfig.color} ${levelConfig.badge}`}>
                               {levelConfig.label}
                             </span>
                           </div>
@@ -1142,15 +875,15 @@ export default function CEOPage() {
                                   Tarefas
                                 </span>
                                 <span className="text-foreground font-medium">
-                                  {member.doneTasks}/{member.totalTasks} concluídas ({member.taskRate}%)
+                                  {member.taskRate === null ? "sem tarefas atribuídas" : `${member.doneTasks}/${member.totalTasks} concluídas (${member.taskRate}%)`}
                                 </span>
                               </div>
                               <div className="h-2 bg-muted rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all ${
-                                    member.taskRate >= 80 ? "bg-primary" : member.taskRate >= 50 ? "bg-primary" : "bg-destructive"
+                                    (member.taskRate ?? 100) >= 50 ? "bg-primary" : "bg-destructive"
                                   }`}
-                                  style={{ width: `${member.taskRate}%` }}
+                                  style={{ width: `${member.taskRate ?? 0}%` }}
                                 />
                               </div>
                               <div className="flex gap-3 mt-1">
@@ -1411,7 +1144,7 @@ export default function CEOPage() {
                                   className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${
                                     editAvatar === opt.type
                                       ? "border-primary/50 bg-primary/[0.06]"
-                                      : "border-transparent hover:bg-card/[0.03]"
+                                      : "border-transparent hover:bg-muted"
                                   }`}
                                 >
                                   <MedievalAvatar type={opt.type} size={36} />
@@ -1553,82 +1286,6 @@ export default function CEOPage() {
             </div>
           )}
 
-          {activeSection === "reports" && (
-            <div className="space-y-4 animate-fade-in">
-              <p className="text-muted-foreground text-sm">Relatórios quinzenais preenchidos pela equipe. Visão exclusiva da diretoria.</p>
-              {quinzReports.map((report) => {
-                const isGood = report.communicationHealth >= 4;
-                const isBad = report.communicationHealth <= 2;
-                return (
-                  <div key={report.id} className={`card border ${isBad ? "border-destructive/20" : isGood ? "border-primary/20" : "border-border"}`}>
-                    <div className="flex items-start justify-between gap-4 mb-4">
-                      <div>
-                        <h4 className="font-semibold text-foreground">{report.clientName}</h4>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Período: {report.period} · por {report.createdBy}
-                        </p>
-                      </div>
-                      <div className="flex items-start gap-4 text-center">
-                        <button
-                          onClick={() => exportReportAsPdf({
-                            title: "Relatório Quinzenal",
-                            subtitle: report.period,
-                            clientName: report.clientName,
-                            period: report.period,
-                            createdBy: report.createdBy,
-                            createdAt: report.createdAt,
-                            sections: [
-                              { label: "Saúde da Comunicação", value: report.communicationHealth, type: "score" },
-                              { label: "Engajamento do Cliente", value: report.clientEngagement, type: "score" },
-                              { label: "Destaques", value: report.highlights, type: "text" },
-                              { label: "Desafios", value: report.challenges, type: "text" },
-                              { label: "Próximos Passos", value: report.nextSteps, type: "text" },
-                            ],
-                          })}
-                          className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                          title="Exportar PDF"
-                        >
-                          <Download size={14} />
-                        </button>
-                        <div>
-                          <div className="flex gap-1 justify-center">
-                            {[1,2,3,4,5].map((s) => (
-                              <span key={s} className={`w-4 h-4 rounded-sm ${s <= report.communicationHealth ? (isBad ? "bg-destructive" : isGood ? "bg-primary" : "bg-muted") : "bg-muted"}`} />
-                            ))}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">Saúde da Comunicação</p>
-                        </div>
-                        <div>
-                          <div className="flex gap-1 justify-center">
-                            {[1,2,3,4,5].map((s) => (
-                              <span key={s} className={`w-4 h-4 rounded-sm ${s <= report.clientEngagement ? "bg-primary" : "bg-muted"}`} />
-                            ))}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">Engajamento do Cliente</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <p className="text-xs text-primary font-medium mb-1">Destaques</p>
-                        <p className="text-muted-foreground leading-relaxed">{report.highlights}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-destructive font-medium mb-1">Desafios</p>
-                        <p className="text-muted-foreground leading-relaxed">{report.challenges}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-primary font-medium mb-1">Próximos Passos</p>
-                        <p className="text-muted-foreground leading-relaxed">{report.nextSteps}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
           {activeSection === "workload" && (
             <div className="space-y-6 animate-fade-in">
               <p className="text-muted-foreground text-sm">Visão de capacidade e carga de trabalho por colaborador.</p>
@@ -1680,7 +1337,7 @@ export default function CEOPage() {
                           <div className="h-2.5 bg-muted rounded-full overflow-hidden mb-3">
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${
-                                isOverloaded ? "bg-destructive" : isHigh ? "bg-lone-warning-bg" : "bg-primary"
+                                isOverloaded ? "bg-destructive" : isHigh ? "bg-lone-warning" : "bg-primary"
                               }`}
                               style={{ width: `${Math.min(utilPct, 100)}%` }}
                             />
@@ -1717,420 +1374,7 @@ export default function CEOPage() {
             </div>
           )}
 
-          {activeSection === "churn" && (
-            <div className="space-y-4 animate-fade-in">
-              {/* ── MÉTRICAS DE CARTEIRA & CHURN ────────────────────────── */}
-              <div>
-                <h3 className="text-base font-semibold text-foreground mb-1">Carteira & Churn</h3>
-                <p className="text-muted-foreground text-sm mb-3">Crescimento e perda de clientes ao longo do tempo.</p>
-
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  <div className="card">
-                    <p className="text-xs text-muted-foreground">Carteira ativa</p>
-                    <p className="text-2xl font-bold text-foreground mt-1">{churnMetrics.activeCount}</p>
-                  </div>
-                  <div className="card">
-                    <p className="text-xs text-muted-foreground">Novos no mês</p>
-                    <p className="text-2xl font-bold text-primary mt-1">+{churnMetrics.newThisMonth}</p>
-                  </div>
-                  <div className="card">
-                    <p className="text-xs text-muted-foreground">Churn no mês</p>
-                    <p className="text-2xl font-bold text-destructive mt-1">−{churnMetrics.churnedThisMonth}</p>
-                  </div>
-                  <div className="card">
-                    <p className="text-xs text-muted-foreground">Saldo líquido</p>
-                    <p className={`text-2xl font-bold mt-1 flex items-center gap-1 ${churnMetrics.netThisMonth >= 0 ? "text-primary" : "text-destructive"}`}>
-                      {churnMetrics.netThisMonth >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
-                      {churnMetrics.netThisMonth >= 0 ? "+" : ""}{churnMetrics.netThisMonth}
-                    </p>
-                  </div>
-                  <div className="card">
-                    <p className="text-xs text-muted-foreground">Churn total · taxa mês</p>
-                    <p className="text-2xl font-bold text-foreground mt-1">{churnMetrics.churnedTotal} <span className="text-sm text-muted-foreground">· {churnMetrics.churnRate.toFixed(1)}%</span></p>
-                  </div>
-                </div>
-
-                <div className="card mt-3">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-3">Últimos 6 meses · novos vs churn</p>
-                  <div className="flex items-end justify-between gap-3 h-32">
-                    {churnMetrics.months.map((m, i) => (
-                      <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                        <div className="flex items-end gap-1 h-24 w-full justify-center">
-                          <div className="w-3 rounded-t bg-primary" style={{ height: `${Math.max(2, (m.novos / churnMetrics.maxBar) * 100)}%` }} title={`${m.novos} novos`} />
-                          <div className="w-3 rounded-t bg-destructive" style={{ height: `${Math.max(2, (m.churn / churnMetrics.maxBar) * 100)}%` }} title={`${m.churn} churn`} />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground capitalize">{m.label}</span>
-                        <span className={`text-[10px] font-semibold ${m.net >= 0 ? "text-primary" : "text-destructive"}`}>{m.net >= 0 ? "+" : ""}{m.net}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-4 mt-3 text-[10px] text-muted-foreground">
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-primary" /> Novos</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-destructive" /> Churn</span>
-                  </div>
-                </div>
-
-                {churnMetrics.recentChurns.length > 0 && (
-                  <div className="card mt-3">
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-3">Churns recentes</p>
-                    <div className="space-y-2">
-                      {churnMetrics.recentChurns.map((c) => (
-                        <div key={c.id} className="flex items-center justify-between gap-3 text-sm">
-                          <span className="text-foreground font-medium truncate">{c.name}</span>
-                          <span className="text-xs text-muted-foreground shrink-0 text-right">
-                            {c.churnedAt ? new Date(c.churnedAt).toLocaleDateString("pt-BR") : "—"}{c.churnReason ? ` · ${c.churnReason}` : ""}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* ── RISCO DE CHURN (preditivo) ──────────────────────────── */}
-              <div className="border-t border-border pt-4">
-                <h3 className="text-base font-semibold text-foreground mb-1">Risco de Churn (preditivo)</h3>
-                <p className="text-muted-foreground text-sm">Análise preditiva de risco de cancelamento baseada em atividade, comunicação e satisfação.</p>
-              </div>
-              <div className="space-y-3">
-                {clients.filter((c) => c.status !== "onboarding").sort((a, b) => churnRiskScore(b) - churnRiskScore(a)).map((client) => {
-                  // Churn score: 0-100 (higher = more risk)
-                  let score = 0;
-                  // Status
-                  if (client.status === "at_risk") score += 35;
-                  else if (client.status === "average") score += 15;
-                  // Kanban inactivity
-                  const kanbanHoursAgo = client.lastKanbanActivity ? (Date.now() - new Date(client.lastKanbanActivity).getTime()) / 3600000 : 999;
-                  if (kanbanHoursAgo > 168) score += 25; // 7 days
-                  else if (kanbanHoursAgo > 72) score += 10; // 3 days
-                  // Posts this month
-                  const postRatio = client.postsGoal ? (client.postsThisMonth ?? 0) / client.postsGoal : 0.5;
-                  if (postRatio < 0.3) score += 20;
-                  else if (postRatio < 0.6) score += 8;
-                  // No recent post
-                  if (!client.lastPostDate) score += 10;
-                  else {
-                    const daysSincePost = (Date.now() - new Date(client.lastPostDate).getTime()) / 86400000;
-                    if (daysSincePost > 14) score += 15;
-                    else if (daysSincePost > 7) score += 5;
-                  }
-                  score = Math.min(100, score);
-
-                  const riskLevel = score >= 60 ? "critical" : score >= 35 ? "warning" : "safe";
-                  const riskConfig = {
-                    critical: { label: "Alto Risco", color: "text-destructive", bg: "bg-destructive/10", border: "border-destructive/30", bar: "bg-destructive" },
-                    warning: { label: "Atenção", color: "text-lone-warning", bg: "bg-lone-warning-bg", border: "border-lone-warning-border", bar: "bg-lone-warning-bg" },
-                    safe: { label: "Estável", color: "text-primary", bg: "bg-primary/10", border: "border-primary/20", bar: "bg-primary" },
-                  }[riskLevel];
-
-                  const signals: string[] = [];
-                  if (client.status === "at_risk") signals.push("Status em risco");
-                  if (kanbanHoursAgo > 168) signals.push(`${Math.floor(kanbanHoursAgo / 24)}d sem atividade no board`);
-                  if (postRatio < 0.3 && client.postsGoal) signals.push(`Apenas ${Math.round(postRatio * 100)}% da meta de posts`);
-                  if (!client.lastPostDate) signals.push("Nenhum post registrado");
-
-                  return (
-                    <div
-                      key={client.id}
-                      onClick={() => router.push(`/clients/${client.id}`)}
-                      className={`card border ${riskConfig.border} cursor-pointer transition-colors hover:border-primary/40`}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold ${riskConfig.bg} ${riskConfig.color}`}>
-                          {client.name[0]}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-foreground text-sm">{client.name}</p>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${riskConfig.bg} ${riskConfig.color} border ${riskConfig.border}`}>
-                              {riskConfig.label}
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">{client.industry} · R$ {client.monthlyBudget.toLocaleString("pt-BR")}/mês</p>
-                        </div>
-                        <div className="text-right">
-                          <p className={`text-xl font-bold ${riskConfig.color}`}>{score}%</p>
-                          <p className="text-[10px] text-muted-foreground">risco</p>
-                        </div>
-                      </div>
-                      {/* Risk bar */}
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-3 mb-2">
-                        <div className={`h-full rounded-full transition-all ${riskConfig.bar}`} style={{ width: `${score}%` }} />
-                      </div>
-                      {/* Signals */}
-                      {signals.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          {signals.map((s, i) => (
-                            <span key={i} className={`text-[9px] px-2 py-0.5 rounded-full ${riskConfig.bg} ${riskConfig.color} border ${riskConfig.border}`}>
-                              {s}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {activeSection === "timesheet" && (
-            <TimesheetTab clients={clients} contentCards={contentCards} tasks={tasks} />
-          )}
-
-          {activeSection === "ltv" && (
-            <div className="space-y-4 animate-fade-in">
-              <p className="text-muted-foreground text-sm">Tempo de retenção e saúde por cliente.</p>
-              <div className="space-y-3">
-                {clients
-                  .sort((a, b) => new Date(a.joinDate).getTime() - new Date(b.joinDate).getTime())
-                  .map((client) => {
-                    const monthsActive = Math.max(1, Math.floor(
-                      (new Date().getTime() - new Date(client.joinDate).getTime()) / (1000 * 60 * 60 * 24 * 30)
-                    ));
-                    const maxMonths = Math.max(1, ...clients.map((c) => Math.floor((new Date().getTime() - new Date(c.joinDate).getTime()) / (1000 * 60 * 60 * 24 * 30))));
-                    const barPct = Math.min(100, (monthsActive / maxMonths) * 100);
-
-                    return (
-                      <div key={client.id} className="card">
-                        <div className="flex items-center gap-4 mb-3">
-                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
-                            client.status === "at_risk" ? "bg-destructive/20 text-destructive" : "bg-primary/20 text-primary"
-                          }`}>
-                            {client.name[0]}
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium text-foreground">{client.name}</span>
-                              <span className={`text-xs font-medium ${client.status === "at_risk" ? "text-destructive" : "text-primary"}`}>
-                                {getStatusLabel(client.status)}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground mt-0.5">
-                              <span>{monthsActive} meses ativo</span>
-                              <span>Desde {client.joinDate}</span>
-                              <span>{client.industry}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${
-                              client.status === "at_risk" ? "bg-destructive" : "bg-primary"
-                            }`}
-                            style={{ width: `${barPct}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Timesheet / Performance Operacional ───────────────────────
-function TimesheetTab({
-  clients,
-  contentCards,
-  tasks,
-}: {
-  clients: import("@/lib/types").Client[];
-  contentCards: import("@/lib/types").ContentCard[];
-  tasks: import("@/lib/types").Task[];
-}) {
-  // "Nenhum dado disponível" só depois de os dados terem chegado. Esta tela não carregava nada —
-  // dependia de outra página ter feito isso — e mostrava os vazios como se fossem o resultado.
-  const contentPronto = useContentStore((s) => s.initialized);
-  const opsPronto = useOperationalStore((s) => s.initialized);
-  const dadosProntos = contentPronto && opsPronto;
-  const vazio = (msg: string) => (
-    <p className="text-xs text-muted-foreground">{dadosProntos ? msg : "Carregando…"}</p>
-  );
-  // Aggregate hours by client
-  const hoursByClient = useMemo(() => {
-    const map: Record<string, { name: string; ms: number }> = {};
-    contentCards.forEach((c) => {
-      const ms = getLiveTimeSpentMs(c.workStartedAt, c.totalTimeSpentMs);
-      if (ms > 0) {
-        if (!map[c.clientId]) map[c.clientId] = { name: c.clientName, ms: 0 };
-        map[c.clientId].ms += ms;
-      }
-    });
-    tasks.forEach((t) => {
-      const ms = getLiveTimeSpentMs(t.workStartedAt, t.totalTimeSpentMs);
-      if (ms > 0) {
-        if (!map[t.clientId]) map[t.clientId] = { name: t.clientName, ms: 0 };
-        map[t.clientId].ms += ms;
-      }
-    });
-    return Object.values(map).sort((a, b) => b.ms - a.ms);
-  }, [contentCards, tasks]);
-
-  const maxClientMs = hoursByClient.length > 0 ? hoursByClient[0].ms : 1;
-
-  // Average time by content format
-  const avgByFormat = useMemo(() => {
-    const map: Record<string, { total: number; count: number }> = {};
-    contentCards.forEach((c) => {
-      const ms = (c.totalTimeSpentMs ?? 0);
-      if (ms > 0 && c.format) {
-        if (!map[c.format]) map[c.format] = { total: 0, count: 0 };
-        map[c.format].total += ms;
-        map[c.format].count += 1;
-      }
-    });
-    return Object.entries(map)
-      .map(([format, { total, count }]) => ({ format, avgMs: Math.round(total / count), count }))
-      .sort((a, b) => b.avgMs - a.avgMs);
-  }, [contentCards]);
-
-  // Ranking by team member (high priority hours)
-  const teamRanking = useMemo(() => {
-    const map: Record<string, { name: string; totalMs: number; highPriorityMs: number; taskCount: number }> = {};
-    const addEntry = (assignedTo: string, ms: number, isHighPriority: boolean) => {
-      if (ms <= 0) return;
-      if (!map[assignedTo]) map[assignedTo] = { name: assignedTo, totalMs: 0, highPriorityMs: 0, taskCount: 0 };
-      map[assignedTo].totalMs += ms;
-      map[assignedTo].taskCount += 1;
-      if (isHighPriority) map[assignedTo].highPriorityMs += ms;
-    };
-    contentCards.forEach((c) => {
-      const ms = getLiveTimeSpentMs(c.workStartedAt, c.totalTimeSpentMs);
-      addEntry(c.socialMedia, ms, c.priority === "high" || c.priority === "critical");
-    });
-    tasks.forEach((t) => {
-      const ms = getLiveTimeSpentMs(t.workStartedAt, t.totalTimeSpentMs);
-      addEntry(t.assignedTo, ms, t.priority === "high" || t.priority === "critical");
-    });
-    return Object.values(map).sort((a, b) => b.totalMs - a.totalMs);
-  }, [contentCards, tasks]);
-
-  // Over-time items
-  const overtimeItems = useMemo(() => {
-    const items: { title: string; clientName: string; assignedTo: string; ms: number; type: "card" | "task" }[] = [];
-    contentCards.forEach((c) => {
-      const ms = getLiveTimeSpentMs(c.workStartedAt, c.totalTimeSpentMs);
-      if (ms >= OVERTIME_THRESHOLD_MS) items.push({ title: c.title, clientName: c.clientName, assignedTo: c.socialMedia, ms, type: "card" });
-    });
-    tasks.forEach((t) => {
-      const ms = getLiveTimeSpentMs(t.workStartedAt, t.totalTimeSpentMs);
-      if (ms >= OVERTIME_THRESHOLD_MS) items.push({ title: t.title, clientName: t.clientName, assignedTo: t.assignedTo, ms, type: "task" });
-    });
-    return items.sort((a, b) => b.ms - a.ms);
-  }, [contentCards, tasks]);
-
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <p className="text-muted-foreground text-sm">Timesheet invisível — tempo de dedicação por cliente, formato e colaborador.</p>
-
-      {/* Over-time alerts */}
-      {overtimeItems.length > 0 && (
-        <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lone-warning">⚠️</span>
-            <h3 className="text-sm font-bold text-foreground">Alertas de Over-Time ({overtimeItems.length})</h3>
-          </div>
-          <div className="space-y-2">
-            {overtimeItems.map((item, i) => (
-              <div key={i} className="flex items-center gap-3 text-xs">
-                <span className="text-lone-warning font-bold w-16 text-right">{formatTimeSpent(item.ms)}</span>
-                <span className="text-foreground font-medium flex-1 truncate">{item.title}</span>
-                <span className="text-muted-foreground">{item.clientName}</span>
-                <span className="text-muted-foreground">· {item.assignedTo}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Hours by client */}
-      <div className="card">
-        <h3 className="font-semibold text-foreground text-sm mb-4 flex items-center gap-2">
-          <BarChart2 size={14} className="text-primary" />
-          Alocação por Cliente (horas)
-        </h3>
-        {hoursByClient.length === 0 ? (
-          vazio("Nenhum tempo registrado ainda. O timesheet começa a contar quando cards entram em produção.")
-        ) : (
-          <div className="space-y-3">
-            {hoursByClient.map((entry) => {
-              const pct = Math.round((entry.ms / maxClientMs) * 100);
-              return (
-                <div key={entry.name}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-foreground font-medium">{entry.name}</span>
-                    <span className="text-xs text-primary font-bold">{formatTimeSpent(entry.ms)}</span>
-                  </div>
-                  <div className="h-3 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all duration-500"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Average by format */}
-      <div className="card">
-        <h3 className="font-semibold text-foreground text-sm mb-4 flex items-center gap-2">
-          <Clock size={14} className="text-primary" />
-          Tempo Médio por Formato de Conteúdo
-        </h3>
-        {avgByFormat.length === 0 ? (
-          vazio("Dados insuficientes. O sistema precisa de cards concluídos para calcular médias.")
-        ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-            {avgByFormat.map(({ format, avgMs, count }) => (
-              <div key={format} className="p-3 rounded-xl border border-border bg-muted/30">
-                <p className="text-xs text-muted-foreground">{format}</p>
-                <p className="text-lg font-bold text-foreground mt-1">{formatTimeSpent(avgMs)}</p>
-                <p className="text-[10px] text-muted-foreground">média · {count} {count === 1 ? "card" : "cards"}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Team ranking */}
-      <div className="card">
-        <h3 className="font-semibold text-foreground text-sm mb-4 flex items-center gap-2">
-          <Users size={14} className="text-primary" />
-          Ranking de Dedicação
-        </h3>
-        {teamRanking.length === 0 ? (
-          vazio("Nenhum dado disponível.")
-        ) : (
-          <div className="space-y-2">
-            {teamRanking.map((member, i) => (
-              <div key={member.name} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                  i === 0 ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
-                }`}>
-                  {i + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground">{member.name}</p>
-                  <p className="text-[10px] text-muted-foreground">{member.taskCount} tarefas/cards</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-foreground">{formatTimeSpent(member.totalMs)}</p>
-                  {member.highPriorityMs > 0 && (
-                    <p className="text-[10px] text-lone-warning">{formatTimeSpent(member.highPriorityMs)} em alta prioridade</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );

@@ -29,25 +29,26 @@ function diasDesde(iso?: string | null): number | null {
 }
 
 // O veredito único, a partir dos sinais que já existem no cliente + reclamação recente.
+// healthLevel vem de clients.current_health_level (escritor único /api/scores, 100 = saudável):
+// saudavel | atencao | risco | sem_dado.
 export function riscoConsolidado(c: {
   healthLevel: string | null; attentionLevel: string | null; diasSemFalar: number | null; reclamacaoRecente: boolean;
 }): { nivel: NivelRisco; motivos: string[] } {
   const motivos: string[] = [];
   const h = c.healthLevel, a = c.attentionLevel, dias = c.diasSemFalar;
 
-  if (h === "critical") motivos.push("health crítico");
   if (a === "critical") motivos.push("atenção crítica (feedback grave)");
-  if (h === "high") motivos.push("health alto (risco)");
+  if (h === "risco") motivos.push("saúde em risco");
   if (c.reclamacaoRecente) motivos.push("reclamação nos últimos 14 dias");
   if (dias != null && dias >= 14) motivos.push(`sumido há ${dias} dias`);
   else if (dias != null && dias >= 7) motivos.push(`sem falar há ${dias} dias`);
-  if (h === "attention") motivos.push("health em atenção");
+  if (h === "atencao") motivos.push("saúde em atenção");
   if (a === "high") motivos.push("atenção alta");
 
   let nivel: NivelRisco = "saudavel";
-  if (h === "critical" || a === "critical") nivel = "critico";
-  else if (h === "high" || c.reclamacaoRecente || (dias != null && dias >= 14)) nivel = "risco";
-  else if (h === "attention" || a === "high" || (dias != null && dias >= 7)) nivel = "atencao";
+  if (a === "critical") nivel = "critico";
+  else if (h === "risco" || c.reclamacaoRecente || (dias != null && dias >= 14)) nivel = "risco";
+  else if (h === "atencao" || a === "high" || (dias != null && dias >= 7)) nivel = "atencao";
   return { nivel, motivos };
 }
 

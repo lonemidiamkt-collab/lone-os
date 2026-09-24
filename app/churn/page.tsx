@@ -4,30 +4,38 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import { useRole } from "@/lib/context/RoleContext";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import {
   Thermometer, AlertTriangle, Shield, TrendingUp, TrendingDown, Minus,
   Loader2, ChevronRight, Clock, RefreshCcw,
 } from "lucide-react";
-import { signalLabel } from "@/lib/health/compute";
+import { ROTULO_NIVEL_SAUDE, type NivelSaude } from "@/lib/scores/health";
 
 interface SparkPoint { date: string; score: number; level: string }
+// breakdown gravado por /api/scores: componentes (0..100 ou null), motivos em frase e cobertura.
+interface Breakdown { componentes?: Record<string, number | null>; motivos?: string[]; cobertura?: number }
 interface Row {
   id: string;
   name: string;
   score: number | null;
-  level: "safe" | "attention" | "high" | "critical" | null;
+  level: NivelSaude;
   computed_at: string | null;
   sparkline: SparkPoint[];
-  breakdown: Record<string, number>;
+  breakdown: Breakdown | null;
 }
-interface Summary { total: number; critical: number; high: number; attention: number; safe: number }
+interface Summary { total: number; risco: number; atencao: number; saudavel: number; sem_dado: number }
 
-const LEVEL_CONFIG = {
-  safe: { label: "Seguro", color: "text-lone-success", bg: "bg-lone-success-bg", border: "border-lone-success-border", bar: "bg-lone-success" },
-  attention: { label: "Atenção", color: "text-lone-warning", bg: "bg-lone-warning-bg", border: "border-lone-warning-border", bar: "bg-lone-warning" },
-  high: { label: "Alto", color: "text-lone-high", bg: "bg-lone-high-bg", border: "border-lone-high-border", bar: "bg-lone-high" },
-  critical: { label: "Crítico", color: "text-lone-danger", bg: "bg-lone-danger-bg", border: "border-lone-danger-border", bar: "bg-destructive" },
+const LEVEL_CONFIG: Record<NivelSaude, { color: string; bg: string; border: string; bar: string }> = {
+  saudavel: { color: "text-lone-success", bg: "bg-lone-success-bg", border: "border-lone-success-border", bar: "bg-lone-success" },
+  atencao: { color: "text-lone-warning", bg: "bg-lone-warning-bg", border: "border-lone-warning-border", bar: "bg-lone-warning" },
+  risco: { color: "text-lone-danger", bg: "bg-lone-danger-bg", border: "border-lone-danger-border", bar: "bg-destructive" },
+  sem_dado: { color: "text-muted-foreground", bg: "bg-muted", border: "border-border", bar: "bg-muted-foreground" },
+};
+
+const NOME_COMPONENTE: Record<string, string> = {
+  resultado: "Resultado", entrega: "Entregas e SLA", relacionamento: "Relacionamento",
+  sentimento: "Sentimento", pendencias: "Pendências", engajamento: "Engajamento do cliente",
+  financeiro: "Financeiro do cliente",
 };
 
 function formatDate(iso: string | null): string {
@@ -48,41 +56,20 @@ export default function ChurnRiskPage() {
   const load = async () => {
     setLoading(true);
     setErr("");
-    try {
-      // /api/health é só o liveness probe ({status:ok}); os scores reais vivem em /api/health/clients
-      // (protegido → authedFetch). Antes batia no probe e o Termômetro ficava sempre vazio.
-      const res = await authedFetch("/api/health/clients");
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: "Erro desconhecido" }));
-        setErr(data.error || "Falha ao carregar");
-        return;
-      }
-      const data = await res.json();
-      setClients(data.clients ?? []);
-      setSummary(data.summary ?? null);
-    } catch {
-      setErr("Falha de conexão");
-    } finally {
-      setLoading(false);
-    }
+    const r = await chamar<{ clients: Row[]; summary: Summary }>("/api/health/clients");
+    if (!r.ok || !r.data) setErr(r.erro ?? "Falha ao carregar");
+    else { setClients(r.data.clients ?? []); setSummary(r.data.summary ?? null); }
+    setLoading(false);
   };
 
+  // Recalcula pelo escritor único (100 = saudável). O compute-health antigo foi desligado.
   const recompute = async () => {
     setRecomputing(true);
     setErr("");
-    try {
-      const res = await authedFetch("/api/system/compute-health", { method: "POST" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: "Erro" }));
-        setErr(data.error || "Falha ao recalcular");
-        return;
-      }
-      await load();
-    } catch {
-      setErr("Falha de conexão no recálculo");
-    } finally {
-      setRecomputing(false);
-    }
+    const r = await chamar("/api/scores?gravar=1");
+    if (!r.ok) setErr(r.erro ?? "Falha ao recalcular");
+    else await load();
+    setRecomputing(false);
   };
 
   useEffect(() => { if (isAdmin) load(); }, [isAdmin]);
@@ -106,7 +93,7 @@ export default function ChurnRiskPage() {
               <Thermometer size={22} className="text-primary" />
               Termômetro de Churn
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">Score preditivo de risco por cliente. Quanto maior, maior a chance de churn. Atualizado diariamente às 06:00 BRT.</p>
+            <p className="text-sm text-muted-foreground mt-1">Saúde por cliente, de 0 a 100 — quanto MAIOR, mais saudável. Pior primeiro. Atualizada todo dia às 06:20.</p>
           </div>
           <button
             onClick={recompute}
@@ -121,10 +108,10 @@ export default function ChurnRiskPage() {
         {summary && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <SummaryCard label="Total" value={summary.total} color="text-foreground" />
-            <SummaryCard label="Crítico" value={summary.critical} color="text-lone-danger" />
-            <SummaryCard label="Alto" value={summary.high} color="text-lone-high" />
-            <SummaryCard label="Atenção" value={summary.attention} color="text-lone-warning" />
-            <SummaryCard label="Seguro" value={summary.safe} color="text-lone-success" />
+            <SummaryCard label={ROTULO_NIVEL_SAUDE.risco} value={summary.risco} color="text-lone-danger" />
+            <SummaryCard label={ROTULO_NIVEL_SAUDE.atencao} value={summary.atencao} color="text-lone-warning" />
+            <SummaryCard label={ROTULO_NIVEL_SAUDE.saudavel} value={summary.saudavel} color="text-lone-success" />
+            <SummaryCard label="Sem dado" value={summary.sem_dado} color="text-muted-foreground" />
           </div>
         )}
 
@@ -167,16 +154,18 @@ function trendDirection(spark: SparkPoint[]): "up" | "down" | "flat" {
   const first = spark[0].score;
   const last = spark[spark.length - 1].score;
   const diff = last - first;
-  if (diff > 5) return "up";      // score subiu = piorou
-  if (diff < -5) return "down";   // score caiu = melhorou
+  if (diff > 5) return "up";      // saúde subiu = melhorou
+  if (diff < -5) return "down";   // saúde caiu = piorou
   return "flat";
 }
 
 function ClientHealthCard({ client: c }: { client: Row }) {
   const [expanded, setExpanded] = useState(false);
-  const level = c.level ?? "safe";
+  const level: NivelSaude = c.level in LEVEL_CONFIG ? c.level : "sem_dado";
   const cfg = LEVEL_CONFIG[level];
-  const score = c.score ?? 0;
+  const score = c.score;
+  const motivos = c.breakdown?.motivos ?? [];
+  const componentes = Object.entries(c.breakdown?.componentes ?? {});
   const trend = trendDirection(c.sparkline);
 
   return (
@@ -190,26 +179,26 @@ function ClientHealthCard({ client: c }: { client: Row }) {
           <div className="relative h-20 w-4 mx-auto rounded-full border border-border bg-surface overflow-hidden">
             <div
               className={`absolute bottom-0 left-0 right-0 ${cfg.bar} transition-all`}
-              style={{ height: `${score}%` }}
+              style={{ height: `${score ?? 0}%` }}
             />
           </div>
-          <p className={`${cfg.color} text-center text-lg font-bold mt-1`}>{Math.round(score)}</p>
+          <p className={`${cfg.color} text-center text-lg font-bold mt-1`}>{score === null ? "—" : Math.round(score)}</p>
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-foreground font-semibold truncate">{c.name}</h3>
             <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border ${cfg.bg} ${cfg.color} ${cfg.border}`}>
-              {cfg.label}
+              {ROTULO_NIVEL_SAUDE[level]}
             </span>
-            {trend === "up" && (
+            {trend === "down" && (
               <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-lone-danger-bg text-lone-danger border border-lone-danger-border">
-                <TrendingUp size={10} /> Piorando 14d
+                <TrendingDown size={10} /> Piorando 14d
               </span>
             )}
-            {trend === "down" && (
+            {trend === "up" && (
               <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-lone-success-bg text-lone-success border border-lone-success-border">
-                <TrendingDown size={10} /> Melhorando 14d
+                <TrendingUp size={10} /> Melhorando 14d
               </span>
             )}
             {trend === "flat" && c.sparkline.length >= 2 && (
@@ -230,20 +219,32 @@ function ClientHealthCard({ client: c }: { client: Row }) {
       {expanded && (
         <div className="border-t border-border p-4 bg-muted/20 space-y-3">
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Sinais que compõem o score</p>
-            {Object.keys(c.breakdown).length === 0 ? (
-              <p className="text-xs text-muted-foreground">Nenhum sinal de risco ativo.</p>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Por quê</p>
+            {motivos.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhum ponto fraco registrado.</p>
             ) : (
+              <ul className="space-y-1">
+                {motivos.map((m) => <li key={m} className="text-xs text-secondary-foreground">• {m}</li>)}
+              </ul>
+            )}
+          </div>
+          {componentes.length > 0 && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
+                Componentes{c.breakdown?.cobertura != null ? ` · ${c.breakdown.cobertura}% medido` : ""}
+              </p>
               <div className="space-y-1.5">
-                {Object.entries(c.breakdown).sort(([, a], [, b]) => b - a).map(([key, weight]) => (
+                {componentes.map(([key, valor]) => (
                   <div key={key} className="flex items-center justify-between text-xs">
-                    <span className="text-secondary-foreground">{signalLabel(key)}</span>
-                    <span className={cfg.color}>+{weight}</span>
+                    <span className="text-secondary-foreground">{NOME_COMPONENTE[key] ?? key}</span>
+                    <span className={valor === null ? "text-muted-foreground" : "text-foreground tabular-nums"}>
+                      {valor === null ? "sem fonte" : valor}
+                    </span>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
           <Link
             href={`/clients/${c.id}`}
             className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
@@ -270,7 +271,7 @@ function Sparkline({ points }: { points: SparkPoint[] }) {
     return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(" ");
   const last = points[points.length - 1];
-  const strokeColor = last.level === "critical" ? "var(--lone-danger)" : last.level === "high" ? "var(--lone-high)" : last.level === "attention" ? "var(--lone-warning)" : "var(--lone-success)";
+  const strokeColor = last.level === "risco" ? "var(--lone-danger)" : last.level === "atencao" ? "var(--lone-warning)" : last.level === "saudavel" ? "var(--lone-success)" : "var(--muted-foreground)";
 
   return (
     <svg width={w} height={h} className="shrink-0">

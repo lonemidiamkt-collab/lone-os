@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { comExecucao, anotar } from "@/lib/obs/correlacao";
 import { hashDaUrl, distancia, LIMIAR_MESMA_ARTE } from "@/lib/imagem/phash";
@@ -12,7 +12,7 @@ import { hashDaUrl, distancia, LIMIAR_MESMA_ARTE } from "@/lib/imagem/phash";
 // que ainda não têm; (2) casa anúncio ↔ arte do MESMO cliente pela distância; (3) preenche
 // child_ad_id na genealogia quando a arte casada é uma variação replicada. Cron diário 07:35.
 export async function POST(req: NextRequest) {
-  const gate = await requireCronOrUser(req);
+  const gate = requireCron(req); // só o cron: qualquer logado disparava lote pesado (IA/Meta)
   if (gate) return gate;
   const max = Math.min(500, Math.max(10, Number(req.nextUrl.searchParams.get("max") ?? 150) || 150));
   return comExecucao({ origem: "cron:creative-casar", ator: "cron" }, async () => {

@@ -83,7 +83,7 @@ export default function EstiloPerfis() {
   return (
     <section className="rounded-xl border border-border bg-card p-5">
       <div className="flex items-center justify-between gap-3 mb-1">
-        <h2 className="text-sm font-semibold text-foreground">🎨 Estilo de comunicação aprendido</h2>
+        <h2 className="text-sm font-semibold text-foreground">Estilo de comunicação aprendido</h2>
         <div className="flex items-center gap-2">
           <button onClick={() => gerar(true)} disabled={gerando} className="text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-40">Testar</button>
           <button onClick={() => gerar(false)} disabled={gerando} className="flex items-center gap-1 rounded-lg bg-primary/10 text-primary border border-primary/20 px-2.5 py-1 text-[11px] font-medium hover:bg-primary/15 disabled:opacity-40">
@@ -105,7 +105,7 @@ export default function EstiloPerfis() {
         </p>
       ) : (
         <div className="space-y-2.5">
-          <ProfileCard label="🏢 Time da Lone" keyName="cs_style:team" value={team ?? ""} onSaved={(v) => setTeam(v || null)} />
+          <ProfileCard label="Time da Lone" keyName="cs_style:team" value={team ?? ""} onSaved={(v) => setTeam(v || null)} />
           {clients.map((c) => (
             <ProfileCard key={c.clientId} label={c.name} keyName={`cs_style:${c.clientId}`} value={c.estilo}
               onSaved={(v) => setClients((prev) => prev.map((x) => x.clientId === c.clientId ? { ...x, estilo: v } : x))} />

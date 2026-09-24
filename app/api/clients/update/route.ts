@@ -26,49 +26,80 @@ const FIELD_MAP: Record<string, string> = {
   cpfCnpj: "cpf_cnpj", birthDate: "birth_date", phone: "phone", email: "email",
   draftStatus: "draft_status", agenteAtivo: "agente_ativo",
   perfilConteudo: "perfil_conteudo",
+  razaoSocial: "razao_social", cnpj: "cnpj", contactName: "contact_name", contactRole: "contact_role",
+  emailCorporativo: "email_corporativo", endereco: "endereco",
+  enderecoRua: "endereco_rua", enderecoNumero: "endereco_numero", enderecoBairro: "endereco_bairro",
+  enderecoCidade: "endereco_cidade", enderecoEstado: "endereco_estado", enderecoCep: "endereco_cep",
+  serviceType: "service_type", idade: "idade",
+  docLogo: "doc_logo", docContratoSocial: "doc_contrato_social", docIdentidade: "doc_identidade",
+  companyPhone: "company_phone", contactPhone: "contact_phone",
+  lastKanbanActivity: "last_kanban_activity",
 };
+
+// Texto opcional que aceita null (= apagar o campo). Antes só `.optional()`: não havia como limpar.
+const txt = (max: number) => z.string().max(max).nullable().optional();
 
 const ClientUpdateSchema = z.object({
   id: z.string().uuid("id deve ser um UUID válido"),
   name: z.string().min(1).max(256).optional(),
   status: z.enum(["good", "average", "at_risk", "onboarding", "churned"]).optional(),
   industry: z.string().max(128).optional(),
-  logo: z.string().max(512).optional(),
+  logo: txt(512),
   attentionLevel: z.enum(["low", "medium", "high", "critical"]).optional(),
   tags: z.array(z.string()).optional(),
   monthlyBudget: z.number().nonnegative().optional(),
   paymentMethod: z.string().max(64).optional(),
   joinDate: z.string().optional(),
-  contractEnd: z.string().optional(),
-  lastPostDate: z.string().optional(),
-  notes: z.string().max(4096).optional(),
-  assignedTraffic: z.string().max(128).optional(),
-  assignedSocial: z.string().max(128).optional(),
-  assignedDesigner: z.string().max(128).optional(),
-  toneOfVoice: z.string().max(128).optional(),
-  driveLink: z.string().max(512).optional(),
-  instagramUser: z.string().max(128).optional(),
+  contractEnd: txt(32),
+  lastPostDate: txt(32),
+  notes: txt(4096),
+  assignedTraffic: txt(128),
+  assignedSocial: txt(128),
+  assignedDesigner: txt(128),
+  toneOfVoice: txt(128),
+  driveLink: txt(512),
+  instagramUser: txt(128),
   postsThisMonth: z.number().int().nonnegative().optional(),
   postsGoal: z.number().int().nonnegative().optional(),
-  campaignBriefing: z.string().max(4096).optional(),
-  fixedBriefing: z.string().max(4096).optional(),
-  metaAdAccountId: z.string().max(64).optional(),
-  metaAdAccountName: z.string().max(256).optional(),
-  leadSource: z.string().max(128).optional(),
-  facebookLogin: z.string().max(256).optional(),
-  googleAdsLogin: z.string().max(256).optional(),
-  instagramLogin: z.string().max(256).optional(),
-  nomeFantasia: z.string().max(256).optional(),
-  nicho: z.string().max(128).optional(),
-  clientFinancePhone: z.string().max(32).optional(),
-  clientPixKey: z.string().max(256).optional(),
-  cpfCnpj: z.string().max(32).optional(),
-  birthDate: z.string().optional(),
-  phone: z.string().max(32).optional(),
-  email: z.string().email().max(256).optional(),
-  draftStatus: z.string().max(64).optional(),
+  campaignBriefing: txt(4096),
+  fixedBriefing: txt(4096),
+  metaAdAccountId: txt(64),
+  metaAdAccountName: txt(256),
+  leadSource: txt(128),
+  facebookLogin: txt(256),
+  googleAdsLogin: txt(256),
+  instagramLogin: txt(256),
+  nomeFantasia: txt(256),
+  nicho: txt(128),
+  clientFinancePhone: txt(32),
+  clientPixKey: txt(256),
+  cpfCnpj: txt(32),
+  birthDate: txt(32),
+  phone: txt(32),
+  email: z.string().email().max(256).nullable().optional(),
+  draftStatus: txt(64),
   agenteAtivo: z.boolean().optional(),
-  perfilConteudo: z.enum(["so_arte", "video", "completo"]).optional(),
+  perfilConteudo: z.enum(["so_arte", "video", "completo"]).nullable().optional(),
+  razaoSocial: txt(256),
+  cnpj: txt(32),
+  contactName: txt(256),
+  contactRole: txt(128),
+  emailCorporativo: z.string().email().max(256).nullable().optional(),
+  endereco: txt(512),
+  enderecoRua: txt(256),
+  enderecoNumero: txt(32),
+  enderecoBairro: txt(128),
+  enderecoCidade: txt(128),
+  enderecoEstado: txt(32),
+  enderecoCep: txt(16),
+  serviceType: z.enum(["lone_growth", "assessoria_trafego", "assessoria_social", "assessoria_design"]).optional(),
+  idade: txt(16),
+  docLogo: txt(1024),
+  docContratoSocial: txt(1024),
+  docIdentidade: txt(1024),
+  companyPhone: txt(32),
+  contactPhone: txt(32),
+  lastKanbanActivity: z.string().max(64).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -92,6 +123,9 @@ export async function POST(req: NextRequest) {
     "facebookLogin", "googleAdsLogin", "instagramLogin",
     "clientPixKey", "cpfCnpj", "clientFinancePhone", "monthlyBudget", "paymentMethod",
     "contractEnd", "birthDate", "phone", "email", "status",
+    "razaoSocial", "cnpj", "emailCorporativo", "endereco", "enderecoRua", "enderecoNumero",
+    "enderecoBairro", "enderecoCidade", "enderecoEstado", "enderecoCep", "idade",
+    "docContratoSocial", "docIdentidade", "companyPhone", "contactPhone",
   ]);
   if (!user.isAdmin && Object.keys(updates).some((k) => SENSITIVE_FIELDS.has(k))) {
     return NextResponse.json(
@@ -102,10 +136,14 @@ export async function POST(req: NextRequest) {
 
   const row: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(updates)) {
-    if (val === undefined || val === null) continue;
-    const col = FIELD_MAP[key] ?? key;
-    row[col] = val;
+    if (val === undefined) continue;
+    const col = FIELD_MAP[key];
+    if (!col) continue;
+    // "" e null apagam; o form manda vazio quando alguém limpa o campo.
+    row[col] = val === "" ? null : val;
   }
+  // Desvincular a conta Meta leva o nome junto (o nome sozinho fazia a tela jurar que havia conta).
+  if (row.meta_ad_account_id === null) row.meta_ad_account_name = null;
   // Status vindo por aqui é gente arrastando no kanban: marca como MANUAL. A rotina de sexta
   // (status-clientes) grava "auto" por outro caminho e respeita o manual por 7 dias — o Julio
   // olhou e decidiu; a régua automática espera a próxima semana. Decidido no servidor, não no
@@ -116,10 +154,9 @@ export async function POST(req: NextRequest) {
     row.status_motivo = `definido à mão por ${user.email ?? "alguém"}`;
   }
 
+  // Nada gravável: responder "salvo" aqui fazia a tela confirmar um save que não aconteceu.
   if (Object.keys(row).length === 0) {
-    // Nothing to update — return current row
-    const { data } = await supabaseAdmin.from("clients").select("*").eq("id", id).single();
-    return NextResponse.json({ success: true, client: data });
+    return NextResponse.json({ error: "Nenhum campo válido para salvar." }, { status: 400 });
   }
 
   try {
@@ -131,6 +168,13 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Desvincular: o gatilho trg_sincronizar_ad_account só espelha conta preenchida, então a linha
+    // em ad_accounts (que o alerta de verba e o digest leem) sai aqui.
+    if (row.meta_ad_account_id === null) {
+      const { error: unlinkErr } = await supabaseAdmin.from("ad_accounts").delete().eq("client_id", id);
+      if (unlinkErr) return NextResponse.json({ error: `Conta desvinculada do cliente, mas não da carteira de tráfego: ${unlinkErr.message}` }, { status: 500 });
+    }
 
     // Sincroniza ad_accounts quando meta_ad_account_id muda
     if (row.meta_ad_account_id) {

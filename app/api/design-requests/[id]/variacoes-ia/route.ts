@@ -45,7 +45,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!g.ok) return NextResponse.json({ error: g.erro }, { status: 502 });
     const { urls, geracaoId } = await guardarGeracao({ clientId, imagens: g.imagens, prompt: g.prompt, entradas: g.entradas, designRequestId: id, adId: (dr.parent_ad_id as string) ?? null, origem: "design:variacoes-ia", qualidade, ms: Date.now() - t0, por: gate.user.email });
     if (!urls.length) return NextResponse.json({ error: "Gerei, mas não consegui guardar as imagens." }, { status: 500 });
-    await supabaseAdmin.from("design_requests").update({ attachments: [...((dr.attachments as string[]) ?? []), ...urls], updated_at: new Date().toISOString() }).eq("id", id);
+    // Sem coluna própria para proposta de IA: fica nos anexos (ia_geracoes guarda a origem).
+    const { error: erroAnexo } = await supabaseAdmin.from("design_requests").update({ attachments: [...((dr.attachments as string[]) ?? []), ...urls], updated_at: new Date().toISOString() }).eq("id", id);
+    if (erroAnexo) return NextResponse.json({ error: `Gerei as propostas, mas não consegui anexar à demanda: ${erroAnexo.message}`, urls, geracaoId }, { status: 500 });
     anotar(`arte IA: ${urls.length} para ${dr.client_name}/${dr.title} (logo=${g.entradas.logo} estilos=${g.entradas.estilos} textos=${(g.entradas.textos as string[]).length})`);
     return NextResponse.json({ ok: true, urls, geracaoId, entradas: g.entradas });
   });

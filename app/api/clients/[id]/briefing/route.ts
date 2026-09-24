@@ -11,6 +11,7 @@ import {
   resolveMemberId, fetchCurrentBriefing,
   idemCacheKey, getIdemCached, setIdemCached,
 } from "./_lib";
+import { conteudoDaNovaVersao } from "./_versao";
 
 // ── GET /api/clients/[id]/briefing ────────────────────────────
 // Roles: todos autenticados
@@ -94,50 +95,28 @@ export async function POST(
 
     const nextVersion = (maxRow?.version ?? 0) + 1;
 
-    // ── Desativa versão atual ────────────────────────────────────
-    await supabaseAdmin
+    // ── Conteúdo: versão atual + o que o form mandou ────────────
+    const { data: atual, error: atualErr } = await supabaseAdmin
       .from("client_briefings")
-      .update({ is_current: false })
+      .select("*")
       .eq("client_id", clientId)
-      .eq("is_current", true);
+      .eq("is_current", true)
+      .maybeSingle();
+    if (atualErr) {
+      return NextResponse.json({ error: `Não consegui ler a versão atual: ${atualErr.message}` }, { status: 500 });
+    }
 
-    // ── Insere nova versão ───────────────────────────────────────
-    const payload = parsed.data;
+    // ── Insere como NÃO atual, depois troca ─────────────────────
+    // Desativar antes e inserir depois deixava o cliente sem briefing quando o insert falhava.
+    // O índice único (1 atual por cliente) impede inserir já como atual.
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from("client_briefings")
       .insert({
-        client_id:                     clientId,
-        version:                       nextVersion,
-        is_current:                    true,
-        created_by:                    memberId,
-
-        resumo_estrategico:            payload.resumo_estrategico ?? null,
-        produtos:                      payload.produtos            ?? [],
-        publico_alvo:                  payload.publico_alvo        ?? [],
-        posicionamento:                payload.posicionamento      ?? null,
-        dores:                         payload.dores               ?? [],
-        ganchos:                       payload.ganchos             ?? [],
-        ctas:                          payload.ctas                ?? [],
-        observacoes_estrategicas:      payload.observacoes_estrategicas ?? null,
-
-        paleta_cores:                  payload.paleta_cores           ?? [],
-        tipografia:                    payload.tipografia             ?? null,
-        logo_url:                      payload.logo_url               ?? null,
-        referencias_visuais:           payload.referencias_visuais    ?? [],
-        elementos_evitar:              payload.elementos_evitar       ?? [],
-
-        tom_voz:                       payload.tom_voz               ?? null,
-        pessoa_verbal:                 payload.pessoa_verbal          ?? null,
-        usa_emoji:                     payload.usa_emoji              ?? null,
-        usa_giria:                     payload.usa_giria              ?? null,
-        palavras_proibidas:            payload.palavras_proibidas     ?? [],
-        hashtags_padrao:               payload.hashtags_padrao        ?? [],
-
-        horarios_preferidos:           payload.horarios_preferidos           ?? null,
-        produtos_destaque_atual:       payload.produtos_destaque_atual       ?? [],
-        concorrentes_evitar_mencionar: payload.concorrentes_evitar_mencionar ?? [],
-
-        observacoes_internas:          payload.observacoes_internas ?? null,
+        ...conteudoDaNovaVersao(atual as Record<string, unknown> | null, parsed.data as Record<string, unknown>),
+        client_id:  clientId,
+        version:    nextVersion,
+        is_current: false,
+        created_by: memberId,
       })
       .select("id")
       .single();
@@ -147,6 +126,23 @@ export async function POST(
         extra: { client_id: clientId, user_email: user.email, version: nextVersion },
       });
       return NextResponse.json({ error: insertError.message }, { status: 500 });
+    }
+
+    const { error: offErr } = await supabaseAdmin
+      .from("client_briefings")
+      .update({ is_current: false })
+      .eq("client_id", clientId)
+      .eq("is_current", true);
+    const { error: onErr } = offErr ? { error: offErr } : await supabaseAdmin
+      .from("client_briefings")
+      .update({ is_current: true })
+      .eq("id", inserted.id);
+    if (offErr || onErr) {
+      // Devolve a versão anterior como atual; a nova fica no histórico, sem apagar nada.
+      if (atual?.id) await supabaseAdmin.from("client_briefings").update({ is_current: true }).eq("id", atual.id as string);
+      const e = offErr ?? onErr;
+      Sentry.captureException(e, { extra: { client_id: clientId, version: nextVersion } });
+      return NextResponse.json({ error: `Não consegui ativar a nova versão: ${e?.message}` }, { status: 500 });
     }
 
     // ── Retorna objeto canônico da view (com completeness_percent) ─

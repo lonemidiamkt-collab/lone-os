@@ -5,7 +5,6 @@
 // relacionamento. SEM financeiro. Reaproveita health + sentimento + esfriando + cards atrasados.
 
 import { useEffect, useMemo, useState } from "react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +32,8 @@ type Filtro = "todos" | "risco" | "atencao" | "pendencias" | "sem_acao" | "sem_v
 export default function JornadaPage() {
   const [fichas, setFichas] = useState<Ficha[]>([]);
   const [loading, setLoading] = useState(true);
+  // 403 (social, designer) e falha de carga não são "nenhum cliente neste filtro".
+  const [erroCarga, setErroCarga] = useState<{ semAcesso: boolean; msg: string } | null>(null);
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [editId, setEditId] = useState("");
   const [form, setForm] = useState<Record<string, string>>({});
@@ -42,17 +43,32 @@ export default function JornadaPage() {
   const [checkins, setCheckins] = useState<Array<{ pergunta: string; resposta: string | null; status: string; origem: string; enviado_em: string }>>([]);
   const [ckResp, setCkResp] = useState("");
 
-  const carregarCheckins = (clientId: string) =>
-    authedFetch(`/api/cs/jornada?checkinsFor=${clientId}`).then((r) => r.json()).then((d) => setCheckins(d.checkins ?? [])).catch(() => setCheckins([]));
+  const [erroCheckin, setErroCheckin] = useState("");
+  const carregarCheckins = async (clientId: string) => {
+    const r = await chamar<{ checkins?: typeof checkins }>(`/api/cs/jornada?checkinsFor=${clientId}`);
+    if (!r.ok) { setErroCheckin(r.erro ?? "Não consegui carregar os check-ins."); return; }
+    setErroCheckin("");
+    setCheckins(r.data?.checkins ?? []);
+  };
   const salvarCheckin = async () => {
     if (!ckResp.trim() || !editId) return;
-    await authedFetch("/api/cs/jornada", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId: editId, checkinResposta: ckResp }) });
+    const r = await chamar<{ ok?: boolean }>("/api/cs/jornada", { clientId: editId, checkinResposta: ckResp });
+    // A rota responde 200 com ok:false quando não gravou — as duas coisas são falha.
+    if (!r.ok || r.data?.ok === false) { setErroCheckin(r.erro ?? "Não consegui registrar o check-in."); return; }
+    setErroCheckin("");
     setCkResp(""); carregarCheckins(editId);
   };
 
-  const carregar = () => {
+  const carregar = async () => {
     setLoading(true);
-    authedFetch("/api/cs/jornada").then((r) => r.json()).then((d) => setFichas(d.fichas ?? [])).catch(() => {}).finally(() => setLoading(false));
+    const r = await chamar<{ fichas?: Ficha[] }>("/api/cs/jornada");
+    if (!r.ok) {
+      setErroCarga({ semAcesso: r.status === 403, msg: r.erro ?? "Não consegui carregar a jornada." });
+    } else {
+      setErroCarga(null);
+      setFichas(r.data?.fichas ?? []);
+    }
+    setLoading(false);
   };
   useEffect(() => { carregar(); }, []);
 
@@ -128,6 +144,16 @@ export default function JornadaPage() {
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Carregando…</p>
+      ) : erroCarga ? (
+        <div className="rounded-lg border border-border p-4 space-y-1">
+          <p className="text-sm font-medium text-foreground">{erroCarga.semAcesso ? "Sem acesso" : "Não consegui carregar"}</p>
+          <p className="text-xs text-muted-foreground">
+            {erroCarga.semAcesso
+              ? "A jornada do cliente é restrita à gestão (traz notas de handoff e risco de churn)."
+              : erroCarga.msg}
+          </p>
+          {!erroCarga.semAcesso && <Button variant="outline" size="sm" onClick={carregar}>Tentar de novo</Button>}
+        </div>
       ) : (
         <div className="divide-y divide-border rounded-lg border border-border">
           {lista.length === 0 && <p className="text-sm text-muted-foreground p-4">Nenhum cliente neste filtro.</p>}
@@ -185,6 +211,7 @@ export default function JornadaPage() {
                         ))}
                       </div>
                     )}
+                    {erroCheckin && <p className="text-[11px] text-lone-danger">{erroCheckin}</p>}
                     <div className="flex gap-2">
                       <Input value={ckResp} onChange={(e) => setCkResp(e.target.value)} placeholder="Registrar o que o cliente falou (leads, atendimento, objeções, prioridades)…" />
                       <Button variant="outline" onClick={salvarCheckin}>Registrar</Button>

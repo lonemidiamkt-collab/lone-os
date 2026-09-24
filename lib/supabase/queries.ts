@@ -77,6 +77,8 @@ function snakeToClient(row: Record<string, unknown>): Client {
     pausedAt: (row.paused_at as string) ?? null,
     pausedReason: (row.paused_reason as string) ?? null,
     pausedUntil: (row.paused_until as string) ?? null,
+    currentHealthScore: row.current_health_score == null ? null : Number(row.current_health_score),
+    currentHealthLevel: (row.current_health_level as Client["currentHealthLevel"]) ?? null,
     pausedBy: (row.paused_by as string) ?? null,
     driveLink: (row.drive_link as string) ?? undefined,
     instagramUser: (row.instagram_user as string) ?? undefined,
@@ -270,7 +272,7 @@ export async function fetchChurnedClients(): Promise<Client[]> {
 // puxa os campos completos via fetchDraftClientsFull (gated, server).
 export async function fetchDraftClients(): Promise<Client[]> {
   const { data, error } = await db.from("clients").select(CLIENT_LEAN_COLS).not("draft_status", "is", null).order("created_at", { ascending: false });
-  if (error) { console.error("[DB] fetchDraftClients:", error); return []; }
+  if (error) { console.error("[DB] fetchDraftClients:", error); throw error; }
   return (data ?? []).map((r) => snakeToClient(r as unknown as Record<string, unknown>));
 }
 
@@ -286,7 +288,7 @@ export async function fetchClientById(id: string): Promise<Client | null> {
 // COMPLETO — rascunhos. SÓ server (service_role). Alimenta a tela de aprovação de cadastro.
 export async function fetchDraftClientsFull(): Promise<Client[]> {
   const { data, error } = await supabaseAdmin.from("clients").select("*").not("draft_status", "is", null).order("created_at", { ascending: false });
-  if (error) { console.error("[DB] fetchDraftClientsFull:", error); return []; }
+  if (error) { console.error("[DB] fetchDraftClientsFull:", error); throw error; }
   return (data ?? []).map(snakeToClient);
 }
 

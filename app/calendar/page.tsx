@@ -13,7 +13,6 @@ import {
   AlertTriangle,
   User,
   Flag,
-  Heart,
   Sparkles,
   Edit3,
   Save,
@@ -25,12 +24,10 @@ import {
   Briefcase,
   Clock,
   ExternalLink,
-  GripVertical,
   CalendarClock,
   Video,
   MapPin,
 } from "lucide-react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
 import FichaReuniao, { type ReuniaoResumida } from "@/components/FichaReuniao";
 import { useAppState } from "@/lib/context/AppStateContext"; // kept for reminders (localStorage-only, no DB equivalent)
@@ -43,6 +40,16 @@ import DriveButton from "@/components/DriveButton";
 import type { ContentCard, Task, TrafficRoutineCheck, TaskStatus, Priority, Reminder, Role } from "@/lib/types";
 import HolidaysPdfButton from "@/components/HolidaysPdfButton";
 import { MarkdownEditor } from "@/components/Markdown";
+import MonthObservancesAlert from "@/components/MonthObservancesAlert";
+import { toast } from "sonner";
+import { todaySP, spDateStr } from "@/lib/utils";
+
+/** "YYYY-MM-DD" das partes LOCAIS de um Date (toISOString daria o dia em UTC). */
+function ymdLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+/** Toast para promessa do store que falhou (o store já desfez o otimista). */
+const avisarFalha = (acao: string) => () => { toast.error(`${acao}. Tenta de novo?`); };
 
 const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const MONTHS_SHORT = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -85,11 +92,12 @@ interface TaskBar {
   raw: Task;
 }
 
+// Uma cor por tipo: com tudo em bg-primary o ponto colorido não dizia nada.
 const TYPE_COLORS: Record<EventType, string> = {
   content: "bg-primary",
-  task: "bg-primary",
-  routine: "bg-muted",
-  reminder: "bg-primary",
+  task: "bg-chart-2",
+  routine: "bg-muted-foreground",
+  reminder: "bg-chart-4",
   // A reunião com cliente é o único compromisso com HORA MARCADA e outra pessoa esperando do
   // outro lado. Cor própria porque perder uma custa diferente de perder um prazo interno.
   meeting: "bg-lone-success",
@@ -157,7 +165,11 @@ export default function CalendarPage() {
   const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
   const { role, currentUser } = useRole();
 
-  const today = new Date();
+  // Hoje de São Paulo como Date "local": à noite o relógio UTC já virou o dia (e às vezes o mês).
+  const hojeStr = todaySP();
+  const today = (() => { const [a, m, d] = hojeStr.split("-").map(Number); return new Date(a, m - 1, d); })();
+  // Arrastar a data de post de um card é decisão de quem cuida do conteúdo, não de qualquer papel.
+  const podeMoverCard = role === "admin" || role === "manager" || role === "social";
   // `?d=YYYY-MM-DD` abre o calendário JÁ no dia certo. É o que liga a aba Reuniões do cliente a
   // esta tela: sem isso, "ver no calendário" jogava a pessoa no mês corrente e ela tinha que
   // procurar a reunião — e uma agenda que obriga a procurar não é a mesma agenda.
@@ -264,57 +276,18 @@ export default function CalendarPage() {
     return map;
   }, [observances, viewYear, viewMonth, CATEGORY_PRIORITY]);
 
-  // Awareness months ativos no mês visualizado (banner topo do mês)
-  const monthAwareness = useMemo(() => {
-    const prefix = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-`;
-    return observances.filter((o) => o.date.startsWith(prefix) && o.monthLong);
-  }, [observances, viewYear, viewMonth]);
-
-  // Datas do mês corrente — feriados nacionais
-  const monthHolidays = useMemo(() => {
-    return Object.entries(observanceByDay)
-      .filter(([, o]) => o.category === "national")
-      .map(([day, o]) => ({ day: parseInt(day, 10), name: o.name }))
-      .sort((a, b) => a.day - b.day);
-  }, [observanceByDay]);
-
-  // Feriados estaduais
-  const monthStateHolidays = useMemo(() => {
-    return Object.entries(observanceByDay)
-      .filter(([, o]) => o.category === "estadual")
-      .map(([day, o]) => ({ day: parseInt(day, 10), name: o.name, uf: o.uf }))
-      .sort((a, b) => a.day - b.day);
-  }, [observanceByDay]);
-
-  // Feriados municipais
-  const monthMunicipalHolidays = useMemo(() => {
-    return Object.entries(observanceByDay)
-      .filter(([, o]) => o.category === "municipal")
-      .map(([day, o]) => ({ day: parseInt(day, 10), name: o.name, cities: o.cities }))
-      .sort((a, b) => a.day - b.day);
-  }, [observanceByDay]);
-
-  // Datas comemorativas (não-feriado: comercial/cultural/profissao)
-  const monthCommemoratives = useMemo(() => {
-    return Object.entries(observanceByDay)
-      .filter(([, o]) => o.category !== "national" && o.category !== "estadual" && o.category !== "municipal")
-      .map(([day, o]) => ({ day: parseInt(day, 10), name: o.name, category: o.category }))
-      .sort((a, b) => a.day - b.day);
-  }, [observanceByDay]);
-
   // Próximos 60 dias (ordenado, separa feriados de comemorativas)
   const upcomingObservances = useMemo(() => {
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() + 60);
-    const cutoffIso = cutoff.toISOString().slice(0, 10);
+    const [a, m, d] = hojeStr.split("-").map(Number);
+    const cutoffIso = ymdLocal(new Date(a, m - 1, d + 60));
     return observances
-      .filter((o) => !o.monthLong && o.date >= todayIso && o.date <= cutoffIso)
+      .filter((o) => !o.monthLong && o.date >= hojeStr && o.date <= cutoffIso)
       .sort((a, b) => a.date.localeCompare(b.date));
-  }, [observances]);
+  }, [observances, hojeStr]);
 
   const handleDragStart = useCallback((e: React.DragEvent, event: CalendarEvent) => {
-    if (event.type === "routine") return; // routine checks are not draggable
+    // Rotina e reunião não se arrastam: reunião tem hora, convidados e aviso ao cliente — reagenda na ficha.
+    if (event.type === "routine" || event.type === "meeting") return;
     draggedEventRef.current = event;
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", event.id);
@@ -348,8 +321,9 @@ export default function CalendarPage() {
     if (newDate === event.date) return; // same day, no-op
 
     if (event.type === "content") {
+      if (!podeMoverCard) { toast.error("Só a gestão e o social mudam a data de post de um card."); return; }
       const card = event.raw as ContentCard;
-      updateContentCard(card.id, { dueDate: newDate });
+      updateContentCard(card.id, { dueDate: newDate }).catch(() => {}); // o store já avisa a falha
     } else if (event.type === "task") {
       const task = event.raw as Task;
       const updates: Partial<Task> = { dueDate: newDate };
@@ -360,14 +334,14 @@ export default function CalendarPage() {
         const diff = oldEnd.getTime() - oldStart.getTime();
         const newEnd = new Date(newDate + "T00:00:00");
         const newStart = new Date(newEnd.getTime() - diff);
-        updates.startDate = newStart.toISOString().slice(0, 10);
+        updates.startDate = ymdLocal(newStart);
       }
-      updateTask(task.id, updates);
+      updateTask(task.id, updates).catch(avisarFalha("Não consegui reagendar a tarefa"));
     } else if (event.type === "reminder") {
       const rem = event.raw as Reminder;
       updateReminder(rem.id, { date: newDate });
     }
-  }, [viewYear, viewMonth, updateContentCard, updateTask, updateReminder]);
+  }, [viewYear, viewMonth, updateContentCard, updateTask, updateReminder, podeMoverCard]);
 
   // Quick Create state
   const [showCreate, setShowCreate] = useState(false);
@@ -389,7 +363,7 @@ export default function CalendarPage() {
         clientName: card.clientName,
         date: card.dueDate,
         dueDate: card.dueDate,
-        color: card.designerDeliveredAt ? "bg-primary" : card.designRequestId ? "bg-primary" : TYPE_COLORS.content,
+        color: card.designerDeliveredAt ? "bg-lone-info" : card.designRequestId ? "bg-lone-warning" : TYPE_COLORS.content,
         detail: `${card.format} · ${card.status.replace(/_/g, " ")}${designTag ? ` · ${designTag}` : ""}`,
         raw: card,
       });
@@ -470,7 +444,8 @@ export default function CalendarPage() {
         type: "meeting",
         title: `${cara.prefixo}Reunião — ${r.cliente}`,
         clientName: r.cliente,
-        date: r.quando.slice(0, 10),
+        // Dia de SP: reunião às 21h BRT já é o dia seguinte em UTC.
+        date: spDateStr(r.quando),
         color: cara.cor,
         detail: `${new Date(r.quando).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}${r.responsavel ? ` · ${r.responsavel}` : ""}`,
         raw: r as unknown as Reminder,
@@ -492,13 +467,19 @@ export default function CalendarPage() {
     window.addEventListener("focus", tick);
     return () => { clearInterval(i); window.removeEventListener("focus", tick); };
   }, [recarregarReunioes]);
+  const [erroReunioes, setErroReunioes] = useState<string | null>(null);
   useEffect(() => {
     let vivo = true;
     const mes = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}`;
-    authedFetch(`/api/reunioes?mes=${mes}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (!vivo || !j?.reunioes) return;
+    type Linha = { reuniaoId: string; clientId: string; cliente: string; quando: string | null; responsavel: string | null; estado: string };
+    chamar<{ reunioes?: Linha[] }>(`/api/reunioes?mes=${mes}`)
+      .then((resp) => {
+        if (!vivo) return;
+        // Sem este aviso, a falha parecia "nenhuma reunião no mês".
+        if (!resp.ok) { setErroReunioes(resp.erro); return; }
+        setErroReunioes(null);
+        const j = resp.data;
+        if (!j?.reunioes) return;
         setReunioes(
           // ── AQUI ESTAVA O BUG ──────────────────────────────────────────
           //
@@ -510,14 +491,13 @@ export default function CalendarPage() {
           // `pendente` fica de fora porque não é reunião: é a linha de "esse cliente ainda não
           // marcou", que a agenda do ciclo usa e não tem data para desenhar.
           j.reunioes
-            .filter((x: { estado: string; quando: string | null }) => !!x.quando && x.estado !== "pendente")
-            .map((x: { reuniaoId: string; clientId: string; cliente: string; quando: string; responsavel: string | null; estado: string }) => ({
-              id: x.reuniaoId, clientId: x.clientId, cliente: x.cliente, quando: x.quando,
+            .filter((x) => !!x.quando && x.estado !== "pendente")
+            .map((x) => ({
+              id: x.reuniaoId, clientId: x.clientId, cliente: x.cliente, quando: x.quando as string,
               responsavel: x.responsavel, estado: x.estado,
             })),
         );
-      })
-      .catch(() => { /* calendário sem reunião é melhor que calendário quebrado */ });
+      });
     return () => { vivo = false; };
   }, [viewYear, viewMonth, versaoReunioes]);
 
@@ -639,12 +619,11 @@ export default function CalendarPage() {
   }, [filteredEvents]);
 
   const upcomingDeadlines = useMemo(() => {
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     return tasks
-      .filter((t) => t.dueDate && t.status !== "done" && t.dueDate >= todayStr)
+      .filter((t) => t.dueDate && t.status !== "done" && t.dueDate >= hojeStr)
       .sort((a, b) => a.dueDate!.localeCompare(b.dueDate!))
       .slice(0, 8);
-  }, [tasks]);
+  }, [tasks, hojeStr]);
 
   // Clicar numa reunião abre a ficha dela. Antes não fazia nada: o clique existia só para tarefa
   // e lembrete, e a reunião — que é o registro mais denso do calendário — não tinha para onde
@@ -692,8 +671,7 @@ export default function CalendarPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
-              const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-              setCreateDate(todayStr);
+              setCreateDate(hojeStr);
               setShowCreate(true);
             }}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all"
@@ -771,104 +749,20 @@ export default function CalendarPage() {
             <HolidaysPdfButton month={viewMonth + 1} year={viewYear} label="Baixar PDF" />
           </div>
 
-          {/* Awareness months ativos (Outubro Rosa, Novembro Azul, etc.) — banner topo */}
-          {monthAwareness.length > 0 && (
-            <div className="mb-3 rounded-xl border border-rose-500/20 bg-rose-500/[0.05] p-3">
-              <div className="flex items-start gap-2 flex-wrap">
-                <Heart size={12} className="text-rose-500 mt-0.5 shrink-0" />
-                <p className="text-[11px] text-rose-500 font-semibold uppercase tracking-wider">
-                  Mês de conscientização
-                </p>
-                <div className="flex flex-wrap gap-1.5 ml-1">
-                  {monthAwareness.map((a) => (
-                    <span key={a.name} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-500 border border-rose-500/20">
-                      <span>{a.name}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Banner de feriados nacionais do mês */}
-          {monthHolidays.length > 0 && (
-            <div className="mb-3 rounded-xl border border-lone-warning-border bg-lone-warning-bg/[0.05] p-3">
-              <div className="flex items-start gap-2 flex-wrap">
-                <Flag size={12} className="text-lone-warning mt-0.5 shrink-0" />
-                <p className="text-[11px] text-lone-warning font-semibold uppercase tracking-wider">
-                  {monthHolidays.length} feriado{monthHolidays.length > 1 ? "s" : ""} nacional{monthHolidays.length > 1 ? "is" : ""}
-                </p>
-                <div className="flex flex-wrap gap-1.5 ml-1">
-                  {monthHolidays.map((h) => (
-                    <span key={h.day} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border">
-                      <strong className="font-bold">{String(h.day).padStart(2, "0")}</strong>
-                      <span>{h.name}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Banner de feriados estaduais do mês */}
-          {monthStateHolidays.length > 0 && (
-            <div className="mb-3 rounded-xl border border-lone-warning-border bg-lone-warning-bg/[0.05] p-3">
-              <div className="flex items-start gap-2 flex-wrap">
-                <Flag size={12} className="text-lone-warning mt-0.5 shrink-0" />
-                <p className="text-[11px] text-lone-warning font-semibold uppercase tracking-wider">
-                  {monthStateHolidays.length} feriado{monthStateHolidays.length > 1 ? "s" : ""} estadua{monthStateHolidays.length > 1 ? "is" : "l"}
-                </p>
-                <div className="flex flex-wrap gap-1.5 ml-1">
-                  {monthStateHolidays.map((h) => (
-                    <span key={`${h.day}-${h.name}`} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border">
-                      <strong className="font-bold">{String(h.day).padStart(2, "0")}</strong>
-                      <span>{h.name}{h.uf ? ` · ${h.uf}` : ""}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Banner de feriados municipais do mês */}
-          {monthMunicipalHolidays.length > 0 && (
-            <div className="mb-3 rounded-xl border border-[color-mix(in_srgb,var(--chart-5)_25%,transparent)] bg-[color-mix(in_srgb,var(--chart-5)_5%,transparent)] p-3">
-              <div className="flex items-start gap-2 flex-wrap">
-                <Flag size={12} className="text-chart-5 mt-0.5 shrink-0" />
-                <p className="text-[11px] text-chart-5 font-semibold uppercase tracking-wider">
-                  {monthMunicipalHolidays.length} feriado{monthMunicipalHolidays.length > 1 ? "s" : ""} municipa{monthMunicipalHolidays.length > 1 ? "is" : "l"}
-                </p>
-                <div className="flex flex-wrap gap-1.5 ml-1">
-                  {monthMunicipalHolidays.map((h) => (
-                    <span key={`${h.day}-${h.name}`} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-[color-mix(in_srgb,var(--chart-5)_12%,transparent)] text-chart-5 border border-[color-mix(in_srgb,var(--chart-5)_25%,transparent)]">
-                      <strong className="font-bold">{String(h.day).padStart(2, "0")}</strong>
-                      <span>{h.name}{h.cities && h.cities.length > 0 ? ` · ${h.cities.join(", ")}` : ""}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Banner de datas comemorativas do mês */}
-          {monthCommemoratives.length > 0 && (
-            <div className="mb-3 rounded-xl border border-[color-mix(in_srgb,var(--chart-4)_25%,transparent)] bg-[color-mix(in_srgb,var(--chart-4)_5%,transparent)] p-3">
-              <div className="flex items-start gap-2 flex-wrap">
-                <Sparkles size={12} className="text-chart-4 mt-0.5 shrink-0" />
-                <p className="text-[11px] text-chart-4 font-semibold uppercase tracking-wider">
-                  {monthCommemoratives.length} data{monthCommemoratives.length > 1 ? "s" : ""} comemorativa{monthCommemoratives.length > 1 ? "s" : ""}
-                </p>
-                <div className="flex flex-wrap gap-1.5 ml-1">
-                  {monthCommemoratives.map((c) => (
-                    <span key={`${c.day}-${c.name}`} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-[color-mix(in_srgb,var(--chart-4)_12%,transparent)] text-chart-4 border border-[color-mix(in_srgb,var(--chart-4)_25%,transparent)]">
-                      <strong className="font-bold">{String(c.day).padStart(2, "0")}</strong>
-                      <span>{c.name}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Uma linha só. Os cinco blocos coloridos (com feriado de cidade de fora da carteira)
+              empurravam a grade para baixo; o dia continua marcado na própria célula. */}
+          <div className="mb-3 space-y-1">
+            <MonthObservancesAlert
+              year={viewYear}
+              month={viewMonth + 1}
+              compact
+              title="Datas do mês"
+              only={["national", "comercial", "cultural", "awareness_month"]}
+            />
+            {erroReunioes && (
+              <p className="text-xs text-destructive">Não consegui carregar as reuniões do mês: {erroReunioes}</p>
+            )}
+          </div>
 
           <div className="grid grid-cols-7 gap-1 mb-1">
             {WEEKDAYS.map((d) => (
@@ -1028,7 +922,7 @@ export default function CalendarPage() {
                       <div className="flex flex-col gap-0.5 flex-1">
                         {nonReminderEvents.slice(0, 2).map((e) => {
                           const isTaskDeadline = e.type === "task" && e.isDeadline && (e.raw as Task).status !== "done";
-                          const isDraggable = e.type !== "routine";
+                          const isDraggable = e.type !== "routine" && e.type !== "meeting" && (e.type !== "content" || podeMoverCard);
                           return (
                             <button
                               key={e.id}
@@ -1040,7 +934,6 @@ export default function CalendarPage() {
                                 isTaskDeadline
                                   ? "bg-destructive/15 text-destructive font-bold"
                                   : e.type === "content" ? "bg-primary/15 text-primary" :
-                                    e.type === "task" ? "bg-primary/15 text-primary" :
                                     "bg-muted text-foreground"
                               } hover:brightness-125`}
                               title={`${e.clientName}: ${e.title}`}
@@ -1116,7 +1009,7 @@ export default function CalendarPage() {
                       >
                         <div className="flex items-center gap-2 mb-1">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${
-                            isReminder && rem?.done ? "bg-lone-success-bg" :
+                            isReminder && rem?.done ? "bg-lone-success" :
                             isTaskDeadline ? "bg-destructive" : e.color
                           }`} />
                           <Icon size={12} className={
@@ -1154,8 +1047,7 @@ export default function CalendarPage() {
                         const idReu = e.id.replace(/^reu-/, "");
                         // Só depois da hora: oferecer "marcou como realizada" numa reunião que
                         // ainda não começou convida a marcar o que não aconteceu.
-                        const jaPassou = new Date(`${e.date}T23:59:59-03:00`) <= new Date()
-                          || new Date(e.date).toDateString() === new Date().toDateString();
+                        const jaPassou = e.date <= hojeStr;
                         if (feito[idReu]) {
                           return <p className="ml-[18px] mt-1 text-[10px] text-lone-success">{feito[idReu]}</p>;
                         }
@@ -1202,11 +1094,10 @@ export default function CalendarPage() {
               <div className="space-y-2">
                 {upcomingDeadlines.map((task) => {
                   const [, m, d] = task.dueDate!.split("-").map(Number);
-                  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-                  const isTaskToday = task.dueDate === todayStr;
+                  const isTaskToday = task.dueDate === hojeStr;
                   const tomorrow = new Date(today);
                   tomorrow.setDate(tomorrow.getDate() + 1);
-                  const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+                  const tomorrowStr = ymdLocal(tomorrow);
                   const isTomorrow = task.dueDate === tomorrowStr;
                   return (
                     <button
@@ -1290,7 +1181,7 @@ export default function CalendarPage() {
                       <span className={`text-[10px] w-10 shrink-0 text-right font-medium ${isOfficial ? "text-lone-warning" : "text-chart-4"}`}>
                         {d} {MONTHS_SHORT[m - 1]}
                       </span>
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOfficial ? "bg-lone-warning-bg" : "bg-chart-4"}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOfficial ? "bg-lone-warning" : "bg-chart-4"}`} />
                       <Icon size={11} className={`shrink-0 ${isOfficial ? "text-lone-warning" : "text-chart-4 opacity-70"}`} />
                       <div className="flex-1 min-w-0">
                         <span className="text-xs text-foreground truncate block">{o.name}</span>
@@ -1303,35 +1194,6 @@ export default function CalendarPage() {
             )}
           </div>
 
-          {/* Legend */}
-          <div className="card">
-            <h3 className="font-semibold text-foreground text-sm mb-3">Legenda</h3>
-            <div className="space-y-2">
-              {(["content", "task", "routine", "reminder"] as EventType[]).map((t) => {
-                const Icon = TYPE_ICONS[t];
-                return (
-                  <div key={t} className="flex items-center gap-2">
-                    <span className={`w-2.5 h-2.5 rounded-full ${TYPE_COLORS[t]}`} />
-                    <Icon size={12} className="text-muted-foreground" />
-                    <span className="text-xs text-foreground">{TYPE_LABELS[t]}</span>
-                  </div>
-                );
-              })}
-              <div className="flex items-center gap-2 pt-1 border-t border-border/50 mt-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-primary" />
-                <span className="text-[10px] text-muted-foreground">Barra = duração da tarefa</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-destructive" />
-                <AlertTriangle size={10} className="text-destructive" />
-                <span className="text-[10px] text-destructive font-medium">Prazo final</span>
-              </div>
-              <div className="flex items-center gap-2 pt-1 border-t border-border/50 mt-1">
-                <GripVertical size={12} className="text-muted-foreground" />
-                <span className="text-[10px] text-muted-foreground">Arraste eventos para reagendar</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -1341,7 +1203,7 @@ export default function CalendarPage() {
           reuniao={reuniaoAberta}
           onFechar={() => setReuniaoAberta(null)}
           // Salvar na ficha pode ter mudado o estado; a agenda relê para não ficar defasada.
-          onMudou={() => setReunioes((rs) => [...rs])}
+          onMudou={recarregarReunioes}
         />
       )}
 
@@ -1350,8 +1212,12 @@ export default function CalendarPage() {
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
           onUpdate={(id, updates) => {
-            updateTask(id, updates);
+            const antes = selectedTask;
             setSelectedTask((prev) => prev ? { ...prev, ...updates } : null);
+            updateTask(id, updates).catch(() => {
+              setSelectedTask((prev) => (prev && prev.id === id ? antes : prev));
+              toast.error("Não consegui salvar a tarefa. Tenta de novo?");
+            });
           }}
           driveLink={clients.find((c) => c.id === selectedTask.clientId)?.driveLink}
         />
@@ -1367,11 +1233,11 @@ export default function CalendarPage() {
           onClose={() => setShowCreate(false)}
           onReuniaoSalva={recarregarReunioes}
           onCreateTask={(task) => {
-            addTask(task);
+            addTask(task).catch(avisarFalha(`Não consegui criar a tarefa "${task.title}"`));
             setShowCreate(false);
           }}
           onCreateContent={(card) => {
-            addContentCard(card);
+            addContentCard(card).catch(avisarFalha(`Não consegui criar o card "${card.title}"`));
             setShowCreate(false);
           }}
           onCreateReminder={(rem) => {
@@ -1379,9 +1245,13 @@ export default function CalendarPage() {
             setShowCreate(false);
           }}
           onSaveAndOpen={async (task) => {
-            const created = await addTask(task);
-            setShowCreate(false);
-            setSelectedTask(created);
+            try {
+              const created = await addTask(task);
+              setShowCreate(false);
+              setSelectedTask(created);
+            } catch {
+              toast.error("Não consegui criar a tarefa. Tenta de novo?");
+            }
           }}
         />
       )}
@@ -1478,6 +1348,7 @@ function QuickCreateModal({
   const [avisarCliente, setAvisarCliente] = useState(true);
   const [duracao, setDuracao] = useState("60");
   const [salvandoReuniao, setSalvandoReuniao] = useState(false);
+  const [erroReuniao, setErroReuniao] = useState<string | null>(null);
 
   // Autoresize do textarea de descrição (briefing usa MarkdownEditor que cuida sozinho)
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -1510,7 +1381,8 @@ function QuickCreateModal({
     // OKRs ("quem teve reunião") e no cron de lembrete. Gravar como tarefa a deixaria fora dos
     // três — foi por isso que o tipo precisou existir aqui em vez de virar "tarefa de reunião".
     if (createType === "meeting") {
-      if (!clientId) { alert("Reunião precisa de um cliente."); return; }
+      if (!clientId) { setErroReuniao("Reunião precisa de um cliente."); return; }
+      setErroReuniao(null);
       setSalvandoReuniao(true);
       try {
         const inicio = new Date(`${date}T${time || "10:00"}:00-03:00`).toISOString();
@@ -1525,7 +1397,7 @@ function QuickCreateModal({
             colaboradores: assignees.filter((a) => a !== currentUser),
           avisarCliente,
         });
-        if (!r.ok) { alert(r.erro ?? "Não consegui agendar a reunião."); onReuniaoSalva?.(); return; }
+        if (!r.ok) { setErroReuniao(r.erro ?? "Não consegui agendar a reunião."); onReuniaoSalva?.(); return; }
         onReuniaoSalva?.();
         onClose();
       } finally {
@@ -1977,6 +1849,10 @@ function QuickCreateModal({
             </div>
           )}
 
+          {createType === "meeting" && erroReuniao && (
+            <p className="text-xs text-destructive">{erroReuniao}</p>
+          )}
+
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
             <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-card/5 transition-all">
@@ -2017,6 +1893,7 @@ function TaskDetailModal({
   onUpdate: (id: string, updates: Partial<Task>) => void;
   driveLink?: string;
 }) {
+  const { profiles } = useRole();
   const [editing, setEditing] = useState(false);
   const [editStatus, setEditStatus] = useState<TaskStatus>(task.status);
   const [editPriority, setEditPriority] = useState<Priority>(task.priority);
@@ -2033,13 +1910,13 @@ function TaskDetailModal({
     setEditing(false);
   };
 
-  const isDeadlinePassed = task.dueDate && task.dueDate < new Date().toISOString().slice(0, 10) && task.status !== "done";
+  const isDeadlinePassed = task.dueDate && task.dueDate < todaySP() && task.status !== "done";
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg mx-4 bg-card border border-border rounded-2xl shadow-2xl animate-fade-in overflow-hidden">
-        <div className={`h-1 w-full ${task.status === "done" ? "bg-lone-success-bg" : isDeadlinePassed ? "bg-destructive" : "bg-primary"}`} />
+        <div className={`h-1 w-full ${task.status === "done" ? "bg-lone-success" : isDeadlinePassed ? "bg-destructive" : "bg-primary"}`} />
 
         <div className="p-6 space-y-5">
           <div className="flex items-start justify-between gap-4">
@@ -2110,11 +1987,15 @@ function TaskDetailModal({
                 <User size={10} /> Responsável
               </label>
               {editing ? (
-                <input
+                // Da equipe, não texto livre: nome digitado errado virava tarefa de ninguém.
+                <select
                   value={editAssignedTo}
                   onChange={(e) => setEditAssignedTo(e.target.value)}
                   className="w-full bg-muted border border-border rounded-lg px-2 py-1.5 text-xs text-foreground"
-                />
+                >
+                  {!profiles.some((p) => p.name === editAssignedTo) && <option value={editAssignedTo}>{editAssignedTo || "— Escolha —"}</option>}
+                  {profiles.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
               ) : (
                 <span className="text-xs text-foreground">{task.assignedTo}</span>
               )}

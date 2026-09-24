@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExternalLink, Check, X, Bookmark, TrendingUp, Loader2 } from "lucide-react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useRole } from "@/lib/context/RoleContext";
+import { cardDaPauta } from "@/components/planejamento/pauta-card";
 import { MOTIVOS_LISTA, type MotivoDescarte } from "@/lib/radar/decisao";
 import { toast } from "sonner";
 
@@ -23,7 +25,7 @@ interface Referencia {
 }
 
 interface Pauta {
-  id: string; cliente_nome: string; nicho: string;
+  id: string; client_id: string; cliente_nome: string; nicho: string;
   tendencia: string; perfis_na_tendencia: number | null;
   fit_score: number | null; forca: number | null; status_tendencia: string | null;
   ideia: string; hook: string | null; formato: string | null;
@@ -39,30 +41,48 @@ const NIVEL_LABEL: Record<string, string> = {
 
 export default function RadarOportunidades() {
   const [pautas, setPautas] = useState<Pauta[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [descartando, setDescartando] = useState<string | null>(null);
+  const clients = useClientsStore((s) => s.clients);
+  const { currentUser } = useRole();
 
   const carregar = useCallback(async () => {
-    try {
-      const res = await authedFetch("/api/radar/pautas?status=nova");
-      if (!res.ok) { setPautas([]); return; }
-      const d = await res.json();
-      setPautas(d?.pautas ?? []);
-    } catch { setPautas([]); }
+    setErro(null);
+    const res = await chamar<{ pautas?: Pauta[] }>("/api/radar/pautas?status=nova");
+    // Falha não pode virar "nada novo": a seção sumia e ninguém sabia que o Radar estava fora.
+    if (!res.ok) { setErro(res.erro); setPautas(null); return; }
+    setPautas(res.data?.pautas ?? []);
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  const decidir = useCallback(async (id: string, decisao: string, motivo?: MotivoDescarte) => {
+  const decidir = useCallback(async (pauta: Pauta, decisao: string, motivo?: MotivoDescarte) => {
+    const id = pauta.id;
     setOcupado(id);
     try {
+      // "Vou usar" vira card em Ideias já com a pauta no briefing. O create deduplica o mesmo
+      // cliente+título por 2 min, então repetir o clique depois de uma falha não gera dois cards.
+      let cardId: string | null = null;
+      if (decisao === "usada") {
+        const social = clients.find((c) => c.id === pauta.client_id)?.assignedSocial ?? null;
+        const card = await chamar<{ id?: string }>("/api/content-cards/create", cardDaPauta(pauta, social, currentUser));
+        if (!card.ok || !card.data?.id) { toast.error(`Não consegui criar o card: ${card.erro ?? "sem id"}`); return; }
+        cardId = card.data.id;
+      }
       const res = await chamar("/api/radar/pautas", { id, decisao, motivo });
       if (!res.ok) { toast.error(res.erro ?? "Não consegui registrar"); return; }
-      toast.success(decisao === "usada" ? "Boa! Anotado como usada." : decisao === "guardada" ? "Guardada." : "Descartada — isso ajuda o Radar a melhorar.");
+      if (cardId) {
+        toast.success("Card criado em Ideias com a pauta no briefing.", {
+          action: { label: "Abrir", onClick: () => { window.location.href = `/social?card=${cardId}`; } },
+        });
+      } else {
+        toast.success(decisao === "guardada" ? "Guardada." : "Descartada — isso ajuda o Radar a melhorar.");
+      }
       setDescartando(null);
       setPautas((p) => (p ?? []).filter((x) => x.id !== id));
     } finally { setOcupado(null); }
-  }, []);
+  }, [clients, currentUser]);
 
   // Agrupa por cliente: o social media trabalha cliente a cliente, não ideia a ideia.
   const porCliente = useMemo(() => {
@@ -74,6 +94,15 @@ export default function RadarOportunidades() {
   // Sem nada novo e sem estar carregando, a seção inteira some: espaço vazio com título é ruído na
   // página que o social usa todo dia.
   if (pautas?.length === 0) return null;
+
+  if (erro) {
+    return (
+      <section className="flex items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <span>Não consegui carregar as oportunidades do Radar: {erro}</span>
+        <button onClick={carregar} className="shrink-0 text-xs underline">Tentar de novo</button>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-4">
@@ -172,7 +201,7 @@ export default function RadarOportunidades() {
                         {MOTIVOS_LISTA.map(([valor, rotulo]) => (
                           <button
                             key={valor}
-                            onClick={() => decidir(p.id, "descartada", valor)}
+                            onClick={() => decidir(p, "descartada", valor)}
                             disabled={ocupado === p.id}
                             className="text-xs px-2.5 py-1 rounded-lg bg-muted hover:bg-muted/70 disabled:opacity-50"
                           >
@@ -187,7 +216,7 @@ export default function RadarOportunidades() {
                   ) : (
                     <div className="flex gap-2">
                       <button
-                        onClick={() => decidir(p.id, "usada")}
+                        onClick={() => decidir(p, "usada")}
                         disabled={ocupado === p.id}
                         className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-lone-success text-background hover:opacity-90 disabled:opacity-50"
                       >
@@ -201,7 +230,7 @@ export default function RadarOportunidades() {
                         <X size={14} /> Não serve
                       </button>
                       <button
-                        onClick={() => decidir(p.id, "guardada")}
+                        onClick={() => decidir(p, "guardada")}
                         disabled={ocupado === p.id}
                         title="guardar para depois"
                         className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-muted-foreground hover:text-foreground disabled:opacity-50"

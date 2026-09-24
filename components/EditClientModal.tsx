@@ -6,6 +6,8 @@ import {
   Check, Loader2, User, Shield, MapPin, Phone, Mail, CreditCard, Briefcase,
 } from "lucide-react";
 import { useClientsStore } from "@/stores/useClientsStore";
+import { chamar } from "@/lib/api/chamar";
+import { toast } from "sonner";
 import type { Client } from "@/lib/types";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useRole } from "@/lib/context/RoleContext";
@@ -110,49 +112,68 @@ export default function EditClientModal({ client, onClose }: Props) {
     || form.serviceType === "assessoria_social"   // social sem designer não produz arte
     || temDesigner;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaving(true);
     const name = form.nomeFantasia.trim() || form.razaoSocial.trim() || client.name;
-    updateClientData(client.id, {
-      name,
-      nomeFantasia: form.nomeFantasia.trim() || undefined,
-      razaoSocial: form.razaoSocial.trim() || undefined,
-      cnpj: form.cnpj.trim() || undefined,
-      endereco: form.endereco.trim() || undefined,
-      emailCorporativo: form.emailCorporativo.trim() || undefined,
-      contactName: form.contactName.trim() || undefined,
-      cpfCnpj: form.cpfCnpj.trim() || undefined,
-      idade: form.idade.trim() || undefined,
-      phone: form.phone.trim() || undefined,
-      email: form.email.trim() || undefined,
-      industry: form.industry,
-      serviceType: form.serviceType as Client["serviceType"],
-      paymentMethod: form.paymentMethod as Client["paymentMethod"],
-      leadSource: form.leadSource as Client["leadSource"],
-      // `undefined` = não mexe. Só grava o que ESTAVA na tela — campo escondido não pode virar
-      // instrução de apagar. Para tirar alguém da carteira, existe a opção vazia no próprio select.
-      assignedTraffic: needsTraffic ? form.assignedTraffic : undefined,
-      assignedSocial: needsSocial ? form.assignedSocial : undefined,
-      assignedDesigner: needsDesigner ? form.assignedDesigner : undefined,
-      metaAdAccountId: form.metaAdAccountId
-        ? (form.metaAdAccountId.startsWith("act_") ? form.metaAdAccountId : `act_${form.metaAdAccountId}`)
-        : undefined,
-      facebookLogin: form.facebookLogin || undefined,
-      facebookPassword: form.facebookPassword || undefined,
-      googleAdsLogin: form.googleAdsLogin || undefined,
-      googleAdsPassword: form.googleAdsPassword || undefined,
-      instagramLogin: form.instagramLogin || undefined,
-      instagramPassword: form.instagramPassword || undefined,
-      instagramUser: form.instagramUser || undefined,
-      toneOfVoice: form.toneOfVoice as Client["toneOfVoice"] || undefined,
-      driveLink: form.driveLink || undefined,
-      postsGoal: parseInt(form.postsGoal) || 12,
-      contractEnd: form.contractEnd || undefined,
-      campaignBriefing: form.campaignBriefing || undefined,
-      fixedBriefing: form.fixedBriefing || undefined,
-      notes: form.notes || undefined,
-    });
-    setTimeout(() => { setSaving(false); onClose(); }, 300);
+    // Vazio vira null (apaga). `|| undefined` impedia limpar um dado errado.
+    const v = (x: string) => (x.trim() ? x.trim() : null);
+    try {
+      await updateClientData(client.id, {
+        name,
+        nomeFantasia: v(form.nomeFantasia),
+        razaoSocial: v(form.razaoSocial),
+        cnpj: v(form.cnpj),
+        endereco: v(form.endereco),
+        emailCorporativo: v(form.emailCorporativo),
+        contactName: v(form.contactName),
+        cpfCnpj: v(form.cpfCnpj),
+        idade: v(form.idade),
+        phone: v(form.phone),
+        email: v(form.email),
+        industry: form.industry,
+        serviceType: form.serviceType as Client["serviceType"],
+        paymentMethod: form.paymentMethod as Client["paymentMethod"],
+        leadSource: form.leadSource as Client["leadSource"],
+        // `undefined` = não mexe. Só grava o que ESTAVA na tela — campo escondido não pode virar
+        // instrução de apagar. Para tirar alguém da carteira, existe a opção vazia no próprio select.
+        assignedTraffic: needsTraffic ? form.assignedTraffic : undefined,
+        assignedSocial: needsSocial ? form.assignedSocial : undefined,
+        assignedDesigner: needsDesigner ? form.assignedDesigner : undefined,
+        metaAdAccountId: form.metaAdAccountId
+          ? (form.metaAdAccountId.startsWith("act_") ? form.metaAdAccountId : `act_${form.metaAdAccountId}`)
+          : (client.metaAdAccountId ? null : undefined),
+        facebookLogin: v(form.facebookLogin),
+        googleAdsLogin: v(form.googleAdsLogin),
+        instagramLogin: v(form.instagramLogin),
+        instagramUser: v(form.instagramUser),
+        toneOfVoice: (form.toneOfVoice as Client["toneOfVoice"]) || null,
+        driveLink: v(form.driveLink),
+        postsGoal: parseInt(form.postsGoal) || 12,
+        contractEnd: v(form.contractEnd),
+        campaignBriefing: v(form.campaignBriefing),
+        fixedBriefing: v(form.fixedBriefing),
+        notes: v(form.notes),
+      });
+      // Senha não passa pela rota de update (que descartava calada): vai cifrada pelo cofre.
+      const senhas: [string, string][] = [
+        ["facebook_password", form.facebookPassword],
+        ["google_ads_password", form.googleAdsPassword],
+        ["instagram_password", form.instagramPassword],
+      ];
+      const falhas: string[] = [];
+      for (const [field, value] of senhas) {
+        if (!value) continue;
+        const r = await chamar("/api/client-vault", { clientId: client.id, table: "clients", field, value });
+        if (!r.ok) falhas.push(`${field.replace("_password", "")}: ${r.erro}`);
+      }
+      if (falhas.length) { toast.error(`Dados salvos, mas a senha não: ${falhas.join(" · ")}`); return; }
+      toast.success("Cliente salvo.");
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "Não foi possível salvar.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const TABS: { key: Tab; label: string; icon: typeof User }[] = [

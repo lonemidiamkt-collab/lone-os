@@ -66,7 +66,8 @@ export function useOKRData() {
   useEffect(() => { loadOKRs(); }, [loadOKRs]);
 
   const updateTarget = async (id: string, target: number) => {
-    await supabase.from("okrs").update({ target, updated_at: new Date().toISOString() }).eq("id", id);
+    const { error } = await supabase.from("okrs").update({ target, updated_at: new Date().toISOString() }).eq("id", id);
+    if (error) throw new Error(error.message);
     setOkrs((prev) => prev.map((o) => o.id === id ? { ...o, target } : o));
   };
 
@@ -116,7 +117,8 @@ export function useOKRData() {
   };
 
   const deleteOKR = async (id: string) => {
-    await supabase.from("okrs").delete().eq("id", id);
+    const { error } = await supabase.from("okrs").delete().eq("id", id);
+    if (error) throw new Error(error.message);
     setOkrs((prev) => prev.filter((o) => o.id !== id));
   };
 

@@ -35,6 +35,8 @@ interface TrafficState {
   syncing: boolean;
   /** Falha do último sync de saldos. Antes o erro sumia e o botão só parava de girar. */
   syncError: string | null;
+  /** Falha ao carregar contas/rotina. Com erro, `initialized` fica false e o próximo init tenta de novo. */
+  loadError: string | null;
   initialized: boolean;
 
   init: () => Promise<void>;
@@ -81,22 +83,25 @@ export const useTrafficStore = create<TrafficState>()(
       investmentData: {},
       syncing: false,
       syncError: null,
+      loadError: null,
       initialized: false,
 
       init: async () => {
         if (get().initialized) return;
         const investmentData = loadInvestmentDataFromStorage();
-        try {
-          const [adAccountsRes, trafficRes] = await Promise.all([
-            authedFetch("/api/traffic/ad-accounts"),
-            authedFetch("/api/data/traffic"),
-          ]);
-          const adAccounts = adAccountsRes.ok ? ((await adAccountsRes.json()).accounts ?? []) : [];
-          const { trafficReports, trafficRoutineChecks } = trafficRes.ok ? await trafficRes.json() : { trafficReports: [], trafficRoutineChecks: [] };
-          set({ adAccounts, trafficReports, trafficRoutineChecks, investmentData, initialized: true }, false, "traffic/init/done");
-        } catch {
-          set({ investmentData, initialized: true }, false, "traffic/init/done/partial");
+        const [contasRes, trafegoRes] = await Promise.all([
+          chamar<{ accounts?: AdAccount[] }>("/api/traffic/ad-accounts"),
+          chamar<{ trafficReports?: TrafficMonthlyReport[]; trafficRoutineChecks?: TrafficRoutineCheck[] }>("/api/data/traffic"),
+        ]);
+        // Resposta ruim NÃO vira lista vazia com cara de verdade: guarda o que veio e marca o erro.
+        const patch: Partial<TrafficState> = { investmentData };
+        if (contasRes.ok) patch.adAccounts = contasRes.data?.accounts ?? [];
+        if (trafegoRes.ok) {
+          patch.trafficReports = trafegoRes.data?.trafficReports ?? [];
+          patch.trafficRoutineChecks = trafegoRes.data?.trafficRoutineChecks ?? [];
         }
+        const erro = !contasRes.ok ? contasRes.erro : !trafegoRes.ok ? trafegoRes.erro : null;
+        set({ ...patch, loadError: erro, initialized: erro === null }, false, erro ? "traffic/init/error" : "traffic/init/done");
       },
 
       syncBalances: async () => {
@@ -197,7 +202,7 @@ export const useTrafficStore = create<TrafficState>()(
 
         // Persiste a VERBA no banco (ad_accounts.monthly_budget). Sem isto a verba ficava
         // só no localStorage — não chegava nos alertas nem em outro dispositivo (fake save).
-        if (data.monthlyBudget !== undefined || data.dailyBudget !== undefined || data.paymentMethod !== undefined) {
+        if (data.monthlyBudget !== undefined || data.dailyBudget !== undefined || data.paymentMethod !== undefined || "nextPaymentDate" in data) {
           try {
             const res = await authedFetch("/api/traffic/ad-accounts", {
               method: "PATCH",
@@ -207,6 +212,8 @@ export const useTrafficStore = create<TrafficState>()(
                 monthlyBudget: data.monthlyBudget,
                 dailyBudget: data.dailyBudget,
                 paymentMethod: data.paymentMethod,
+                // Data do próximo aporte vai pro banco: no localStorage ela sumia em outro dispositivo.
+                ...("nextPaymentDate" in data ? { nextPaymentDate: data.nextPaymentDate ?? null } : {}),
               }),
             });
             if (!res.ok) {

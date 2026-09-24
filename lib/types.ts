@@ -161,6 +161,9 @@ export interface Client {
   pausedAt?: string | null;
   pausedReason?: string | null;
   pausedUntil?: string | null;
+  /** Saúde unificada (100 = saudável), gravada só por /api/scores. null = sem dado suficiente. */
+  currentHealthScore?: number | null;
+  currentHealthLevel?: "saudavel" | "atencao" | "risco" | "sem_dado" | null;
   pausedBy?: string | null;
   publicReportToken?: string;
   publicReportTokenCreatedAt?: string;
@@ -648,6 +651,7 @@ export interface AdCampaign {
   dailyMetrics: AdDailyMetric[];
   // Data quality flags
   hasData?: boolean;          // false if API returned no insights
+  insightsFailed?: boolean;   // a leitura da Meta falhou: mostrar "sem dados", nunca R$0
   lastSyncAt?: string;        // ISO timestamp of when data was fetched
 }
 

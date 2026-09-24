@@ -1,5 +1,6 @@
 // Saúde do cliente: client_health_scores já traz o breakdown com MOTIVOS em frase — é a evidência.
-// Só crítico e atenção viram recomendação; "warning" são 21 clientes e viraria ruído.
+// Escala do escritor único (/api/scores): 100 = saudável; níveis saudavel | atencao | risco | sem_dado.
+// Só risco e atenção viram recomendação; sem_dado não é evidência de nada.
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { ItemBruto } from "../tipos";
@@ -13,7 +14,7 @@ export async function itensDaSaude(clientes: { porId: Map<string, ClienteRef> })
   if (!ultimo) return [];
   const { data, error } = await supabaseAdmin.from("client_health_scores")
     .select("client_id, score, level, breakdown").eq("computed_for_date", ultimo.computed_for_date as string)
-    .in("level", ["critical", "high", "attention"]);
+    .in("level", ["risco", "atencao"]);
   if (error) throw new Error(`client_health_scores: ${error.message}`);
 
   const out: ItemBruto[] = [];
@@ -23,14 +24,14 @@ export async function itensDaSaude(clientes: { porId: Map<string, ClienteRef> })
     const b = (h.breakdown ?? {}) as Breakdown;
     const motivos = (b.motivos ?? []).filter(Boolean).slice(0, 4);
     if (!motivos.length) continue; // score sem motivo não é evidência
-    const critico = h.level === "critical";
+    const critico = h.level === "risco";
     const cobertura = b.cobertura ?? 100;
     out.push({
       fonte: "saude", clientId: c.id, cliente: c.nome,
-      entityRef: null, motivo: `risco_${h.level}`,
-      titulo: `${c.nome}: saúde ${critico ? "crítica" : "em atenção"} (score ${h.score})`,
+      entityRef: null, motivo: `saude_${h.level}`,
+      titulo: `${c.nome}: saúde ${critico ? "em risco" : "em atenção"} (${h.score}/100)`,
       fato: motivos,
-      inferencia: [`Score ${h.score}/100 com ${cobertura}% dos sinais medidos`],
+      inferencia: [`Saúde ${h.score}/100 (100 = saudável) com ${cobertura}% dos sinais medidos`],
       recomendacao: critico
         ? "Ligar para o cliente hoje: ouvir, registrar o que ele pediu e marcar a reunião do mês"
         : "Falar com o cliente esta semana com um resultado ou uma próxima peça na mão",

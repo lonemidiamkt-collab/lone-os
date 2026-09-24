@@ -15,8 +15,10 @@ import { useRole } from "@/lib/context/RoleContext";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import type { ContentCard, CardAttachment } from "@/lib/types";
-import CardArtAttachments from "@/components/kanban/CardArtAttachments";
+import CardArtAttachments, { MAX_ARTES } from "@/components/kanban/CardArtAttachments";
+import { STATUS_COR } from "@/components/kanban/status-cores";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -33,14 +35,18 @@ import { MarkdownEditor, MarkdownView, htmlToMarkdown } from "@/components/Markd
 
 
 const STATUS_OPTIONS: { value: ContentCard["status"]; label: string; color: string }[] = [
-  { value: "ideas", label: "Ideias", color: "bg-muted" },
-  { value: "script", label: "Roteiro", color: "bg-muted" },
-  { value: "in_production", label: "Em Produção", color: "bg-primary" },
-  { value: "approval", label: "Aprovação Social Media", color: "bg-muted" },
-  { value: "client_approval", label: "Aprovação Cliente", color: "bg-muted" },
-  { value: "scheduled", label: "Agendado", color: "bg-muted" },
-  { value: "published", label: "Publicado", color: "bg-primary" },
+  { value: "ideas", label: "Ideias", color: STATUS_COR.ideas },
+  { value: "script", label: "Roteiro", color: STATUS_COR.script },
+  { value: "in_production", label: "Em Produção", color: STATUS_COR.in_production },
+  { value: "blocked", label: "Bloqueado", color: STATUS_COR.blocked },
+  { value: "approval", label: "Aprovação Social Media", color: STATUS_COR.approval },
+  { value: "client_approval", label: "Aprovação Cliente", color: STATUS_COR.client_approval },
+  { value: "scheduled", label: "Agendado", color: STATUS_COR.scheduled },
+  { value: "published", label: "Publicado", color: STATUS_COR.published },
 ];
+
+// Campo apagado vai como null: `x || undefined` sumia com a chave e o valor antigo ficava no banco.
+const ouNulo = (v: string) => (v.trim() ? v : null);
 
 const ROLE_COLORS: Record<string, string> = {
   admin: "text-primary",
@@ -95,6 +101,9 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
   const [dueDate, setDueDate] = useState(card.dueDate ?? "");
   const [status, setStatus] = useState(card.status);
   const [attachments, setAttachments] = useState<CardAttachment[] | null>(null); // null = carregando
+  const [erroAnexos, setErroAnexos] = useState<string | null>(null);
+  const [tentativaAnexos, setTentativaAnexos] = useState(0);
+  const [salvando, setSalvando] = useState(false);
   const [saved, setSaved] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [editingBriefing, setEditingBriefing] = useState(false);
@@ -207,14 +216,19 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
   const comments = liveComments ?? card.comments ?? [];
 
   // Carrega as artes (multi-arte) ao abrir o card
+  // Falha NÃO vira lista vazia: "Nenhuma arte ainda" levava a pessoa a pedir de novo uma arte que existia.
   useEffect(() => {
     let alive = true;
-    authedFetch(`/api/cards/${card.id}/attachments`)
-      .then((r) => { if (!r.ok) trilha("modal:anexos:erro", { id: card.id, status: r.status }); return r.ok ? r.json() : { attachments: [] }; })
-      .then((d) => { if (alive) { const l = (d.attachments as CardAttachment[]) ?? []; setAttachments(l); trilha("modal:aberto", { id: card.id, anexos: l.length, temDr: !!card.designRequestId, entregue: !!card.designerDeliveredAt, img: !!card.imageUrl }); } })
-      .catch(() => { if (alive) { setAttachments([]); trilha("modal:anexos:falha-rede", { id: card.id }); } });
+    setAttachments(null); setErroAnexos(null);
+    chamar<{ attachments?: CardAttachment[] }>(`/api/cards/${card.id}/attachments`).then((r) => {
+      if (!alive) return;
+      if (!r.ok) { trilha("modal:anexos:erro", { id: card.id, status: r.status }); setErroAnexos(r.erro); return; }
+      const l = r.data?.attachments ?? [];
+      setAttachments(l);
+      trilha("modal:aberto", { id: card.id, anexos: l.length, temDr: !!card.designRequestId, entregue: !!card.designerDeliveredAt, img: !!card.imageUrl });
+    });
     return () => { alive = false; };
-  }, [card.id]);
+  }, [card.id, tentativaAnexos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reflete a mudança de arte no board na hora (capa = 1ª arte; sem arte = sem capa).
   const handleAttachmentsChange = (next: CardAttachment[]) => {
@@ -232,18 +246,30 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // A data de postagem NÃO bloqueia mais o save — travar tudo fazia o social PERDER a edição
     // (briefing, legenda etc.). Salva o que foi editado e, se faltar a data, apenas AVISA: sem ela o
     // card fica invisível pro acompanhamento de pauta do agente CS. (Pedido do Roberto: não travar.)
-    updateContentCard(card.id, {
-      observations,
-      briefing: briefing || undefined,
-      caption: caption || undefined,
-      hashtags: hashtags || undefined,
-      dueDate: dueDate || undefined,
-      status,
-    });
+    if (salvando) return;
+    const now = new Date().toISOString();
+    const updates = {
+      observations: ouNulo(observations),
+      briefing: ouNulo(briefing),
+      caption: ouNulo(caption),
+      hashtags: ouNulo(hashtags),
+      dueDate: dueDate || null,
+      ...(status !== card.status
+        ? { status, statusChangedAt: now, columnEnteredAt: { ...(card.columnEnteredAt ?? {}), [status]: now } }
+        : {}),
+    } as unknown as Partial<ContentCard>;
+    setSalvando(true);
+    try {
+      await updateContentCard(card.id, updates);
+    } catch {
+      return; // o store já avisou e desfez
+    } finally {
+      setSalvando(false);
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
     if (!dueDate) {
@@ -251,11 +277,22 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
     }
   };
 
-  const handleSaveBriefing = () => {
-    updateContentCard(card.id, { briefing: briefing || undefined });
+  const handleSaveBriefing = async () => {
+    try {
+      await updateContentCard(card.id, { briefing: ouNulo(briefing) } as unknown as Partial<ContentCard>);
+    } catch {
+      return; // editor fica aberto com o texto
+    }
     setEditingBriefing(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+  };
+
+  const salvarTitulo = async () => {
+    const t = title.trim();
+    setEditingTitle(false);
+    if (!t || t === card.title) { setTitle(card.title ?? ""); return; }
+    await updateContentCard(card.id, { title: t }).catch(() => setTitle(card.title ?? ""));
   };
 
   const handleComment = () => {
@@ -282,7 +319,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
       pushNotification("content", "Demanda arquivada", `"${card.title}" saiu do quadro. Recupere em Arquivadas.`, card.clientId);
       onClose();
     } catch {
-      setArchiving(false);
+      setArchiving(false); // o store já avisou
     }
   };
 
@@ -326,12 +363,12 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
                   onChange={(e) => setTitle(e.target.value)}
                   autoFocus
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") { const t = title.trim(); if (t && t !== card.title) updateContentCard(card.id, { title: t }); setEditingTitle(false); }
+                    if (e.key === "Enter") void salvarTitulo();
                     if (e.key === "Escape") { setTitle(card.title ?? ""); setEditingTitle(false); }
                   }}
                   className="flex-1 text-lg font-semibold bg-surface border border-primary/40 rounded-lg px-2 py-1 text-foreground outline-none"
                 />
-                <button type="button" onClick={() => { const t = title.trim(); if (t && t !== card.title) updateContentCard(card.id, { title: t }); setEditingTitle(false); }}
+                <button type="button" onClick={() => void salvarTitulo()}
                   className="text-[11px] px-2.5 py-1 rounded-md bg-primary text-primary-foreground font-medium">Salvar</button>
                 <button type="button" onClick={() => { setTitle(card.title ?? ""); setEditingTitle(false); }}
                   className="text-[11px] px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">Cancelar</button>
@@ -357,7 +394,14 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
               <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
                 <ImageIcon size={13} /> Artes do card
               </div>
-              {attachments === null ? (
+              {erroAnexos ? (
+                <div className="flex flex-col items-center gap-2 py-6 px-2 border border-destructive/30 bg-destructive/10 rounded-lg text-center">
+                  <p className="text-xs text-destructive">Não consegui carregar as artes: {erroAnexos}</p>
+                  <button type="button" onClick={() => setTentativaAnexos((n) => n + 1)} className="text-[11px] px-2.5 py-1 rounded-md bg-muted border border-border text-foreground hover:border-primary/30">
+                    Tentar de novo
+                  </button>
+                </div>
+              ) : attachments === null ? (
                 <div className="flex items-center justify-center py-8 text-muted-foreground">
                   <Upload size={16} className="animate-pulse" />
                 </div>
@@ -371,7 +415,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
                 />
               )}
               <p className="text-[9px] text-muted-foreground text-center">
-                PNG, JPEG, WebP, GIF — até 10MB, máx 20 artes
+                PNG, JPEG, WebP, GIF — até 10MB, máx {MAX_ARTES} artes
               </p>
             </div>
 
@@ -418,13 +462,13 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
                       const prev = status;
                       setStatus(opt.value);
                       // Status salva automaticamente ao clicar — dispensa "Salvar alterações" (pedido
-                      // do social). Se a gravação falhar, reverte o pill (store também faz rollback) e avisa,
-                      // pra o pill não divergir do board nem reaplicar valor errado num "Salvar" depois.
-                      updateContentCard(card.id, { status: opt.value, statusChangedAt: new Date().toISOString() })
-                        .catch(() => {
-                          setStatus(prev);
-                          pushNotification("system", "Falha ao salvar status", `Não deu pra mudar o status de "${card.title}". Tente de novo.`, card.clientId);
-                        });
+                      // do social). Se a gravação falhar, reverte o pill (o store desfaz e avisa).
+                      const now = new Date().toISOString();
+                      updateContentCard(card.id, {
+                        status: opt.value,
+                        statusChangedAt: now,
+                        columnEnteredAt: { ...(card.columnEnteredAt ?? {}), [opt.value]: now },
+                      }).catch(() => setStatus(prev));
                     }}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                       status === opt.value
@@ -714,7 +758,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
 
               {/* Resultado — Revisar arte */}
               {revisao && (
-                <div className={`rounded-lg border p-3 text-xs ${revisao.ok ? "border-lone-success-border/30 bg-lone-success-bg/10 text-lone-success" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>
+                <div className={`rounded-lg border p-3 text-xs ${revisao.ok ? "border-lone-success-border bg-lone-success-bg text-lone-success" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>
                   <div className="font-semibold flex items-center gap-1.5">
                     {revisao.ok ? <CheckCircle size={13} /> : <XCircle size={13} />} {revisao.resumo}
                   </div>
@@ -729,7 +773,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
 
               {/* Resultado — Revisão final do post */}
               {revisaoPost && (
-                <div className={`rounded-lg border p-3 text-xs ${revisaoPost.aprovado ? "border-lone-success-border/30 bg-lone-success-bg/10 text-lone-success" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>
+                <div className={`rounded-lg border p-3 text-xs ${revisaoPost.aprovado ? "border-lone-success-border bg-lone-success-bg text-lone-success" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>
                   <div className="font-semibold flex items-center gap-1.5">
                     {revisaoPost.aprovado ? <CheckCircle size={13} /> : <XCircle size={13} />} {revisaoPost.resumo}
                   </div>
@@ -889,7 +933,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
                 })
                   .then((req) => {
                     trilha("solicitar-design:ok", { id: card.id, dr: req.id });
-                    updateContentCard(card.id, { designRequestId: req.id });
+                    updateContentCard(card.id, { designRequestId: req.id }).catch(() => {});
                     pushNotification("content", "Design solicitado", `Pedido de arte para "${card.title}" enviado ao designer.`, card.clientId, card.id);
                     toast.success(`Design solicitado — "${card.title}" está no quadro do designer.`);
                   })
@@ -927,15 +971,20 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
             <Button
               variant="outline"
               className="mr-auto flex items-center gap-2 text-lone-success border-lone-success-border hover:bg-lone-success-bg"
-              onClick={() => {
+              onClick={async () => {
                 // Confirmar a arte já AVANÇA o card pra Aprovação (Social Media) se ainda estiver em
                 // produção — antes só marcava confirmado e o card ficava parado na mesma coluna.
                 const advance = ["ideas", "script", "in_production", "blocked"].includes(status);
-                updateContentCard(card.id, {
-                  socialConfirmedAt: new Date().toISOString(),
-                  socialConfirmedBy: currentUser,
-                  ...(advance ? { status: "approval" } : {}),
-                });
+                const now = new Date().toISOString();
+                try {
+                  await updateContentCard(card.id, {
+                    socialConfirmedAt: now,
+                    socialConfirmedBy: currentUser,
+                    ...(advance ? { status: "approval" as const, statusChangedAt: now, columnEnteredAt: { ...(card.columnEnteredAt ?? {}), approval: now } } : {}),
+                  });
+                } catch {
+                  return;
+                }
                 if (advance) setStatus("approval");
                 toast.success(advance ? "Arte confirmada — card movido para Aprovação Social Media." : "Arte confirmada.");
               }}
@@ -966,10 +1015,11 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
           </Button>
           <Button
             onClick={handleSave}
-            className={`flex items-center gap-2 ${saved ? "bg-primary hover:bg-primary" : ""}`}
+            disabled={salvando}
+            className="flex items-center gap-2"
           >
             <Save size={14} />
-            {saved ? "Salvo!" : "Salvar alteracoes"}
+            {salvando ? "Salvando…" : saved ? "Salvo!" : "Salvar alterações"}
           </Button>
         </DialogFooter>
       </DialogContent>

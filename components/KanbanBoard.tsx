@@ -62,7 +62,7 @@ export default function KanbanBoard<T extends { id: string }>({
   };
 
   const handleDrop = (toCol: string) => {
-    if (dragging && dragging.fromCol !== toCol) moveItem(dragging.itemId, dragging.fromCol, toCol);
+    if (onMove && dragging && dragging.fromCol !== toCol) moveItem(dragging.itemId, dragging.fromCol, toCol);
     setDragging(null);
     setDragOver(null);
   };
@@ -99,10 +99,11 @@ export default function KanbanBoard<T extends { id: string }>({
             {col.items.map((item: T) => (
               <div
                 key={item.id}
-                draggable
+                draggable={!!onMove}
                 onDragStart={() => handleDragStart(item.id, col.id)}
                 className={cn(
-                  "cursor-grab active:cursor-grabbing transition-opacity relative group",
+                  onMove ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+                  "transition-opacity relative group",
                   dragging?.itemId === item.id ? "opacity-40" : "opacity-100"
                 )}
               >
@@ -131,7 +132,7 @@ export default function KanbanBoard<T extends { id: string }>({
                                 <button
                                   key={target.id}
                                   onClick={(e) => { e.stopPropagation(); moveItem(item.id, col.id, target.id); setMenuOpen(null); }}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-card/[0.04] hover:text-foreground transition-all"
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
                                 >
                                   <span className={cn("w-2 h-2 rounded-full shrink-0", target.color)} />
                                   <span className="truncate">{target.title}</span>
@@ -143,7 +144,7 @@ export default function KanbanBoard<T extends { id: string }>({
                           {onEdit && (
                             <button
                               onClick={(e) => { e.stopPropagation(); onEdit(item); setMenuOpen(null); }}
-                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-card/[0.04] hover:text-foreground transition-all"
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
                             >
                               <Edit3 size={11} /> Editar
                             </button>

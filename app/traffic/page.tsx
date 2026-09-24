@@ -1,5 +1,6 @@
 "use client";
 
+import { metaAccountStatus } from "@/lib/budgets/account-status";
 import { toast } from "sonner";
 import Header from "@/components/Header";
 import DefesaAlertBanner from "@/components/DefesaAlertBanner";
@@ -16,54 +17,47 @@ import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
 import {
   TrendingUp, AlertTriangle, CheckCircle, Users,
-  Calendar, User, Save,
+  Calendar, Save,
   Plus, X, Filter, Search,
   ClipboardCheck, BarChart2,
   MessageCircle, FileText, Star, ArrowUpRight, ArrowDownRight, Minus,
   Check, Megaphone, Eye, MousePointerClick, DollarSign, Target,
   Pause, AlertCircle, Download, ChevronDown, ChevronUp,
-  Settings2, GripVertical, Zap, Activity, TrendingDown,
+  Settings2, Zap, Activity, TrendingDown,
   Brain, ShieldAlert, Sparkles, CircleDot, Bell, FolderDown, Loader2, Facebook, Send,
   Wallet, CreditCard, Banknote, AlertOctagon, Info, Palette,
 } from "lucide-react";
-import { getAttentionColor, getAttentionLabel, getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS, todaySP } from "@/lib/utils";
+import { getAttentionColor, getAttentionLabel, todaySP } from "@/lib/utils";
 import { emOperacao } from "@/lib/clients/operacao";
-import type { Client, Task, TrafficMonthlyReport, AdCampaign, AdAccount, ClientInvestmentData, InvestmentPaymentMethod } from "@/lib/types";
-import { mockAdAccounts, mockAdCampaigns } from "@/lib/mockData";
+import type { Client, Task, AdCampaign, AdAccount, ClientInvestmentData, InvestmentPaymentMethod } from "@/lib/types";
 import { fetchClientGroupMessageLog, type ClientGroupMessageLogRow } from "@/lib/supabase/queries";
-import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useMetaConnection, fetchAdAccounts, fetchCampaignInsights, fetchAccountDemographics, TokenExpiredError } from "@/lib/meta/useMetaAds";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import AtalhoCriativos from "@/components/traffic/AtalhoCriativos";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { parseBRL, statusPacing, PACING_UI, diasEntre, diaDaSemana, segundaDaSemana, diasAntes } from "@/components/traffic/investimento";
+import { chamar } from "@/lib/api/chamar";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { exportReportAsPdf } from "@/lib/exportPdf";
+import Link from "next/link";
 import { exportTrafficReportPdf, exportClientReportPdf, buildTrafficReportData, exportAllTrafficReportsZip } from "@/lib/exportTrafficPdf";
-import { analyzeCampaigns, generateAnalysisSummary, generateAccountReport, generateDailyRoutineAlerts } from "@/lib/ai/campaignAnalyzer";
-import type { CampaignInsight, PortfolioSummary, AccountAIReport, DailyRoutineAlert } from "@/lib/ai/campaignAnalyzer";
+import { analyzeCampaigns, generateAccountReport, generateDailyRoutineAlerts } from "@/lib/ai/campaignAnalyzer";
+import type { PortfolioSummary } from "@/lib/ai/campaignAnalyzer";
 
 const STATUS_COLUMNS = [
   { id: "onboarding", title: "Onboarding", color: "bg-muted" },
   { id: "good", title: "Bons Resultados", color: "bg-primary" },
-  { id: "average", title: "Resultados Medios", color: "bg-muted" },
+  { id: "average", title: "Resultados Médios", color: "bg-muted" },
   { id: "at_risk", title: "Em Risco", color: "bg-destructive" },
 ];
 
-const TASK_COLUMNS = [
-  { id: "pending", title: "Pendente", color: "bg-muted" },
-  { id: "in_progress", title: "Em Execucao", color: "bg-primary" },
-  { id: "review", title: "Validacao", color: "bg-muted" },
-  { id: "done", title: "Concluido", color: "bg-primary" },
-];
-
-type TabType = "rotina" | "status" | "kanban" | "relatorios" | "report" | "anuncios" | "investimento";
+type TabType = "rotina" | "status" | "anuncios" | "investimento";
 
 function getTodayStr() {
   return todaySP();
 }
 
 function getDayOfWeek(): number {
-  return new Date().getDay(); // 0=Sun, 1=Mon, ... 5=Fri
+  return diaDaSemana(todaySP()); // 0=dom … 5=sex, em São Paulo
 }
 
 function formatNumber(n: number): string {
@@ -79,6 +73,11 @@ function formatCurrency(n: number): string {
 function pctChange(current: number, previous: number): number {
   if (previous === 0) return current > 0 ? 100 : 0;
   return ((current - previous) / previous) * 100;
+}
+
+/** Campanha cujo insight a Meta não devolveu — mostrar "sem dados", nunca R$0. */
+function insightFalhou(c: AdCampaign): boolean {
+  return !!c.insightsFailed;
 }
 
 // Map Meta API objectives (v21.0 uses OUTCOME_* format) to our AdObjective type
@@ -107,33 +106,36 @@ export default function TrafficPage() {
   const router = useRouter();
   // ── Zustand stores ────────────────────────────────────────────────────────
   const clients = useClientsStore((s) => s.clients);
-  const updateClientData = useClientsStore((s) => s.updateClient);
   const updateClientStatus = useClientsStore((s) => s.updateClientStatus);
   const initClients = useClientsStore((s) => s.init);
   const subClients = useClientsStore((s) => s.subscribeRealtime);
 
-  const addContentCard = useContentStore((s) => s.addContentCard);
   const addDesignRequest = useContentStore((s) => s.addDesignRequest);
   const initContent = useContentStore((s) => s.init);
   const subContent = useContentStore((s) => s.subscribeRealtime);
 
   const tasks = useOperationalStore((s) => s.tasks);
-  const addTask = useOperationalStore((s) => s.addTask);
-  const updateTask = useOperationalStore((s) => s.updateTask);
-  const deleteTask = useOperationalStore((s) => s.deleteTask);
   const initOps = useOperationalStore((s) => s.init);
   const subOps = useOperationalStore((s) => s.subscribeRealtime);
 
-  const trafficReports = useTrafficStore((s) => s.trafficReports);
   const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
   const investmentData = useTrafficStore((s) => s.investmentData);
-  const addTrafficReport = useTrafficStore((s) => s.addTrafficReport);
-  const updateTrafficReport = useTrafficStore((s) => s.updateTrafficReport);
   const addTrafficRoutineCheck = useTrafficStore((s) => s.addTrafficRoutineCheck);
   const updateInvestmentData = useTrafficStore((s) => s.updateInvestmentData);
   const initTraffic = useTrafficStore((s) => s.init);
+  const trafficLoadError = useTrafficStore((s) => s.loadError);
 
   const pushNotification = useNotificationsStore((s) => s.push);
+
+  const criarDemanda = async (req: Omit<import("@/lib/types").DesignRequest, "id">): Promise<boolean> => {
+    try {
+      await addDesignRequest(req);
+      return true;
+    } catch (err) {
+      toast.error(`Não consegui criar a demanda${err instanceof Error && err.message ? ` (${err.message})` : ""}. O pedido continua aberto — tente de novo.`);
+      return false;
+    }
+  };
 
   useEffect(() => {
     initClients();
@@ -150,10 +152,8 @@ export default function TrafficPage() {
   // Lido do client_group_message_log p/ não precisar marcar à mão o que já foi enviado.
   const [messageLog, setMessageLog] = useState<ClientGroupMessageLogRow[]>([]);
   useEffect(() => {
-    const ws = new Date();
-    ws.setDate(ws.getDate() + (ws.getDay() === 0 ? -6 : 1 - ws.getDay())); // segunda desta semana (domingo NÃO pula p/ a próxima)
-    const wsStr = `${ws.getFullYear()}-${String(ws.getMonth()+1).padStart(2,"0")}-${String(ws.getDate()).padStart(2,"0")}`;
-    fetchClientGroupMessageLog(wsStr).then(setMessageLog);
+    // segunda desta semana em SP (domingo NÃO pula p/ a próxima)
+    fetchClientGroupMessageLog(segundaDaSemana(todaySP())).then(setMessageLog);
   }, []);
 
   // Creative request modal state
@@ -170,7 +170,7 @@ export default function TrafficPage() {
   // Consume pendingTab from secondary sidebar navigation
   useEffect(() => {
     if (!pendingTab) return;
-    const VALID: TabType[] = ["rotina","status","kanban","relatorios","report","anuncios","investimento"];
+    const VALID: TabType[] = ["rotina","status","anuncios","investimento"];
     if (VALID.includes(pendingTab as TabType)) {
       setActiveTab(pendingTab as TabType);
     }
@@ -189,22 +189,25 @@ export default function TrafficPage() {
   // Gasto do mês por cliente (servidor, sincronizado em BRT via sync-balances) — fonte real
   // do pacing no Controle de Investimento, independente do preset de datas da aba Anúncios.
   const [monthSpendByClient, setMonthSpendByClient] = useState<Map<string, number>>(new Map());
+  // Falha aqui NÃO é "gasto zero": o pacing mostra "sem dados" em vez de "no ritmo".
+  const [monthSpendFalhou, setMonthSpendFalhou] = useState(false);
   useEffect(() => {
     let alive = true;
-    authedFetch("/api/traffic/sync-balances")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json) => {
-        if (!alive || !json?.accounts) return;
+    chamar<{ accounts?: Array<{ current_month_spend: number | null; clients?: { id?: string } }> }>("/api/traffic/sync-balances")
+      .then((r) => {
+        if (!alive) return;
+        const contas = r.data?.accounts;
+        if (!r.ok || !Array.isArray(contas)) { setMonthSpendFalhou(true); return; }
         const m = new Map<string, number>();
-        for (const a of json.accounts as Array<{ current_month_spend: number | null; clients?: { id?: string } }>) {
+        for (const a of contas) {
           const cid = a.clients?.id;
           if (cid && a.current_month_spend != null) {
             m.set(cid, (m.get(cid) ?? 0) + a.current_month_spend);
           }
         }
+        setMonthSpendFalhou(false);
         setMonthSpendByClient(m);
-      })
-      .catch(() => {});
+      });
     return () => { alive = false; };
   }, []);
 
@@ -227,31 +230,28 @@ export default function TrafficPage() {
   const trafficTasks = effectiveFilter === "all"
     ? tasks.filter((t) => t.role === "traffic")
     : tasks.filter((t) => t.role === "traffic" && t.assignedTo === effectiveFilter);
-  const taskKanbanCols = TASK_COLUMNS.map((col) => ({
-    ...col,
-    items: trafficTasks.filter((t) => t.status === col.id),
-  }));
-
-  const [showNewTask, setShowNewTask] = useState(false);
-  const [showContentRequest, setShowContentRequest] = useState(false);
 
   const tabs: { key: TabType; label: string; icon?: React.ReactNode }[] = [
-    { key: "rotina", label: "Rotina Diaria", icon: <ClipboardCheck size={14} /> },
+    { key: "rotina", label: "Rotina Diária", icon: <ClipboardCheck size={14} /> },
     { key: "status", label: "Status Clientes" },
-    { key: "kanban", label: "Kanban Tarefas" },
-    { key: "relatorios", label: "Relatorios Mensais", icon: <BarChart2 size={14} /> },
-    { key: "report", label: "Analise" },
-    { key: "anuncios", label: "Anuncios", icon: <Megaphone size={14} /> },
+    { key: "anuncios", label: "Anúncios", icon: <Megaphone size={14} /> },
     { key: "investimento", label: "Investimento", icon: <Wallet size={14} /> },
   ];
 
   return (
     <div className="flex flex-col flex-1 overflow-auto">
-      <Header title="Trafego Pago" subtitle="Gestao de performance e campanhas" />
+      <Header title="Tráfego Pago" subtitle="Gestão de performance e campanhas" />
 
       <div className="p-6 space-y-6 animate-fade-in">
         <DefesaAlertBanner />
         {isAdmin && <SystemAlertBanner />}
+        {trafficLoadError && (
+          <div className="flex items-center gap-3 rounded-xl border border-lone-danger-border bg-lone-danger-bg px-4 py-3 text-xs text-lone-danger">
+            <AlertTriangle size={14} className="shrink-0" />
+            <span className="flex-1">Não consegui carregar a rotina e as contas de tráfego ({trafficLoadError}). O que aparece abaixo pode estar incompleto.</span>
+            <button onClick={() => initTraffic()} className="font-medium underline hover:no-underline">Tentar de novo</button>
+          </div>
+        )}
         {/* Workspace Filter */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -320,11 +320,6 @@ export default function TrafficPage() {
               >
                 {tab.icon}
                 {tab.label}
-                {tab.key === "kanban" && (
-                  <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">
-                    {trafficTasks.filter((t) => t.status !== "done").length}
-                  </span>
-                )}
                 {tab.key === "rotina" && (() => {
                   const today = getTodayStr();
                   const todayChecks = trafficRoutineChecks.filter((c) => c.date === today && (effectiveFilter === "all" || c.completedBy === effectiveFilter));
@@ -338,7 +333,7 @@ export default function TrafficPage() {
             ))}
           </div>
 
-          {/* Rotina Diaria Tab */}
+          {/* Rotina Diária */}
           {activeTab === "rotina" && (
             <RoutineTab
               clients={filteredClients}
@@ -347,7 +342,7 @@ export default function TrafficPage() {
               currentUser={currentUser}
               effectiveFilter={effectiveFilter}
               tasks={trafficTasks}
-              adCampaigns={sharedIsUsingRealData ? sharedRealCampaigns : mockAdCampaigns}
+              adCampaigns={sharedIsUsingRealData ? sharedRealCampaigns : []}
               isUsingRealData={sharedIsUsingRealData}
               messageLog={messageLog}
             />
@@ -407,125 +402,12 @@ export default function TrafficPage() {
             </div>
           )}
 
-          {/* Task Kanban */}
-          {activeTab === "kanban" && (
-            <div className="animate-fade-in">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <p className="text-muted-foreground text-sm">Fluxo interno de tarefas da equipe de trafego.</p>
-                  <div className="flex items-center gap-2">
-                    {taskKanbanCols.map((col) => (
-                      <span key={col.id} className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md">
-                        {col.title}: <span className="text-foreground font-medium">{col.items.length}</span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <button onClick={() => setShowContentRequest(true)} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 text-primary hover:bg-primary/25 border border-primary/20 transition-colors">
-                  <FileText size={13} />
-                  Solicitar Conteúdo
-                </button>
-                <button onClick={() => setShowNewTask(true)} className="btn-primary text-xs flex items-center gap-1.5">
-                  <Plus size={13} />
-                  Nova Tarefa
-                </button>
-              </div>
-              <KanbanBoard<Task>
-                columns={taskKanbanCols}
-                onDelete={(taskId) => deleteTask(taskId)}
-                onMove={(taskId, _from, toStatus) => {
-                  updateTask(taskId, { status: toStatus as Task["status"] });
-                }}
-                renderCard={(task) => (
-                  <div
-                    onClick={() => router.push(`/clients/${task.clientId}`)}
-                    className={`bg-card border border-border rounded-lg p-3 hover:border-primary/30 transition-colors cursor-pointer ${task.status === "done" ? "opacity-60" : ""}`}>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); updateTask(task.id, { status: task.status === "done" ? "pending" : "done" }); }}
-                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5 transition-all ${
-                          task.status === "done"
-                            ? "bg-primary border-primary text-primary-foreground"
-                            : "border-border hover:border-primary"
-                        }`}
-                        title={task.status === "done" ? "Reabrir tarefa" : "Marcar como concluida"}
-                      >
-                        {task.status === "done" && <Check size={10} />}
-                      </button>
-                      <p className={`font-medium text-foreground text-sm leading-tight flex-1 ${task.status === "done" ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
-                      <span className={`badge border text-xs shrink-0 ${getPriorityColor(task.priority)}`}>
-                        {getPriorityLabel(task.priority)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{task.clientName}</p>
-                    <div className="flex items-center gap-1 mt-2">
-                      <User size={11} className="text-muted-foreground/50" />
-                      <span className="text-xs text-muted-foreground">{task.assignedTo}</span>
-                      {task.dueDate && (
-                        <>
-                          <Calendar size={11} className="text-muted-foreground/50 ml-1" />
-                          <span className="text-xs text-muted-foreground">{task.dueDate}</span>
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
-                      {task.status === "pending" && (
-                        <button onClick={(e) => { e.stopPropagation(); updateTask(task.id, { status: "in_progress" }); }} className="text-xs text-primary hover:underline">Iniciar</button>
-                      )}
-                      {task.status === "in_progress" && (
-                        <button onClick={(e) => { e.stopPropagation(); updateTask(task.id, { status: "review" }); }} className="text-xs text-primary hover:underline">Enviar p/ Validacao</button>
-                      )}
-                      {task.status === "review" && (
-                        <button onClick={(e) => { e.stopPropagation(); updateTask(task.id, { status: "done" }); }} className="text-xs text-primary hover:underline">Concluir</button>
-                      )}
-                      {task.status === "done" && (
-                        <span className="text-xs text-primary flex items-center gap-1"><CheckCircle size={11} /> Concluido</span>
-                      )}
-                      {/* Timesheet — manager/admin only */}
-                      {(role === "admin" || role === "manager") && (() => {
-                        const timeMs = getLiveTimeSpentMs(task.workStartedAt, task.totalTimeSpentMs);
-                        if (timeMs <= 0) return null;
-                        const isOvertime = timeMs >= OVERTIME_THRESHOLD_MS;
-                        return (
-                          <span className={`ml-auto text-[10px] flex items-center gap-1 ${isOvertime ? "text-lone-warning font-bold" : "text-muted-foreground"}`}>
-                            {isOvertime ? "⚠️" : "⏱️"} {formatTimeSpent(timeMs)}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                )}
-              />
-            </div>
-          )}
-
-          {/* Relatorios Mensais Tab */}
-          {activeTab === "relatorios" && (
-            <MonthlyReportsTab
-              clients={filteredClients}
-              reports={trafficReports}
-              realCampaigns={sharedIsUsingRealData ? sharedRealCampaigns : []}
-              monthSpendByClient={monthSpendByClient}
-              onAddReport={addTrafficReport}
-              onUpdateReport={updateTrafficReport}
-              currentUser={currentUser}
-              effectiveFilter={effectiveFilter}
-            />
-          )}
-
-          {/* Analise / Report Tab */}
-          {activeTab === "report" && (
-            <TrafficReportTab clients={filteredClients} />
-          )}
-
           {/* Anuncios Tab */}
           {activeTab === "anuncios" && (
             <AdAnalyticsTab
               clients={filteredClients}
-              accounts={mockAdAccounts}
-              campaigns={mockAdCampaigns}
-              addDesignRequest={addDesignRequest}
-              updateClientData={updateClientData}
+              accounts={[]}
+              campaigns={[]}
               currentUser={currentUser}
               onRealDataChange={(campaigns, isReal) => {
                 setSharedRealCampaigns(campaigns);
@@ -539,9 +421,10 @@ export default function TrafficPage() {
           {activeTab === "investimento" && (
             <InvestmentControlTab
               clients={filteredClients}
-              adCampaigns={sharedIsUsingRealData ? sharedRealCampaigns : mockAdCampaigns}
+              adCampaigns={sharedIsUsingRealData ? sharedRealCampaigns : []}
               investmentData={investmentData}
               monthSpendByClient={monthSpendByClient}
+              monthSpendFalhou={monthSpendFalhou}
               onSave={updateInvestmentData}
               isUsingRealData={sharedIsUsingRealData}
               currentUser={currentUser}
@@ -550,38 +433,20 @@ export default function TrafficPage() {
         </div>
       </div>
 
-      {/* Content Request Modal */}
-      {showContentRequest && (
-        <ContentRequestModal
-          clients={filteredClients}
-          currentUser={currentUser}
-          onClose={() => setShowContentRequest(false)}
-          onSave={(card) => { addContentCard(card); setShowContentRequest(false); }}
-        />
-      )}
-
-      {/* New Task Modal */}
-      {showNewTask && (
-        <NewTaskModal
-          clients={filteredClients}
-          trafficManagers={trafficManagers}
-          currentUser={currentUser}
-          onClose={() => setShowNewTask(false)}
-          onSave={(task) => { addTask(task); setShowNewTask(false); }}
-        />
-      )}
-
       {/* Pedido de arte direto (sem campanha) */}
       {showDesignModal && (
         <TrafficDesignRequestModal
           clients={filteredClients}
           currentUser={currentUser}
           onClose={() => setShowDesignModal(false)}
-          onSubmit={(req) => {
-            addDesignRequest(req).catch((err: unknown) => toast.error(`Não consegui criar a demanda${err instanceof Error && err.message ? ` (${err.message})` : ""}. Tenta de novo.`));
+          onSubmit={async (req) => {
+            // Som, aviso e fechar só depois que o servidor confirmou — antes o modal fechava e a falha sumia.
+            if (!(await criarDemanda(req))) return false;
             pushNotification("content", "Arte solicitada ao Designer", `Pedido de arte para "${req.clientName}" enviado para a fila do Designer.`, req.clientId);
             import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
+            toast.success("Pedido enviado para a fila do Designer.");
             setShowDesignModal(false);
+            return true;
           }}
         />
       )}
@@ -593,12 +458,13 @@ export default function TrafficPage() {
           client={creativeModal.client}
           currentUser={currentUser}
           onClose={() => setCreativeModal(null)}
-          onSubmit={(req) => {
-            addDesignRequest(req).catch((err: unknown) => toast.error(`Não consegui criar a demanda${err instanceof Error && err.message ? ` (${err.message})` : ""}. Tenta de novo.`));
-            pushNotification("content", "Criativo solicitado ao Design", `Pedido de criativo para campanha "${creativeModal.campaign.name}" enviado para a fila do Designer com prioridade ${req.priority === "critical" ? "critica" : "alta"}.`, creativeModal.client.id);
-            // Audio feedback
+          onSubmit={async (req) => {
+            if (!(await criarDemanda(req))) return false;
+            pushNotification("content", "Criativo solicitado ao Design", `Pedido de criativo para campanha "${creativeModal.campaign.name}" enviado para a fila do Designer com prioridade ${req.priority === "critical" ? "crítica" : "alta"}.`, creativeModal.client.id);
             import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
+            toast.success("Pedido de criativo enviado para a fila do Designer.");
             setCreativeModal(null);
+            return true;
           }}
         />
       )}
@@ -622,8 +488,9 @@ function TrafficDesignRequestModal({
   clients: import("@/lib/types").Client[];
   currentUser: string;
   onClose: () => void;
-  onSubmit: (req: Omit<import("@/lib/types").DesignRequest, "id">) => void;
+  onSubmit: (req: Omit<import("@/lib/types").DesignRequest, "id">) => Promise<boolean>;
 }) {
+  const [enviando, setEnviando] = useState(false);
   const [clientId, setClientId] = useState(clients[0]?.id ?? "");
   const [format, setFormat] = useState("Post Feed (1:1)");
   const [briefing, setBriefing] = useState("");
@@ -632,9 +499,10 @@ function TrafficDesignRequestModal({
 
   const selectedClient = clients.find((c) => c.id === clientId);
 
-  const handleSubmit = () => {
-    if (!selectedClient || !briefing.trim()) return;
-    onSubmit({
+  const handleSubmit = async () => {
+    if (!selectedClient || !briefing.trim() || enviando) return;
+    setEnviando(true);
+    await onSubmit({
       title: `Arte Tráfego — ${selectedClient.name}`,
       clientId: selectedClient.id,
       clientName: selectedClient.name,
@@ -645,6 +513,7 @@ function TrafficDesignRequestModal({
       briefing: briefing.trim(),
       deadline: deadline || undefined,
     });
+    setEnviando(false);
   };
 
   return (
@@ -749,10 +618,10 @@ function TrafficDesignRequestModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!briefing.trim() || !clientId}
+            disabled={!briefing.trim() || !clientId || enviando}
             className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            <Palette size={14} /> Enviar para o Designer
+            {enviando ? <Loader2 size={14} className="animate-spin" /> : <Palette size={14} />} {enviando ? "Enviando…" : "Enviar para o Designer"}
           </button>
         </div>
       </div>
@@ -813,8 +682,9 @@ function CreativeRequestModal({
   client: import("@/lib/types").Client;
   currentUser: string;
   onClose: () => void;
-  onSubmit: (req: Omit<import("@/lib/types").DesignRequest, "id">) => void;
+  onSubmit: (req: Omit<import("@/lib/types").DesignRequest, "id">) => Promise<boolean>;
 }) {
+  const [enviando, setEnviando] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
   const [customFormat, setCustomFormat] = useState("Post Feed (1:1)");
   const [observations, setObservations] = useState("");
@@ -825,7 +695,8 @@ function CreativeRequestModal({
   const suggestions = SMART_SUGGESTIONS[campaign.objective] ?? SMART_SUGGESTIONS.engagement;
   const objectiveLabel = OBJECTIVE_LABELS[campaign.objective] ?? campaign.objective;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (enviando) return;
     const suggestion = selectedSuggestion !== null ? suggestions[selectedSuggestion] : null;
     const format = suggestion ? suggestion.format : customFormat;
     const briefingParts = [
@@ -844,7 +715,8 @@ function CreativeRequestModal({
       observations ? `\nObservacoes do Gestor:\n${observations}` : null,
     ].filter(Boolean).join("\n");
 
-    onSubmit({
+    setEnviando(true);
+    await onSubmit({
       title: `[TRAFEGO] Criativo — ${campaign.name}`,
       clientId: client.id,
       clientName: client.name,
@@ -854,6 +726,7 @@ function CreativeRequestModal({
       format,
       briefing: briefingParts,
     });
+    setEnviando(false);
   };
 
   return (
@@ -867,10 +740,10 @@ function CreativeRequestModal({
             <div>
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
                 <Sparkles size={18} className="text-primary" />
-                Solicitar Reforco Criativo
+                Solicitar Reforço Criativo
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                O pedido ira direto para a fila do Designer com tag [TRAFEGO]
+                O pedido irá direto para a fila do Designer com tag [TRAFEGO]
               </p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card/5">
@@ -906,7 +779,7 @@ function CreativeRequestModal({
           <div className="space-y-2">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold flex items-center gap-1.5">
               <Brain size={10} className="text-primary" />
-              Sugestoes do Sistema — {objectiveLabel}
+              Sugestões do Sistema — {objectiveLabel}
             </p>
             <div className="space-y-1.5">
               {suggestions.map((s, i) => {
@@ -948,7 +821,7 @@ function CreativeRequestModal({
             <div className="flex gap-2">
               {([
                 { value: "high" as const, label: "Alta", color: "text-lone-warning border-lone-warning-border bg-lone-warning-bg" },
-                { value: "critical" as const, label: "Critica (Verba Rodando)", color: "text-destructive border-destructive/20 bg-destructive/5" },
+                { value: "critical" as const, label: "Crítica (Verba Rodando)", color: "text-destructive border-destructive/20 bg-destructive/5" },
               ]).map((p) => (
                 <button key={p.value} onClick={() => setPriority(p.value)}
                   className={`flex-1 py-2 rounded-xl border text-xs font-medium transition-all ${
@@ -961,7 +834,7 @@ function CreativeRequestModal({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Observacoes (opcional)</label>
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Observações (opcional)</label>
             <textarea value={observations} onChange={(e) => setObservations(e.target.value)}
               placeholder="Ex: CPA alto, precisamos de video mais agressivo com CTA direto..."
               rows={3}
@@ -976,7 +849,7 @@ function CreativeRequestModal({
               <span className="text-xs text-foreground font-medium">Criativo — {campaign.name}</span>
             </div>
             <p className="text-[10px] text-muted-foreground mt-1">
-              {client.name} · {selectedSuggestion !== null ? suggestions[selectedSuggestion].format : customFormat} · {priority === "critical" ? "Critica" : "Alta"}
+              {client.name} · {selectedSuggestion !== null ? suggestions[selectedSuggestion].format : customFormat} · {priority === "critical" ? "Crítica" : "Alta"}
             </p>
           </div>
         </div>
@@ -985,9 +858,9 @@ function CreativeRequestModal({
           <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-card/5 transition-all">
             Cancelar
           </button>
-          <button onClick={handleSubmit}
-            className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary transition-all">
-            <Send size={12} /> Enviar para Producao
+          <button onClick={handleSubmit} disabled={enviando}
+            className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary transition-all disabled:opacity-50">
+            {enviando ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} {enviando ? "Enviando…" : "Enviar para Produção"}
           </button>
         </div>
       </div>
@@ -1037,9 +910,7 @@ function RoutineTab({
   const supportFailed = activeClients.filter((c) => supportFailedIds.includes(c.id) && !supportDone.has(c.id));
 
   // Weekly checks
-  const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() + (weekStart.getDay() === 0 ? -6 : 1 - weekStart.getDay()));
-  const weekStartStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth()+1).padStart(2,"0")}-${String(weekStart.getDate()).padStart(2,"0")}`;
+  const weekStartStr = segundaDaSemana(today);
   const weekChecks = routineChecks.filter(
     (c) => c.date >= weekStartStr && (effectiveFilter === "all" || c.completedBy === effectiveFilter)
   );
@@ -1089,16 +960,11 @@ function RoutineTab({
 
   // Task alerts
   const openTasks = tasks.filter((t) => t.status !== "done");
-  const overdueTasks = openTasks.filter((t) => {
-    if (!t.dueDate) return false;
-    return new Date(t.dueDate + "T23:59:59") < new Date();
-  });
+  // Prazo é data de calendário em SP: compara "YYYY-MM-DD", sem fuso do navegador no meio.
+  const overdueTasks = openTasks.filter((t) => !!t.dueDate && t.dueDate < today);
   const dueSoonTasks = openTasks.filter((t) => {
-    if (!t.dueDate) return false;
-    const due = new Date(t.dueDate + "T23:59:59");
-    const now = new Date();
-    const diff = (due.getTime() - now.getTime()) / (1000 * 60 * 60);
-    return diff > 0 && diff <= 48;
+    const d = t.dueDate ? diasEntre(today, t.dueDate) : null;
+    return d !== null && d >= 0 && d <= 1;
   });
 
   return (
@@ -1116,10 +982,8 @@ function RoutineTab({
                 <p className="text-[10px] text-muted-foreground">Contas que precisam de atenção hoje — máx. 5 por dia</p>
               </div>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold ml-1">AI</span>
-              {isUsingRealData ? (
+              {isUsingRealData && (
                 <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-bold uppercase tracking-wider ml-auto">Dados reais</span>
-              ) : (
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-bold uppercase tracking-wider ml-auto">Dados simulados</span>
               )}
             </div>
             <div className="space-y-2.5">
@@ -1190,7 +1054,7 @@ function RoutineTab({
               <div className="flex items-center gap-2 mb-2">
                 <Calendar size={16} className="text-primary" />
                 <h3 className="text-sm font-semibold text-primary">
-                  {dueSoonTasks.length} tarefa(s) vencem em ate 48h
+                  {dueSoonTasks.length} tarefa(s) vencem em até 48h
                 </h3>
               </div>
               <div className="space-y-1.5">
@@ -1213,7 +1077,7 @@ function RoutineTab({
           <div>
             <h3 className="font-semibold text-foreground flex items-center gap-2">
               <ClipboardCheck size={16} className="text-primary" />
-              Suporte Diario nos Grupos
+              Suporte Diário nos Grupos
             </h3>
             <p className="text-xs text-muted-foreground mt-1">A automação envia e marca sozinha; aja só nos que falharam.</p>
           </div>
@@ -1287,7 +1151,7 @@ function RoutineTab({
       <div className="card border border-border">
         <div className="flex items-center gap-2 mb-3">
           <FileText size={16} className={isMonday ? "text-primary" : "text-muted-foreground"} />
-          <h3 className="font-semibold text-foreground">Relatorios Semanais</h3>
+          <h3 className="font-semibold text-foreground">Relatórios Semanais</h3>
           <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Toda segunda-feira</span>
           {isMonday && <span className="text-xs bg-lone-brand-bg-soft text-primary px-2 py-0.5 rounded-full font-medium">HOJE</span>}
         </div>
@@ -1317,7 +1181,7 @@ function RoutineTab({
           <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Toda quarta-feira</span>
           {isWednesday && <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium">HOJE</span>}
         </div>
-        <p className="text-xs text-muted-foreground mb-3">Analise rapida: como esta a performance dos anuncios ate agora? Algum ajuste necessario?</p>
+        <p className="text-xs text-muted-foreground mb-3">Análise rápida: como está a performance dos anúncios até agora? Algum ajuste necessário?</p>
         <div className="space-y-2">
           {activeClients.map((client) => {
             const done = analysisDone.has(client.id);
@@ -1398,694 +1262,6 @@ function RoutineTab({
 }
 
 // ══════════════════════════════════════════════════════════════
-// RELATORIOS MENSAIS TAB (+ COMPARATIVO)
-// ══════════════════════════════════════════════════════════════
-
-function MonthlyReportsTab({
-  clients,
-  reports,
-  realCampaigns,
-  monthSpendByClient,
-  onAddReport,
-  onUpdateReport,
-  currentUser,
-  effectiveFilter,
-}: {
-  clients: Client[];
-  reports: TrafficMonthlyReport[];
-  realCampaigns: AdCampaign[];
-  monthSpendByClient: Map<string, number>;
-  onAddReport: (r: Omit<TrafficMonthlyReport, "id" | "createdAt">) => TrafficMonthlyReport | Promise<TrafficMonthlyReport>;
-  onUpdateReport: (id: string, updates: Partial<TrafficMonthlyReport>) => void | Promise<void>;
-  currentUser: string;
-  effectiveFilter: string;
-}) {
-  const [selectedClient, setSelectedClient] = useState<string>(clients[0]?.id ?? "");
-  const [showForm, setShowForm] = useState(false);
-  const [editingReport, setEditingReport] = useState<TrafficMonthlyReport | null>(null);
-
-  const activeClients = clients.filter(emOperacao);
-  const clientReports = useMemo(
-    () => reports.filter((r) => r.clientId === selectedClient).sort((a, b) => a.month.localeCompare(b.month)),
-    [reports, selectedClient]
-  );
-
-  const selectedClientData = clients.find((c) => c.id === selectedClient);
-
-  // Compute month-over-month changes
-  const comparisons = useMemo(() => {
-    return clientReports.map((report, idx) => {
-      const prev = idx > 0 ? clientReports[idx - 1] : null;
-      return {
-        report,
-        changes: prev ? {
-          messages: pctChange(report.messages, prev.messages),
-          messageCost: pctChange(report.messageCost, prev.messageCost),
-          impressions: pctChange(report.impressions, prev.impressions),
-        } : null,
-      };
-    });
-  }, [clientReports]);
-
-  const latest = comparisons.length > 0 ? comparisons[comparisons.length - 1] : null;
-
-  const handleEdit = (report: TrafficMonthlyReport) => {
-    setEditingReport(report);
-    setShowForm(false);
-  };
-
-  return (
-    <div className="animate-fade-in space-y-6">
-      {/* Client selector */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-sm text-muted-foreground font-medium">Cliente:</span>
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5 flex-wrap">
-          {activeClients.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => { setSelectedClient(c.id); setShowForm(false); setEditingReport(null); }}
-              className={`text-xs px-3 py-1.5 rounded-md transition-colors ${
-                selectedClient === c.id ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {c.name}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 ml-auto">
-          {(() => {
-            const clientCampaigns = realCampaigns.filter((c) => c.clientId === selectedClient);
-            const hasReal = clientCampaigns.length > 0;
-            return (
-          <button
-            disabled={!hasReal}
-            onClick={() => {
-              if (!selectedClientData || !hasReal) return;
-              const [yy, mm] = todaySP().split("-");
-              const month = `${yy}-${mm}`;
-              // Auto-gera a partir dos dados REAIS da Meta (a aba Anúncios precisa ter carregado a conta).
-              const sumMetric = (pick: (m: NonNullable<AdCampaign["dailyMetrics"]>[number]) => number) =>
-                clientCampaigns.reduce((s, c) => s + (c.dailyMetrics ?? []).reduce((ds, m) => ds + pick(m), 0), 0);
-              const totalSpend = monthSpendByClient.get(selectedClient) ?? sumMetric((m) => m.spend ?? 0);
-              const totalImpressions = sumMetric((m) => m.impressions ?? 0);
-              const totalMessages = sumMetric((m) => m.messages ?? m.leads ?? 0);
-              const costPerMsg = totalMessages > 0 ? totalSpend / totalMessages : 0;
-              onAddReport({
-                clientId: selectedClient,
-                clientName: selectedClientData.name,
-                month,
-                createdBy: currentUser,
-                messages: totalMessages,
-                messageCost: Math.round(costPerMsg * 100) / 100,
-                impressions: totalImpressions,
-                observations: `Relatorio auto-gerado da Meta. ${clientCampaigns.length} campanha(s), investimento total R$ ${totalSpend.toFixed(2)}.`,
-              });
-              toast.success("Relatório gerado a partir dos dados da Meta.");
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-lone-success-bg text-lone-success border border-lone-success-border hover:bg-lone-success-bg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            title={hasReal ? "Gerar relatorio a partir dos dados reais da Meta" : "Abra a aba Anúncios e carregue a conta deste cliente para habilitar"}
-          >
-            <Zap size={13} />
-            Auto-gerar
-          </button>
-            );
-          })()}
-          <button
-            onClick={() => { setShowForm(!showForm); setEditingReport(null); }}
-            className="btn-primary text-xs flex items-center gap-1.5"
-          >
-            <Plus size={13} />
-            Novo Relatorio
-          </button>
-        </div>
-      </div>
-
-      {/* New Report Form */}
-      {showForm && selectedClientData && (
-        <NewReportForm
-          client={selectedClientData}
-          currentUser={currentUser}
-          realCampaigns={realCampaigns}
-          monthSpend={monthSpendByClient.get(selectedClientData.id)}
-          onSubmit={(data) => { onAddReport(data); setShowForm(false); }}
-          onCancel={() => setShowForm(false)}
-        />
-      )}
-
-      {/* Edit Report Form */}
-      {editingReport && selectedClientData && (
-        <EditReportForm
-          report={editingReport}
-          onSave={(updates) => { onUpdateReport(editingReport.id, updates); setEditingReport(null); }}
-          onCancel={() => setEditingReport(null)}
-        />
-      )}
-
-      {/* Latest Month Summary */}
-      {latest && !editingReport && (
-        <div className="card border border-primary/20">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-foreground">{selectedClientData?.name} — Ultimo Mes</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">{formatMonthLabel(latest.report.month)}</p>
-            </div>
-            <div className="flex items-center gap-3">
-              {latest.changes && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">Tendencia geral:</span>
-                  {(() => {
-                    const trend = latest.changes.messages;
-                    if (trend > 5) return <span className="flex items-center gap-1 text-xs font-medium text-primary"><ArrowUpRight size={14} /> Crescendo</span>;
-                    if (trend < -5) return <span className="flex items-center gap-1 text-xs font-medium text-destructive"><ArrowDownRight size={14} /> Caindo</span>;
-                    return <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><Minus size={14} /> Estavel</span>;
-                  })()}
-                </div>
-              )}
-              <button
-                onClick={() => exportReportAsPdf({
-                  title: "Relatório Mensal de Tráfego",
-                  clientName: selectedClientData?.name ?? "",
-                  period: formatMonthLabel(latest.report.month),
-                  createdBy: latest.report.createdBy,
-                  createdAt: latest.report.createdAt,
-                  sections: [
-                    { label: "Mensagens/Leads", value: latest.report.messages, type: "metric" },
-                    { label: "Custo por Lead", value: `R$ ${latest.report.messageCost.toFixed(2)}`, type: "metric" },
-                    { label: "Impressões", value: latest.report.impressions.toLocaleString("pt-BR"), type: "metric" },
-                    ...(latest.report.observations ? [{ label: "Observações", value: latest.report.observations, type: "text" as const }] : []),
-                  ],
-                })}
-                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-              >
-                <FileText size={12} /> PDF
-              </button>
-              <button onClick={() => handleEdit(latest.report)} className="text-xs text-primary hover:underline flex items-center gap-1">
-                Editar
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <MetricBox label="Mensagens/Leads" value={latest.report.messages} change={latest.changes?.messages} />
-            <MetricBox label="Custo por Lead" value={`R$ ${latest.report.messageCost.toFixed(2)}`} change={latest.changes?.messageCost} invertColor />
-            <MetricBox label="Impressoes" value={formatNumber(latest.report.impressions)} change={latest.changes?.impressions} />
-          </div>
-
-          {latest.report.observations && (
-            <div className="mt-4 bg-muted border border-border rounded-lg p-3">
-              <p className="text-xs text-muted-foreground font-medium mb-1">Observacoes do Gestor</p>
-              <p className="text-sm text-foreground leading-relaxed">{latest.report.observations}</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Historical Comparison */}
-      {comparisons.length > 1 && !editingReport && (
-        <div className="card border border-border">
-          <div className="flex items-center gap-2 mb-4">
-            <BarChart2 size={16} className="text-primary" />
-            <h3 className="font-semibold text-foreground">Evolucao Mensal — {selectedClientData?.name}</h3>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-2.5 px-3 text-muted-foreground font-medium text-xs">Mes</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">Leads</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">Var.</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">CPL</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">Var.</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">Impressoes</th>
-                  <th className="text-right py-2.5 px-3 text-muted-foreground font-medium text-xs">Var.</th>
-                  <th className="py-2.5 px-3 text-muted-foreground font-medium text-xs w-16"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparisons.map(({ report, changes }) => (
-                  <tr key={report.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
-                    <td className="py-3 px-3 font-medium text-foreground">{formatMonthLabel(report.month)}</td>
-                    <td className="py-3 px-3 text-right text-foreground">{report.messages}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.messages} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
-                    <td className="py-3 px-3 text-right text-foreground">R$ {report.messageCost.toFixed(2)}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.messageCost} invert /> : <span className="text-xs text-muted-foreground">—</span>}</td>
-                    <td className="py-3 px-3 text-right text-foreground">{formatNumber(report.impressions)}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.impressions} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
-                    <td className="py-3 px-3 text-center">
-                      <button
-                        onClick={() => handleEdit(report)}
-                        className="text-xs text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-all"
-                      >
-                        Editar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {comparisons.length === 0 && !editingReport && (
-        <div className="card text-center py-10 text-muted-foreground">
-          Nenhum relatorio registrado para {selectedClientData?.name}. Clique em &quot;Novo Relatorio&quot; para adicionar.
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Metric Box ───────────────────────────────────────────
-
-function MetricBox({ label, value, change, invertColor }: { label: string; value: string | number; change?: number; invertColor?: boolean }) {
-  return (
-    <div className="bg-card border border-border rounded-lg p-3">
-      <p className="text-xs text-muted-foreground mb-1">{label}</p>
-      <div className="flex items-end justify-between gap-2">
-        <p className="text-lg font-bold text-foreground">{value}</p>
-        {change !== undefined && <ChangeChip value={change} invert={invertColor} />}
-      </div>
-    </div>
-  );
-}
-
-function ChangeChip({ value, invert }: { value: number; invert?: boolean }) {
-  const isPositive = value > 0;
-  const isNeutral = Math.abs(value) < 1;
-  // For cost metrics, positive = bad (invert colors)
-  const isGood = invert ? !isPositive : isPositive;
-
-  if (isNeutral) return <span className="text-xs text-muted-foreground">0%</span>;
-
-  return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isGood ? "text-primary" : "text-destructive"}`}>
-      {isPositive ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-      {Math.abs(value).toFixed(1)}%
-    </span>
-  );
-}
-
-function formatMonthLabel(month: string): string {
-  const [y, m] = month.split("-");
-  const names = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-  return `${names[parseInt(m) - 1]}/${y}`;
-}
-
-// ── New Report Form ──────────────────────────────────────
-
-function NewReportForm({
-  client,
-  currentUser,
-  realCampaigns,
-  monthSpend,
-  onSubmit,
-  onCancel,
-}: {
-  client: Client;
-  currentUser: string;
-  realCampaigns: AdCampaign[];
-  monthSpend?: number;
-  onSubmit: (data: Omit<TrafficMonthlyReport, "id" | "createdAt">) => void;
-  onCancel: () => void;
-}) {
-  const [yy, mm] = todaySP().split("-");
-  const defaultMonth = `${yy}-${mm}`;
-
-  const [month, setMonth] = useState(defaultMonth);
-  const [messages, setMessages] = useState("");
-  const [messageCost, setMessageCost] = useState("");
-  const [impressions, setImpressions] = useState("");
-  const [observations, setObservations] = useState("");
-
-  const clientCampaigns = realCampaigns.filter((c) => c.clientId === client.id);
-  const hasReal = clientCampaigns.length > 0;
-
-  // Pré-preenche os campos a partir dos dados reais da Meta (a aba Anúncios precisa ter carregado a conta).
-  const puxarDaMeta = () => {
-    const sum = (pick: (m: NonNullable<AdCampaign["dailyMetrics"]>[number]) => number) =>
-      clientCampaigns.reduce((s, c) => s + (c.dailyMetrics ?? []).reduce((ds, m) => ds + pick(m), 0), 0);
-    const totalMsgs = sum((m) => m.messages ?? m.leads ?? 0);
-    const totalImpr = sum((m) => m.impressions ?? 0);
-    const totalSpend = monthSpend ?? sum((m) => m.spend ?? 0);
-    setMessages(String(totalMsgs));
-    setImpressions(String(totalImpr));
-    setMessageCost(totalMsgs > 0 ? (totalSpend / totalMsgs).toFixed(2) : "");
-    toast.success("Preenchi com os dados da Meta — confira e ajuste se precisar.");
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!messages || !messageCost) return;
-    onSubmit({
-      clientId: client.id,
-      clientName: client.name,
-      month,
-      createdBy: currentUser,
-      messages: Number(messages),
-      messageCost: Number(messageCost),
-      impressions: Number(impressions),
-      observations: observations || undefined,
-    });
-  };
-
-  return (
-    <div className="card border border-primary/20">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-foreground">Novo Relatorio — {client.name}</h3>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={puxarDaMeta}
-            disabled={!hasReal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            title={hasReal ? "Preencher com os números reais da Meta" : "Abra a aba Anúncios e carregue a conta deste cliente para habilitar"}
-          >
-            <Zap size={13} /> Puxar da Meta
-          </button>
-          <button onClick={onCancel} className="text-muted-foreground hover:text-foreground p-1"><X size={16} /></button>
-        </div>
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div>
-            <label className="text-xs text-muted-foreground font-medium">Mes *</label>
-            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground font-medium">Mensagens/Leads *</label>
-            <input type="number" value={messages} onChange={(e) => setMessages(e.target.value)} placeholder="300" className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground font-medium">Custo por Lead (R$) *</label>
-            <input type="number" step="0.01" value={messageCost} onChange={(e) => setMessageCost(e.target.value)} placeholder="8.50" className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground font-medium">Impressoes</label>
-            <input type="number" value={impressions} onChange={(e) => setImpressions(e.target.value)} placeholder="70000" className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary" />
-          </div>
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground font-medium">Observacoes do Gestor</label>
-          <input value={observations} onChange={(e) => setObservations(e.target.value)} placeholder="Notas sobre o desempenho do mes..." className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary" />
-        </div>
-        <div className="flex gap-2 pt-2">
-          <button type="button" onClick={onCancel} className="btn-ghost flex-1">Cancelar</button>
-          <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-1.5">
-            <Save size={14} />
-            Salvar Relatorio
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-// ── Edit Report Form ─────────────────────────────────────
-
-function EditReportForm({
-  report,
-  onSave,
-  onCancel,
-}: {
-  report: TrafficMonthlyReport;
-  onSave: (updates: Partial<TrafficMonthlyReport>) => void;
-  onCancel: () => void;
-}) {
-  const [messages, setMessages] = useState(String(report.messages));
-  const [messageCost, setMessageCost] = useState(String(report.messageCost));
-  const [impressions, setImpressions] = useState(String(report.impressions));
-  const [observations, setObservations] = useState(report.observations ?? "");
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!messages || !messageCost) return;
-    onSave({
-      messages: Number(messages),
-      messageCost: Number(messageCost),
-      impressions: Number(impressions),
-      observations: observations || undefined,
-    });
-  };
-
-  return (
-    <div className="card border border-border">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="font-semibold text-foreground">Editar Relatorio — {report.clientName}</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">{formatMonthLabel(report.month)} · Criado por {report.createdBy}</p>
-        </div>
-        <button onClick={onCancel} className="text-muted-foreground hover:text-foreground p-1"><X size={16} /></button>
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div>
-            <label className="text-xs text-muted-foreground font-medium">Mes</label>
-            <div className="w-full mt-1 bg-muted/50 rounded-lg p-2.5 text-sm text-muted-foreground">{formatMonthLabel(report.month)}</div>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground font-medium">Mensagens/Leads *</label>
-            <input type="number" value={messages} onChange={(e) => setMessages(e.target.value)} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground font-medium">Custo por Lead (R$) *</label>
-            <input type="number" step="0.01" value={messageCost} onChange={(e) => setMessageCost(e.target.value)} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground font-medium">Impressoes</label>
-            <input type="number" value={impressions} onChange={(e) => setImpressions(e.target.value)} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" />
-          </div>
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground font-medium">Observacoes do Gestor</label>
-          <input value={observations} onChange={(e) => setObservations(e.target.value)} placeholder="Notas sobre o desempenho do mes..." className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary" />
-        </div>
-        <div className="flex gap-2 pt-2">
-          <button type="button" onClick={onCancel} className="btn-ghost flex-1">Cancelar</button>
-          <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-1.5">
-            <Save size={14} />
-            Salvar Alteracoes
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════
-// ANALISE TAB (antigo Report)
-// ══════════════════════════════════════════════════════════════
-
-function TrafficReportTab({ clients }: { clients: Client[] }) {
-  const updateClientData = useClientsStore((s) => s.updateClient);
-  const relevantClients = clients.filter(
-    (c) => c.status === "at_risk" || c.attentionLevel === "high" || c.attentionLevel === "critical"
-  );
-  const healthyClients = clients.filter(
-    (c) => c.status === "good" && c.attentionLevel !== "high" && c.attentionLevel !== "critical"
-  );
-  const [saved, setSaved] = useState<Record<string, boolean>>({});
-
-  return (
-    <div className="animate-fade-in space-y-6">
-      <p className="text-muted-foreground text-sm">Registro interno da equipe — nao visivel ao cliente.</p>
-
-      {relevantClients.length > 0 && (
-        <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-destructive flex items-center gap-2">
-            <AlertTriangle size={14} />
-            Clientes que Precisam de Atencao ({relevantClients.length})
-          </h3>
-          {relevantClients.map((client) => (
-            <div key={client.id} className="card border border-destructive/20">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center text-sm font-bold text-destructive">
-                  {client.name[0]}
-                </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-foreground">{client.name}</p>
-                  <p className="text-xs text-muted-foreground">Gestor: {client.assignedTraffic}</p>
-                </div>
-                {saved[client.id] && <span className="text-xs text-primary font-medium animate-fade-in">Salvo!</span>}
-              </div>
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const fd = new FormData(e.currentTarget);
-                  const notes = fd.get("notes") as string;
-                  try {
-                    // await + trata erro: antes era fire-and-forget e mostrava "Salvo!" mesmo se o banco recusasse.
-                    await updateClientData(client.id, { notes: notes || undefined });
-                    setSaved((prev) => ({ ...prev, [client.id]: true }));
-                    setTimeout(() => setSaved((prev) => ({ ...prev, [client.id]: false })), 1500);
-                  } catch {
-                    toast.error("Não foi possível salvar. Tente de novo.");
-                  }
-                }}
-                className="space-y-2"
-              >
-                <div>
-                  <label className="text-xs text-muted-foreground font-medium">Momento atual do cliente</label>
-                  <textarea
-                    name="notes"
-                    defaultValue={client.notes || ""}
-                    placeholder="Descreva a situacao atual, o que esta acontecendo com as campanhas..."
-                    className="w-full mt-1 bg-muted rounded-lg p-3 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary resize-none"
-                    rows={3}
-                  />
-                </div>
-                <button type="submit" className="btn-primary flex items-center gap-2 text-xs">
-                  <Save size={13} />
-                  Salvar Relatorio
-                </button>
-              </form>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {healthyClients.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
-            <CheckCircle size={14} />
-            Clientes com Bons Resultados ({healthyClients.length})
-          </h3>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {healthyClients.map((client) => (
-              <div key={client.id} className="card flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">
-                  {client.name[0]}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground text-sm truncate">{client.name}</p>
-                  <p className="text-xs text-muted-foreground">{client.assignedTraffic}</p>
-                </div>
-                <div className="text-right">
-                  <span className={`badge border text-xs ${getAttentionColor(client.attentionLevel)}`}>
-                    {getAttentionLabel(client.attentionLevel)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════
-// NEW TASK MODAL
-// ══════════════════════════════════════════════════════════════
-
-function NewTaskModal({
-  clients, trafficManagers, currentUser, onClose, onSave,
-}: {
-  clients: Client[];
-  trafficManagers: string[];
-  currentUser: string;
-  onClose: () => void;
-  onSave: (task: Omit<Task, "id">) => void;
-}) {
-  const ROLE_OPTIONS: { value: import("@/lib/types").Role; label: string }[] = [
-    { value: "traffic", label: "Tráfego" },
-    { value: "social", label: "Social Media" },
-    { value: "designer", label: "Designer" },
-    { value: "manager", label: "Gerente" },
-  ];
-  const team = useTeamMembers();
-  const membersByRole = (role: string): string[] => {
-    if (role === "traffic") return [...team.traffic, ...team.manager].map((m) => m.name);
-    if (role === "social") return team.social.map((m) => m.name);
-    if (role === "designer") return team.designer.map((m) => m.name);
-    if (role === "manager") return team.manager.map((m) => m.name);
-    return team.members.map((m) => m.name);
-  };
-
-  const [title, setTitle] = useState("");
-  const [clientId, setClientId] = useState(clients[0]?.id ?? "");
-  const [taskRole, setTaskRole] = useState<import("@/lib/types").Role>("traffic");
-  const [assignedTo, setAssignedTo] = useState(currentUser);
-  const [priority, setPriority] = useState<Task["priority"]>("medium");
-  const [dueDate, setDueDate] = useState("");
-
-  const selectedClient = clients.find((c) => c.id === clientId);
-  const availableMembers = membersByRole(taskRole);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || !clientId) return;
-    onSave({
-      title: title.trim(),
-      clientId,
-      clientName: selectedClient?.name ?? "",
-      assignedTo,
-      role: taskRole,
-      status: "pending",
-      priority,
-      dueDate: dueDate || undefined,
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <h3 className="font-semibold text-foreground">Nova Tarefa de Trafego</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-1"><X size={18} /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div>
-            <label className="text-xs text-muted-foreground font-medium">Titulo *</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Otimizar campanhas Google Ads" className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary" autoFocus />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground font-medium">Cliente *</label>
-              <select value={clientId} onChange={(e) => setClientId(e.target.value)} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary">
-                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground font-medium">Setor</label>
-              <select value={taskRole} onChange={(e) => { setTaskRole(e.target.value as import("@/lib/types").Role); setAssignedTo(membersByRole(e.target.value)[0] ?? currentUser); }} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary">
-                {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground font-medium">Responsável</label>
-            <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary">
-              {availableMembers.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground font-medium">Prioridade</label>
-              <select value={priority} onChange={(e) => setPriority(e.target.value as Task["priority"])} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary">
-                <option value="low">Baixa</option>
-                <option value="medium">Media</option>
-                <option value="high">Alta</option>
-                <option value="critical">Critica</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground font-medium">Prazo</label>
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" />
-            </div>
-          </div>
-          <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="btn-ghost flex-1">Cancelar</button>
-            <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-1.5"><Plus size={14} /> Criar Tarefa</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════
 // AD ANALYTICS TAB
 // ══════════════════════════════════════════════════════════════
 
@@ -2123,8 +1299,6 @@ function AdAnalyticsTab({
   clients,
   accounts,
   campaigns,
-  addDesignRequest,
-  updateClientData,
   currentUser,
   onRealDataChange,
   onRequestCreative,
@@ -2132,8 +1306,6 @@ function AdAnalyticsTab({
   clients: Client[];
   accounts: AdAccount[];
   campaigns: AdCampaign[];
-  addDesignRequest: (req: Omit<import("@/lib/types").DesignRequest, "id"> & { contentCardId?: string }) => import("@/lib/types").DesignRequest | Promise<import("@/lib/types").DesignRequest>;
-  updateClientData: (id: string, data: Partial<Client>) => void;
   currentUser: string;
   onRealDataChange?: (campaigns: AdCampaign[], isReal: boolean) => void;
   onRequestCreative?: (campaign: AdCampaign, client: Client) => void;
@@ -2192,10 +1364,6 @@ function AdAnalyticsTab({
   const [pendingFrom, setPendingFrom] = useState("");
   const [pendingTo, setPendingTo] = useState("");
 
-  // Sync Carteira state
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ matched: number; total: number } | null>(null);
-
   // Refresh All state
   const [refreshingAll, setRefreshingAll] = useState(false);
 
@@ -2252,9 +1420,11 @@ function AdAnalyticsTab({
       });
   }, [meta.connected, meta.token]);
 
-  // Fetch campaigns when an account is selected
+  // Só a resposta do último pedido vale: trocar rápido de conta mostrava campanhas de um cliente sob outro.
+  const selectReqRef = useRef(0);
   const handleSelectAccount = useCallback(async (accountId: string) => {
     if (!meta.token) return;
+    const reqId = ++selectReqRef.current;
     setSelectedMetaAccount(accountId);
     setLoadingCampaigns(true);
     setMetaError(null);
@@ -2266,10 +1436,11 @@ function AdAnalyticsTab({
         customDateFrom || undefined,
         customDateTo || undefined,
       );
+      if (reqId !== selectReqRef.current) return;
       // Resolve o cliente REAL (UUID) dono desta conta, senão o Investimento/pacing filtra por clientId e nunca casa (gasto R$0).
       const ownerClient = clients.find((cl) => cl.metaAdAccountId === accountId);
+      // Campanha cujo insight falhou fica na lista marcada "sem dados" — sumir com ela ou mostrar R$0 mentia.
       const mapped: AdCampaign[] = camps
-        .filter((c: any) => !c.error)
         .map((c: any) => ({
           id: c.id,
           accountId,
@@ -2302,10 +1473,12 @@ function AdAnalyticsTab({
           frequency: c.frequency ?? 0,
           dailyMetrics: c.dailyMetrics ?? [],
           hasData: c.hasData ?? false,
+          insightsFailed: !!c.insightsFailed,
           lastSyncAt: c.lastSyncAt,
         }));
       setMetaCampaigns(mapped);
     } catch (err: any) {
+      if (reqId !== selectReqRef.current) return;
       if (err instanceof TokenExpiredError) {
         meta.handleTokenError();
         setMetaError("Token expirado. Reconecte sua conta Meta Ads.");
@@ -2313,7 +1486,7 @@ function AdAnalyticsTab({
         setMetaError("Erro ao buscar campanhas: " + err.message);
       }
     }
-    setLoadingCampaigns(false);
+    if (reqId === selectReqRef.current) setLoadingCampaigns(false);
   }, [meta.token, meta.handleTokenError, metaAccounts, clients, dateRange, customDateFrom, customDateTo]);
 
   // Refresh data when date range or custom dates change (if account already selected)
@@ -2344,42 +1517,17 @@ function AdAnalyticsTab({
     return { spend, results, leads, messages, clicks, impressions };
   }, [portfolioCampaigns]);
 
-  function normalizeName(s: string): string {
-    return s.toLowerCase().replace(/[^a-z0-9]/g, "");
-  }
-
-  const handleSyncCarteira = useCallback(async () => {
-    if (!meta.token || metaAccounts.length === 0) return;
-    setSyncing(true);
-    setSyncResult(null);
-    let matched = 0;
-    for (const client of clients) {
-      if (client.metaAdAccountId) continue;
-      const clientNorm = normalizeName(client.name);
-      const best = metaAccounts.find((acc) => {
-        const accNorm = normalizeName(acc.name ?? "");
-        return accNorm.includes(clientNorm.slice(0, 5)) || clientNorm.includes(accNorm.slice(0, 5));
-      });
-      if (best) {
-        updateClientData(client.id, { metaAdAccountId: best.id, metaAdAccountName: best.name ?? best.account_id });
-        matched++;
-      }
-    }
-    setSyncing(false);
-    setSyncResult({ matched, total: clients.filter((c) => !c.metaAdAccountId).length + matched });
-    setTimeout(() => setSyncResult(null), 4000);
-  }, [meta.token, metaAccounts, clients, updateClientData]);
-
   const handleRefreshAll = useCallback(async () => {
     if (!meta.token || linkedClients.length === 0) return;
     setRefreshingAll(true);
     const newMap = new Map<string, AdCampaign[]>();
+    const falharam: string[] = [];
     await Promise.all(
       linkedClients.map(async (client) => {
         if (!client.metaAdAccountId || !meta.token) return;
         try {
           const camps = await fetchCampaignInsights(meta.token, client.metaAdAccountId, dateRange);
-          const mapped: AdCampaign[] = camps.filter((c: any) => !c.error).map((c: any) => ({
+          const mapped: AdCampaign[] = camps.map((c: any) => ({
             id: c.id, accountId: client.metaAdAccountId!, clientId: client.id,
             clientName: client.name, name: c.name, objective: mapMetaObjective(c.objective),
             status: (c.status === "active" || c.status === "paused") ? c.status : "active" as any,
@@ -2394,15 +1542,19 @@ function AdAnalyticsTab({
             leads: c.leads ?? 0, costPerLead: c.costPerLead ?? 0,
             results: c.results ?? 0, costPerResult: c.costPerResult ?? 0,
             frequency: c.frequency ?? 0, dailyMetrics: c.dailyMetrics ?? [],
-            hasData: c.hasData ?? false, lastSyncAt: c.lastSyncAt,
+            hasData: c.hasData ?? false, insightsFailed: !!c.insightsFailed, lastSyncAt: c.lastSyncAt,
           }));
           newMap.set(client.id, mapped);
         } catch (err: any) {
           if (err instanceof TokenExpiredError) meta.handleTokenError();
+          falharam.push(client.name);
         }
       })
     );
     setPortfolioCampaigns(newMap);
+    if (falharam.length > 0) {
+      toast.error(`Não consegui carregar ${falharam.length} cliente(s) da Meta: ${falharam.slice(0, 3).join(", ")}${falharam.length > 3 ? "…" : ""}. O resumo está incompleto.`);
+    }
     if (selectedMetaAccount) handleSelectAccount(selectedMetaAccount);
     setRefreshingAll(false);
   }, [meta.token, meta.handleTokenError, linkedClients, dateRange, selectedMetaAccount, handleSelectAccount]);
@@ -2460,9 +1612,8 @@ function AdAnalyticsTab({
   // IMPORTANT: never convert custom date strings through new Date() — "YYYY-MM-DD" parses
   // as UTC midnight, causing a 1-day shift for timezones behind UTC (e.g. BRT = UTC-3).
   // Use the string directly when set; compute local date strings otherwise.
-  const localDateStr = (d: Date) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD in browser TZ
-  const rangeEndStr = customDateTo || localDateStr(new Date());
-  const rangeStartStr = customDateFrom || localDateStr(new Date(Date.now() - dateRange * 86400000));
+  const rangeEndStr = customDateTo || todaySP();
+  const rangeStartStr = customDateFrom || diasAntes(todaySP(), dateRange);
   // Quando o usuário usa datas customizadas, periodDays é o intervalo real (não o preset numérico).
   // Usar T12:00:00 para evitar shift de timezone ao parsear strings YYYY-MM-DD.
   const actualPeriodDays = customDateFrom && customDateTo
@@ -2654,7 +1805,7 @@ function AdAnalyticsTab({
               leads: (c.leads as number) ?? 0, costPerLead: (c.costPerLead as number) ?? 0,
               results: (c.results as number) ?? 0, costPerResult: (c.costPerResult as number) ?? 0,
               frequency: (c.frequency as number) ?? 0, dailyMetrics: (c.dailyMetrics as AdCampaign["dailyMetrics"]) ?? [],
-              hasData: (c.hasData as boolean) ?? false, lastSyncAt: c.lastSyncAt as string | undefined,
+              hasData: (c.hasData as boolean) ?? false, insightsFailed: !!c.insightsFailed, lastSyncAt: c.lastSyncAt as string | undefined,
             }));
 
           for (const client of linkedClients) {
@@ -2699,8 +1850,16 @@ function AdAnalyticsTab({
         }
       }
 
-      const reports: { clientName: string; data: import("@/lib/exportTrafficPdf").TrafficReportData }[] = [];
+      // Relatório com campanha faltando mente pro cliente: quem teve falha na Meta fica fora do ZIP e é avisado.
+      for (const [cid, camps] of dataByClient) {
+        const falhas = camps.filter(insightFalhou).length;
+        if (falhas > 0) {
+          fetchErrors.push(`${clients.find((c) => c.id === cid)?.name ?? cid}: ${falhas} campanha(s) sem dados da Meta — ficou fora do ZIP`);
+          dataByClient.delete(cid);
+        }
+      }
 
+      const reports: { clientName: string; data: import("@/lib/exportTrafficPdf").TrafficReportData }[] = [];
 
       for (const [clientId, clientCampaigns] of dataByClient) {
         const client = clients.find((c) => c.id === clientId);
@@ -2762,6 +1921,10 @@ function AdAnalyticsTab({
 
   const handleExportPdf = async () => {
     if (exportingPdf) return;
+    if (filteredCampaigns.some(insightFalhou)) {
+      toast.error("Há campanha sem dados da Meta — o PDF sairia com número faltando. Clique em Atualizar Dados e tente de novo.");
+      return;
+    }
     setExportingPdf(true);
     try {
       const accountId = selectedClient !== "all"
@@ -2787,6 +1950,10 @@ function AdAnalyticsTab({
 
   const handleExportClientPdf = async () => {
     if (exportingPdf) return;
+    if (filteredCampaigns.some(insightFalhou)) {
+      toast.error("Há campanha sem dados da Meta — o PDF sairia com número faltando. Clique em Atualizar Dados e tente de novo.");
+      return;
+    }
     setExportingPdf(true);
     try {
       const accountId = selectedClient !== "all"
@@ -2879,18 +2046,6 @@ function AdAnalyticsTab({
             </div>
 
             <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-              {/* Sync Carteira button */}
-              {metaAccounts.length > 0 && (
-                <button
-                  onClick={handleSyncCarteira}
-                  disabled={syncing}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-all disabled:opacity-50"
-                  title="Auto-vincula clientes da carteira às contas Meta pelo nome"
-                >
-                  {syncing ? <Loader2 size={12} className="animate-spin" /> : <Users size={12} />}
-                  Sincronizar Carteira
-                </button>
-              )}
               {/* Refresh All button */}
               {linkedClients.length > 0 && (
                 <button
@@ -2924,14 +2079,6 @@ function AdAnalyticsTab({
               </button>
             </div>
           </div>
-
-          {/* Sync result toast */}
-          {syncResult && (
-            <div className="flex items-center gap-2 px-4 py-2.5 bg-primary/10 border border-primary/20 rounded-xl text-xs text-primary animate-fade-in">
-              <CheckCircle size={13} />
-              Sincronização concluída: {syncResult.matched} cliente(s) vinculado(s) automaticamente de {syncResult.total} analisado(s).
-            </div>
-          )}
 
           {/* ── Portfolio Summary ──────────────────────────────────────────── */}
           {portfolioCampaigns.size > 0 && (
@@ -3051,11 +2198,14 @@ function AdAnalyticsTab({
                               {acc.currency ?? "BRL"}
                             </span>
                             <span className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                              acc.account_status === 1
-                                ? "bg-primary/10 text-primary border-primary/20"
-                                : "bg-primary/10 text-primary border-primary/15"
+                              ({
+                                ok: "bg-primary/10 text-primary border-primary/20",
+                                critical: "bg-lone-danger-bg text-lone-danger border-lone-danger-border",
+                                review: "bg-lone-warning-bg text-lone-warning border-lone-warning-border",
+                                paused: "bg-muted text-muted-foreground border-border",
+                              } as const)[metaAccountStatus(acc.account_status).gravidade]
                             }`}>
-                              {acc.account_status === 1 ? "Ativa" : acc.account_status === 2 ? "Desativada" : "Status " + acc.account_status}
+                              {metaAccountStatus(acc.account_status).label}
                             </span>
                           </div>
                         </div>
@@ -3142,27 +2292,26 @@ function AdAnalyticsTab({
         </div>
       ) : null}
 
-      {/* Mock data warning banner */}
-      {!isUsingRealData && (
-        <div className="bg-lone-warning-bg border border-lone-warning-border rounded-xl px-4 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-lone-warning-bg flex items-center justify-center shrink-0">
-            <AlertCircle size={16} className="text-lone-warning" />
-          </div>
-          <div className="flex-1">
-            <p className="text-xs font-semibold text-lone-warning">Dados Simulados</p>
-            <p className="text-[10px] text-lone-warning mt-0.5">
-              As campanhas e métricas abaixo são fictícias para demonstração. Conecte sua conta Meta Ads para ver dados reais.
-            </p>
-          </div>
-          <span className="text-[9px] font-bold text-lone-warning bg-lone-warning-bg border border-lone-warning-border px-2 py-1 rounded-md uppercase tracking-wider shrink-0">
-            Demo
-          </span>
+      {/* Sem token neste navegador: a rota do token só responde a admin — nada de número inventado. */}
+      {!meta.loading && !meta.connected && !isAdmin && (
+        <div className="rounded-xl border border-border bg-card px-4 py-6 flex items-start gap-3">
+          <Info size={16} className="text-muted-foreground shrink-0 mt-0.5" />
+          <p className="text-sm text-muted-foreground">
+            Os dados de anúncios desta aba ainda vêm do navegador do admin. Peça para um admin abrir a aba, ou use{" "}
+            <Link href="/traffic/budgets" className="text-primary hover:underline">Saldos, Verba &amp; Alertas</Link>.
+          </p>
         </div>
       )}
 
-      {/* Main Content — always show (mock data when no Meta account selected) */}
-      {!loadingCampaigns && (
+      {/* Conteúdo só com conta real selecionada */}
+      {!loadingCampaigns && isUsingRealData && (
       <>
+      {metaCampaigns.some(insightFalhou) && (
+        <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg px-4 py-3 flex items-center gap-2 text-xs text-lone-warning">
+          <AlertTriangle size={14} className="shrink-0" />
+          {metaCampaigns.filter(insightFalhou).length} campanha(s) sem dados — a Meta não respondeu. Os totais abaixo não incluem elas; clique em Atualizar Dados.
+        </div>
+      )}
       {/* ═══ FILTERS BAR ═══ */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* Bússola — busca rápida de cliente */}
@@ -3303,8 +2452,8 @@ function AdAnalyticsTab({
                   setShowCustomRange(false);
                   return;
                 }
-                const to = customDateTo || new Date().toISOString().slice(0, 10);
-                const from = customDateFrom || new Date(new Date().getTime() - dateRange * 86400000).toISOString().slice(0, 10);
+                const to = customDateTo || todaySP();
+                const from = customDateFrom || diasAntes(todaySP(), dateRange);
                 setPendingFrom(from);
                 setPendingTo(to);
                 setShowCustomRange(true);
@@ -3323,7 +2472,7 @@ function AdAnalyticsTab({
               <input
                 type="date"
                 value={pendingFrom}
-                max={pendingTo || new Date().toISOString().slice(0, 10)}
+                max={pendingTo || todaySP()}
                 onChange={(e) => setPendingFrom(e.target.value)}
                 className="text-xs px-1.5 py-1 rounded bg-card border border-border text-foreground w-[120px] cursor-pointer"
               />
@@ -3332,7 +2481,7 @@ function AdAnalyticsTab({
                 type="date"
                 value={pendingTo}
                 min={pendingFrom || undefined}
-                max={new Date().toISOString().slice(0, 10)}
+                max={todaySP()}
                 onChange={(e) => setPendingTo(e.target.value)}
                 className="text-xs px-1.5 py-1 rounded bg-card border border-border text-foreground w-[120px] cursor-pointer"
               />
@@ -3340,7 +2489,7 @@ function AdAnalyticsTab({
                 type="button"
                 onClick={() => {
                   if (!pendingFrom || !pendingTo) return;
-                  const diff = Math.ceil((new Date(pendingTo).getTime() - new Date(pendingFrom).getTime()) / 86400000);
+                  const diff = diasEntre(pendingFrom, pendingTo) ?? 0;
                   if (diff > 0) setDateRange(diff);
                   setCustomDateFrom(pendingFrom);
                   setCustomDateTo(pendingTo);
@@ -3857,8 +3006,9 @@ function AdAnalyticsTab({
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-semibold text-foreground truncate">{camp.name}</p>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${statusInfo?.cls}`}>{statusInfo?.label}</span>
-                      {!isUsingRealData && <span className="text-[9px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-bold uppercase tracking-wider">Simulado</span>}
-                      {isUsingRealData && camp.hasData === false && <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border font-bold uppercase tracking-wider">Sem dados</span>}
+                      {insightFalhou(camp) ? (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-bold uppercase tracking-wider" title="A Meta não respondeu os números desta campanha">Sem dados — falha na Meta</span>
+                      ) : camp.hasData === false && <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border font-bold uppercase tracking-wider">Sem dados</span>}
                       {budgetPct > 90 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-semibold">Verba {budgetPct.toFixed(0)}%</span>}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
@@ -3871,7 +3021,7 @@ function AdAnalyticsTab({
                   </div>
                   <div className="flex items-center gap-5 text-xs shrink-0">
                     <div className="text-right">
-                      <p className="font-bold text-foreground tabular-nums">R$ {formatCurrency(camp.spend)}</p>
+                      <p className="font-bold text-foreground tabular-nums">{insightFalhou(camp) ? "—" : `R$ ${formatCurrency(camp.spend)}`}</p>
                       <p className="text-[10px] text-muted-foreground">Gasto</p>
                     </div>
                     <div className="text-right">
@@ -3982,18 +3132,8 @@ function AdAnalyticsTab({
 // INVESTMENT CONTROL TAB
 // ══════════════════════════════════════════════════════════════
 
-const INVESTMENT_BLUE = "var(--primary)";
-const INVESTMENT_BLUE_LIGHT = "var(--primary)";
-
 function fmtBRL(value: number): string {
   return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function parseBRL(raw: string): number {
-  // Remove R$, dots (thousands), then replace comma with dot
-  const cleaned = raw.replace(/[R$\s.]/g, "").replace(",", ".");
-  const n = parseFloat(cleaned);
-  return isNaN(n) ? 0 : n;
 }
 
 function formatInputBRL(raw: string): string {
@@ -4016,6 +3156,7 @@ function InvestmentControlTab({
   investmentData,
   monthSpendByClient,
   onSave,
+  monthSpendFalhou,
   isUsingRealData,
   currentUser,
 }: {
@@ -4023,11 +3164,16 @@ function InvestmentControlTab({
   adCampaigns: AdCampaign[];
   investmentData: Record<string, ClientInvestmentData>;
   monthSpendByClient: Map<string, number>;
+  monthSpendFalhou: boolean;
   onSave: (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => Promise<{ ok: boolean; error?: string }>;
   isUsingRealData: boolean;
   currentUser: string;
 }) {
   const [selectedId, setSelectedId] = useState(clients[0]?.id ?? "");
+  // Trocar o filtro de workspace tirava o cliente selecionado da lista e a aba ficava em branco.
+  useEffect(() => {
+    if (clients.length > 0 && !clients.some((c) => c.id === selectedId)) setSelectedId(clients[0].id);
+  }, [clients, selectedId]);
   const [forms, setForms] = useState<Record<string, InvestmentForm>>({});
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
 
@@ -4066,13 +3212,15 @@ function InvestmentControlTab({
   // "this_month" da Meta em BRT). Só cai pro somatório das campanhas (janela do preset da aba
   // Anúncios, ~7d) se o servidor ainda não sincronizou — senão o pacing compararia 7 dias de
   // gasto contra o orçamento do mês inteiro e mentiria ("campanha travada").
-  const getMonthlySpend = useCallback((clientId: string): number => {
+  // null = não sabemos o gasto (sincronização falhou ou conta sem dado) — nunca vira R$0.
+  const getMonthlySpend = useCallback((clientId: string): number | null => {
+    if (monthSpendFalhou) return null;
     const server = monthSpendByClient.get(clientId);
     if (server != null) return server;
-    return adCampaigns
-      .filter((c) => c.clientId === clientId)
-      .reduce((sum, c) => sum + (c.spend ?? 0), 0);
-  }, [adCampaigns, monthSpendByClient]);
+    const camps = adCampaigns.filter((c) => c.clientId === clientId);
+    if (camps.length === 0 || camps.some(insightFalhou)) return null;
+    return camps.reduce((sum, c) => sum + (c.spend ?? 0), 0);
+  }, [adCampaigns, monthSpendByClient, monthSpendFalhou]);
 
   // Get today's spend (data de hoje em São Paulo, não UTC)
   const getTodaySpend = useCallback((clientId: string): number => {
@@ -4137,13 +3285,18 @@ function InvestmentControlTab({
     const stored = investmentData[c.id];
     return sum + (stored?.monthlyBudget ?? c.monthlyBudget);
   }, 0);
-  const totalSpend = clients.reduce((sum, c) => sum + getMonthlySpend(c.id), 0);
+  const totalSpend = clients.reduce((sum, c) => sum + (getMonthlySpend(c.id) ?? 0), 0);
+  const semGasto = clients.filter((c) => getMonthlySpend(c.id) === null).length;
 
+  if (clients.length === 0) {
+    return <p className="text-sm text-muted-foreground text-center py-10">Nenhum cliente neste workspace.</p>;
+  }
   if (!form || !selectedClient) return null;
 
   const monthlyBudget = parseBRL(form.monthlyRaw);
   const dailyBudget = parseBRL(form.dailyRaw);
-  const monthlySpend = getMonthlySpend(selectedId);
+  const monthlySpendOuNull = getMonthlySpend(selectedId);
+  const monthlySpend = monthlySpendOuNull ?? 0;
   const todaySpend = getTodaySpend(selectedId);
   const remaining = Math.max(0, monthlyBudget - monthlySpend);
   const currentDay = spDay;
@@ -4168,37 +3321,15 @@ function InvestmentControlTab({
   // ideal daily spend
   const idealDailyBudget = monthlyBudget > 0 ? monthlyBudget / daysInMonth : 0;
 
-  // Pacing health status
-  type PacingStatus = "ok" | "warning" | "critical" | "slow";
-  const pacingStatus: PacingStatus = (() => {
-    if (monthlyBudget === 0 || monthlySpend === 0) return "ok";
-    if (deviationPct > 30 || projectedEndDay < 25) return "critical";
-    if (deviationPct > 15) return "warning";
-    if (deviationPct < -15) return "slow"; // significantly under-pacing
-    return "ok";
-  })();
-
-  const pacingColor = {
-    ok:       INVESTMENT_BLUE,       // var(--primary)
-    warning:  "var(--lone-warning)",             // amber
-    critical: "var(--destructive)",             // red
-    slow:     "var(--lone-info)",             // purple — underperforming
-  }[pacingStatus];
-
-  const pacingLabel = {
-    ok:       "No ritmo esperado",
-    warning:  "Acima do ritmo — atenção",
-    critical: "Verba acabando rápido",
-    slow:     "Abaixo do ritmo — campanha travada",
-  }[pacingStatus];
+  const pacingStatus = statusPacing({ verba: monthlyBudget, gasto: monthlySpendOuNull, dia: currentDay, diasNoMes: daysInMonth });
+  const pacingUi = PACING_UI[pacingStatus];
+  const pacingLabel = pacingStatus === "sem_dados" && monthSpendFalhou ? "Sem dados — sincronização falhou" : pacingUi.label;
 
   const needsPaymentDate = form.paymentMethod === "pix" || form.paymentMethod === "boleto";
   const boletoAt80 = form.paymentMethod === "boleto" && spendPct >= 80;
 
   // Days until next payment
-  const daysUntilPayment = form.nextPaymentDate
-    ? Math.ceil((new Date(form.nextPaymentDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    : null;
+  const daysUntilPayment = form.nextPaymentDate ? diasEntre(todaySP(), form.nextPaymentDate) : null;
   const balanceWarnDays = daysUntilPayment !== null && daysUntilPayment <= 5 && remaining < dailyBudget * 3;
 
   return (
@@ -4212,23 +3343,32 @@ function InvestmentControlTab({
         </div>
         <div className="bg-card border border-border rounded-xl p-4">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Gasto Total (Meta)</p>
-          <p className="text-xl font-bold tabular-nums" style={{ color: INVESTMENT_BLUE_LIGHT }}>
-            R$ {fmtBRL(totalSpend)}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            {totalMonthly > 0 ? ((totalSpend / totalMonthly) * 100).toFixed(1) : 0}% do orçamento total
-          </p>
+          {monthSpendFalhou ? (
+            <>
+              <p className="text-xl font-bold tabular-nums text-muted-foreground">—</p>
+              <p className="text-xs text-lone-warning mt-1">Sem dados — sincronização falhou</p>
+            </>
+          ) : (
+            <>
+              <p className="text-xl font-bold tabular-nums text-primary">
+                R$ {fmtBRL(totalSpend)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {totalMonthly > 0 ? ((totalSpend / totalMonthly) * 100).toFixed(1) : 0}% do orçamento total
+                {semGasto > 0 && ` · ${semGasto} sem dados`}
+              </p>
+            </>
+          )}
         </div>
         <div className="bg-card border border-border rounded-xl p-4">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Saldo Restante</p>
-          <p className="text-xl font-bold text-primary tabular-nums">R$ {fmtBRL(Math.max(0, totalMonthly - totalSpend))}</p>
+          <p className="text-xl font-bold text-primary tabular-nums">{monthSpendFalhou ? "—" : `R$ ${fmtBRL(Math.max(0, totalMonthly - totalSpend))}`}</p>
           {/* Total pacing bar with time marker */}
           <div className="mt-1.5 relative h-1.5 bg-muted rounded-full overflow-visible">
             <div
-              className="absolute top-0 left-0 h-full rounded-full transition-all"
+              className="absolute top-0 left-0 h-full rounded-full transition-all bg-primary"
               style={{
                 width: `${totalMonthly > 0 ? Math.min(100, (totalSpend / totalMonthly) * 100) : 0}%`,
-                backgroundColor: INVESTMENT_BLUE,
               }}
             />
             {/* Time marker */}
@@ -4248,24 +3388,13 @@ function InvestmentControlTab({
         <div className="w-72 shrink-0 space-y-2">
           <p className="text-xs text-muted-foreground font-medium px-1">Clientes ({clients.length})</p>
           {clients.map((c) => {
-            const spend = getMonthlySpend(c.id);
+            const spendOuNull = getMonthlySpend(c.id);
+            const spend = spendOuNull ?? 0;
             const budget = investmentData[c.id]?.monthlyBudget ?? c.monthlyBudget;
             const pct = budget > 0 ? Math.min(100, (spend / budget) * 100) : 0;
             const isSelected = c.id === selectedId;
             const isDirty = forms[c.id]?.dirty ?? false;
-            // Per-client pacing
-            const cExpected = budget * timePct;
-            const cDeviation = cExpected > 0 ? ((spend - cExpected) / cExpected) * 100 : 0;
-            const cAvgBurn = currentDay > 0 ? spend / currentDay : 0;
-            const cRemaining = Math.max(0, budget - spend);
-            const cProjectedEnd = cAvgBurn > 0 ? currentDay + Math.floor(cRemaining / cAvgBurn) : daysInMonth;
-            const cStatus: "ok"|"warning"|"critical"|"slow" =
-              budget === 0 || spend === 0 ? "ok"
-              : cDeviation > 30 || cProjectedEnd < 25 ? "critical"
-              : cDeviation > 15 ? "warning"
-              : cDeviation < -15 ? "slow"
-              : "ok";
-            const cColor = { ok: INVESTMENT_BLUE, warning: "var(--lone-warning)", critical: "var(--destructive)", slow: "var(--lone-info)" }[cStatus];
+            const cUi = PACING_UI[statusPacing({ verba: budget, gasto: spendOuNull, dia: currentDay, diasNoMes: daysInMonth })];
             return (
               <button
                 key={c.id}
@@ -4286,15 +3415,15 @@ function InvestmentControlTab({
                     <span className="text-xs font-semibold text-foreground truncate">{c.name}</span>
                     {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-lone-warning-bg shrink-0" title="Alterações não salvas" />}
                   </div>
-                  <span className="text-[10px] tabular-nums shrink-0 ml-1 font-semibold" style={{ color: cColor }}>
-                    {pct.toFixed(0)}%
+                  <span className={`text-[10px] tabular-nums shrink-0 ml-1 font-semibold ${cUi.texto}`} title={cUi.label}>
+                    {spendOuNull === null ? "—" : `${pct.toFixed(0)}%`}
                   </span>
                 </div>
                 {/* Pacing bar with time marker */}
                 <div className="relative h-1 bg-muted rounded-full overflow-visible">
                   <div
-                    className="absolute top-0 left-0 h-full rounded-full transition-all"
-                    style={{ width: `${pct}%`, backgroundColor: cColor }}
+                    className={`absolute top-0 left-0 h-full rounded-full transition-all ${cUi.barra}`}
+                    style={{ width: `${pct}%` }}
                   />
                   <div
                     className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 rounded-full bg-card/50"
@@ -4302,7 +3431,7 @@ function InvestmentControlTab({
                   />
                 </div>
                 <div className="flex items-center justify-between mt-1.5">
-                  <span className="text-[10px] text-muted-foreground">R$ {fmtBRL(spend)}</span>
+                  <span className="text-[10px] text-muted-foreground">{spendOuNull === null ? "sem dados" : `R$ ${fmtBRL(spend)}`}</span>
                   <span className="text-[10px] text-muted-foreground">/ R$ {fmtBRL(budget)}</span>
                 </div>
               </button>
@@ -4312,17 +3441,11 @@ function InvestmentControlTab({
 
         {/* Right: Detail panel */}
         <div className="flex-1 min-w-0">
-          <div className="bg-card border rounded-2xl overflow-hidden"
-            style={{ borderColor: `${INVESTMENT_BLUE}25` }}
-          >
+          <div className="bg-card border border-primary/25 rounded-2xl overflow-hidden">
             {/* Panel header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b"
-              style={{ borderColor: `${INVESTMENT_BLUE}20`, background: `linear-gradient(to right, ${INVESTMENT_BLUE}08, transparent)` }}
-            >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold"
-                  style={{ backgroundColor: `${INVESTMENT_BLUE}20`, color: INVESTMENT_BLUE_LIGHT }}
-                >
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold bg-primary/15 text-primary">
                   {selectedClient.name[0]}
                 </div>
                 <div>
@@ -4333,11 +3456,6 @@ function InvestmentControlTab({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {!isUsingRealData && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-bold uppercase tracking-wider">
-                    Dados simulados
-                  </span>
-                )}
                 {isUsingRealData && (
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-bold uppercase tracking-wider">
                     Meta API
@@ -4348,6 +3466,30 @@ function InvestmentControlTab({
 
             <div className="p-5 space-y-5">
               {/* ALERTS — pacing-aware */}
+              {pacingStatus === "parado" && (
+                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-destructive/25 bg-destructive/10">
+                  <AlertOctagon size={16} className="text-destructive shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-destructive">Parado — nenhum gasto no mês até o dia {currentDay}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Confira na Meta se a conta tem saldo, se as campanhas estão ativas e se o cartão/boleto passou.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {pacingStatus === "sem_dados" && (
+                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-border bg-muted">
+                  <Info size={16} className="text-muted-foreground shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{pacingLabel}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {monthSpendFalhou
+                        ? "Não consegui buscar o gasto do mês no servidor. Recarregue a página; se continuar, confira Saldos, Verba & Alertas."
+                        : "Esta conta ainda não tem gasto sincronizado. Confira se a conta Meta está vinculada ao cliente."}
+                    </p>
+                  </div>
+                </div>
+              )}
               {pacingStatus === "critical" && (
                 <div className="flex items-start gap-3 p-3.5 rounded-xl border border-destructive/25 bg-destructive/8">
                   <AlertOctagon size={16} className="text-destructive shrink-0 mt-0.5" />
@@ -4413,17 +3555,15 @@ function InvestmentControlTab({
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <Activity size={13} style={{ color: pacingColor }} />
+                    <Activity size={13} className={pacingUi.texto} />
                     Barra de Saúde do Orçamento
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold border"
-                      style={{ color: pacingColor, borderColor: `${pacingColor}40`, backgroundColor: `${pacingColor}12` }}
-                    >
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${pacingUi.texto} ${pacingUi.borda} ${pacingUi.fundo}`}>
                       {pacingLabel}
                     </span>
-                    <span className="text-xs font-bold tabular-nums" style={{ color: pacingColor }}>
-                      {spendPct.toFixed(1)}%
+                    <span className={`text-xs font-bold tabular-nums ${pacingUi.texto}`}>
+                      {monthlySpendOuNull === null ? "—" : `${spendPct.toFixed(1)}%`}
                     </span>
                   </div>
                 </div>
@@ -4432,8 +3572,8 @@ function InvestmentControlTab({
                 <div className="relative h-5 bg-muted rounded-full overflow-visible">
                   {/* Spend fill */}
                   <div
-                    className="absolute top-0 left-0 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${spendPct}%`, backgroundColor: pacingColor, opacity: 0.85 }}
+                    className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 opacity-90 ${pacingUi.barra}`}
+                    style={{ width: `${spendPct}%` }}
                   />
                   {/* Time marker — thin white line at "today" position */}
                   <div
@@ -4457,7 +3597,7 @@ function InvestmentControlTab({
                 <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                   <span>0%</span>
                   <span className="flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: pacingColor }} />
+                    <span className={`inline-block w-2 h-2 rounded-sm ${pacingUi.barra}`} />
                     Gasto real: {spendPct.toFixed(1)}%
                     <span className="mx-1">·</span>
                     <span className="w-px h-3 inline-block bg-card/50 align-middle" />
@@ -4475,9 +3615,7 @@ function InvestmentControlTab({
                   </div>
                   <div className="bg-muted/40 rounded-lg p-2.5 text-center border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Diária Real (Meta)</p>
-                    <p className="text-sm font-bold tabular-nums mt-0.5"
-                      style={{ color: avgDailyBurn > idealDailyBudget * 1.15 ? "var(--destructive)" : avgDailyBurn < idealDailyBudget * 0.85 ? "var(--lone-info)" : pacingColor }}
-                    >
+                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${avgDailyBurn > idealDailyBudget * 1.15 ? "text-destructive" : avgDailyBurn < idealDailyBudget * 0.85 ? "text-lone-info" : pacingUi.texto}`}>
                       R$ {fmtBRL(avgDailyBurn)}
                     </p>
                     <p className="text-[9px] text-muted-foreground">média {currentDay}d</p>
@@ -4497,8 +3635,8 @@ function InvestmentControlTab({
                 <div className="grid grid-cols-3 gap-2">
                   <div className="bg-muted/50 rounded-lg p-2.5 text-center border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Gasto Mês</p>
-                    <p className="text-sm font-bold tabular-nums mt-0.5" style={{ color: pacingColor }}>
-                      R$ {fmtBRL(monthlySpend)}
+                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${pacingUi.texto}`}>
+                      {monthlySpendOuNull === null ? "—" : `R$ ${fmtBRL(monthlySpend)}`}
                     </p>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-2.5 text-center border border-border">
@@ -4635,7 +3773,7 @@ function InvestmentControlTab({
               {/* Meta account link info */}
               {selectedClient.metaAdAccountId && (
                 <div className="flex items-center gap-2 text-[11px] text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 border border-border">
-                  <Facebook size={12} style={{ color: INVESTMENT_BLUE_LIGHT }} />
+                  <Facebook size={12} className="text-primary" />
                   <span>Conta de anúncios: <span className="text-foreground font-medium">{selectedClient.metaAdAccountName}</span> · ID: {selectedClient.metaAdAccountId}</span>
                 </div>
               )}
@@ -4656,11 +3794,7 @@ function InvestmentControlTab({
                 <button
                   onClick={handleSave}
                   disabled={!form.dirty}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
-                  style={{
-                    backgroundColor: form.dirty ? INVESTMENT_BLUE : undefined,
-                    color: form.dirty ? "var(--primary-foreground)" : undefined,
-                  }}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-40 ${form.dirty ? "bg-primary text-primary-foreground" : ""}`}
                 >
                   <Save size={13} />
                   Salvar Alterações
@@ -4674,167 +3808,3 @@ function InvestmentControlTab({
   );
 }
 
-// ══════════════════════════════════════════════════════════════
-// CONTENT REQUEST MODAL — Traffic requests content from Social
-// ══════════════════════════════════════════════════════════════
-
-function ContentRequestModal({
-  clients,
-  currentUser,
-  onClose,
-  onSave,
-}: {
-  clients: Client[];
-  currentUser: string;
-  onClose: () => void;
-  onSave: (card: Omit<import("@/lib/types").ContentCard, "id">) => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [clientId, setClientId] = useState(clients[0]?.id ?? "");
-  const [format, setFormat] = useState("Post");
-  const [priority, setPriority] = useState<"low" | "medium" | "high" | "critical">("medium");
-  const [dueDate, setDueDate] = useState("");
-  const [note, setNote] = useState("");
-
-  const selectedClient = clients.find((c) => c.id === clientId);
-
-  const canSubmit = title.trim() && clientId && dueDate;
-
-  const handleSubmit = () => {
-    if (!canSubmit || !selectedClient) return;
-    onSave({
-      title: title.trim(),
-      clientId,
-      clientName: selectedClient.name,
-      socialMedia: selectedClient.assignedSocial,
-      status: "ideas",
-      priority,
-      format,
-      dueDate,
-      requestedByTraffic: currentUser,
-      trafficRequestNote: note.trim() || undefined,
-      trafficRequestAt: new Date().toISOString(),
-      briefing: note.trim() || `Solicitação de tráfego: ${title.trim()}`,
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 bg-overlay z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div
-        className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl animate-fade-in"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
-              <FileText size={16} className="text-primary" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Solicitar Conteúdo</h3>
-              <p className="text-[10px] text-muted-foreground">O social media receberá a solicitação no kanban</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X size={16} /></button>
-        </div>
-
-        <div className="p-4 space-y-4">
-          {/* Title */}
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground font-medium">Título da solicitação *</label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ex: Criativo para campanha de leads"
-              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-            />
-          </div>
-
-          {/* Client + Format */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground font-medium">Cliente *</label>
-              <select
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-              >
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground font-medium">Formato</label>
-              <select
-                value={format}
-                onChange={(e) => setFormat(e.target.value)}
-                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-              >
-                {["Post", "Reels", "Story", "Carrossel", "BTS", "Destaque"].map((f) => (
-                  <option key={f} value={f}>{f}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Priority + Due date */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground font-medium">Prioridade</label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as typeof priority)}
-                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-              >
-                <option value="low">Baixa</option>
-                <option value="medium">Média</option>
-                <option value="high">Alta</option>
-                <option value="critical">Urgente</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground font-medium">Data limite *</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-              />
-            </div>
-          </div>
-
-          {/* Note/Briefing */}
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground font-medium">Briefing / Observação</label>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={3}
-              placeholder="Descreva o que precisa: objetivo da campanha, público-alvo, estilo visual, texto sugerido..."
-              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary resize-none"
-            />
-          </div>
-
-          {/* Info */}
-          {selectedClient && (
-            <div className="text-[10px] text-muted-foreground bg-muted rounded-lg px-3 py-2 border border-border">
-              Responsável social: <span className="text-foreground">{selectedClient.assignedSocial}</span> · Designer: <span className="text-foreground">{selectedClient.assignedDesigner}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-2 p-4 border-t border-border">
-          <button onClick={onClose} className="btn-ghost text-xs">Cancelar</button>
-          <button
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-40"
-          >
-            <FileText size={13} />
-            Solicitar Conteúdo
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}

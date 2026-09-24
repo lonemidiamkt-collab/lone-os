@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
+import { useRole } from "@/lib/context/RoleContext";
+import type { Role } from "@/lib/types";
 import {
   Search, Users, FileText, TrendingUp, Instagram,
   Palette, Calendar, Lock, Inbox,
-  LayoutDashboard, Thermometer, ShieldAlert, Megaphone,
-  Zap, Target, UserPlus, Plus,
+  LayoutDashboard, Thermometer, ShieldAlert,
+  Zap, Target, UserPlus, Plus, FileSignature, Info,
+  Handshake, Radar, Bot, BookOpen, ClipboardCheck, Plug,
 } from "lucide-react";
 
 interface SearchResult {
@@ -19,33 +22,47 @@ interface SearchResult {
   subtitle: string;
   href: string;
   icon: typeof Users;
+  /** Quem vê o item. Ausente = todos. */
+  roles?: Role[];
 }
 
+const OPERACAO: Role[] = ["admin", "manager", "traffic", "social", "designer"];
+const GESTAO: Role[] = ["admin", "manager"];
+
 const PAGES: SearchResult[] = [
-  { id: "p-dash", type: "page", title: "Dashboard", subtitle: "Visão geral", href: "/", icon: LayoutDashboard },
-  { id: "p-mywork", type: "page", title: "Meu Trabalho", subtitle: "Tarefas atribuídas a você", href: "/my-work", icon: Inbox },
-  { id: "p-traffic", type: "page", title: "Tráfego Pago", subtitle: "Campanhas e anúncios", href: "/traffic", icon: TrendingUp },
-  { id: "p-social", type: "page", title: "Social Media", subtitle: "Kanban de conteúdo", href: "/social", icon: Instagram },
-  { id: "p-design", type: "page", title: "Designer", subtitle: "Fila de design", href: "/design", icon: Palette },
-  { id: "p-clients", type: "page", title: "Clientes", subtitle: "Lista de clientes", href: "/clients", icon: Users },
-  { id: "p-contratos", type: "page", title: "Contratos", subtitle: "Lista global de contratos", href: "/contratos", icon: FileText },
-  { id: "p-churn", type: "page", title: "Termômetro de Churn", subtitle: "Score preditivo de risco", href: "/churn", icon: Thermometer },
-  { id: "p-defesa", type: "page", title: "Defesa Ativa", subtitle: "Anomalias em Meta Ads", href: "/defesa", icon: ShieldAlert },
-  { id: "p-calendar", type: "page", title: "Calendário", subtitle: "Agenda de publicações", href: "/calendar", icon: Calendar },
-  { id: "p-broadcasts", type: "page", title: "Comunicados", subtitle: "Mensagens em massa", href: "/broadcasts", icon: Megaphone },
-  { id: "p-automations", type: "page", title: "Automações", subtitle: "Regras e gatilhos do sistema", href: "/automations", icon: Zap },
-  { id: "p-goals", type: "page", title: "Metas & OKRs", subtitle: "Objetivos do time", href: "/goals", icon: Target },
-  { id: "p-sobre", type: "page", title: "Sobre o Sistema", subtitle: "Documentação interna", href: "/sobre", icon: FileText },
-  { id: "p-ceo", type: "page", title: "Área CEO", subtitle: "Visão da diretoria", href: "/ceo", icon: Lock },
+  { id: "p-dash", type: "page", title: "Dashboard", subtitle: "Visão geral", href: "/", icon: LayoutDashboard, roles: OPERACAO },
+  { id: "p-mywork", type: "page", title: "Meu Trabalho", subtitle: "Tarefas atribuídas a você", href: "/my-work", icon: Inbox, roles: OPERACAO },
+  { id: "p-tarefas", type: "page", title: "Tarefas", subtitle: "Gerenciador de tarefas do time", href: "/tarefas", icon: ClipboardCheck },
+  { id: "p-processos", type: "page", title: "Processos", subtitle: "Como cada coisa é feita aqui", href: "/processos", icon: BookOpen },
+  { id: "p-traffic", type: "page", title: "Tráfego Pago", subtitle: "Campanhas e anúncios", href: "/traffic", icon: TrendingUp, roles: ["admin", "manager", "traffic"] },
+  { id: "p-social", type: "page", title: "Social Media", subtitle: "Kanban de conteúdo", href: "/social", icon: Instagram, roles: ["admin", "manager", "social", "designer"] },
+  { id: "p-design", type: "page", title: "Designer", subtitle: "Fila de design", href: "/design", icon: Palette, roles: ["admin", "manager", "designer", "social"] },
+  { id: "p-clients", type: "page", title: "Clientes", subtitle: "Lista de clientes", href: "/clients", icon: Users, roles: GESTAO },
+  { id: "p-crm", type: "page", title: "Comercial", subtitle: "Funil de vendas (CRM)", href: "/crm", icon: Handshake, roles: ["admin", "manager", "comercial"] },
+  { id: "p-prospeccao", type: "page", title: "Prospecção", subtitle: "Piloto SDR e fila do dia", href: "/prospeccao", icon: Radar, roles: GESTAO },
+  { id: "p-contratos", type: "page", title: "Contratos", subtitle: "Lista global de contratos", href: "/contratos", icon: FileSignature, roles: GESTAO },
+  { id: "p-churn", type: "page", title: "Termômetro de Churn", subtitle: "Score preditivo de risco", href: "/churn", icon: Thermometer, roles: GESTAO },
+  { id: "p-defesa", type: "page", title: "Defesa Ativa", subtitle: "Anomalias em Meta Ads", href: "/defesa", icon: ShieldAlert, roles: ["admin", "manager", "traffic"] },
+  { id: "p-calendar", type: "page", title: "Calendário", subtitle: "Agenda de publicações", href: "/calendar", icon: Calendar, roles: OPERACAO },
+  { id: "p-integrations", type: "page", title: "Conexão Meta", subtitle: "Token e contas de anúncio", href: "/integrations", icon: Plug, roles: ["admin", "manager", "traffic"] },
+  { id: "p-agente", type: "page", title: "Agente Lone", subtitle: "Prioridades e decisões do agente", href: "/agente", icon: Bot, roles: GESTAO },
+  { id: "p-automations", type: "page", title: "Automações", subtitle: "Regras e gatilhos do sistema", href: "/automations", icon: Zap, roles: GESTAO },
+  { id: "p-goals", type: "page", title: "Metas & OKRs", subtitle: "Objetivos do time", href: "/goals", icon: Target, roles: GESTAO },
+  { id: "p-sobre", type: "page", title: "Sobre o Sistema", subtitle: "Documentação interna", href: "/sobre", icon: Info, roles: OPERACAO },
+  { id: "p-ceo", type: "page", title: "Área CEO", subtitle: "Visão da diretoria", href: "/ceo", icon: Lock, roles: ["admin"] },
 ];
 
 // Ações rápidas — abrem a página de destino onde a ação acontece (mesmo padrão do Header)
 const ACTIONS: SearchResult[] = [
-  { id: "a-novo-cliente", type: "action", title: "Novo Cliente", subtitle: "Cadastrar cliente novo", href: "/clients?action=new", icon: UserPlus },
-  { id: "a-novo-conteudo", type: "action", title: "Novo Conteúdo", subtitle: "Criar card de social media", href: "/social?action=new-content", icon: Plus },
-  { id: "a-novo-contrato", type: "action", title: "Novo Contrato", subtitle: "Gerar contrato pra cliente", href: "/contratos", icon: FileText },
-  { id: "a-novo-comunicado", type: "action", title: "Novo Comunicado", subtitle: "Enviar mensagem em massa", href: "/broadcasts", icon: Megaphone },
+  { id: "a-novo-cliente", type: "action", title: "Novo Cliente", subtitle: "Cadastrar cliente novo", href: "/clients?action=new", icon: UserPlus, roles: GESTAO },
+  { id: "a-novo-conteudo", type: "action", title: "Novo Conteúdo", subtitle: "Criar card de social media", href: "/social?action=new-content", icon: Plus, roles: ["admin", "manager", "social", "designer"] },
+  { id: "a-novo-contrato", type: "action", title: "Novo Contrato", subtitle: "Gerar contrato pra cliente", href: "/contratos", icon: FileSignature, roles: GESTAO },
 ];
+
+// "Grafica" acha "Gráfica": o time digita sem acento no celular.
+function norm(s: string | null | undefined): string {
+  return (s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
 
 function digitsOnly(s: string): string {
   return s.replace(/\D/g, "");
@@ -60,11 +77,14 @@ export default function GlobalSearch() {
   const clients = useClientsStore((s) => s.clients);
   const contentCards = useContentStore((s) => s.contentCards);
   const tasks = useOperationalStore((s) => s.tasks);
+  const { role } = useRole();
+  const pages = useMemo(() => PAGES.filter((p) => !p.roles || p.roles.includes(role)), [role]);
+  const actions = useMemo(() => ACTIONS.filter((a) => !a.roles || a.roles.includes(role)), [role]);
 
   // Cmd+K / Ctrl+K to open
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setOpen((prev) => !prev);
       }
@@ -87,43 +107,43 @@ export default function GlobalSearch() {
 
   // Build search results
   const results = useMemo<SearchResult[]>(() => {
-    const q = query.toLowerCase().trim();
+    const q = norm(query).trim();
     // Sem query: mostra ações + páginas (ações primeiro pra ficarem em destaque)
-    if (!q) return [...ACTIONS, ...PAGES];
+    if (!q) return [...actions, ...pages];
 
     const qDigits = digitsOnly(q);
     const items: SearchResult[] = [];
 
     // Ações rápidas
-    ACTIONS.forEach((a) => {
-      if (a.title.toLowerCase().includes(q) || a.subtitle.toLowerCase().includes(q)) {
+    actions.forEach((a) => {
+      if (norm(a.title).includes(q) || norm(a.subtitle).includes(q)) {
         items.push(a);
       }
     });
 
     // Pages
-    PAGES.forEach((p) => {
-      if (p.title.toLowerCase().includes(q) || p.subtitle.toLowerCase().includes(q)) {
+    pages.forEach((p) => {
+      if (norm(p.title).includes(q) || norm(p.subtitle).includes(q)) {
         items.push(p);
       }
     });
 
-    // Clients (busca por nome, nicho/industry, e CNPJ se digitou número)
+    // Clients (busca por nome, nome fantasia, nicho/industry, e CNPJ se digitou número)
     clients.forEach((c) => {
-      const nicho = (c as { nicho?: string }).nicho;
-      const cnpj = (c as { cnpj?: string }).cnpj;
+      const { nicho, cnpj, nomeFantasia } = c;
       const subtitle = nicho || c.industry || "";
       const matchesText =
-        c.name.toLowerCase().includes(q) ||
-        (nicho && nicho.toLowerCase().includes(q)) ||
-        c.industry.toLowerCase().includes(q);
+        norm(c.name).includes(q) ||
+        norm(nomeFantasia).includes(q) ||
+        norm(nicho).includes(q) ||
+        norm(c.industry).includes(q);
       const matchesCnpj = qDigits.length >= 4 && cnpj && digitsOnly(cnpj).includes(qDigits);
       if (matchesText || matchesCnpj) {
         items.push({
           id: `c-${c.id}`,
           type: "client",
           title: c.name,
-          subtitle: matchesCnpj && cnpj ? `CNPJ ${cnpj}` : subtitle,
+          subtitle: matchesCnpj && cnpj ? `CNPJ ${cnpj}` : nomeFantasia && nomeFantasia !== c.name ? `${nomeFantasia}${subtitle ? ` · ${subtitle}` : ""}` : subtitle,
           href: `/clients/${c.id}`,
           icon: Users,
         });
@@ -132,13 +152,14 @@ export default function GlobalSearch() {
 
     // Tasks
     tasks.forEach((t) => {
-      if (t.title.toLowerCase().includes(q) || t.clientName.toLowerCase().includes(q)) {
+      if (norm(t.title).includes(q) || norm(t.clientName).includes(q)) {
         items.push({
           id: `t-${t.id}`,
           type: "task",
           title: t.title,
-          subtitle: `${t.clientName} · ${t.assignedTo}`,
-          href: `/clients/${t.clientId}`,
+          subtitle: [t.clientName, t.assignedTo].filter(Boolean).join(" · "),
+          // Tarefa geral (clientId vazio) abria /clients/undefined.
+          href: t.clientId ? `/clients/${t.clientId}` : "/tarefas",
           icon: FileText,
         });
       }
@@ -146,7 +167,7 @@ export default function GlobalSearch() {
 
     // Content cards
     contentCards.forEach((c) => {
-      if (c.title.toLowerCase().includes(q) || c.clientName.toLowerCase().includes(q)) {
+      if (norm(c.title).includes(q) || norm(c.clientName).includes(q)) {
         items.push({
           id: `cc-${c.id}`,
           type: "content",
@@ -159,7 +180,7 @@ export default function GlobalSearch() {
     });
 
     return items.slice(0, 16);
-  }, [query, clients, tasks, contentCards]);
+  }, [query, clients, tasks, contentCards, actions, pages]);
 
   // Reset selected on results change
   useEffect(() => {
@@ -249,7 +270,7 @@ export default function GlobalSearch() {
                   </p>
                   <p className="text-[10px] text-muted-foreground truncate">{result.subtitle}</p>
                 </div>
-                <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider shrink-0">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider shrink-0">
                   {TYPE_LABELS[result.type]}
                 </span>
               </button>
@@ -258,7 +279,7 @@ export default function GlobalSearch() {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-4 px-4 py-2 border-t border-border text-[10px] text-muted-foreground/50">
+        <div className="flex items-center gap-4 px-4 py-2 border-t border-border text-[10px] text-muted-foreground">
           <span className="flex items-center gap-1">
             <kbd className="px-1 py-0.5 rounded bg-muted border border-border font-mono">↑↓</kbd> navegar
           </span>

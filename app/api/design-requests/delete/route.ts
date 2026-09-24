@@ -3,12 +3,13 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { getServerUser } from "@/lib/supabase/auth-server";
+import { requireRole, GESTAO } from "@/lib/api/require-role";
 
-/** POST /api/design-requests/delete — Body: { id: string } */
+/** POST /api/design-requests/delete — Body: { id: string }. Só gestão: apagar some com o histórico. */
 export async function POST(req: NextRequest) {
-  const user = await getServerUser(req);
-  if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
+  const gate = await requireRole(req, GESTAO);
+  if (gate instanceof NextResponse) return gate;
+  const user = gate.user;
 
   const body = await req.json().catch(() => ({}));
   const id = (body as { id?: string }).id;

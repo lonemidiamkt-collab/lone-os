@@ -38,8 +38,8 @@ const QuickActions = React.forwardRef<HTMLDivElement, QuickActionsProps>(
             "inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg",
             "text-sm font-sans font-medium transition-colors",
             isPrimary
-              ? "bg-lone-brand/10 text-lone-brand border border-lone-brand/20 hover:bg-lone-brand/20"
-              : "bg-lone-bg-elevated text-lone-text-primary border border-lone-border hover:bg-lone-bg-elevated/70"
+              ? "bg-lone-brand-bg-soft text-lone-brand border border-lone-border-strong hover:opacity-80"
+              : "bg-lone-bg-elevated text-lone-text-primary border border-lone-border hover:border-lone-border-strong"
           );
 
           if (action.href) {

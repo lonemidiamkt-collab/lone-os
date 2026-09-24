@@ -4,7 +4,7 @@ export const maxDuration = 120;
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { getServerUser } from "@/lib/supabase/auth-server";
+import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { avaliar, type Offboarding } from "@/lib/clients/offboarding";
 
 // O ENCERRAMENTO DE UM CLIENTE, do pedido à conclusão.
@@ -47,8 +47,10 @@ function paraRegra(r: Record<string, unknown>): Offboarding {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getServerUser(req);
-  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  // Encerrar parceria é decisão de gestão; antes qualquer logado conseguia iniciar o distrato.
+  const gate = await requireRole(req, GESTAO);
+  if (gate instanceof NextResponse) return gate;
+  const { user } = gate;
 
   const b = await req.json().catch(() => null) as Record<string, unknown> | null;
   const acao = b?.acao as Acao | undefined;

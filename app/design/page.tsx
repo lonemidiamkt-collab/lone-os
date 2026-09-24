@@ -15,6 +15,7 @@ import { useContentStore } from "@/stores/useContentStore";
 import { marcarMutacao } from "@/stores/useContentStore";
 import { trilha } from "@/lib/obs/trilha";
 import { entregarArte, novoOperationId } from "@/lib/ops/entregar-arte";
+import { chamar } from "@/lib/api/chamar";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { getPriorityColor, getPriorityLabel, spDateStr } from "@/lib/utils";
 import {
@@ -94,6 +95,22 @@ const URGENCY_BADGE: Record<string, { label: string; cls: string }> = {
   ok:      { label: "",       cls: "text-muted-foreground" },
 };
 
+// A arte ENTREGUE pelo designer. `imageUrl` sozinho não serve: é também onde cai a imagem de
+// referência que o social anexa, e o quadro mostrava "Arte ✓" num card que ninguém tinha feito.
+function arteEntregue(c: ContentCard): string | null {
+  const entrega = c.cardAttachments?.find((a) => a.tipo === "entrega");
+  if (entrega) return entrega.url;
+  return c.designerDeliveredAt && c.imageUrl ? c.imageUrl : null;
+}
+const temArteEntregue = (c: ContentCard) =>
+  !!c.designerDeliveredAt || !!c.cardAttachments?.some((a) => a.tipo === "entrega");
+
+/** Toast de falha para promessas do store (que desfazem o otimista e relançam). */
+const avisarFalha = (acao: string) => (err: unknown) => {
+  const det = err instanceof Error && err.message ? ` (${err.message})` : "";
+  toast.error(`${acao}${det}. Tenta de novo?`);
+};
+
 // ── Upload Modal (Link Drive) ────────────────────────────────────────────────
 
 function UploadArtModal({
@@ -113,6 +130,8 @@ function UploadArtModal({
     card.imageUrl && card.imageUrl.includes("drive.google.com") ? card.imageUrl : ""
   );
   const [attachments, setAttachments] = useState<CardAttachment[] | null>(null); // null = carregando
+  const [erroAnexos, setErroAnexos] = useState<string | null>(null);
+  const [tentativaAnexos, setTentativaAnexos] = useState(0);
   const [initialRefs, setInitialRefs] = useState<CardAttachment[]>([]); // artes já no card ao abrir = referência do social
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -126,33 +145,34 @@ function UploadArtModal({
   // Carrega as artes já anexadas ao card ao abrir o modal
   useEffect(() => {
     let alive = true;
-    authedFetch(`/api/cards/${card.id}/attachments`)
-      .then((r) => (r.ok ? r.json() : { attachments: [] }))
-      .then((d) => {
-        if (!alive) return;
-        const list = (d.attachments as CardAttachment[]) ?? [];
-        setAttachments(list);
-        // Só na 1ª carga: o que já está no card antes de eu entregar = referência do social.
-        setInitialRefs((prev) => (prev.length ? prev : list.filter((a) => a.id !== "legacy")));
-      })
-      .catch(() => { if (alive) setAttachments([]); });
+    setErroAnexos(null);
+    chamar<{ attachments?: CardAttachment[] }>(`/api/cards/${card.id}/attachments`).then((r) => {
+      if (!alive) return;
+      // Falha NÃO é "sem arte": mostrar a grade vazia fazia o designer reenviar o que já estava lá.
+      if (!r.ok) { setErroAnexos(r.erro); return; }
+      const list = r.data?.attachments ?? [];
+      setAttachments(list);
+      // Só na 1ª carga: o que já está no card antes de eu entregar = referência do social.
+      setInitialRefs((prev) => (prev.length ? prev : list.filter((a) => a.id !== "legacy" && a.tipo !== "entrega")));
+    });
     return () => { alive = false; };
-  }, [card.id]);
+  }, [card.id, tentativaAnexos]);
 
   // Mantém a capa do card no board atualizada conforme o designer anexa/remove artes
   const handleAttachmentsChange = (next: CardAttachment[]) => {
     setAttachments(next);
     const real = next.filter((a) => a.id !== "legacy");
-    const cover = next[0]?.url;
+    // A capa só troca para uma ENTREGA: referência do social no topo da lista não é arte pronta.
+    const cover = real.find((a) => a.tipo === "entrega")?.url;
     marcarMutacao();
     useContentStore.setState((s) => ({
       contentCards: s.contentCards.map((c) =>
-        c.id === card.id ? { ...c, cardAttachments: real, imageUrl: cover } : c,
+        c.id === card.id ? { ...c, cardAttachments: real, imageUrl: next.length === 0 ? undefined : (cover ?? c.imageUrl) } : c,
       ),
     }));
     // Removeu tudo (inclusive a capa legada) → persiste a limpeza do image_url legado.
     if (next.length === 0 && card.imageUrl) {
-      updateContentCard(card.id, { imageUrl: "" }).catch(() => {});
+      updateContentCard(card.id, { imageUrl: "" }).catch(() => {}); // o store já avisa a falha
     }
   };
 
@@ -204,10 +224,7 @@ function UploadArtModal({
       // preço/texto/localização/regras. Sempre roda (não só quem tem regra) — foi o gap que deixou
       // o preço errado do Imperio passar. Se achar problema, avisa no grupo de Artes + comenta no card.
       // Best-effort (não bloqueia a entrega).
-      authedFetch("/api/cs/revisar-entrega", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cardId: card.id }),
-      }).catch(() => {});
+      void chamar("/api/cs/revisar-entrega", { cardId: card.id });
       import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
       setSaved(true);
       setTimeout(() => { setSaved(false); onClose(); }, 800);
@@ -257,7 +274,12 @@ function UploadArtModal({
           {/* Artes (multi-arte) — upload direto, colar (Ctrl+V) ou arrastar */}
           <div className="space-y-1.5">
             <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Artes do card (até 10 · PNG, JPG, WebP, GIF · 10MB)</label>
-            {attachments === null ? (
+            {erroAnexos ? (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                <span>Não consegui carregar as artes do card: {erroAnexos}</span>
+                <button type="button" onClick={() => setTentativaAnexos((n) => n + 1)} className="shrink-0 underline">Tentar de novo</button>
+              </div>
+            ) : attachments === null ? (
               <div className="flex items-center justify-center py-6 text-muted-foreground">
                 <Upload size={16} className="animate-pulse" />
               </div>
@@ -462,7 +484,7 @@ export default function DesignPage() {
   // (contentApprovals não atualizava). Refetch a cada 45s com a aba visível + ao voltar o foco.
   useEffect(() => {
     const tick = () => { if (document.visibilityState === "visible") refreshContent(); };
-    const interval = setInterval(tick, 20000); // ~20s: mudança de status/arte do social aparece "sozinha" mais rápido
+    const interval = setInterval(tick, 45000);
     document.addEventListener("visibilitychange", tick);
     window.addEventListener("focus", tick);
     return () => { clearInterval(interval); document.removeEventListener("visibilitychange", tick); window.removeEventListener("focus", tick); };
@@ -473,11 +495,8 @@ export default function DesignPage() {
   const [quadro, setQuadroRaw] = useState<string | null>(null); // null = ainda não decidiu
   const setQuadro = (valor: string) => {
     setQuadroRaw(valor);
-    authedFetch("/api/preferences", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: "design_workspace", value: valor }),
-    }).catch(() => {});
+    // Preferência: falhar só significa abrir no quadro padrão da próxima vez.
+    void chamar("/api/preferences", { key: "design_workspace", value: valor });
   };
   const [tab, setTab] = useState<TabView>("kanbans");
   const [kanbanGroupBy, setKanbanGroupBy] = useState<"person" | "client">("person"); // agrupar por pessoa ou por cliente (visão unificada)
@@ -502,10 +521,11 @@ export default function DesignPage() {
   const [briefingReq, setBriefingReq] = useState<DesignRequest | null>(null);
   const [gerandoIa, setGerandoIa] = useState(false);
   const [geracaoIa, setGeracaoIa] = useState<{ id: string; urls: string[] } | null>(null);
+  const [motivoIa, setMotivoIa] = useState<string | null>(null); // null = campo fechado
   async function feedbackIa(feedback: "serviu" | "nao_serviu", motivo = "") {
     if (!geracaoIa?.id) return;
-    const r = await authedFetch(`/api/ia/geracoes/${geracaoIa.id}/feedback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ feedback, motivo }) });
-    if (r.ok) { toast.success(feedback === "serviu" ? "Anotado: serviu." : "Anotado: não serviu — vai calibrar as instruções."); setGeracaoIa(null); } else toast.error("Não consegui anotar.");
+    const r = await chamar(`/api/ia/geracoes/${geracaoIa.id}/feedback`, { feedback, motivo });
+    if (r.ok) { toast.success(feedback === "serviu" ? "Anotado: serviu." : "Anotado: não serviu — vai calibrar as instruções."); setGeracaoIa(null); setMotivoIa(null); } else toast.error(`Não consegui anotar: ${r.erro}`);
   }
   // Upload de arte direto do modal de briefing
   const briefingUploadInputRef = useRef<HTMLInputElement>(null);
@@ -539,8 +559,8 @@ export default function DesignPage() {
         pushNotification("content", "Designer comentou na demanda",
           `"${briefingReq.title}" (${briefingReq.clientName}) — ${currentUser}: ${note.slice(0, 80)}`, briefingReq.clientId, briefingReq.contentCardId ?? undefined);
       }
-    } catch {
-      /* o store reverte otimista sozinho */
+    } catch (err) {
+      avisarFalha("Não consegui salvar o comentário")(err);
     } finally { setSavingNote(false); }
   }
 
@@ -580,14 +600,13 @@ export default function DesignPage() {
       // ENTREGA: é a arte final do designer, a única que a publicação automática pode mandar
       // pro Instagram. Referência do social é marcada como "referencia" na criação da demanda.
       formData.append("tipo", "entrega");
-      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
-      const res = await authedFetch("/api/upload-art", { method: "POST", body: formData });
-      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-      if (!res.ok) {
-        setBriefingUploadError(data.error || `Falha (HTTP ${res.status})`);
-        console.error("[briefingReq upload]", { status: res.status, data });
+      const res = await chamar<{ url?: string; attachments?: CardAttachment[] }>("/api/upload-art", formData);
+      if (!res.ok || !res.data) {
+        setBriefingUploadError(res.erro ?? "Falha no upload");
+        console.error("[briefingReq upload]", { status: res.status, erro: res.erro });
         return;
       }
+      const data = res.data;
       // Modo card devolve { attachments: [row...] }; modo avulso devolve { url }.
       const created = (Array.isArray(data.attachments) ? data.attachments : []) as CardAttachment[];
       const artUrl = (data.url as string) ?? created[created.length - 1]?.url;
@@ -610,9 +629,15 @@ export default function DesignPage() {
           operationId: novoOperationId(),
         }) : null;
         if (!linkedCard || !r) {
-          // Demanda sem card vinculado (PDF/vídeo ou demanda solta): a operação exige card. Mantém o
-          // comportamento antigo só para este caso — vira card de serviço na Fase 2.
-          updateDesignRequest(briefingReq.id, { attachments: nextAttachments, status: "done" });
+          // Demanda sem card (tarefa própria do designer): a operação exige card, então grava o
+          // arquivo e o "concluído" num update só — o servidor recusa concluir sem anexo.
+          try {
+            await updateDesignRequest(briefingReq.id, { attachments: nextAttachments, status: "done" });
+          } catch (err) {
+            const m = err instanceof Error ? err.message : "erro";
+            setBriefingUploadError(`O arquivo subiu, mas a demanda não foi marcada como entregue (${m}). Tente de novo.`);
+            return;
+          }
           setBriefingReq({ ...briefingReq, attachments: nextAttachments, status: "done" });
         } else if (!r.ok || !r.data?.card) {
           setBriefingUploadError(r.erro ?? r.data?.error ?? "A arte subiu, mas a entrega não foi registrada. Tente de novo.");
@@ -629,13 +654,19 @@ export default function DesignPage() {
           }));
           setBriefingReq({ ...briefingReq, attachments: estado.demanda?.attachments ?? nextAttachments, status: (estado.demanda?.status as DesignRequest["status"]) ?? "done" });
           trilha("entregar:ok", { card: linkedCard.id, artes: estado.delivery.urls.length, via: "briefing" });
-          authedFetch("/api/cs/revisar-entrega", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: linkedCard.id }) }).catch(() => {});
+          void chamar("/api/cs/revisar-entrega", { cardId: linkedCard.id });
         }
         pushNotification("content", "Arte entregue pelo Designer", `"${briefingReq.title}" (${briefingReq.clientName}) — arte pronta para confirmação.`, briefingReq.clientId, linkedCard?.id);
         import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
       } else {
         // Social media / outros adicionam referência — anexa e notifica designer
-        updateDesignRequest(briefingReq.id, { attachments: nextAttachments });
+        try {
+          await updateDesignRequest(briefingReq.id, { attachments: nextAttachments });
+        } catch (err) {
+          const m = err instanceof Error ? err.message : "erro";
+          setBriefingUploadError(`A imagem subiu, mas não vinculou ao pedido (${m}). Tente de novo.`);
+          return;
+        }
         setBriefingReq({ ...briefingReq, attachments: nextAttachments });
         pushNotification("content", "Referência enviada", `"${briefingReq.title}" (${briefingReq.clientName}) — ${currentUser} enviou uma imagem de referência.`, briefingReq.clientId, linkedCard?.id);
       }
@@ -683,14 +714,11 @@ export default function DesignPage() {
     // cairia na visão geral em vez do próprio quadro.
     if (quadro !== null || !hydrated) return;
     let vivo = true;
-    authedFetch("/api/preferences?keys=design_workspace")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!vivo) return;
-        const salvo = typeof data?.design_workspace === "string" ? data.design_workspace : "";
-        setQuadroRaw(salvo || (role === "designer" ? currentUser : "Todos"));
-      })
-      .catch(() => { if (vivo) setQuadroRaw(role === "designer" ? currentUser : "Todos"); });
+    chamar<{ design_workspace?: unknown }>("/api/preferences?keys=design_workspace").then((r) => {
+      if (!vivo) return;
+      const salvo = typeof r.data?.design_workspace === "string" ? r.data.design_workspace : "";
+      setQuadroRaw(salvo || (role === "designer" ? currentUser : "Todos"));
+    });
     return () => { vivo = false; };
   }, [quadro, role, currentUser, hydrated]);
 
@@ -758,7 +786,7 @@ export default function DesignPage() {
 
   // Stats
   const needsArt = myContentCards.filter((c) =>
-    !c.imageUrl && ["in_production", "approval", "client_approval"].includes(c.status)
+    !temArteEntregue(c) && ["in_production", "approval", "client_approval"].includes(c.status)
   ).length;
   const totalInProduction = myContentCards.filter((c) => c.status === "in_production").length;
   const totalDone = myDesignRequests.filter((r) => r.status === "done").length;
@@ -783,13 +811,28 @@ export default function DesignPage() {
   // (o toast some em segundos; assim o designer bate o olho e sabe que tem, sem depender da tela).
   const alteracoesPendentes = myContentCards.filter((c) => alteracaoPendente(c)).length;
 
+  // "Concluído" só existe com arte. Com card: abre o Entregar Arte (operação única, transacional).
+  // Sem card (tarefa própria): o arquivo final sobe pelo botão do briefing, que conclui junto.
+  const concluirDemanda = (req: DesignRequest) => {
+    const card = (req.contentCardId ? contentCards.find((c) => c.id === req.contentCardId) : undefined)
+      ?? contentCards.find((c) => c.designRequestId === req.id);
+    if (card) { setBriefingReq(null); setUploadCard(card); return; }
+    toast.info("Anexe o arquivo final em \"Enviar Arte\" — é isso que conclui a demanda.");
+    setBriefingReq(req);
+  };
+  const ehGestao = role === "admin" || role === "manager";
+
   return (
     <div className="flex flex-col flex-1 overflow-auto">
       <Header title="Área do Designer" subtitle="Produção de artes — kanbans por social media" />
 
       <div className="p-6 space-y-6 animate-fade-in">
-        {/* Banner de feriados/datas comemorativas do mês — pra planejamento criativo */}
-        <MonthObservancesAlert title="Datas e feriados deste mês" />
+        {/* Uma linha só: o bloco do mês inteiro (com feriado de cidade que não é de ninguém) era o
+            que mais pesava no topo. Regional só entra se for da cidade de um cliente do quadro. */}
+        <MonthObservancesAlert
+          proximosDias={21}
+          cidades={clients.filter((c) => !myClientIds || myClientIds.has(c.id)).map((c) => c.enderecoCidade ?? "").filter(Boolean)}
+        />
 
         {/* Seletor de quadro. Cada designer abre no seu; trocar serve pra ajudar o outro, e por
             isso o quadro do colega abre EDITÁVEL — só sinalizado. */}
@@ -982,7 +1025,7 @@ export default function DesignPage() {
 
             {/* Pending deadlines strip */}
             {(() => {
-              const upcoming = contentCards
+              const upcoming = myContentCards
                 .filter((c) => c.dueDate && c.status !== "published" && c.status !== "scheduled" && !c.designerDeliveredAt)
                 .sort((a, b) => {
                   const cmp = (a.dueDate ?? "").localeCompare(b.dueDate ?? "");
@@ -1009,7 +1052,7 @@ export default function DesignPage() {
                           }`}
                           onClick={() => setUploadCard(card)}
                         >
-                          <div className={`w-2 h-2 rounded-full shrink-0 ${isOverdue ? "bg-destructive" : isToday ? "bg-primary" : "bg-primary"}`} />
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${isOverdue ? "bg-destructive" : isToday ? "bg-lone-warning" : "bg-muted-foreground"}`} />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-foreground font-medium truncate">{card.title}</p>
                             <p className="text-[10px] text-muted-foreground">{card.clientName} · {card.socialMedia}</p>
@@ -1035,7 +1078,7 @@ export default function DesignPage() {
             {socialPeople.map((person) => {
               const cards = cardsBySocial[person] ?? [];
               const personNeedsArt = cards.filter((c) =>
-                !c.imageUrl && ["in_production", "approval", "client_approval"].includes(c.status)
+                !temArteEntregue(c) && ["in_production", "approval", "client_approval"].includes(c.status)
               ).length;
 
               return (
@@ -1092,7 +1135,7 @@ export default function DesignPage() {
                           priority: c.priority,
                           dueDate: c.dueDate,
                           dueTime: c.dueTime,
-                          imageUrl: c.imageUrl,
+                          imageUrl: arteEntregue(c) ?? undefined,
                           briefing: c.briefing,
                           requestedByTraffic: c.requestedByTraffic,
                           _card: c,
@@ -1101,7 +1144,7 @@ export default function DesignPage() {
                     renderCard={(item) => {
                       const urgency = getDeadlineUrgency(item.dueDate);
                       const badge = urgency && urgency !== "ok" ? URGENCY_BADGE[urgency] : null;
-                      const hasArt = !!item.imageUrl;
+                      const hasArt = temArteEntregue(item._card as ContentCard);
                       const client = clients.find((c) => c.id === (item._card as ContentCard).clientId);
                       const isAtRisk = client?.status === "at_risk";
                       const budgetTier = (client?.monthlyBudget ?? 0) >= 8000 ? "high" : (client?.monthlyBudget ?? 0) >= 4000 ? "med" : "low";
@@ -1142,7 +1185,7 @@ export default function DesignPage() {
                           )}
 
                           {/* Art thumbnail */}
-                          {hasArt && (
+                          {item.imageUrl && (
                             <div className="w-full h-20 rounded-md overflow-hidden bg-muted">
                               <SignedImage src={item.imageUrl!} alt="" className="w-full h-full object-cover" />
                             </div>
@@ -1174,11 +1217,11 @@ export default function DesignPage() {
                               {getPriorityLabel(item.priority)}
                             </span>
                             {hasArt ? (
-                              <span className="text-[10px] text-primary flex items-center gap-0.5">
+                              <span className="text-[10px] text-lone-success flex items-center gap-0.5">
                                 <CheckCircle size={9} /> Arte
                               </span>
                             ) : (
-                              <span className="text-[10px] text-primary flex items-center gap-0.5">
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
                                 <ImageIcon size={9} /> Sem arte
                               </span>
                             )}
@@ -1240,8 +1283,8 @@ export default function DesignPage() {
                               <Upload size={11} />
                               {hasArt ? "Trocar Arte" : "Enviar Arte"}
                             </button>
-                            {hasArt && (
-                              <DownloadButton url={item.imageUrl!} title={item.title} />
+                            {item.imageUrl && (
+                              <DownloadButton url={item.imageUrl} title={item.title} />
                             )}
                             {(() => {
                               const fc = item._card as ContentCard;
@@ -1271,6 +1314,20 @@ export default function DesignPage() {
                         return;
                       }
 
+                      // Agendado/publicado já saiu da mão do designer: arrastar pra Fila virava "ideias"
+                      // e o post publicado voltava pra produção.
+                      if (card.status === "scheduled" || card.status === "published") {
+                        toast.error("Este card já está agendado/publicado — o status dele muda no quadro do social.");
+                        return;
+                      }
+                      // Aprovação = arte entregue. Sem entrega registrada, o arraste abre o Entregar Arte
+                      // (a operação única) em vez de só trocar a etiqueta.
+                      if (to === "delivered" && (!card.designerDeliveredAt || alteracaoPendente(card))) {
+                        toast.info("Anexe a arte para mandar para aprovação.");
+                        setUploadCard(card);
+                        return;
+                      }
+
                       // Map designer column to actual status
                       const newStatus = DESIGNER_COL_TO_STATUS[to] ?? to;
                       const now = new Date().toISOString();
@@ -1284,17 +1341,19 @@ export default function DesignPage() {
                           [newStatus]: now,
                         },
                         // Clear block fields if unblocking
-                        ...(card.status === "blocked" ? { blockedReason: undefined, blockedBy: undefined, blockedAt: undefined } : {}),
-                      }, { bypassWorkflow: true });
+                        // null limpa no banco; undefined some do JSON e o motivo antigo ficava.
+                        ...(card.status === "blocked" ? { blockedReason: null, blockedBy: null, blockedAt: null } as unknown as Partial<ContentCard> : {}),
+                      }, { bypassWorkflow: true }).catch(() => {}); // o store já avisa a falha
                     }}
                     onEdit={(item) => {
                       const fullCard = (item as { _card?: ContentCard })._card ?? contentCards.find((c) => c.id === item.id);
                       if (fullCard) setDetailCard(fullCard);
                     }}
-                    onDelete={(itemId) => {
+                    // Apagar (arquivar) card é da gestão e do social; o servidor recusa o designer.
+                    onDelete={role !== "designer" ? (itemId) => {
                       const fullCard = contentCards.find((c) => c.id === itemId);
                       if (fullCard) setCardToDelete(fullCard);
-                    }}
+                    } : undefined}
                   />
                   </KanbanErrorBoundary>
                 </div>
@@ -1315,7 +1374,7 @@ export default function DesignPage() {
                       DESIGNER_COLUMNS.findIndex((dc) => dc.statuses.includes(a.status)) -
                       DESIGNER_COLUMNS.findIndex((dc) => dc.statuses.includes(b.status)),
                   );
-                  const needArt = cards.filter((c) => !c.imageUrl && ["in_production", "approval", "client_approval"].includes(c.status)).length;
+                  const needArt = cards.filter((c) => !temArteEntregue(c) && ["in_production", "approval", "client_approval"].includes(c.status)).length;
                   return (
                     <div key={client.id} className="w-64 shrink-0 flex flex-col bg-muted/20 border border-border rounded-xl">
                       <div className="flex items-center gap-2 p-3 border-b border-border rounded-t-xl bg-muted/40">
@@ -1336,9 +1395,9 @@ export default function DesignPage() {
                               onClick={() => setDetailCard(card)}
                               className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/40 transition-colors cursor-pointer"
                             >
-                              {card.imageUrl && (
+                              {arteEntregue(card) && (
                                 <div className="aspect-video w-full overflow-hidden bg-muted">
-                                  <SignedImage src={card.imageUrl!} alt={card.title} className="w-full h-full object-cover" />
+                                  <SignedImage src={arteEntregue(card)!} alt={card.title} className="w-full h-full object-cover" />
                                 </div>
                               )}
                               <div className="p-2">
@@ -1387,7 +1446,8 @@ export default function DesignPage() {
             updateDesignRequest={updateDesignRequest}
             updateContentCard={updateContentCard}
             onBriefing={setBriefingReq}
-            onDeleteRequest={setReqToDelete}
+            onConcluir={concluirDemanda}
+            onDeleteRequest={ehGestao ? setReqToDelete : undefined}
             currentUser={currentUser}
             alteracaoPendente={alteracaoPendente}
           />
@@ -1406,7 +1466,7 @@ export default function DesignPage() {
 
       {/* ═══ PERFORMANCE TAB ═══ */}
       {tab === "performance" && (
-        <div className="space-y-6 animate-fade-in">
+        <div className="px-6 pb-6 space-y-6 animate-fade-in">
           {/* Summary cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="card">
@@ -1496,7 +1556,7 @@ export default function DesignPage() {
 
       {/* ═══ HISTORY TAB ═══ */}
       {tab === "history" && (
-        <div className="space-y-4 animate-fade-in">
+        <div className="px-6 pb-6 space-y-4 animate-fade-in">
           <p className="text-xs text-muted-foreground">Cards entregues e aprovados — historico completo de producao.</p>
           <div className="space-y-2">
             {myContentCards
@@ -1508,9 +1568,9 @@ export default function DesignPage() {
                 return (
                   <div key={card.id} onClick={() => setDetailCard(card)}
                     className="card card-interactive p-4 flex items-center gap-4 cursor-pointer hover:border-primary/20">
-                    {card.imageUrl ? (
+                    {arteEntregue(card) ? (
                       <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted shrink-0">
-                        <SignedImage src={card.imageUrl!} alt="" className="w-full h-full object-cover" />
+                        <SignedImage src={arteEntregue(card)!} alt="" className="w-full h-full object-cover" />
                       </div>
                     ) : (
                       <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
@@ -1526,7 +1586,7 @@ export default function DesignPage() {
                         {card.designerDeliveredAt && (
                           <>
                             <span className="text-[10px] text-muted-foreground">·</span>
-                            <span className="text-[10px] text-muted-foreground">Entregue {card.designerDeliveredAt.slice(0, 10)}</span>
+                            <span className="text-[10px] text-muted-foreground">Entregue {spDateStr(card.designerDeliveredAt).split("-").reverse().join("/")}</span>
                           </>
                         )}
                       </div>
@@ -1550,7 +1610,7 @@ export default function DesignPage() {
                   </div>
                 );
               })}
-            {myContentCards.filter((c) => c.designerDeliveredAt || c.status === "published").length === 0 && (
+            {myContentCards.filter((c) => c.designerDeliveredAt || c.status === "published" || c.status === "scheduled").length === 0 && (
               <div className="text-center py-12">
                 <Clock size={24} className="text-muted-foreground mx-auto mb-3" />
                 <p className="text-xs text-muted-foreground">Nenhuma entrega no historico ainda.</p>
@@ -1574,7 +1634,7 @@ export default function DesignPage() {
       {cardToDelete && (
         <DeleteConfirmModal
           title="Apagar este card de conteúdo?"
-          message="Toda informação do card (briefing, comentários, anexo) será removida permanentemente. Esta ação não pode ser desfeita."
+          message="O card sai do quadro e vai para Arquivadas — dá para recuperar de lá."
           itemLabel={`${cardToDelete.title} — ${cardToDelete.clientName}`}
           confirmLabel="Apagar card"
           onConfirm={() => deleteContentCard(cardToDelete.id)}
@@ -1636,7 +1696,7 @@ export default function DesignPage() {
                       ...(blockingCard.columnEnteredAt ?? {}),
                       blocked: now,
                     },
-                  });
+                  }).catch(() => {}); // o store já avisa a falha
                   // Notify Social Media
                   pushNotification(
                     "sla",
@@ -1710,7 +1770,7 @@ export default function DesignPage() {
                     nonDeliveryReason: finalReason,
                     nonDeliveryReportedBy: currentUser,
                     nonDeliveryReportedAt: new Date().toISOString(),
-                  });
+                  }).catch(() => {}); // o store já avisa a falha
                   setNonDeliveryCard(null);
                   setNonDeliveryReason("");
                   setNonDeliveryCustomReason("");
@@ -1774,7 +1834,7 @@ export default function DesignPage() {
                 ];
                 const score = Math.round((checks.filter((c) => c.ok).length / checks.length) * 100);
                 return (
-                  <div className={`p-3 rounded-lg border ${score >= 75 ? "bg-lone-success-bg/[0.04] border-lone-success-border/[0.1]" : score >= 50 ? "bg-lone-warning-bg/[0.04] border-lone-warning-border/[0.1]" : "bg-destructive/[0.04] border-destructive/[0.1]"}`}>
+                  <div className={`p-3 rounded-lg border ${score >= 75 ? "bg-lone-success-bg border-lone-success-border" : score >= 50 ? "bg-lone-warning-bg border-lone-warning-border" : "bg-destructive/10 border-destructive/20"}`}>
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Saude do Briefing</p>
                       <span className={`text-xs font-bold ${score >= 75 ? "text-lone-success" : score >= 50 ? "text-lone-warning" : "text-destructive"}`}>{score}%</span>
@@ -1844,7 +1904,14 @@ export default function DesignPage() {
                           key={s.v}
                           onClick={() => {
                             if (rc.status === s.v) return;
-                            updateContentCard(rc.id, { status: s.v, statusChangedAt: new Date().toISOString() }).catch(() => {});
+                            // Etiqueta de aprovação em diante = arte entregue: sem entrega, abre o Entregar Arte.
+                            const posEntrega = ["approval", "client_approval", "scheduled", "published"].includes(s.v);
+                            if (posEntrega && (!rc.designerDeliveredAt || alteracaoPendente(rc))) {
+                              toast.info("Anexe a arte antes de mandar para aprovação.");
+                              setUploadCard(rc);
+                              return;
+                            }
+                            updateContentCard(rc.id, { status: s.v, statusChangedAt: new Date().toISOString() }).catch(() => {}); // o store já avisa a falha
                           }}
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                             rc.status === s.v ? "bg-primary/20 text-primary border border-primary/30" : "bg-muted text-muted-foreground hover:text-foreground"
@@ -2007,10 +2074,14 @@ export default function DesignPage() {
                             {(role === "designer" || role === "admin" || role === "manager") && (
                               <button
                                 onClick={() => {
+                                  const antes = briefingReq;
                                   const next = briefingReq.attachments!.filter((_, idx) => idx !== i);
                                   const nextStatus = next.length === 0 ? "in_progress" : briefingReq.status;
-                                  updateDesignRequest(briefingReq.id, { attachments: next, status: nextStatus });
                                   setBriefingReq({ ...briefingReq, attachments: next, status: nextStatus });
+                                  updateDesignRequest(briefingReq.id, { attachments: next, status: nextStatus }).catch((err) => {
+                                    setBriefingReq(antes);
+                                    avisarFalha("Não consegui remover o anexo")(err);
+                                  });
                                 }}
                                 className="p-2 rounded-lg border border-border hover:border-destructive/30 hover:text-destructive text-muted-foreground transition-colors"
                                 title="Remover anexo"
@@ -2068,8 +2139,12 @@ export default function DesignPage() {
               {briefingReq.status === "queued" && (
                 <button
                   onClick={() => {
-                    updateDesignRequest(briefingReq.id, { status: "in_progress" });
+                    const antes = briefingReq;
                     setBriefingReq({ ...briefingReq, status: "in_progress" });
+                    updateDesignRequest(briefingReq.id, { status: "in_progress" }).catch((err) => {
+                      setBriefingReq(antes);
+                      avisarFalha("Não consegui iniciar a demanda")(err);
+                    });
                   }}
                   className="btn-primary flex-1 text-sm flex items-center justify-center gap-1.5"
                 >
@@ -2078,13 +2153,10 @@ export default function DesignPage() {
               )}
               {briefingReq.status === "in_progress" && (
                 <button
-                  onClick={() => {
-                    updateDesignRequest(briefingReq.id, { status: "done" });
-                    setBriefingReq(null);
-                  }}
+                  onClick={() => concluirDemanda(briefingReq)}
                   className="bg-primary hover:bg-primary/80 text-primary-foreground px-3 py-2 rounded-lg font-medium text-sm transition-colors flex-1 flex items-center justify-center gap-1.5"
                 >
-                  <CheckCircle size={13} /> Marcar Concluído
+                  <CheckCircle size={13} /> Entregar e concluir
                 </button>
               )}
               <button onClick={() => setBriefingReq(null)} className="btn-ghost flex-1 text-sm">Fechar</button>
@@ -2107,9 +2179,9 @@ export default function DesignPage() {
                         onClick={async () => {
                           setGerandoIa(true);
                           try {
-                            const r = await authedFetch(`/api/design-requests/${briefingReq.id}/variacoes-ia`, { method: "POST" });
-                            const d = await r.json().catch(() => ({}));
-                            if (!r.ok) { toast.error(d?.error ?? "Não consegui gerar."); return; }
+                            const r = await chamar<{ urls: string[]; geracaoId: string; entradas?: unknown }>(`/api/design-requests/${briefingReq.id}/variacoes-ia`, undefined, { method: "POST" });
+                            const d = r.data;
+                            if (!r.ok || !d) { toast.error(r.erro ?? "Não consegui gerar."); return; }
                             setBriefingReq({ ...briefingReq, attachments: [...(briefingReq.attachments ?? []), ...(d.urls as string[])] });
                             setGeracaoIa({ id: d.geracaoId as string, urls: d.urls as string[] });
                             const e = d.entradas as { logo?: boolean; estilos?: number; textos?: string[] } | undefined;
@@ -2126,7 +2198,20 @@ export default function DesignPage() {
                       <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
                         Serviu?
                         <button onClick={() => void feedbackIa("serviu")} className="rounded border border-border px-1.5 hover:bg-lone-success-bg" title="A proposta ajudou">👍</button>
-                        <button onClick={() => { const m = window.prompt("O que saiu errado? (ex.: logo errada, cores, texto inventado)") ?? ""; void feedbackIa("nao_serviu", m); }} className="rounded border border-border px-1.5 hover:bg-destructive/10" title="Não ajudou — diga o porquê">👎</button>
+                        <button onClick={() => setMotivoIa("")} className="rounded border border-border px-1.5 hover:bg-destructive/10" title="Não ajudou — diga o porquê">👎</button>
+                      </span>
+                    )}
+                    {geracaoIa && motivoIa !== null && (
+                      <span className="mt-1.5 flex items-center gap-1.5">
+                        <input
+                          autoFocus
+                          value={motivoIa}
+                          onChange={(e) => setMotivoIa(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") void feedbackIa("nao_serviu", motivoIa); if (e.key === "Escape") setMotivoIa(null); }}
+                          placeholder="O que saiu errado? (logo, cores, texto inventado…)"
+                          className="flex-1 min-w-0 rounded-md border border-border bg-background px-2 py-1 text-[11px] text-foreground outline-none focus:border-primary/50"
+                        />
+                        <button onClick={() => void feedbackIa("nao_serviu", motivoIa)} className="rounded-md border border-border px-2 py-1 text-[10px] text-foreground hover:bg-muted">Enviar</button>
                       </span>
                     )}
                   </span>
@@ -2190,15 +2275,17 @@ function RequestsView({
   updateDesignRequest,
   updateContentCard,
   onBriefing,
+  onConcluir,
   onDeleteRequest,
   currentUser,
   alteracaoPendente,
 }: {
   designRequests: DesignRequest[];
   contentCards: ContentCard[];
-  updateDesignRequest: (id: string, updates: Partial<DesignRequest>) => void;
-  updateContentCard: (id: string, updates: Partial<ContentCard>, options?: { bypassWorkflow?: boolean }) => void;
+  updateDesignRequest: (id: string, updates: Partial<DesignRequest>) => Promise<void>;
+  updateContentCard: (id: string, updates: Partial<ContentCard>, options?: { bypassWorkflow?: boolean }) => Promise<void>;
   onBriefing: (req: DesignRequest) => void;
+  onConcluir: (req: DesignRequest) => void;
   onDeleteRequest?: (req: DesignRequest) => void;
   currentUser?: string;
   alteracaoPendente: (c: ContentCard) => { reason?: string | null; reviewedBy?: string | null } | null;
@@ -2344,17 +2431,16 @@ function RequestsView({
           )}
           onMove={(itemId, from, to) => {
             if (to === "alteracoes") return; // não pode virar destino (coluna virtual)
-            if (from === "alteracoes") {
-              // Designer refez → tira da coluna Alterações: marca entregue de novo (limpa
-              // alteracaoPendente) + move a demanda pro destino (ex: Concluído). Antes o arraste
-              // pra fora era bloqueado e a arte ficava presa mesmo depois de refeita.
-              const req = designRequests.find((r) => r.id === itemId);
-              const card = req ? (contentCards.find((c) => c.id === req.contentCardId) ?? contentCards.find((c) => c.designRequestId === req.id)) : null;
-              if (card) updateContentCard(card.id, { designerDeliveredAt: new Date().toISOString(), designerDeliveredBy: currentUser }, { bypassWorkflow: true });
-              updateDesignRequest(itemId, { status: to as DesignRequest["status"] });
+            const req = designRequests.find((r) => r.id === itemId);
+            if (!req) return;
+            // Sair de Alterações ou ir pra Concluído = entregar arte. Antes o arraste gravava
+            // designerDeliveredAt sem arte nenhuma; agora abre a entrega de verdade.
+            if (from === "alteracoes" || to === "done") {
+              onConcluir(req);
               return;
             }
-            updateDesignRequest(itemId, { status: to as DesignRequest["status"] });
+            updateDesignRequest(itemId, { status: to as DesignRequest["status"] })
+              .catch(avisarFalha("Não consegui mover a demanda"));
           }}
           onEdit={(item) => {
             const fullReq = (item as { _req?: DesignRequest })._req ?? designRequests.find((r) => r.id === item.id);
@@ -2411,13 +2497,13 @@ function RequestsView({
                 </div>
                 <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border">
                   {req.status === "queued" && (
-                    <button onClick={(e) => { e.stopPropagation(); updateDesignRequest(req.id, { status: "in_progress" }); }} className="btn-primary text-xs py-1.5">
+                    <button onClick={(e) => { e.stopPropagation(); updateDesignRequest(req.id, { status: "in_progress" }).catch(avisarFalha("Não consegui iniciar a demanda")); }} className="btn-primary text-xs py-1.5">
                       Iniciar Produção
                     </button>
                   )}
                   {req.status === "in_progress" && (
-                    <button onClick={(e) => { e.stopPropagation(); updateDesignRequest(req.id, { status: "done" }); }} className="bg-primary hover:bg-primary/80 text-primary-foreground px-3 py-1.5 rounded-lg font-medium text-xs transition-colors">
-                      Marcar Concluído
+                    <button onClick={(e) => { e.stopPropagation(); onConcluir(req); }} className="bg-primary hover:bg-primary/80 text-primary-foreground px-3 py-1.5 rounded-lg font-medium text-xs transition-colors">
+                      Entregar e concluir
                     </button>
                   )}
                   {req.status === "done" && (
@@ -2460,8 +2546,8 @@ function ClientesView({
   }
 
   const statusColor = (s: string) => {
-    if (s === "good")       return { dot: "bg-lone-success-bg", label: "On Fire" };
-    if (s === "average")    return { dot: "bg-lone-warning-bg",   label: "Atenção" };
+    if (s === "good")       return { dot: "bg-lone-success", label: "On Fire" };
+    if (s === "average")    return { dot: "bg-lone-warning",   label: "Atenção" };
     if (s === "at_risk")    return { dot: "bg-destructive",     label: "Crítico" };
     if (s === "onboarding") return { dot: "bg-primary",   label: "Onboarding" };
     return { dot: "bg-muted", label: s };
@@ -2552,7 +2638,7 @@ function ClientDrawer({
   designRequests: DesignRequest[];
   onClose: () => void;
   onCreateTask: () => void;
-  updateClientData: (id: string, data: Partial<Client>) => void;
+  updateClientData: (id: string, data: Partial<Client>) => Promise<void>;
 }) {
   const openRequests = designRequests.filter((r) => r.status !== "done");
   const delivered = contentCards.filter((c) => c.designerDeliveredAt).length;
@@ -2567,20 +2653,27 @@ function ClientDrawer({
   const [briefingSaved, setBriefingSaved] = useState(false);
 
   const handleSaveBriefing = async () => {
+    // Só vai o que MUDOU: um tom fora da lista (texto livre antigo) virava undefined e sumia; e
+    // "" (limpar o briefing) vai como "" — undefined some do JSON e o servidor nunca limpava.
+    const mudancas: Partial<Client> = {};
+    const tom = briefingForm.toneOfVoice.trim();
+    if (tom !== (client.toneOfVoice ?? "")) mudancas.toneOfVoice = tom as Client["toneOfVoice"];
+    const fixo = briefingForm.fixedBriefing.trim();
+    if (fixo !== (client.fixedBriefing ?? "")) mudancas.fixedBriefing = fixo;
+    const campanha = briefingForm.campaignBriefing.trim();
+    if (campanha !== (client.campaignBriefing ?? "")) mudancas.campaignBriefing = campanha;
+    if (Object.keys(mudancas).length === 0) { setEditingBriefing(false); return; }
     setSavingBriefing(true);
-    const toneValue = briefingForm.toneOfVoice.trim();
-    const validTones = ["formal", "funny", "authoritative", "casual"] as const;
-    updateClientData(client.id, {
-      toneOfVoice: (validTones as readonly string[]).includes(toneValue) ? (toneValue as typeof validTones[number]) : undefined,
-      fixedBriefing: briefingForm.fixedBriefing.trim() || undefined,
-      campaignBriefing: briefingForm.campaignBriefing.trim() || undefined,
-    });
-    setTimeout(() => {
-      setSavingBriefing(false);
-      setBriefingSaved(true);
+    try {
+      await updateClientData(client.id, mudancas);
       setEditingBriefing(false);
+      setBriefingSaved(true);
       setTimeout(() => setBriefingSaved(false), 2000);
-    }, 400);
+    } catch (err) {
+      avisarFalha("Não consegui salvar o briefing")(err);
+    } finally {
+      setSavingBriefing(false);
+    }
   };
 
   const hasBriefing = client.toneOfVoice || client.fixedBriefing || client.campaignBriefing;
@@ -2673,15 +2766,17 @@ function ClientDrawer({
                 <FileText size={11} /> Briefing de Marca
               </p>
               {!editingBriefing ? (
-                <button
-                  onClick={() => setEditingBriefing(true)}
-                  className="text-[10px] px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
-                >
-                  {hasBriefing ? "Editar" : "+ Adicionar"}
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {briefingSaved && <span className="text-[10px] text-lone-success">✓ Salvo</span>}
+                  <button
+                    onClick={() => setEditingBriefing(true)}
+                    className="text-[10px] px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+                  >
+                    {hasBriefing ? "Editar" : "+ Adicionar"}
+                  </button>
+                </div>
               ) : (
                 <div className="flex items-center gap-1">
-                  {briefingSaved && <span className="text-[10px] text-lone-success">✓ Salvo</span>}
                   <button
                     onClick={() => {
                       setEditingBriefing(false);
@@ -2717,6 +2812,9 @@ function ClientDrawer({
                       className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50"
                     >
                       <option value="">— Não definido —</option>
+                      {briefingForm.toneOfVoice && !["casual", "formal", "funny", "authoritative"].includes(briefingForm.toneOfVoice) && (
+                        <option value={briefingForm.toneOfVoice}>{briefingForm.toneOfVoice} (atual)</option>
+                      )}
                       <option value="casual">Casual (descontraído)</option>
                       <option value="formal">Formal (corporativo)</option>
                       <option value="funny">Divertido (humor)</option>
@@ -2879,60 +2977,61 @@ function NewTaskModal({
   // e ninguém vê faltar. Era o único formulário que ainda deixava passar.
   const canSubmit = !!clientId && title.trim().length > 0 && !!deadline;
 
+  // RETRY SEM DUPLICAR: se a demanda já foi criada e só a referência falhou, o segundo clique
+  // retoma daqui — antes ele criava outra demanda igual.
+  const criadaRef = useRef<DesignRequest | null>(null);
+  const enviadasRef = useRef(new Map<File, string>());
+
   const handleSubmit = async () => {
     if (!canSubmit || !client || saving) return;
     setSaving(true); setErroRef(null); erroRefRef.current = null;
-    trilha("nova-demanda:submit", { clientId: client.id, refs: refs.length });
-    // Antes o await sem try: qualquer falha (401 do instante, 5xx, rede) subia sem tratamento — o
-    // botão ficava em "Salvando…" para sempre e a pessoa recarregava e criava de novo.
-    let criada: DesignRequest | null = null;
-    try {
-      criada = await addDesignRequest({
-        title: title.trim(),
-        clientId: client.id,
-        clientName: client.nomeFantasia || client.name,
-        requestedBy,
-        priority,
-        status: "queued",
-        format,
-        briefing: briefing.trim(),
-        deadline: deadline || undefined,
-      });
-    } catch (err) {
-      const m = err instanceof Error ? err.message : "erro";
-      trilha("nova-demanda:erro", { msg: m });
-      setErroRef(`Não consegui criar a demanda (${m}). Nada foi salvo — tenta de novo.`);
-      setSaving(false);
-      return;
+    trilha("nova-demanda:submit", { clientId: client.id, refs: refs.length, retomada: !!criadaRef.current });
+    let criada = criadaRef.current;
+    if (!criada) {
+      try {
+        criada = await addDesignRequest({
+          title: title.trim(),
+          clientId: client.id,
+          clientName: client.nomeFantasia || client.name,
+          requestedBy,
+          priority,
+          status: "queued",
+          format,
+          briefing: briefing.trim(),
+          deadline: deadline || undefined,
+        });
+        criadaRef.current = criada;
+      } catch (err) {
+        const m = err instanceof Error ? err.message : "erro";
+        trilha("nova-demanda:erro", { msg: m });
+        setErroRef(`Não consegui criar a demanda (${m}). Nada foi salvo — tenta de novo.`);
+        setSaving(false);
+        return;
+      }
     }
 
     // Sobe as referências DEPOIS de criar (o upload precisa do id da demanda). Se falhar, a
     // demanda continua criada — perdê-la por causa de um anexo seria pior — e o aviso aparece.
     if (criada?.id && refs.length) {
-      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
-      const urls: string[] = [];
       for (const f of refs) {
+        if (enviadasRef.current.has(f)) continue;
         const fd = new FormData();
         // Referência do pedido, não entrega — mesma regra do board social.
         fd.append("file", f); fd.append("cardId", criada.id); fd.append("tipo", "referencia");
-        try {
-          const r = await authedFetch("/api/upload-art", { method: "POST", body: fd });
-          const d = await r.json().catch(() => ({}));
-          if (!r.ok || !d?.url) throw new Error("upload");
-          urls.push(d.url as string);
-        } catch {
-          const m = `Demanda criada, mas a referência "${f.name}" não subiu. Abra a demanda e anexe de novo.`;
+        const r = await chamar<{ url?: string }>("/api/upload-art", fd);
+        if (r.ok && r.data?.url) enviadasRef.current.set(f, r.data.url);
+        else {
+          const m = `Demanda criada, mas a referência "${f.name}" não subiu (${r.erro ?? "sem url"}). Clique de novo para tentar só ela.`;
           erroRefRef.current = m; setErroRef(m);
         }
       }
-      if (urls.length) {
-        await authedFetch("/api/design-requests/update", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: criada.id, attachments: [...(criada.attachments ?? []), ...urls] }),
-        }).catch(() => {
-          const m = "As referências subiram mas não vincularam à demanda. Abra e anexe de novo.";
+      const urls = refs.map((f) => enviadasRef.current.get(f)).filter((u): u is string => !!u);
+      if (urls.length && !erroRefRef.current) {
+        const r = await chamar("/api/design-requests/update", { id: criada.id, attachments: [...(criada.attachments ?? []), ...urls] });
+        if (!r.ok) {
+          const m = `A demanda foi criada, mas as referências não vincularam (${r.erro}). Clique de novo para tentar.`;
           erroRefRef.current = m; setErroRef(m);
-        });
+        }
       }
       // Falhou algo: segura o modal aberto pra pessoa ver o aviso.
       if (erroRefRef.current) { setSaving(false); return; }
@@ -3104,7 +3203,7 @@ function NewTaskModal({
             className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-sm font-medium transition-colors disabled:opacity-50"
           >
             {saving ? <Loader size={13} className="animate-spin" /> : <Plus size={13} />}
-            {saving ? "Criando..." : "Criar Tarefa"}
+            {saving ? "Criando..." : criadaRef.current ? "Tentar anexar de novo" : "Criar Tarefa"}
           </button>
         </div>
       </div>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import {
-  Settings, User, Palette, Bell, Shield, LogOut,
+  Settings, User, Palette, Shield, LogOut,
   Sun, Moon, Check, ChevronRight, Mail, Key,
   Building2, FileText, Loader2, Save,
 } from "lucide-react";
@@ -25,7 +25,7 @@ const ROLE_LABELS: Record<string, string> = {
 export default function SettingsPage() {
   const { currentProfile, role, logout } = useRole();
   const { theme } = useTheme();
-  const [activeSection, setActiveSection] = useState<"profile" | "appearance" | "notifications" | "security" | "juridico">("profile");
+  const [activeSection, setActiveSection] = useState<"profile" | "appearance" | "security" | "juridico">("profile");
   const isAdmin = role === "admin" || role === "manager";
 
   // Juridico state
@@ -97,24 +97,9 @@ export default function SettingsPage() {
     setTimeout(() => setAgencySaved(false), 2000);
   };
 
-  // Notification preferences (local state — would persist to DB in production)
-  const [notifPrefs, setNotifPrefs] = useState({
-    taskAssigned: true,
-    cardStatusChange: true,
-    designDelivered: true,
-    slaWarnings: true,
-    chatMentions: true,
-    systemUpdates: false,
-  });
-
-  const togglePref = (key: keyof typeof notifPrefs) => {
-    setNotifPrefs((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
   const sections = [
     { key: "profile" as const, label: "Perfil", icon: User },
     { key: "appearance" as const, label: "Aparência", icon: Palette },
-    { key: "notifications" as const, label: "Notificações", icon: Bell },
     { key: "security" as const, label: "Segurança", icon: Shield },
     ...(isAdmin ? [{ key: "juridico" as const, label: "Jurídico & Contratos", icon: FileText }] : []),
   ];
@@ -169,12 +154,12 @@ export default function SettingsPage() {
           {activeSection === "profile" && (
             <div className="space-y-6 animate-fade-in">
               <div className="card">
-                <h3 className="font-semibold text-foreground text-sm mb-5">Informacoes do Perfil</h3>
+                <h3 className="font-semibold text-foreground text-sm mb-5">Informações do Perfil</h3>
 
                 {/* Staff lockdown warning */}
                 {role !== "admin" && (
-                  <div className="mb-4 px-4 py-3 rounded-xl bg-lone-warning-bg/[0.05] border border-lone-warning-border/[0.12] text-[11px] text-lone-warning">
-                    Alteracoes de perfil sao gerenciadas exclusivamente pela Diretoria (Admins).
+                  <div className="mb-4 px-4 py-3 rounded-xl bg-lone-warning-bg border border-lone-warning-border text-[11px] text-lone-warning">
+                    Alterações de perfil são gerenciadas exclusivamente pela Diretoria (Admins).
                   </div>
                 )}
 
@@ -252,61 +237,14 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="p-4 rounded-xl border border-border bg-muted/30">
-                    <p className="text-sm font-medium text-foreground mb-1">Cor de Destaque</p>
-                    <p className="text-xs text-muted-foreground mb-3">Azul var(--primary) — padrao do Lone OS</p>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-primary" />
-                      <div className="w-8 h-8 rounded-lg bg-primary" />
-                      <div className="w-8 h-8 rounded-lg bg-primary/50" />
-                      <span className="text-[10px] text-muted-foreground ml-2">Palette fixa</span>
-                    </div>
-                  </div>
-
-                  <div className="p-4 rounded-xl border border-border bg-muted/30">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-foreground">Tour do Sistema</p>
-                        <p className="text-xs text-muted-foreground">Refaca o tour interativo para conhecer o Lone OS</p>
+                        <p className="text-xs text-muted-foreground">Refaça o tour interativo para conhecer o Lone OS</p>
                       </div>
                       <RestartTourButton className="px-3 py-1.5 rounded-lg text-xs text-primary bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all" />
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Notifications */}
-          {activeSection === "notifications" && (
-            <div className="space-y-6 animate-fade-in">
-              <div className="card">
-                <h3 className="font-semibold text-foreground text-sm mb-5">Preferências de Notificação</h3>
-                <div className="space-y-1">
-                  {([
-                    { key: "taskAssigned" as const, label: "Tarefa atribuída a mim", desc: "Quando uma nova tarefa for designada para você" },
-                    { key: "cardStatusChange" as const, label: "Mudança de status de card", desc: "Quando um card de conteúdo mudar de coluna" },
-                    { key: "designDelivered" as const, label: "Arte entregue pelo designer", desc: "Quando o designer finalizar uma arte" },
-                    { key: "slaWarnings" as const, label: "Alertas de SLA", desc: "Quando um card estiver parado por muito tempo" },
-                    { key: "chatMentions" as const, label: "Menções no chat", desc: "Quando alguém mencionar você em uma conversa" },
-                    { key: "systemUpdates" as const, label: "Atualizações do sistema", desc: "Notificações sobre manutenções e atualizações" },
-                  ]).map(({ key, label, desc }) => (
-                    <div key={key} className="flex items-center justify-between p-3.5 rounded-xl hover:bg-muted/30 transition-all">
-                      <div>
-                        <p className="text-sm text-foreground">{label}</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
-                      </div>
-                      <button
-                        onClick={() => togglePref(key)}
-                        className={`relative w-10 h-5 rounded-full transition-all ${
-                          notifPrefs[key] ? "bg-primary" : "bg-muted"
-                        }`}
-                      >
-                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-card shadow transition-all ${
-                          notifPrefs[key] ? "left-[22px]" : "left-0.5"
-                        }`} />
-                      </button>
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>
@@ -350,7 +288,7 @@ export default function SettingsPage() {
               <div className="card">
                 <div className="flex items-center justify-between mb-5">
                   <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
-                    <Building2 size={14} className="text-primary" /> Dados da Agencia
+                    <Building2 size={14} className="text-primary" /> Dados da Agência
                   </h3>
                   <button onClick={handleAgencySave} disabled={agencySaving || !agencyLoaded}
                     title={agencyLoaded ? undefined : "Carregando o cadastro da agência…"}
@@ -364,12 +302,12 @@ export default function SettingsPage() {
                     {agencyError}
                   </p>
                 )}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {([
-                    { key: "razaoSocial", label: "Razao Social" },
+                    { key: "razaoSocial", label: "Razão Social" },
                     { key: "nomeFantasia", label: "Nome Fantasia" },
                     { key: "cnpj", label: "CNPJ" },
-                    { key: "endereco", label: "Endereco" },
+                    { key: "endereco", label: "Endereço" },
                     { key: "email", label: "E-mail" },
                     { key: "telefone", label: "Telefone" },
                   ] as { key: keyof typeof agencyForm; label: string }[]).map(({ key, label }) => (
@@ -385,9 +323,9 @@ export default function SettingsPage() {
               {/* Signatario */}
               <div className="card">
                 <h3 className="font-semibold text-foreground text-sm mb-5 flex items-center gap-2">
-                  <User size={14} className="text-primary" /> Signatario (Contratada)
+                  <User size={14} className="text-primary" /> Signatário (Contratada)
                 </h3>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {([
                     { key: "signatarioNome", label: "Nome Completo" },
                     { key: "signatarioCpf", label: "CPF" },
@@ -408,7 +346,7 @@ export default function SettingsPage() {
                   <FileText size={14} className="text-primary" /> Templates de Contrato
                 </h3>
                 <p className="text-[10px] text-muted-foreground mb-5">
-                  Duracao padrao e clausulas por tipo de servico. O DOCX oficial preenchido esta em <code className="text-primary">contract-templates/*.docx</code>.
+                  Duração padrão e cláusulas por tipo de serviço. O DOCX oficial preenchido está em <code className="text-primary">contract-templates/*.docx</code>.
                 </p>
                 <div className="space-y-4">
                   {templates.map((t, idx) => (
@@ -419,12 +357,12 @@ export default function SettingsPage() {
                           <span className="text-[10px] text-muted-foreground font-mono">{t.serviceType}</span>
                           <button onClick={() => setEditingClauses(editingClauses === t.id ? null : t.id)}
                             className={`text-[10px] px-2 py-0.5 rounded border transition-all ${editingClauses === t.id ? "bg-primary/10 text-primary border-primary/20" : "border-border text-muted-foreground hover:text-foreground"}`}>
-                            {editingClauses === t.id ? "Fechar" : "Editar Clausulas"}
+                            {editingClauses === t.id ? "Fechar" : "Editar Cláusulas"}
                           </button>
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] text-muted-foreground">Duracao padrao (meses)</label>
+                        <label className="text-[10px] text-muted-foreground">Duração padrão (meses)</label>
                         <input type="number" value={t.durationMonths} onChange={(e) => {
                           const u = [...templates]; u[idx] = { ...u[idx], durationMonths: Number(e.target.value) || 3 }; setTemplates(u);
                         }} className="w-40 bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/50" />
@@ -433,7 +371,7 @@ export default function SettingsPage() {
                       {/* Clause editor */}
                       {editingClauses === t.id && (
                         <div className="space-y-4 pt-3 border-t border-border">
-                          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Clausulas do Contrato</p>
+                          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Cláusulas do Contrato</p>
                           {t.clauses.map((clause, ci) => (
                             <div key={clause.id} className="space-y-1.5">
                               <input value={clause.title} onChange={(e) => {
@@ -447,9 +385,9 @@ export default function SettingsPage() {
                             </div>
                           ))}
 
-                          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider pt-2">Clausulas Condicionais (Opcionais)</p>
+                          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider pt-2">Cláusulas Condicionais (Opcionais)</p>
                           {t.conditionalClauses.map((cc, cci) => (
-                            <div key={cc.id} className={`rounded-lg border p-3 space-y-2 transition-all ${cc.enabled ? "border-primary/30 bg-primary/[0.03]" : "border-border"}`}>
+                            <div key={cc.id} className={`rounded-lg border p-3 space-y-2 transition-all ${cc.enabled ? "border-primary/30 bg-primary/5" : "border-border"}`}>
                               <div className="flex items-center justify-between">
                                 <input value={cc.title} onChange={(e) => {
                                   const u = [...templates]; const c = [...u[idx].conditionalClauses]; c[cci] = { ...c[cci], title: e.target.value };

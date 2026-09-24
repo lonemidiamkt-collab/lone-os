@@ -5,7 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCronOrUser } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { scoreDimensao, loneScore, leituraLoneScore, type ResultadoDimensao } from "@/lib/scores/executivo";
-import { calcularSaude, distribuicao, situacaoDaDistribuicao, type SaudeCliente } from "@/lib/scores/health";
+import { calcularSaude, distribuicao, situacaoDaDistribuicao, gravacaoDaSaude, type SaudeCliente } from "@/lib/scores/health";
+import { estaPausado, hojeSP } from "@/lib/clients/pausa";
 import { scorePessoa, capacidade, type Funcao, type ResultadoPessoa } from "@/lib/scores/performance";
 import { classificar, resumirAtrasos, type CardParaAtraso } from "@/lib/scores/atraso";
 import {
@@ -45,7 +46,8 @@ export async function GET(req: NextRequest) {
 
   const [clientesQ, cardsQ, membrosQ] = await Promise.all([
     supabaseAdmin.from("clients")
-      .select("id, name, nome_fantasia, status, active, assigned_social, assigned_designer, assigned_traffic, churned_at, created_at")
+      .select("id, name, nome_fantasia, status, active, assigned_social, assigned_designer, assigned_traffic, churned_at, created_at, paused_at, paused_until")
+      .is("draft_status", null)
       .or("active.is.null,active.eq.true"),
     supabaseAdmin.from("content_cards")
       .select("id, client_id, status, due_date, designer_delivered_at, designer_delivered_by, client_approved_at, blocked_reason, created_at, social_media")
@@ -56,6 +58,10 @@ export async function GET(req: NextRequest) {
     supabaseAdmin.from("team_members").select("name, role, is_active"),
   ]);
 
+  // Erro de leitura não pode virar "carteira vazia" — e com ?gravar=1 apagaria a saúde de todos.
+  if (clientesQ.error) {
+    return NextResponse.json({ ok: false, error: `clients: ${clientesQ.error.message}` }, { status: 500 });
+  }
   const clientes = (clientesQ.data ?? []).filter((c) => !/\(teste\)/i.test((c.name as string) || ""));
   const ativos = clientes.filter((c) => c.status !== "onboarding");
   const cards = cardsQ.data ?? [];
@@ -75,7 +81,8 @@ export async function GET(req: NextRequest) {
     (cardsPorCliente.get(cid) ?? cardsPorCliente.set(cid, []).get(cid)!).push(k);
   }
 
-  const saude: SaudeCliente[] = clientes.map((c) => {
+  // Pausado continua na carteira do time, mas não recebe nada — nem nota de saúde.
+  const saude: SaudeCliente[] = clientes.filter((c) => !estaPausado(c as never)).map((c) => {
     const id = c.id as string;
     const s = sinais.get(id);
     const meus = cardsPorCliente.get(id) ?? [];
@@ -120,12 +127,20 @@ export async function GET(req: NextRequest) {
   //
   // Persistir aqui também serve às telas que leem a tabela direto, sem passar por esta rota, e dá
   // histórico: dá para ver a saúde de um cliente caindo semana a semana.
+  // ÚNICO escritor de client_health_scores e de clients.current_health_* (100 = saudável). O antigo
+  // /api/system/compute-health gravava nas MESMAS linhas com a escala invertida (100 = risco).
+  let gravacao: { linhas: number; clientes: number; erros: string[] } | null = null;
   if (req.nextUrl.searchParams.get("gravar") === "1") {
-    const hojeData = new Date().toISOString().slice(0, 10);
-    const linhas = saude.filter((x) => x.score !== null).map((x) => ({
+    const hojeData = hojeSP();
+    const agoraIso = new Date().toISOString();
+    const erros: string[] = [];
+    const linhas = saude.flatMap((x) => {
+      const g = gravacaoDaSaude(x).historico;
+      if (!g) return [];
+      return [{
       client_id: x.clientId,
-      score: x.score,
-      level: x.nivel === "saudavel" ? "safe" : x.nivel === "atencao" ? "warning" : "critical",
+      score: g.score,
+      level: g.level,
       breakdown: {
         componentes: Object.fromEntries(x.componentes.map((c) => [c.chave, c.valor])),
         motivos: x.motivos,
@@ -147,16 +162,27 @@ export async function GET(req: NextRequest) {
           };
         })(),
       },
-      computed_at: new Date().toISOString(),
+      computed_at: agoraIso,
       computed_for_date: hojeData,
-    }));
+      }];
+    });
     // Um registro por cliente por dia: recalcular no mesmo dia atualiza em vez de empilhar.
     // (Sem isto, rodar de hora em hora encheria a tabela e distorceria qualquer média histórica —
     // é o mesmo erro que já inflou metric_snapshots 98 vezes.)
     for (let i = 0; i < linhas.length; i += 100) {
-      await supabaseAdmin.from("client_health_scores")
+      const { error } = await supabaseAdmin.from("client_health_scores")
         .upsert(linhas.slice(i, i + 100), { onConflict: "client_id,computed_for_date" });
+      if (error) erros.push(`client_health_scores: ${error.message}`);
     }
+    // O cache em clients é o que listas, ficha e cockpit leem — no mesmo passo, com a mesma escala.
+    for (let i = 0; i < saude.length; i += 20) {
+      const lote = await Promise.all(saude.slice(i, i + 20).map((x) =>
+        supabaseAdmin.from("clients")
+          .update({ ...gravacaoDaSaude(x).cache, health_computed_at: agoraIso })
+          .eq("id", x.clientId)));
+      for (const r of lote) if (r.error) erros.push(`clients: ${r.error.message}`);
+    }
+    gravacao = { linhas: linhas.length, clientes: saude.length, erros: [...new Set(erros)] };
   }
 
   // ── ATRASO: de quem é ──────────────────────────────────────────────────
@@ -274,7 +300,8 @@ export async function GET(req: NextRequest) {
   const score = loneScore(dims);
 
   return NextResponse.json({
-    ok: true,
+    ok: !gravacao || gravacao.erros.length === 0,
+    ...(gravacao ? { gravacao } : {}),
     lone_score: { ...score, leitura: leituraLoneScore(score) },
     saude: {
       ...dist,
@@ -297,5 +324,5 @@ export async function GET(req: NextRequest) {
           : "",
       ].filter(Boolean),
     },
-  });
+  }, { status: gravacao?.erros.length ? 500 : 200 });
 }

@@ -150,7 +150,7 @@ export default function GruposPage() {
       </div>
 
       {dupGroupJids.length > 0 && (
-        <div className="rounded-xl bg-lone-warning-bg/[0.06] border border-lone-warning-border px-4 py-3">
+        <div className="rounded-xl bg-lone-warning-bg border border-lone-warning-border px-4 py-3">
           <p className="text-xs text-lone-warning font-medium flex items-center gap-1.5">
             <AlertTriangle size={13} /> {dupGroupJids.length} grupo(s) com mais de um cliente — confira (pode ser proposital, ex.: mesmo dono; senão um vê o relatório do outro):
           </p>
@@ -164,7 +164,9 @@ export default function GruposPage() {
         </div>
       )}
 
-      <div className="rounded-xl border border-border overflow-hidden">
+      {/* Tabela larga: no celular rola de lado em vez de espremer as colunas. */}
+      <div className="rounded-xl border border-border overflow-x-auto">
+        <div className="min-w-[860px]">
         <div className="grid grid-cols-[1.1fr_1.3fr_100px_95px_210px_70px] gap-3 px-4 py-2.5 bg-card border-b border-border">
           {["Cliente", "Grupo WhatsApp", "Verba mín (R$)", "Destino", "Alertas", "Confiança"].map((h) => (
             <p key={h} className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">{h}</p>
@@ -175,7 +177,7 @@ export default function GruposPage() {
           const needsReview = !sel[r.clientId] || conf === "low" || conf === "none";
           const isDup = !!sel[r.clientId] && groupCounts[sel[r.clientId]] > 1;
           return (
-            <div key={r.clientId} className={`grid grid-cols-[1.1fr_1.3fr_100px_95px_210px_70px] gap-3 px-4 py-2.5 border-b border-border last:border-0 items-center ${isDup ? "bg-destructive/[0.05]" : needsReview ? "bg-lone-warning-bg/[0.03]" : ""}`}>
+            <div key={r.clientId} className={`grid grid-cols-[1.1fr_1.3fr_100px_95px_210px_70px] gap-3 px-4 py-2.5 border-b border-border last:border-0 items-center ${isDup ? "bg-destructive/5" : needsReview ? "bg-lone-warning-bg" : ""}`}>
               <p className="text-sm text-foreground truncate" title={r.metaAccountId}>
                 {r.clientName}
                 {isDup && <span title="Grupo repetido — confira" className="ml-1.5 text-[9px] text-destructive font-medium whitespace-nowrap">⚠️ repetido</span>}
@@ -233,6 +235,7 @@ export default function GruposPage() {
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );

@@ -26,21 +26,26 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   // `card_attachments` (entrega multi-arte, que é o caminho padrão hoje). O portal filtrava só por
   // image_url — e como a entrega atual grava apenas em card_attachments, o cliente abria o portal e
   // NÃO VIA NENHUMA ARTE. Em produção: 60 cards entregues, 0 com image_url, 60 com anexo.
-  const { data: cards } = await supabaseAdmin
+  const { data: cards, error: errCards } = await supabaseAdmin
     .from("content_cards")
     .select("id, title, format, status, image_url, due_date, scheduled_at, publish_verified_at, designer_delivered_at, client_approved_at, archived_at")
     .eq("client_id", client.id as string)
-    // ARQUIVADO NÃO É APAGADO (18/09): a equipe arquiva o card depois de postar para limpar o quadro —
-    // 25 por dia. O portal excluía arquivados e o cliente abria "Conteúdo" VAZIO (UNAFER: 9 artes
-    // entregues, 9 arquivadas, 0 visíveis; Calabria 0/27, CIIL 0/24). Arquivar é organização do time;
-    // para o cliente, arte entregue é arte entregue. Só fica de fora o que foi apagado de verdade
-    // (não existe apagar: soft-delete é o próprio archived_at + sem entrega — coberto pelo .or).
     .or("image_url.not.is.null,designer_delivered_at.not.is.null")
     .order("due_date", { ascending: false })
-    .limit(40);
+    .limit(60);
+  if (errCards) {
+    console.error("[portal/content] falhou a leitura dos cards:", client.id, errCards.message);
+    return NextResponse.json({ error: "Não consegui carregar suas artes agora." }, { status: 503 });
+  }
+
+  // ARQUIVADO: a equipe arquiva depois de POSTAR para limpar o quadro (UNAFER: 9 entregues, 9
+  // arquivadas) — esses continuam valendo para o cliente. Mas arquivar também é como se descarta
+  // arte recusada ou pedido cancelado, e isso não é do cliente ver. Regra: arquivado só se publicado.
+  const visiveis = (cards ?? []).filter((c) =>
+    !c.archived_at || c.status === "published" || !!c.publish_verified_at);
 
   // Capa vinda dos anexos (a primeira, por posição) para os cards sem image_url.
-  const semCapa = (cards ?? []).filter((c) => !(c.image_url as string)?.trim()).map((c) => c.id as string);
+  const semCapa = visiveis.filter((c) => !(c.image_url as string)?.trim()).map((c) => c.id as string);
   const capaDeAnexo = new Map<string, string>();
   if (semCapa.length) {
     const { data: anexos } = await supabaseAdmin
@@ -59,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     for (const [cid, m] of melhor) capaDeAnexo.set(cid, m.url);
   }
 
-  const items = (cards ?? [])
+  const items = visiveis
     .map((c) => ({ ...c, image_url: (c.image_url as string)?.trim() || capaDeAnexo.get(c.id as string) || null }))
     .filter((c) => (c.image_url as string)?.startsWith("http") || (c.image_url as string)?.startsWith("/"))
     .slice(0, 12)

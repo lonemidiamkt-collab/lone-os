@@ -5,6 +5,7 @@ import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import Link from "next/link";
+import { todaySP, getAttentionLabel } from "@/lib/utils";
 import {
   AlertTriangle, Clock, FileText, Instagram,
   TrendingDown, UserX, Calendar, CheckCircle,
@@ -29,7 +30,7 @@ export default function SmartAlerts() {
   const alerts = useMemo<Alert[]>(() => {
     const result: Alert[] = [];
     const now = Date.now();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todaySP();
 
     for (const client of clients) {
       if (client.status === "onboarding" || client.draftStatus) continue;
@@ -42,8 +43,8 @@ export default function SmartAlerts() {
             id: `post-${client.id}`,
             type: daysSince >= 10 ? "danger" : "warning",
             icon: Instagram,
-            title: `${client.nomeFantasia || client.name} sem post ha ${daysSince} dias`,
-            detail: `Ultimo post: ${client.lastPostDate}`,
+            title: `${client.nomeFantasia || client.name} sem post há ${daysSince} dias`,
+            detail: `Último post: ${client.lastPostDate}`,
             href: `/clients/${client.id}`,
             clientId: client.id,
           });
@@ -57,7 +58,7 @@ export default function SmartAlerts() {
           type: "danger",
           icon: UserX,
           title: `${client.nomeFantasia || client.name} em risco de churn`,
-          detail: `Atencao: ${client.attentionLevel}`,
+          detail: `Atenção: ${getAttentionLabel(client.attentionLevel)}`,
           href: `/clients/${client.id}`,
           clientId: client.id,
         });
@@ -88,7 +89,7 @@ export default function SmartAlerts() {
         type: "warning",
         icon: Clock,
         title: `Tarefa atrasada: ${task.title}`,
-        detail: `Responsavel: ${task.assignedTo} — Prazo: ${task.dueDate}`,
+        detail: `Responsável: ${task.assignedTo} — Prazo: ${task.dueDate}`,
         href: `/clients/${task.clientId}`,
       });
     }
@@ -105,8 +106,8 @@ export default function SmartAlerts() {
         id: `stuck-${card.id}`,
         type: "warning",
         icon: Calendar,
-        title: `Card parado em aprovacao: ${card.title}`,
-        detail: `Cliente: ${card.clientName} — Responsavel: ${card.socialMedia}`,
+        title: `Card parado em aprovação: ${card.title}`,
+        detail: `Cliente: ${card.clientName} — Responsável: ${card.socialMedia}`,
         href: "/social",
       });
     }
@@ -130,7 +131,7 @@ export default function SmartAlerts() {
           Alertas Inteligentes
         </h3>
         <div className="flex items-center gap-2">
-          {dangerCount > 0 && <span className="text-[10px] px-2 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20">{dangerCount} criticos</span>}
+          {dangerCount > 0 && <span className="text-[10px] px-2 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20">{dangerCount} críticos</span>}
           {warningCount > 0 && <span className="text-[10px] px-2 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border">{warningCount} avisos</span>}
         </div>
       </div>

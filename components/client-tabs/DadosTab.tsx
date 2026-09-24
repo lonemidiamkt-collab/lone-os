@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import type { Client, Role, ServiceType, ContentProfile } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
+import type { ClientPatch } from "@/stores/useClientsStore";
 import {
   Building2, Shield, FileText, Eye, EyeOff, Download, Upload,
   Pencil, Check, Loader2, AlertTriangle, Send, ExternalLink,
@@ -16,16 +18,18 @@ interface Props {
   client: Client;
   role: Role;
   currentUser: string;
-  updateClientData: (id: string, data: Partial<Client>) => void;
+  updateClientData: (id: string, data: ClientPatch) => Promise<void>;
   onNavigateTab: (tab: string) => void;
   generateOnboardingLink: () => void;
   generatingLink: boolean;
   onboardingLink?: string | null;
+  /** false enquanto os campos sensíveis não chegaram (ou falharam): editar agora gravaria vazio por cima. */
+  dadosCompletos: boolean;
 }
 
 type Tab = "overview" | "dados" | "contratos" | "chat" | "historico" | "tasks" | "content" | "onboarding" | "wallet" | "reports";
 
-export default function DadosTab({ client, role, currentUser, updateClientData, onNavigateTab, generateOnboardingLink, generatingLink, onboardingLink }: Props) {
+export default function DadosTab({ client, role, currentUser, updateClientData, onNavigateTab, generateOnboardingLink, generatingLink, onboardingLink, dadosCompletos }: Props) {
   const isAdmin = role === "admin" || role === "manager";
   const team = useTeamMembers();
 
@@ -127,7 +131,16 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
     assignedDesigner: client.assignedDesigner || "",
   });
 
-  useEffect(() => { setForm(initForm()); }, [client.id]);
+  // Os campos sensíveis (logins, CPF, endereço) chegam DEPOIS, por /api/clients/[id]. Dependendo só
+  // do id, o form ficava com o vazio do primeiro render e o save gravava vazio por cima.
+  const assinaturaSensivel = [
+    client.id, client.cpfCnpj, client.facebookLogin, client.instagramLogin, client.googleAdsLogin,
+    client.enderecoRua, client.enderecoNumero, client.enderecoBairro, client.enderecoCep, client.razaoSocial, client.cnpj,
+  ].join("|");
+  useEffect(() => {
+    if (!editing) setForm(initForm());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assinaturaSensivel]);
 
   useEffect(() => {
     let mounted = true;
@@ -149,27 +162,29 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       // de senhas (via /api/client-vault que criptografa server-side).
       // await: o store dá throw se o banco recusar → cai no catch com toast (antes salvava
       // otimista e não avisava nada em caso de falha).
+      // Campo esvaziado vira null (apaga); `|| undefined` impedia limpar qualquer dado errado.
+      const v = (x: string | undefined) => (x && x.trim() ? x.trim() : null);
       await updateClientData(client.id, {
-        nomeFantasia: form.nomeFantasia || undefined, razaoSocial: form.razaoSocial || undefined,
-        cnpj: form.cnpj || undefined, nicho: form.nicho || undefined,
-        contactName: form.contactName || undefined,
-        cpfCnpj: form.cpfCnpj || undefined, phone: form.phone || undefined,
-        emailCorporativo: form.emailCorporativo || undefined,
-        email: form.emailCorporativo || undefined,
-        enderecoRua: form.enderecoRua || undefined, enderecoNumero: form.enderecoNumero || undefined,
-        enderecoBairro: form.enderecoBairro || undefined,
-        enderecoCidade: form.enderecoCidade || undefined, enderecoEstado: form.enderecoEstado || undefined,
-        enderecoCep: form.enderecoCep || undefined,
+        nomeFantasia: v(form.nomeFantasia), razaoSocial: v(form.razaoSocial),
+        cnpj: v(form.cnpj), nicho: v(form.nicho),
+        contactName: v(form.contactName),
+        cpfCnpj: v(form.cpfCnpj), phone: v(form.phone),
+        emailCorporativo: v(form.emailCorporativo),
+        email: v(form.emailCorporativo) ?? undefined,
+        enderecoRua: v(form.enderecoRua), enderecoNumero: v(form.enderecoNumero),
+        enderecoBairro: v(form.enderecoBairro),
+        enderecoCidade: v(form.enderecoCidade), enderecoEstado: v(form.enderecoEstado),
+        enderecoCep: v(form.enderecoCep),
         // Logins (não-sensível) ainda via path normal
-        facebookLogin: form.facebookLogin || undefined,
-        instagramLogin: form.instagramLogin || undefined,
-        googleAdsLogin: form.googleAdsLogin || undefined,
+        facebookLogin: v(form.facebookLogin),
+        instagramLogin: v(form.instagramLogin),
+        googleAdsLogin: v(form.googleAdsLogin),
         // Operational fields
         serviceType: (form.serviceType as ServiceType) || undefined,
-        perfilConteudo: (form.perfilConteudo as ContentProfile) || undefined,
-        assignedTraffic: form.assignedTraffic || undefined,
-        assignedSocial: form.assignedSocial || undefined,
-        assignedDesigner: form.assignedDesigner || undefined,
+        perfilConteudo: (form.perfilConteudo as ContentProfile) || null,
+        assignedTraffic: v(form.assignedTraffic),
+        assignedSocial: v(form.assignedSocial),
+        assignedDesigner: v(form.assignedDesigner),
       });
 
       // Senhas: só envia se foi editada (evita regravar blob criptografado com string vazia).
@@ -178,18 +193,21 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       if (form.instagramPassword && form.instagramPassword !== "••••••••") pwUpdates.push({ field: "instagram_password", value: form.instagramPassword });
       if (form.googleAdsPassword && form.googleAdsPassword !== "••••••••") pwUpdates.push({ field: "google_ads_password", value: form.googleAdsPassword });
 
+      const falhas: string[] = [];
       for (const u of pwUpdates) {
-        await authedFetch("/api/client-vault", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clientId: client.id, table: "clients", field: u.field, value: u.value }),
-        }).catch((err) => console.error("[vault] save failed:", u.field, err));
+        const r = await chamar("/api/client-vault", { clientId: client.id, table: "clients", field: u.field, value: u.value });
+        if (!r.ok) falhas.push(`${u.field.replace("_password", "")}: ${r.erro}`);
+      }
+      if (falhas.length) {
+        // Os dados foram salvos; a senha não. Mantém em edição para não perder o que foi digitado.
+        toast.error(`Dados salvos, mas a senha não: ${falhas.join(" · ")}`);
+        return;
       }
 
       setEditing(false);
       toast.success("Dados do cliente salvos.");
-    } catch {
-      toast.error("Não foi possível salvar. Tente de novo.");
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "Não foi possível salvar. Tente de novo.");
     } finally { setSaving(false); }
   };
 
@@ -203,23 +221,18 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   };
 
   const [revealingPw, setRevealingPw] = useState<string | null>(null);
+  // Sem a revelação não dá pra saber se há senha no cofre — "Armazenada" era chute.
+  const [semSenha, setSemSenha] = useState<Record<string, boolean>>({});
   const revealPassword = async (pwKey: string): Promise<void> => {
     const field = pwFieldMap[pwKey];
     if (!field) return;
     setRevealingPw(pwKey);
-    try {
-      const res = await authedFetch(`/api/client-vault?clientId=${client.id}&table=clients&field=${field}`);
-      if (!res.ok) {
-        setForm((p) => ({ ...p, [pwKey]: "" }));
-        return;
-      }
-      const data = await res.json();
-      setForm((p) => ({ ...p, [pwKey]: data.value ?? "" }));
-    } catch {
-      setForm((p) => ({ ...p, [pwKey]: "" }));
-    } finally {
-      setRevealingPw(null);
-    }
+    const r = await chamar<{ value: string | null }>(`/api/client-vault?clientId=${client.id}&table=clients&field=${field}`);
+    setRevealingPw(null);
+    if (!r.ok) { toast.error(`Não consegui revelar a senha: ${r.erro}`); return; }
+    const valor = r.data?.value ?? "";
+    setSemSenha((p) => ({ ...p, [pwKey]: !valor }));
+    setForm((p) => ({ ...p, [pwKey]: valor }));
   };
 
   const handleDocUpload = async (file: File, docType: string) => {
@@ -232,7 +245,11 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       const data = await res.json();
       if (res.ok && data.url) {
         const field = docType === "contrato_social" ? "docContratoSocial" : docType === "identidade" ? "docIdentidade" : "docLogo";
-        updateClientData(client.id, { [field]: data.url });
+        try {
+          await updateClientData(client.id, { [field]: data.url });
+        } catch (e) {
+          setUploadError(`Arquivo subiu, mas não ficou salvo na ficha: ${e instanceof Error ? e.message : "erro"}`);
+        }
       } else {
         setUploadError(data.error ?? "Falha no upload");
         setTimeout(() => setUploadError(null), 5000);
@@ -346,7 +363,9 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
               </button>
             </>
           ) : isAdmin ? (
-            <button onClick={() => setEditing(true)} className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-primary/30 hover:text-primary">
+            <button onClick={() => { setForm(initForm()); setEditing(true); }} disabled={!dadosCompletos}
+              title={dadosCompletos ? undefined : "Os dados completos do cliente não carregaram — editar agora apagaria CPF, endereço e logins."}
+              className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-primary/30 hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed">
               <Pencil size={12} /> Editar Dados
             </button>
           ) : null}
@@ -357,12 +376,12 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           Antes só existia UMA logo (doc_logo, do onboarding) e 32 de 52 clientes não tinham. */}
       <div className="rounded-xl border border-border bg-card p-4">
         <MarcaDoCliente clientId={client.id} podeEditar={["admin", "manager", "social", "designer", "traffic"].includes(role)}
-          onCapaChange={(url) => updateClientData(client.id, { docLogo: url })} />
+          onCapaChange={(url) => { updateClientData(client.id, { docLogo: url }).catch((e) => toast.error(`Capa não salva: ${e instanceof Error ? e.message : "erro"}`)); }} />
       </div>
 
       {/* Link de Correção gerado */}
       {onboardingLink && (
-        <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg/[0.03] p-4 space-y-2">
+        <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg p-4 space-y-2">
           <p className="text-xs font-medium text-lone-warning flex items-center gap-1.5">
             <LinkIcon size={12} /> Link de Preenchimento Gerado
           </p>
@@ -392,7 +411,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
 
       {/* Pendencies */}
       {missing.length > 0 && (
-        <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg/[0.03] p-4">
+        <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg p-4">
           <p className="text-xs font-medium text-lone-warning flex items-center gap-1.5 mb-2">
             <AlertTriangle size={12} /> {missing.length} {missing.length === 1 ? "pendencia" : "pendencias"}
           </p>
@@ -414,7 +433,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                 <img src={client.docLogo} alt={`Logo ${companyName}`} className="max-w-full max-h-full object-contain" />
               </div>
             ) : (
-              <div className="w-28 h-28 rounded-2xl border-2 border-dashed border-lone-warning-border bg-lone-warning-bg/[0.02] flex flex-col items-center justify-center gap-1.5">
+              <div className="w-28 h-28 rounded-2xl border-2 border-dashed border-lone-warning-border bg-lone-warning-bg flex flex-col items-center justify-center gap-1.5">
                 <AlertTriangle size={18} className="text-lone-warning" />
                 <span className="text-[10px] text-lone-warning text-center px-2">Logo pendente</span>
               </div>
@@ -504,10 +523,10 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         </div>
       )}
 
-      {/* BLOCO 1: Identificacao */}
+      {/* BLOCO 1: Identificação */}
       <div className="rounded-xl border border-border bg-card p-5 space-y-4">
         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-          <Building2 size={11} className="text-primary" /> Identificacao Corporativa
+          <Building2 size={11} className="text-primary" /> Identificação Corporativa
         </p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-3">
           {([
@@ -525,7 +544,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                 <input value={form[key] || ""} onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 transition-colors" />
               ) : (
-                <p className="text-sm text-foreground">{form[key] || <span className="text-muted-foreground italic">Nao informado</span>}</p>
+                <p className="text-sm text-foreground">{form[key] || <span className="text-muted-foreground italic">Não informado</span>}</p>
               )}
             </div>
           ))}
@@ -544,7 +563,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
               const hasLogin = !!form[loginKey];
               const hasPw = !!form[pwKey];
               return (
-                <div key={loginKey} className={`rounded-xl border p-4 space-y-3 ${hasLogin ? "border-border bg-surface" : "border-lone-warning-border bg-lone-warning-bg/[0.02]"}`}>
+                <div key={loginKey} className={`rounded-xl border p-4 space-y-3 ${hasLogin ? "border-border bg-surface" : "border-lone-warning-border bg-lone-warning-bg"}`}>
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-medium text-foreground flex items-center gap-1.5"><span>{icon}</span> {platform}</p>
                     <div className="flex items-center gap-1.5">
@@ -565,7 +584,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                           className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" placeholder="Login / Email" />
                       ) : (
                         <div className="flex items-center gap-2">
-                          <p className="text-sm text-foreground flex-1">{form[loginKey] || <span className="text-muted-foreground italic">Nao informado</span>}</p>
+                          <p className="text-sm text-foreground flex-1">{form[loginKey] || <span className="text-muted-foreground italic">Não informado</span>}</p>
                           {hasLogin && <button type="button" onClick={() => copyToClip(form[loginKey])} className="text-muted-foreground hover:text-primary transition-colors" title="Copiar"><LinkIcon size={11} /></button>}
                         </div>
                       )}
@@ -591,7 +610,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                               showPw[pwKey] ? form[pwKey] : "••••••••"
                             ) : (
                               <span className="text-muted-foreground italic font-sans text-[11px]">
-                                {revealingPw === pwKey ? "Descriptografando..." : "🔒 Armazenada (clique pra revelar)"}
+                                {revealingPw === pwKey ? "Descriptografando..." : semSenha[pwKey] ? "Nenhuma senha no cofre" : "🔒 Clique no olho pra revelar"}
                               </span>
                             )}
                           </p>
@@ -812,7 +831,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           {(() => {
             const agenteAtivo = client.agenteAtivo !== false;
             return (
-              <div className="flex items-center justify-between pt-3 border-t border-border/60">
+              <div className="flex items-center justify-between pt-3 border-t border-border">
                 <div>
                   <p className="text-xs font-medium text-foreground">🤖 Agente CS</p>
                   <p className="text-[10px] text-muted-foreground">

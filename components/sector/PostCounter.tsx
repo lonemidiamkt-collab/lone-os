@@ -1,6 +1,7 @@
 "use client";
 
 import type { ContentCard } from "@/lib/types";
+import { todaySP } from "@/lib/utils";
 import { Calendar, Clock } from "lucide-react";
 
 interface Props {
@@ -9,7 +10,7 @@ interface Props {
 }
 
 export default function PostCounter({ cards, currentUser }: Props) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todaySP();
   const myCards = cards.filter((c) => c.socialMedia === currentUser);
 
   const todayPosts = myCards.filter((c) => c.dueDate === today && c.status !== "published");
@@ -25,7 +26,7 @@ export default function PostCounter({ cards, currentUser }: Props) {
   return (
     <div className="card space-y-3">
       <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
-        <Calendar size={14} className="text-primary" /> Publicacoes
+        <Calendar size={14} className="text-primary" /> Publicações
       </h3>
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 text-center">
@@ -38,7 +39,7 @@ export default function PostCounter({ cards, currentUser }: Props) {
         </div>
         <div className={`rounded-lg border p-3 text-center ${pendingApproval.length > 0 ? "bg-lone-warning-bg border-lone-warning-border" : "bg-surface border-border"}`}>
           <p className={`text-lg font-bold ${pendingApproval.length > 0 ? "text-lone-warning" : "text-foreground"}`}>{pendingApproval.length}</p>
-          <p className="text-[10px] text-muted-foreground">Aprovacao</p>
+          <p className="text-[10px] text-muted-foreground">Aprovação</p>
         </div>
       </div>
       {todayPosts.length > 0 && (

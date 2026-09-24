@@ -126,7 +126,6 @@ export interface RelatorioFinal {
   totais: Metricas;
   pesquisados: number; qualificados: number; abordados: number;
   custo_total_usd: number; custo_por_reuniao_usd: number | null; custo_por_cliente_usd: number | null;
-  receita_brl: number | null;
   cruzamentos: Cruzamentos;
   gerado_em: string;
 }
@@ -139,16 +138,12 @@ export async function gerarRelatorioFinal(c: CampanhaRow, agora = new Date()): P
   const { count: qualificados } = await supabaseAdmin.from("prospects").select("id", { count: "exact", head: true }).gte("created_at", de).in("classe", ["A", "B"]);
   const reunioes = totais.reunioes_online + totais.visitas;
   const dias = Math.max(1, Math.round((agora.getTime() - new Date(de).getTime()) / 86_400_000));
-  // Receita: valor dos leads do CRM ganhos que vieram da prospecção (se o Roberto preencheu).
-  const { data: ganhos } = await supabaseAdmin.from("crm_leads").select("valor_orcamento").eq("estagio", "ganho").not("prospect_id", "is", null);
-  const receita = (ganhos ?? []).reduce((s, r) => s + Number((r as { valor_orcamento: number | null }).valor_orcamento ?? 0), 0);
   return {
     campanha: { nome: c.nome, inicio: c.iniciado_em, fim: c.termina_em, dias_executados: dias },
     totais, pesquisados: pesquisados ?? 0, qualificados: qualificados ?? 0, abordados: totais.abordados,
     custo_total_usd: totais.custo_usd,
     custo_por_reuniao_usd: reunioes ? Math.round((totais.custo_usd / reunioes) * 100) / 100 : null,
     custo_por_cliente_usd: totais.vendas ? Math.round((totais.custo_usd / totais.vendas) * 100) / 100 : null,
-    receita_brl: receita || null,
     cruzamentos: await cruzamentos(de, ate),
     gerado_em: agora.toISOString(),
   };
@@ -165,7 +160,7 @@ export function textoRelatorioFinal(r: RelatorioFinal): string {
     linha("Prospects pesquisados", r.pesquisados), linha("Qualificados (A/B)", r.qualificados), linha("Empresas abordadas", r.abordados),
     linha("Respostas", t.respostas), linha("Taxa de resposta", t.conversao.prospect_resposta), linha("Decisores alcançados", t.decisores),
     linha("Interessados", t.interessados), linha("Reuniões online", t.reunioes_online), linha("Visitas", t.visitas), linha("Realizadas", t.realizadas),
-    linha("No-show", t.no_shows), linha("Propostas", t.propostas), linha("Clientes", t.vendas), linha("Receita (CRM)", r.receita_brl !== null ? `R$ ${r.receita_brl.toLocaleString("pt-BR")}` : "—"),
+    linha("No-show", t.no_shows), linha("Propostas", t.propostas), linha("Clientes", t.vendas),
     linha("Custo do agente", `${brl(r.custo_total_usd)} (US$ ${r.custo_total_usd.toFixed(2)})`),
     linha("Custo por reunião", r.custo_por_reuniao_usd !== null ? brl(r.custo_por_reuniao_usd) : "—"),
     linha("Custo por cliente", r.custo_por_cliente_usd !== null ? brl(r.custo_por_cliente_usd) : "—"),

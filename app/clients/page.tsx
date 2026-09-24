@@ -13,34 +13,31 @@ import type { Client } from "@/lib/types";
 import {
   getAttentionColor,
   getAttentionLabel,
-  getStatusColor,
-  getStatusLabel,
   getStatusLed,
   calcHealthScore,
 } from "@/lib/utils";
+import { saudeExibida, ROTULO_NIVEL_SAUDE, COR_NIVEL_SAUDE } from "@/lib/scores/health";
+import { ROTULO_RESULTADO_ANUNCIO, TITULO_RESULTADO_ANUNCIO } from "@/lib/scores/resultado-anuncio";
 import {
   Search, UserPlus, ChevronRight,
-  ExternalLink, MoreHorizontal, Facebook, AlertTriangle, Zap,
-  Check, X, Loader2, Clock, Send, Archive, RotateCcw, Trash2, Pause, Play,
+  ExternalLink, MoreHorizontal, Facebook,
+  Loader2, Clock, Archive, RotateCcw, Trash2, Pause, Play,
 } from "lucide-react";
 import Link from "next/link";
-import { mockAdCampaigns } from "@/lib/mockData";
 import { fetchDraftClients, fetchChurnedClients } from "@/lib/supabase/queries";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { rotuloPausa } from "@/lib/clients/pausa";
 
-// Health score: uses shared calcHealthScore from lib/utils.ts
-
-function HealthBar({ score }: { score: number }) {
-  // Cor por faixa (antes era sempre azul → um cliente com 22 parecia igual a um com 90).
-  const bar = score >= 70 ? "bg-lone-success" : score >= 40 ? "bg-lone-warning" : "bg-destructive";
-  const txt = score >= 70 ? "text-lone-success" : score >= 40 ? "text-lone-warning" : "text-destructive";
+// Mesma régua da ficha e do termômetro (lib/scores/health.ts) — cor e rótulo do mesmo nível.
+function HealthBar({ client }: { client: Client }) {
+  const s = saudeExibida(client as Client & { currentHealthScore?: number | null; currentHealthLevel?: string | null }, () => calcHealthScore(client));
+  const cor = COR_NIVEL_SAUDE[s.nivel];
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2" title={`${ROTULO_NIVEL_SAUDE[s.nivel]}${s.doCache ? "" : " (estimativa)"}`}>
       <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${bar}`} style={{ width: `${score}%` }} />
+        <div className={`h-full rounded-full transition-all ${cor.barra}`} style={{ width: `${s.score ?? 0}%` }} />
       </div>
-      <span className={`text-xs font-medium tabular-nums ${txt}`}>{score}</span>
+      <span className={`text-xs font-medium tabular-nums ${cor.texto}`}>{s.score ?? "—"}</span>
     </div>
   );
 }
@@ -50,7 +47,7 @@ export default function ClientsPage() {
   const clients = useClientsStore((s) => s.clients);
   const init = useClientsStore((s) => s.init);
   const subscribeRealtime = useClientsStore((s) => s.subscribeRealtime);
-  const updateClientData = useClientsStore((s) => s.updateClient);
+  const patchClientLocal = useClientsStore((s) => s.patchClientLocal);
   const { role, currentUser } = useRole();
 
   useEffect(() => {
@@ -105,47 +102,13 @@ export default function ClientsPage() {
   // ─── Draft clients (pending invite / awaiting approval) ───
   const isAdmin = role === "admin" || role === "manager";
   const [drafts, setDrafts] = useState<Client[]>([]);
-  const [approvingId, setApprovingId] = useState<string | null>(null);
-  const [draftActionError, setDraftActionError] = useState<string | null>(null);
+  const [draftsErro, setDraftsErro] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) return;
-    fetchDraftClients().then(setDrafts);
+    // Só a contagem: a revisão e a aprovação moram em /clients/pending (bloco duplicado removido).
+    fetchDraftClients().then(setDrafts).catch(() => setDraftsErro(true));
   }, [isAdmin]);
-
-  const handleApprove = async (clientId: string) => {
-    setApprovingId(clientId);
-    setDraftActionError(null);
-    try {
-      const res = await authedFetch("/api/onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "approve", clientId }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setDrafts((prev) => prev.filter((d) => d.id !== clientId));
-    } catch (err) {
-      setDraftActionError(`Erro ao aprovar: ${err instanceof Error ? err.message : "tente novamente"}`);
-    } finally {
-      setApprovingId(null);
-    }
-  };
-
-  const handleReject = async (clientId: string) => {
-    if (!confirm("Tem certeza que deseja rejeitar este cadastro? Os dados serao removidos.")) return;
-    setDraftActionError(null);
-    try {
-      const res = await authedFetch("/api/onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reject", clientId }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setDrafts((prev) => prev.filter((d) => d.id !== clientId));
-    } catch (err) {
-      setDraftActionError(`Erro ao rejeitar: ${err instanceof Error ? err.message : "tente novamente"}`);
-    }
-  };
 
   // ─── Lifecycle: arquivar (churn) / reativar (admin/manager) ───
   const [showArchived, setShowArchived] = useState(false);
@@ -201,7 +164,8 @@ export default function ClientsPage() {
         body: JSON.stringify({ action: "pause", reason: pauseReason.trim(), until: pauseUntil || undefined }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`);
-      updateClientData(pauseTarget.id, { pausedAt: new Date().toISOString(), pausedReason: pauseReason.trim(), pausedUntil: pauseUntil || null });
+      // A rota de lifecycle já gravou; aqui é só o estado da tela.
+      patchClientLocal(pauseTarget.id, { pausedAt: new Date().toISOString(), pausedReason: pauseReason.trim(), pausedUntil: pauseUntil || null });
       setPauseTarget(null); setPauseReason(""); setPauseUntil("");
     } catch (e) {
       setLifecycleError(e instanceof Error ? e.message : "Erro ao pausar");
@@ -215,7 +179,7 @@ export default function ClientsPage() {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "resume" }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`);
-      updateClientData(clientId, { pausedAt: null, pausedReason: null, pausedUntil: null });
+      patchClientLocal(clientId, { pausedAt: null, pausedReason: null, pausedUntil: null });
     } catch (e) {
       setLifecycleError(e instanceof Error ? e.message : "Erro ao retomar");
     } finally { setLifecycleBusy(false); }
@@ -461,8 +425,8 @@ export default function ClientsPage() {
             <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
               {[
                 { label: isOperator ? "Meus Clientes" : "Total de Clientes", value: filtered.length, color: "text-foreground", bg: "bg-muted" },
-                { label: "Bons Resultados", value: filtered.filter((c) => c.status === "good").length, color: "text-primary", bg: "bg-primary/10" },
-                { label: "Em Risco (Churn)", value: filtered.filter((c) => c.status === "at_risk").length, color: "text-lone-danger", bg: "bg-lone-danger-bg" },
+                { label: `${TITULO_RESULTADO_ANUNCIO}: bom`, value: filtered.filter((c) => c.status === "good").length, color: "text-primary", bg: "bg-primary/10" },
+                { label: `${TITULO_RESULTADO_ANUNCIO}: ruim`, value: filtered.filter((c) => c.status === "at_risk").length, color: "text-lone-danger", bg: "bg-lone-danger-bg" },
                 { label: "Em Onboarding", value: filtered.filter((c) => c.status === "onboarding").length, color: "text-primary", bg: "bg-primary/10" },
               ].map((stat) => (
                 <div key={stat.label} className={`rounded-xl p-4 ${stat.bg} border border-border`}>
@@ -504,72 +468,15 @@ export default function ClientsPage() {
               </div>
             )}
 
-            {isAdmin && drafts.length > 0 && (
-              <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Clock size={14} className="text-lone-warning" />
-                    <h3 className="text-sm font-semibold text-lone-warning">
-                      Cadastros Pendentes ({drafts.length})
-                    </h3>
-                  </div>
-                  <Link href="/clients/pending" className="text-xs text-primary hover:underline flex items-center gap-1">
-                    Revisar todos <ExternalLink size={10} />
-                  </Link>
-                </div>
-                {draftActionError && (
-                  <p className="text-xs text-lone-danger bg-lone-danger-bg border border-lone-danger-border rounded-md px-3 py-2">{draftActionError}</p>
-                )}
-                <div className="space-y-2">
-                  {drafts.map((draft) => (
-                    <div key={draft.id} className="flex items-center gap-3 bg-muted border border-border rounded-lg p-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground">{draft.name}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] text-muted-foreground">{draft.industry}</span>
-                          {draft.draftStatus === "pending_invite" && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border flex items-center gap-1">
-                              <Send size={8} /> Link enviado
-                            </span>
-                          )}
-                          {draft.draftStatus === "awaiting_approval" && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
-                              <Check size={8} /> Formulario recebido
-                            </span>
-                          )}
-                          {draft.contactName && (
-                            <span className="text-[10px] text-muted-foreground">Contato: {draft.contactName}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Link
-                          href={`/clients/pending?client=${draft.id}`}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors border border-primary/20"
-                        >
-                          <ExternalLink size={10} /> Revisar
-                        </Link>
-                        {draft.draftStatus === "awaiting_approval" && (
-                          <button
-                            onClick={() => handleApprove(draft.id)}
-                            disabled={approvingId === draft.id}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-lone-success-bg text-lone-success text-xs font-medium hover:opacity-80 transition-colors border border-lone-success-border"
-                          >
-                            {approvingId === draft.id ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
-                            Aprovar
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleReject(draft.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-muted-foreground text-xs hover:text-lone-danger hover:bg-destructive/10 transition-colors"
-                        >
-                          <X size={10} /> Rejeitar
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            {isAdmin && (drafts.length > 0 || draftsErro) && (
+              <Link href="/clients/pending"
+                className="flex items-center justify-between rounded-xl border border-lone-warning-border bg-lone-warning-bg px-4 py-3 text-sm text-lone-warning hover:opacity-90">
+                <span className="flex items-center gap-2">
+                  <Clock size={14} />
+                  {draftsErro ? "Não consegui contar os cadastros pendentes — abrir a fila" : `Cadastros pendentes (${drafts.length})`}
+                </span>
+                <span className="flex items-center gap-1 text-xs">Revisar <ExternalLink size={10} /></span>
+              </Link>
             )}
 
             {/* Filters + Add Button */}
@@ -588,11 +495,11 @@ export default function ClientsPage() {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="bg-card border border-border text-sm text-secondary-foreground rounded-lg px-3 py-2 outline-none focus:border-primary"
               >
-                <option value="all">Todos os status</option>
-                <option value="onboarding">Onboarding</option>
-                <option value="good">Bons Resultados</option>
-                <option value="average">Resultados Médios</option>
-                <option value="at_risk">Em Risco</option>
+                <option value="all">{TITULO_RESULTADO_ANUNCIO}: todos</option>
+                <option value="onboarding">{ROTULO_RESULTADO_ANUNCIO.onboarding}</option>
+                <option value="good">Anúncio: {ROTULO_RESULTADO_ANUNCIO.good}</option>
+                <option value="average">Anúncio: {ROTULO_RESULTADO_ANUNCIO.average}</option>
+                <option value="at_risk">Anúncio: {ROTULO_RESULTADO_ANUNCIO.at_risk}</option>
               </select>
               <select
                 value={filtroReuniao}
@@ -703,10 +610,7 @@ export default function ClientsPage() {
                 </div>
               )}
               {filtered.map((client) => {
-                const health = calcHealthScore(client);
                 const hasMetaLinked = !!client.metaAdAccountId;
-                const clientCampaignErrors = mockAdCampaigns.filter((c) => c.clientId === client.id && c.status === "error");
-                const hasAdError = clientCampaignErrors.length > 0;
                 return (
                   <div
                     key={client.id}
@@ -714,7 +618,7 @@ export default function ClientsPage() {
                       client.status === "at_risk" ? "border-lone-danger-border" : ""
                     } ${
                       hasMetaLinked ? "ring-1 ring-primary/30" : ""
-                    } ${hasAdError ? "ring-1 ring-destructive/40" : ""}`}
+                    }`}
                     onClick={() => {
                       if (client.status === "onboarding") {
                         router.push(`/clients/${client.id}?tab=onboarding`);
@@ -736,7 +640,7 @@ export default function ClientsPage() {
                         <div className="flex items-center justify-between mb-1.5">
                           <div className="flex items-center gap-2">
                             <h4 className="font-semibold text-foreground tracking-tight">{client.name}</h4>
-                            <span className="text-xs text-muted-foreground">{getStatusLabel(client.status)}</span>
+                            <span className="text-xs text-muted-foreground" title="Resultado do anúncio (CPL x meta) — não é risco de churn">Anúncio: {ROTULO_RESULTADO_ANUNCIO[client.status] ?? client.status}</span>
                             {/* PAUSA (23/09): o cliente continua na carteira — o selo existe para
                                 ninguém cobrar post de quem está pausado. */}
                             {rotuloPausa(client as never) && (
@@ -774,19 +678,13 @@ export default function ClientsPage() {
                                 Meta
                               </span>
                             )}
-                            {hasAdError && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-lone-danger-bg text-lone-danger border border-lone-danger-border animate-pulse">
-                                <AlertTriangle size={9} />
-                                Erro em campanha
-                              </span>
-                            )}
                           </div>
                           <span className="text-xs text-muted-foreground">{client.industry}</span>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-xs text-muted-foreground w-12 shrink-0">Health</span>
+                          <span className="text-xs text-muted-foreground w-12 shrink-0">Saúde</span>
                           <div className="flex-1 max-w-40">
-                            <HealthBar score={health} />
+                            <HealthBar client={client} />
                           </div>
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">

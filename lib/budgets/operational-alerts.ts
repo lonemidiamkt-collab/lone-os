@@ -2,6 +2,8 @@
 // PURO/testável. Lê uma config por cliente (client_alert_config) e o snapshot da
 // conta (vindo do sync) e devolve a lista de alertas disparados.
 
+import { metaAccountStatus } from "./account-status";
+
 export type OpAlertType =
   | "verba_zerada" | "verba_baixa" | "erro_conta" | "sem_gasto" | "campanha_parada" | "meta_erro";
 
@@ -39,18 +41,10 @@ export interface AccountAlertSnapshot {
   available: number | null;
   monthlyBudget: number | null;
   avgDailySpend: number | null;
-  accountStatus: number;            // 1=Ativa 2=Desativada 3=Em revisão 7=Pendente 9=Grace
+  accountStatus: number;            // ver ./account-status
   syncError?: string | null;
   campaignsActive?: number | null;  // p/ campanha parada (fase 1b)
   campaignsTotal?: number | null;
-}
-
-function statusLabel(status: number): string {
-  switch (status) {
-    case 2: return "desativada"; case 3: return "em revisão";
-    case 7: return "pendente";  case 9: return "em grace period (risco de pausa)";
-    default: return `status ${status}`;
-  }
 }
 
 /**
@@ -76,8 +70,8 @@ export function detectClientAlerts(
     if (cfg.alertErroConta) {
       hits.push({
         type: "erro_conta",
-        severity: snap.accountStatus === 9 ? "critical" : "warning",
-        reason: `Conta ${statusLabel(snap.accountStatus)} (possível erro de cartão/cobrança)`,
+        severity: metaAccountStatus(snap.accountStatus).gravidade === "critical" ? "critical" : "warning",
+        reason: `Conta ${metaAccountStatus(snap.accountStatus).frase}`,
       });
     }
     return hits; // conta pausada: não avalia saldo/gasto

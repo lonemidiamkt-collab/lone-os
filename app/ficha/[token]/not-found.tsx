@@ -2,6 +2,8 @@
 // devolver HTTP 404 de verdade (no Next 15, cair no not-found raiz responde 200). Também dá ao
 // cliente uma mensagem melhor do que o 404 interno "Voltar ao Dashboard".
 
+import { linkWhatsapp } from "@/lib/portal/contato";
+
 export default function FichaVivaNotFound() {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center px-6 text-center">
@@ -11,10 +13,10 @@ export default function FichaVivaNotFound() {
         Fale com seu gestor da Lone Mídia para receber um novo link de acesso.
       </p>
       <a
-        href="https://wa.me/5522981530700"
+        href={linkWhatsapp()}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold bg-lone-success text-background"
+        className="mt-6 inline-flex items-center gap-2 px-5 min-h-[44px] rounded-full text-sm font-semibold bg-lone-success text-background"
       >
         Falar com a equipe
       </a>

@@ -161,3 +161,31 @@ export function metricLabel(metric: string): string {
   };
   return map[metric] ?? metric;
 }
+
+/** Hora (0–23) em que a ausência da linha de hoje passa a significar gasto zero. */
+export const HORA_GASTO_ZERO_SP = 11;
+
+export type DiaCorrente =
+  | { tipo: "hoje" }
+  | { tipo: "zero_hoje" }
+  | { tipo: "ultimo_dia" };
+
+/**
+ * Qual dia avaliar. A Meta NÃO devolve linha para dia sem gasto — então, numa conta ativa depois
+ * das 11h (SP), "sem linha de hoje" é justamente o gasto zero que a Defesa precisa pegar.
+ * Antes disso (ou conta não ativa) ainda pode ser atraso da Meta: cai no último dia com dado.
+ */
+export function escolherDiaCorrente(
+  temLinhaHoje: boolean,
+  contaAtiva: boolean,
+  horaSP: number,
+): DiaCorrente {
+  if (temLinhaHoje) return { tipo: "hoje" };
+  if (contaAtiva && horaSP >= HORA_GASTO_ZERO_SP) return { tipo: "zero_hoje" };
+  return { tipo: "ultimo_dia" };
+}
+
+/** Métrica de um dia sem nenhuma entrega. */
+export function metricaZerada(metric_date: string): CurrentMetric {
+  return { metric_date, spend: 0, impressions: 0, clicks: 0, conversions: 0, ctr: 0, cpm: 0, cpc: 0, cpl: null };
+}

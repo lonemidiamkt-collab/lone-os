@@ -55,7 +55,7 @@ function safeEncrypt(value: string | null | undefined): string | null {
 // plaintext) pra qualquer portador do token. Allowlist explícita fecha isso.
 const ONBOARDING_PUBLIC_COLS =
   "id, client_id, token, status, submitted_at, created_at, contact_name, contact_cpf, contact_email, " +
-  "contact_whatsapp, nome_fantasia, razao_social, cnpj, nicho, endereco_rua, endereco_bairro, " +
+  "contact_whatsapp, company_phone, contact_phone, instagram_user, nome_fantasia, razao_social, cnpj, nicho, endereco_rua, endereco_bairro, " +
   "endereco_cidade, endereco_estado, endereco_cep, doc_contrato_social, doc_identidade, doc_logo, " +
   "notes, meta_status, instagram_status, google_status, clients(name, industry, service_type)";
 
@@ -229,6 +229,8 @@ export async function POST(req: NextRequest) {
   if (body.action === "auto_save") {
     const { token: t, ...fields } = body;
     if (!t) return NextResponse.json({ error: "Token required" }, { status: 400 });
+    // Mesma regra do submit: senha em branco = "não mexer" (o form nunca recebe a senha de volta).
+    const senhaDigitada = (v: unknown) => typeof v === "string" && v.trim() !== "";
     const { error: autoSaveErr } = await supabase.from("client_onboarding_submissions").update({
       contact_name: fields.contactName || null,
       contact_cpf: fields.contactCpf || null,
@@ -236,6 +238,9 @@ export async function POST(req: NextRequest) {
       contact_email: fields.contactEmail || null,
       nome_fantasia: fields.nomeFantasia || null,
       razao_social: fields.razaoSocial || null,
+      company_phone: fields.companyPhone || null,
+      contact_phone: fields.contactPhone || null,
+      instagram_user: fields.instagramUser || null,
       cnpj: fields.cnpj || null,
       nicho: fields.nicho || null,
       endereco_rua: fields.enderecoRua || null,
@@ -244,13 +249,13 @@ export async function POST(req: NextRequest) {
       endereco_estado: fields.enderecoEstado || null,
       endereco_cep: fields.enderecoCep || null,
       meta_login: fields.metaLogin || null,  // login em plaintext é ok (não é sensível)
-      meta_password: safeEncrypt(fields.metaPassword),
+      ...(senhaDigitada(fields.metaPassword) ? { meta_password: safeEncrypt(fields.metaPassword) } : {}),
       meta_status: fields.metaStatus || null,
       instagram_login: fields.instagramLogin || null,
-      instagram_password: safeEncrypt(fields.instagramPassword),
+      ...(senhaDigitada(fields.instagramPassword) ? { instagram_password: safeEncrypt(fields.instagramPassword) } : {}),
       instagram_status: fields.instagramStatus || null,
       google_login: fields.googleLogin || null,
-      google_password: safeEncrypt(fields.googlePassword),
+      ...(senhaDigitada(fields.googlePassword) ? { google_password: safeEncrypt(fields.googlePassword) } : {}),
       google_status: fields.googleStatus || null,
       doc_contrato_social: fields.docContratoSocial || null,
       doc_identidade: fields.docIdentidade || null,

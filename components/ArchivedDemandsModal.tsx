@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Archive, RotateCcw, Trash2, Loader2 } from "lucide-react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { Archive, RotateCcw, Loader2 } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
@@ -17,8 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 
 /**
- * Tela de demandas ARQUIVADAS (soft-delete). Busca sob demanda (?archived=1),
- * permite Desarquivar (volta pro quadro) ou Excluir definitivamente (cascade).
+ * Tela de demandas ARQUIVADAS (soft-delete). Busca sob demanda (?archived=1) e permite
+ * Desarquivar (volta pro quadro). Não há exclusão definitiva: a API de delete só arquiva.
  * Componente isolado pra não inflar app/social/page.tsx.
  */
 /** "há 5 min", "hoje 14:32", "ontem", "12/07" — referência de tempo, não carimbo cru. */
@@ -48,10 +47,16 @@ export default function ArchivedDemandsModal({ workspace, onClose }: { workspace
   useEffect(() => {
     let active = true;
     const params = workspace && workspace !== "Todos" ? `&socialMedia=${encodeURIComponent(workspace)}` : "";
-    authedFetch(`/api/data/content?archived=1${params}`)
-      .then((r) => (r.ok ? r.json() : { contentCards: [] }))
-      .then((d) => { if (active) setCards(d.contentCards ?? []); })
-      .catch(() => { if (active) setCards([]); });
+    chamar<{ contentCards?: ContentCard[] }>(`/api/data/content?archived=1${params}`).then((r) => {
+      if (!active) return;
+      if (!r.ok) {
+        // Erro virava "Nenhuma demanda arquivada" — quem procurava um card achava que tinha sumido.
+        setErro(r.erro ?? "Não consegui carregar as demandas arquivadas.");
+        setCards([]);
+        return;
+      }
+      setCards(r.data?.contentCards ?? []);
+    });
     return () => { active = false; };
   }, [workspace]);
 
@@ -83,17 +88,6 @@ export default function ArchivedDemandsModal({ workspace, onClose }: { workspace
     }
   };
 
-  const remove = async (id: string) => {
-    setBusyId(id);
-    try {
-      const r = await chamar("/api/content-cards/delete", { id });
-      if (!r.ok) { setErro(r.erro); return; }
-      setCards((cs) => (cs ?? []).filter((c) => c.id !== id));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg max-h-[85vh] flex flex-col p-0 overflow-hidden">
@@ -108,7 +102,7 @@ export default function ArchivedDemandsModal({ workspace, onClose }: { workspace
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 size={18} className="animate-spin" />
             </div>
-          ) : cards.length === 0 ? (
+          ) : cards.length === 0 && !erro ? (
             <p className="text-sm text-muted-foreground text-center py-12">Nenhuma demanda arquivada.</p>
           ) : (
             cards.map((c) => (
@@ -130,16 +124,6 @@ export default function ArchivedDemandsModal({ workspace, onClose }: { workspace
                   onClick={() => unarchive(c.id)}
                 >
                   <RotateCcw size={13} /> Desarquivar
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busyId === c.id}
-                  className="text-destructive hover:bg-destructive/10 shrink-0"
-                  onClick={() => remove(c.id)}
-                  title="Excluir definitivamente"
-                >
-                  <Trash2 size={14} />
                 </Button>
               </div>
             ))
