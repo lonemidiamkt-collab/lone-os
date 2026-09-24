@@ -1,16 +1,20 @@
 "use client";
 
-// /design — a tela do Designer. Leva 5b: os "Kanbans Social Media" (quatro colunas com nomes
-// próprios) e o "Quadro de Tarefas" (a fila de pedidos de arte, com outras três) viraram UM quadro,
-// o mesmo do Social (components/conteudo/QuadroProducao.tsx), com as seis etapas de
-// lib/conteudo/etapas.ts. O designer abre no "Meus" (a fila de arte dele); "Por designer" é o antigo
-// Quadro de Tarefas, agora com os cards; o pedido de arte e a entrega moram no card.
+// /design — a tela do Designer.
+//
+// Leva 5b juntou os quadros num só, com as seis etapas do card — e o designer passou a ver o quadro
+// do social inteiro ("tá bugado, como se eu fosse o social", Rodrigo, set/2026). Agora o /design abre
+// na FILA DE ARTES (components/design/FilaDoDesigner.tsx): cinco colunas com nome de trabalho de
+// designer — Na fila, Fazendo, Ajustes pedidos, Entregue, Aprovado / No ar — lidas do mesmo dado do
+// quadro (lib/conteudo/fila-designer.ts). O card abre no modo arte (components/design/CardDoDesigner.tsx).
+// A gestão e o social trocam para o "Quadro de produção" (as seis etapas, Por cliente, Por designer).
 
 import Header from "@/components/Header";
 import SignedImage from "@/components/shared/SignedImage";
 import CsAgentInbox from "@/components/cs/CsAgentInbox";
 import ContentCardModal from "@/components/ContentCardModal";
 import QuadroProducao from "@/components/conteudo/QuadroProducao";
+import FilaDoDesigner from "@/components/design/FilaDoDesigner";
 import ModoFoco from "@/components/design/ModoFoco";
 import { CargaDosDesigners } from "@/components/conteudo/Cronometro";
 import { cargaPorDesigner } from "@/lib/conteudo/capacidade";
@@ -23,9 +27,9 @@ import { useContentStore } from "@/stores/useContentStore";
 import { trilha } from "@/lib/obs/trilha";
 import { chamar } from "@/lib/api/chamar";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
-import { spDateStr, todaySP } from "@/lib/utils";
+import { cn, spDateStr, todaySP } from "@/lib/utils";
 import {
-  Clock, CheckCircle, Loader, X, AlertTriangle, ImageIcon, ChevronDown, Plus, Calendar, RotateCcw, Palette, Focus,
+  Clock, CheckCircle, Loader, X, AlertTriangle, ImageIcon, Plus, Calendar, RotateCcw, Palette, Focus, Search, Inbox,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
@@ -35,11 +39,14 @@ import type { Client, ContentCard, DesignRequest } from "@/lib/types";
 import { infoDoStatus, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { designerDeve } from "@/lib/conteudo/producao";
 import { lerVista, montarItens, passaNoFiltro, compararItens, type Vista } from "@/lib/conteudo/quadro";
+import { LIMITE_FAZENDO, resumirFila } from "@/lib/conteudo/fila-designer";
 import { diasEntre, somarDias } from "@/lib/conteudo/no-ar";
 
-// Abas: "producao" é o quadro; "kanbans" e "requests" são os nomes antigos (links, ⌘K, favoritos)
-// e caem nele, na vista certa. "clientes" saiu na Leva 5a (a lista de clientes é uma só).
+// Abas: "producao" é a fila/quadro; "kanbans" e "requests" são os nomes antigos (links, ⌘K,
+// favoritos) e caem nela. "clientes" saiu na Leva 5a (a lista de clientes é uma só).
 type TabView = "producao" | "performance" | "history";
+/** Fila de artes (do designer) ou o quadro de produção inteiro (seis etapas). */
+type Modo = "fila" | "quadro";
 
 function ddmm(ymd: string): string {
   return ymd.slice(0, 10).split("-").reverse().slice(0, 2).join("/");
@@ -56,7 +63,7 @@ function arteEntregue(c: ContentCard): string | null {
 export default function DesignPage() {
   const clients = useClientsStore((s) => s.clients);
   // Rodrigo (11/09/2026): "todas as demandas sumiram". O dono da arte é resolvido pela lista de
-  // clientes; enquanto ela não chega, o quadro não pode afirmar que está vazio.
+  // clientes; enquanto ela não chega, a fila não pode afirmar que está vazia.
   const clientesCarregados = useClientsStore((s) => s.initialized);
   const clientesCarregando = useClientsStore((s) => s.loading);
   const initClients = useClientsStore((s) => s.init);
@@ -64,6 +71,7 @@ export default function DesignPage() {
 
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
+  const conteudoCarregado = useContentStore((s) => s.initialized);
   const addDesignRequest = useContentStore((s) => s.addDesignRequest);
   const initContent = useContentStore((s) => s.init);
   const subContent = useContentStore((s) => s.subscribeRealtime);
@@ -72,6 +80,7 @@ export default function DesignPage() {
   const pushNotification = useNotificationsStore((s) => s.push);
 
   const { role, currentUser, hydrated } = useRole();
+  const ehDesigner = role === "designer";
 
   useEffect(() => {
     initClients();
@@ -91,15 +100,20 @@ export default function DesignPage() {
     return () => { clearInterval(interval); document.removeEventListener("visibilitychange", tick); window.removeEventListener("focus", tick); };
   }, [refreshContent]);
 
-  // ── QUADRO ATIVO (10/09/2026). Cada designer abre no PRÓPRIO quadro; o seletor existe pra quando
-  // um precisa ajudar o outro — esconder o quadro do colega quebraria justamente esse pedido.
+  // ── DE QUEM É A FILA (10/09/2026). Cada designer abre na PRÓPRIA; trocar serve pra ajudar o outro —
+  // esconder a fila do colega quebraria justamente esse pedido.
   const [quadro, setQuadroRaw] = useState<string | null>(null); // null = ainda não decidiu
   const setQuadro = (valor: string) => {
     setQuadroRaw(valor);
     void chamar("/api/preferences", { key: "design_workspace", value: valor });
   };
   const [tab, setTab] = useState<TabView>("producao");
+  // O designer vê só a fila; a gestão e o social escolhem (modoEscolhido) — ver `modo` abaixo.
+  const [modoEscolhido, setModoEscolhido] = useState<Modo>("fila");
+  const modo: Modo = ehDesigner ? "fila" : modoEscolhido;
   const [vista, setVista] = useState<Vista>("meus");
+  const [clienteFiltro, setClienteFiltro] = useState("");
+  const [busca, setBusca] = useState("");
   const { pendingTab, setPendingTab, setCurrentTab, secondaryOpen } = useNav();
 
   // Aba pedida pelo painel lateral ou pela busca ⌘K (só consome o pedido que é desta tela).
@@ -115,11 +129,12 @@ export default function DesignPage() {
       setPendingTab("");
       return;
     }
-    // kanbans → Meus; requests (Quadro de Tarefas) → Por designer; producao → como estava.
+    // producao/kanbans → fila; requests (Quadro de Tarefas) → quadro Por designer (gestão).
     const v = pendingTab === "producao" ? null : lerVista(pendingTab);
     if (pendingTab === "producao" || v) {
       setTab("producao");
-      if (v) setVista(v);
+      if (v === "designer" || v === "cliente") { setModoEscolhido("quadro"); setVista(v); }
+      else setModoEscolhido("fila");
       setPendingTab("");
     }
   }, [pendingTab, setPendingTab]);
@@ -133,13 +148,19 @@ export default function DesignPage() {
   // Modo foco (Leva 7B, N19): um card por vez, em tela cheia, com a entrega por colar.
   const [focoAberto, setFocoAberto] = useState(false);
 
-  // ?card=<id> (Meu Trabalho, avisos) abre o card; ?vista= escolhe a vista do quadro.
+  // ?card=<id> (Meu Trabalho, avisos) abre o card; ?vista= escolhe fila ou quadro; ?foco=1 abre o
+  // modo foco (atalho do Meu Trabalho).
   const cardDoLinkRef = useRef<string | null>(null);
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
-    const v = lerVista(q.get("vista"));
-    if (v) { setTab("producao"); setVista(v); }
+    const bruto = q.get("vista");
+    const v = lerVista(bruto);
+    if (bruto === "quadro") { setTab("producao"); setModoEscolhido("quadro"); }
+    else if (v === "designer" || v === "cliente") { setTab("producao"); setModoEscolhido("quadro"); setVista(v); }
+    else if (v || bruto === "fila") { setTab("producao"); setModoEscolhido("fila"); }
+    if (q.get("foco") === "1") setFocoAberto(true);
     cardDoLinkRef.current = q.get("card");
+    if (!cardDoLinkRef.current && (bruto || q.get("foco"))) window.history.replaceState(null, "", window.location.pathname);
   }, []);
   useEffect(() => {
     const id = cardDoLinkRef.current;
@@ -150,32 +171,34 @@ export default function DesignPage() {
     window.history.replaceState(null, "", window.location.pathname);
   }, [contentCards]);
 
-  // ── Quadros que existem hoje, tirados do dado (ver lib/design/dono.ts).
+  // ── Filas que existem hoje, tiradas do dado (ver lib/design/dono.ts).
   const quadros = useMemo(() => quadrosDisponiveis(designRequests, clients), [designRequests, clients]);
   const contagens = useMemo(() => contagemPorQuadro(designRequests, clients), [designRequests, clients]);
 
-  // Preferência salva; na falta dela, o designer cai no próprio quadro e a gestão na visão geral.
+  // Preferência salva; na falta dela, o designer cai na própria fila e a gestão na do time.
   useEffect(() => {
     if (quadro !== null || !hydrated) return;
     let vivo = true;
     chamar<{ design_workspace?: unknown }>("/api/preferences?keys=design_workspace").then((r) => {
       if (!vivo) return;
       const salvo = typeof r.data?.design_workspace === "string" ? r.data.design_workspace : "";
-      setQuadroRaw(salvo || (role === "designer" ? currentUser : "Todos"));
+      setQuadroRaw(salvo || (ehDesigner ? currentUser : "Todos"));
     });
     return () => { vivo = false; };
-  }, [quadro, role, currentUser, hydrated]);
+  }, [quadro, ehDesigner, currentUser, hydrated]);
 
-  const quadroAtivo = quadro ?? (role === "designer" ? currentUser : "Todos");
-  // O valor ativo TEM que existir entre as opções: um <select> com value que não casa mostra a
-  // primeira opção — a pessoa lê um nome e está vendo outro quadro.
-  const opcoesQuadro = useMemo(
-    () => (quadroAtivo !== "Todos" && !quadros.includes(quadroAtivo) ? [quadroAtivo, ...quadros] : quadros),
-    [quadros, quadroAtivo],
-  );
-  const quadroDeOutro = role === "designer" && quadroAtivo !== currentUser;
+  const quadroAtivo = quadro ?? (ehDesigner ? currentUser : "Todos");
+  // O valor ativo TEM que existir entre as opções: senão a pessoa lê um nome e está vendo outra fila.
+  // O designer sempre tem a própria fila, mesmo sem nada nela ainda.
+  const opcoesQuadro = useMemo(() => {
+    const base = quadroAtivo !== "Todos" && !quadros.includes(quadroAtivo) ? [quadroAtivo, ...quadros] : quadros;
+    const comigo = ehDesigner && !base.includes(currentUser) ? [currentUser, ...base] : base;
+    // A própria fila primeiro; "sem designer" por último.
+    return [...comigo].sort((a, b) => Number(b === currentUser) - Number(a === currentUser) || Number(a === SEM_DONO) - Number(b === SEM_DONO));
+  }, [quadros, quadroAtivo, ehDesigner, currentUser]);
+  const quadroDeOutro = ehDesigner && quadroAtivo !== currentUser;
 
-  // Clientes da carteira do quadro ativo (para o alerta de datas e a Nova Tarefa).
+  // Clientes da carteira da fila ativa (para o alerta de datas e a Nova Tarefa).
   const myClientIds = useMemo(() => {
     if (quadroAtivo === "Todos") return null;
     return new Set(
@@ -186,11 +209,16 @@ export default function DesignPage() {
     );
   }, [clients, quadroAtivo]);
 
-  // Os cards do quadro ativo, já com a etapa de design resolvida (mesma conta do quadro).
-  const itens = useMemo(() => {
-    const todos = montarItens(contentCards, designRequests, clients.map((c) => ({ id: c.id, assignedDesigner: c.assignedDesigner })));
-    return todos.filter((it) => passaNoFiltro(it, { pessoa: quadroAtivo, modo: "designer" }));
-  }, [contentCards, designRequests, clients, quadroAtivo]);
+  // Todos os cards com a etapa de design resolvida (a mesma conta do quadro), e os da fila ativa.
+  const todosItens = useMemo(
+    () => montarItens(contentCards, designRequests, clients.map((c) => ({ id: c.id, assignedDesigner: c.assignedDesigner }))),
+    [contentCards, designRequests, clients],
+  );
+  const itens = useMemo(() => todosItens.filter((it) => passaNoFiltro(it, { pessoa: quadroAtivo, modo: "designer" })), [todosItens, quadroAtivo]);
+  const itensDaFila = useMemo(
+    () => itens.filter((it) => passaNoFiltro(it, { pessoa: "Todos", modo: "designer", clientId: clienteFiltro || null, busca })),
+    [itens, clienteFiltro, busca],
+  );
   const myContentCards = useMemo(() => itens.map((it) => it.card), [itens]);
   const socialPeople = useMemo(() => [...new Set(myContentCards.map((c) => c.socialMedia).filter(Boolean))].sort(), [myContentCards]);
   const cardsBySocial = useMemo(() => {
@@ -198,79 +226,51 @@ export default function DesignPage() {
     for (const p of socialPeople) map[p] = myContentCards.filter((c) => c.socialMedia === p);
     return map;
   }, [myContentCards, socialPeople]);
+  // Clientes que aparecem na fila (o filtro de cliente não lista quem não tem arte nenhuma).
+  const clientesDaFila = useMemo(() => {
+    const ids = new Set(itens.filter((it) => it.estado !== "sem_pedido").map((it) => it.card.clientId));
+    return clients.filter((c) => ids.has(c.id)).sort((a, b) => (a.nomeFantasia || a.name).localeCompare(b.nomeFantasia || b.name, "pt-BR"));
+  }, [itens, clients]);
+  const designersNaVista = quadroAtivo === "Todos"
+    ? Math.max(1, new Set(itens.filter((it) => designerDeve(it.estado)).map((it) => it.designer ?? SEM_DONO)).size)
+    : 1;
 
-  // ── Números do topo (a mesma leitura do quadro) ──
+  // ── Números do topo (a mesma leitura da fila) ──
   const hoje = todaySP();
+  const resumo = useMemo(() => resumirFila(itens, hoje), [itens, hoje]);
   const devendo = itens.filter((it) => it.etapa === "com_designer" && designerDeve(it.estado));
+  // O que o modo foco percorre (a mesma fila de components/design/ModoFoco.tsx).
   const needsArt = devendo.length;
-  const totalFazendo = itens.filter((it) => it.estado === "em_andamento").length;
-  // Entregues nos últimos 30 dias, pela data da entrega no card (o updated_at do pedido muda por
-  // outros motivos — renomear o card, ligar o pedido — e não é a hora da entrega).
+  // Entregues nos últimos 30 dias, pela data da entrega no card.
   const desde30 = somarDias(hoje, -30);
   const totalDone = itens.filter((it) => it.card.designerDeliveredAt && spDateStr(it.card.designerDeliveredAt) >= desde30).length;
-  // URGENTE PRO DESIGNER = arte que ELE ainda deve, com o prazo vencido ou hoje (10/09/2026: 61 dos 66
-  // que o contador antigo mostrava já estavam entregues — número que não é dele vira número ignorado).
-  const urgentCards = devendo.filter((it) => it.prazoArte && diasEntre(hoje, it.prazoArte) <= 0).length;
-  const aguardandoTerceiro = itens.filter((it) =>
-    it.estado === "entregue" && statusNaEtapa(it.card.status, "revisao", "com_cliente") && it.card.dueDate && diasEntre(hoje, it.card.dueDate) <= 0).length;
-  const alteracoesPendentes = itens.filter((it) => it.estado === "alteracao").length;
   const proximos = [...devendo].filter((it) => it.prazoArte).sort(compararItens).slice(0, 6);
 
-  // Carga diária do time (Leva 7B, N18): todos os designers, não só o quadro ativo — quem distribui
+  // Carga diária do time (Leva 7B, N18): todos os designers, não só a fila ativa — quem distribui
   // precisa ver quem está livre, e o designer vê a linha dele marcada.
   const cargas = useMemo(() => {
-    const todos = montarItens(contentCards, designRequests, clients.map((c) => ({ id: c.id, assignedDesigner: c.assignedDesigner })));
     const nomes = [...new Set(clients.map((c) => (c.assignedDesigner ?? "").trim()).filter(Boolean))];
-    return cargaPorDesigner(todos, hoje, { designers: nomes });
-  }, [contentCards, designRequests, clients, hoje]);
+    return cargaPorDesigner(todosItens, hoje, { designers: nomes });
+  }, [todosItens, clients, hoje]);
+
+  const rotuloFila = (nome: string) => (nome === currentUser ? "Minha fila" : nome === SEM_DONO ? "Sem designer" : nome.split(" ")[0]);
+  const opcoesPessoa = [...opcoesQuadro, "Todos"];
+  const carregandoCarteira = !clientesCarregados && quadroAtivo !== "Todos";
 
   return (
     <div className="flex flex-col flex-1 overflow-auto">
-      <Header title="Designer" subtitle="Fila de artes — o quadro de produção do lado de quem faz a arte" />
+      <Header title="Designer" subtitle={ehDesigner ? "Sua fila de artes" : "Fila de artes do time"} />
 
-      <div className="p-6 space-y-6 animate-fade-in">
+      <div className="p-6 space-y-5 animate-fade-in">
         <MonthObservancesAlert
           proximosDias={21}
           cidades={clients.filter((c) => !myClientIds || myClientIds.has(c.id)).map((c) => c.enderecoCidade ?? "").filter(Boolean)}
         />
 
-        {/* Seletor de quadro. Cada designer abre no seu; trocar serve pra ajudar o outro. */}
-        {opcoesQuadro.length > 1 && (
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-xs text-muted-foreground uppercase tracking-wider">Quadro de:</span>
-            <div className="relative">
-              <select
-                value={quadroAtivo}
-                onChange={(e) => setQuadro(e.target.value)}
-                aria-label="Quadro de qual designer"
-                className="bg-card border border-border rounded-lg px-4 py-2 text-sm text-foreground outline-none focus:border-primary appearance-none cursor-pointer pr-8"
-              >
-                <option value="Todos">Visão geral (todos os designers)</option>
-                {opcoesQuadro.map((nome) => (
-                  <option key={nome} value={nome}>
-                    {nome}{contagens[nome] ? ` — ${contagens[nome]} aberta${contagens[nome] > 1 ? "s" : ""}` : ""}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            </div>
-            {quadroDeOutro && (
-              <span className="text-[11px] text-lone-warning bg-lone-warning-bg border border-lone-warning-border px-2.5 py-1 rounded">
-                Você está no quadro de {quadroAtivo} — o que mexer aqui é dele
-              </span>
-            )}
-            {quadroAtivo === SEM_DONO && (
-              <span className="text-[11px] text-muted-foreground border border-border px-2.5 py-1 rounded">
-                Clientes sem designer no cadastro
-              </span>
-            )}
-          </div>
-        )}
-
         {/* Abas: com o painel lateral aberto (computador) elas moram lá; no celular, aparecem aqui. */}
         <div className={`flex items-center gap-3 flex-wrap ${secondaryOpen ? "lg:hidden" : ""}`}>
           <div role="tablist" aria-label="Abas do Designer" className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-            {([["producao", "Produção"], ["performance", "Performance"], ["history", "Histórico"]] as const).map(([id, rotulo]) => (
+            {([["producao", "Fila de artes"], ["performance", "Performance"], ["history", "Histórico"]] as const).map(([id, rotulo]) => (
               <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
                 className={`text-xs px-3 py-1.5 rounded-md transition-colors ${tab === id ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
                 {rotulo}
@@ -279,23 +279,108 @@ export default function DesignPage() {
           </div>
         </div>
 
-        {/* Números */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <Numero icone={<ImageIcon size={18} />} valor={needsArt} rotulo="Com você (arte a fazer)" destaque={needsArt > 0} />
-          <Numero icone={<Palette size={18} />} valor={totalFazendo} rotulo="Fazendo agora" />
-          <Numero icone={<CheckCircle size={18} />} valor={totalDone} rotulo="Entregues (30 dias)" />
-          <Numero icone={<AlertTriangle size={18} />} valor={urgentCards} rotulo="Prazo vencido ou hoje" alerta={urgentCards > 0}
-            extra={aguardandoTerceiro > 0 ? `+${aguardandoTerceiro} entregue${aguardandoTerceiro > 1 ? "s" : ""}, esperando aprovação` : undefined} />
-          <Numero icone={<RotateCcw size={18} />} valor={alteracoesPendentes} rotulo="Alterações" alerta={alteracoesPendentes > 0} />
+        {/* ── Barra: de quem é a fila, fila ou quadro, cliente, busca, modo foco ── */}
+        <div className="flex flex-wrap items-center gap-2">
+          {!ehDesigner && (
+            <div role="tablist" aria-label="Fila ou quadro" className="inline-flex items-center gap-1 rounded-lg bg-muted p-1">
+              {([["fila", "Fila de artes"], ["quadro", "Quadro de produção"]] as const).map(([id, rotulo]) => (
+                <button key={id} role="tab" aria-selected={modo === id} onClick={() => setModoEscolhido(id)}
+                  className={cn("h-8 px-3 rounded-md text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    modo === id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {opcoesPessoa.length <= 5 ? (
+            <div role="radiogroup" aria-label="Fila de quem" className="inline-flex items-center gap-1 rounded-lg border border-border bg-card p-1">
+              {opcoesPessoa.map((nome) => {
+                const ativo = quadroAtivo === nome;
+                const n = nome === "Todos" ? null : contagens[nome];
+                return (
+                  <button key={nome} role="radio" aria-checked={ativo} onClick={() => setQuadro(nome)}
+                    className={cn("h-7 px-2.5 rounded-md text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring inline-flex items-center gap-1.5",
+                      ativo ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}>
+                    {nome === "Todos" ? "Todos os designers" : rotuloFila(nome)}
+                    {n ? <span className="tabular-nums text-[10px] opacity-80">{n}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <select value={quadroAtivo} onChange={(e) => setQuadro(e.target.value)} aria-label="Fila de quem"
+              className="h-9 rounded-lg border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary/40">
+              <option value="Todos">Todos os designers</option>
+              {opcoesQuadro.map((nome) => <option key={nome} value={nome}>{rotuloFila(nome)}{contagens[nome] ? ` — ${contagens[nome]}` : ""}</option>)}
+            </select>
+          )}
+
+          {modo === "fila" && (
+            <>
+              <select value={clienteFiltro} onChange={(e) => setClienteFiltro(e.target.value)} aria-label="Filtrar por cliente"
+                className="h-9 max-w-[220px] rounded-lg border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary/40">
+                <option value="">Todos os clientes</option>
+                {clientesDaFila.map((c) => <option key={c.id} value={c.id}>{c.nomeFantasia || c.name}</option>)}
+              </select>
+              <div className="relative">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" aria-hidden="true" />
+                <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar arte…" aria-label="Buscar arte"
+                  className="h-9 w-44 sm:w-52 rounded-lg border border-border bg-card pl-8 pr-7 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/40" />
+                {busca && (
+                  <button onClick={() => setBusca("")} aria-label="Limpar busca" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={() => setFocoAberto(true)}
+              disabled={needsArt === 0}
+              title={needsArt ? "Um card por vez, em tela cheia: cole a arte (Ctrl+V) e Enter entrega; → próximo, Esc sai" : "Nada na fila"}
+              className="flex items-center gap-1.5 px-3 h-9 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:border-primary/40 transition-colors disabled:opacity-40"
+            >
+              <Focus size={13} /> Modo foco{needsArt ? ` (${needsArt})` : ""}
+            </button>
+            <button
+              onClick={() => setNewTaskOpen(true)}
+              className="flex items-center gap-1.5 px-3 h-9 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
+            >
+              <Plus size={13} /> Nova tarefa
+            </button>
+          </div>
         </div>
 
-        {/* ═══ PRODUÇÃO ═══ */}
-        {tab === "producao" && !clientesCarregados && quadroAtivo !== "Todos" && (
+        {quadroDeOutro && (
+          <p className="text-[11px] text-lone-warning bg-lone-warning-bg border border-lone-warning-border px-2.5 py-1.5 rounded-md w-fit">
+            {quadroAtivo === "Todos" ? "Você está vendo a fila de todos os designers" : `Você está na fila de ${quadroAtivo}`} — o que mexer aqui é de quem é a arte.
+          </p>
+        )}
+
+        {/* Números — a mesma leitura da fila */}
+        {tab === "producao" && (
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <Numero icone={<AlertTriangle size={18} />} valor={resumo.paraHoje} rotulo="Para hoje (prazo hoje ou vencido)" alerta={resumo.paraHoje > 0}
+              extra={resumo.vencidas > 0 ? `${resumo.vencidas} já venceu${resumo.vencidas > 1 ? "ram" : ""}` : undefined} />
+            <Numero icone={<RotateCcw size={18} />} valor={resumo.ajustes} rotulo="Ajustes pedidos" alerta={resumo.ajustes > 0} />
+            <Numero icone={<Inbox size={18} />} valor={resumo.naFila} rotulo="Na fila" destaque={resumo.naFila > 0}
+              extra={resumo.devolvidos > 0 ? `+${resumo.devolvidos} devolvido${resumo.devolvidos > 1 ? "s" : ""} ao social` : undefined} />
+            <Numero icone={<Palette size={18} />} valor={resumo.fazendo} rotulo="Fazendo agora"
+              extra={quadroAtivo !== "Todos" ? `limite de ${LIMITE_FAZENDO} por vez` : undefined} />
+            <Numero icone={<CheckCircle size={18} />} valor={totalDone} rotulo="Entregues (30 dias)" />
+          </div>
+        )}
+
+        {/* ═══ FILA / QUADRO ═══ */}
+        {tab === "producao" && carregandoCarteira && (
           <div className="card text-center py-14 animate-fade-in">
             {clientesCarregando ? (
               <>
                 <Loader size={18} className="mx-auto text-primary animate-spin mb-3" />
-                <p className="text-sm text-muted-foreground">Carregando sua carteira para montar o quadro…</p>
+                <p className="text-sm text-muted-foreground">Carregando sua carteira para montar a fila…</p>
               </>
             ) : (
               <>
@@ -305,71 +390,67 @@ export default function DesignPage() {
             )}
           </div>
         )}
-        {tab === "producao" && (clientesCarregados || quadroAtivo === "Todos") && (
+        {tab === "producao" && !carregandoCarteira && (
           <div className="space-y-5">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground">O pedido de arte é uma etapa do card: pegue, entregue e responda alterações no próprio card.</p>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => setFocoAberto(true)}
-                  disabled={needsArt === 0}
-                  title={needsArt ? "Um card por vez, em tela cheia: cole a arte (Ctrl+V) e Enter entrega; → próximo, Esc sai" : "Nada na fila"}
-                  className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:border-primary/40 transition-colors disabled:opacity-40"
-                >
-                  <Focus size={12} /> Modo foco{needsArt ? ` (${needsArt})` : ""}
-                </button>
-                <button
-                  onClick={() => setNewTaskOpen(true)}
-                  className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
-                >
-                  <Plus size={12} /> Nova tarefa
-                </button>
-              </div>
-            </div>
-
             <CsAgentInbox cards={myContentCards} onOpen={setDetailCard} titulo="CS Agente — pra produzir" />
 
-            {/* Próximos prazos de arte — o que o designer ainda deve, do prazo mais perto. */}
-            {proximos.length > 0 && (
-              <div className="bg-card border border-border rounded-xl p-4">
-                <p className="text-lone-eyebrow uppercase text-muted-foreground mb-3 flex items-center gap-1.5">
-                  <Clock size={11} aria-hidden="true" /> Próximos prazos de arte
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {proximos.map((it) => {
-                    const d = diasEntre(hoje, it.prazoArte!);
-                    return (
-                      <button key={it.card.id} onClick={() => setDetailCard(it.card)}
-                        className={`text-left flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors hover:border-primary/30 ${
-                          d < 0 ? "bg-destructive/5 border-destructive/20" : d === 0 ? "bg-primary/5 border-primary/15" : "bg-muted/50 border-border"
-                        }`}>
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${d < 0 ? "bg-destructive" : d === 0 ? "bg-lone-warning" : "bg-muted-foreground"}`} aria-hidden="true" />
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-xs text-foreground font-medium truncate">{it.card.title}</span>
-                          <span className="block text-[10px] text-muted-foreground truncate">{it.card.clientName}{it.card.socialMedia ? ` · ${it.card.socialMedia}` : ""}</span>
-                        </span>
-                        <span className={`text-[11px] font-medium shrink-0 ${d < 0 ? "text-destructive" : d === 0 ? "text-primary" : "text-muted-foreground"}`}>
-                          {d < 0 ? `venceu ${ddmm(it.prazoArte!)}` : d === 0 ? "hoje" : ddmm(it.prazoArte!)}
-                        </span>
-                      </button>
-                    );
-                  })}
+            {modo === "fila" && (
+              !conteudoCarregado ? (
+                <div className="flex items-center gap-2 py-10 justify-center text-sm text-muted-foreground">
+                  <Loader size={16} className="animate-spin" aria-hidden="true" /> Carregando a fila…
                 </div>
-              </div>
+              ) : (
+                <KanbanErrorBoundary context="Fila de artes (Designer)">
+                  <FilaDoDesigner itens={itensDaFila} hoje={hoje} designersNaVista={designersNaVista}
+                    mostrarDesigner={quadroAtivo === "Todos"} clientes={clients} onAbrir={setDetailCard} />
+                </KanbanErrorBoundary>
+              )
             )}
 
-            <CargaDosDesigners cargas={cargas} hoje={hoje} destaque={role === "designer" ? currentUser : null} />
+            {modo === "quadro" && (
+              <>
+                {/* Próximos prazos de arte — o que o designer ainda deve, do prazo mais perto. */}
+                {proximos.length > 0 && (
+                  <div className="bg-card border border-border rounded-xl p-4">
+                    <p className="text-lone-eyebrow uppercase text-muted-foreground mb-3 flex items-center gap-1.5">
+                      <Clock size={11} aria-hidden="true" /> Próximos prazos de arte
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {proximos.map((it) => {
+                        const d = diasEntre(hoje, it.prazoArte!);
+                        return (
+                          <button key={it.card.id} onClick={() => setDetailCard(it.card)}
+                            className={`text-left flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors hover:border-primary/30 ${
+                              d < 0 ? "bg-destructive/5 border-destructive/20" : d === 0 ? "bg-primary/5 border-primary/15" : "bg-muted/50 border-border"
+                            }`}>
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${d < 0 ? "bg-destructive" : d === 0 ? "bg-lone-warning" : "bg-muted-foreground"}`} aria-hidden="true" />
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-xs text-foreground font-medium truncate">{it.card.title}</span>
+                              <span className="block text-[10px] text-muted-foreground truncate">{it.card.clientName}{it.card.socialMedia ? ` · ${it.card.socialMedia}` : ""}</span>
+                            </span>
+                            <span className={`text-[11px] font-medium shrink-0 ${d < 0 ? "text-destructive" : d === 0 ? "text-primary" : "text-muted-foreground"}`}>
+                              {d < 0 ? `venceu ${ddmm(it.prazoArte!)}` : d === 0 ? "hoje" : ddmm(it.prazoArte!)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                <KanbanErrorBoundary context="Quadro de produção (Designer)">
+                  <QuadroProducao
+                    pessoa={quadroAtivo}
+                    modo="designer"
+                    vista={vista}
+                    onVista={setVista}
+                    onAbrirCard={setDetailCard}
+                    clientes={clients}
+                  />
+                </KanbanErrorBoundary>
+              </>
+            )}
 
-            <KanbanErrorBoundary context="Quadro de produção (Designer)">
-              <QuadroProducao
-                pessoa={quadroAtivo}
-                modo="designer"
-                vista={vista}
-                onVista={setVista}
-                onAbrirCard={setDetailCard}
-                clientes={clients}
-              />
-            </KanbanErrorBoundary>
+            <CargaDosDesigners cargas={cargas} hoje={hoje} destaque={ehDesigner ? currentUser : null} />
           </div>
         )}
       </div>
@@ -529,8 +610,12 @@ export default function DesignPage() {
       )}
 
 
-      {/* O card aberto: briefing, arte (pedido, entrega, alterações) e comentários — o mesmo do Social. */}
-      {detailCard && <ContentCardModal card={detailCard} onClose={() => setDetailCard(null)} />}
+      {/* O designer abre o card no modo arte (briefing, referências, kit da marca, entrega); a gestão
+          também, quando está na fila. O social fica no card completo — cada um troca pelo botão do topo. */}
+      {detailCard && (
+        <ContentCardModal card={detailCard} onClose={() => setDetailCard(null)}
+          modo={modo === "fila" && (role === "admin" || role === "manager") ? "arte" : undefined} />
+      )}
       {focoAberto && <ModoFoco pessoa={quadroAtivo} onClose={() => setFocoAberto(false)} onAbrirCard={setDetailCard} />}
 
       {/* ═══ NOVA TAREFA ═══ */}

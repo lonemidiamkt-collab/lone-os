@@ -179,9 +179,10 @@ export const MENU: readonly GrupoMenu[] = [
         secoes: [
           { titulo: "Designer", itens: [
             // Leva 5b: "Kanbans Social Media" e "Quadro de Tarefas" viraram o quadro de produção (o mesmo
-            // do Social). Os endereços antigos (#kanbans, #requests) abrem nele, na vista certa.
-            { id: "design-producao", rotulo: "Produção", icone: Columns3, href: "/design", aba: "producao", badge: "designQueued",
-              termos: ["kanbans", "quadro de tarefas", "fila", "demandas", "pedidos de arte", "por designer"] },
+            // do Social). Set/2026: o designer abre na fila de artes (colunas dele); a gestão troca para o
+            // quadro. Os endereços antigos (#kanbans, #requests) abrem no lugar certo.
+            { id: "design-producao", rotulo: "Fila de artes", icone: Columns3, href: "/design", aba: "producao", badge: "designQueued",
+              termos: ["produção", "kanbans", "quadro de tarefas", "fila", "demandas", "pedidos de arte", "por designer", "ajustes"] },
             { id: "design-performance", rotulo: "Performance", icone: Activity, href: "/design", aba: "performance" },
             { id: "design-historico", rotulo: "Histórico", icone: History, href: "/design", aba: "history" },
           ] },

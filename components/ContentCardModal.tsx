@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Upload, Calendar, FileText, User, Tag,
   Save, ImageIcon, Hash, AlignLeft,
-  Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Archive, AtSign,
+  Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Archive, Palette,
 } from "lucide-react";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
@@ -12,7 +12,6 @@ import { marcarMutacao } from "@/stores/useContentStore";
 import { trilha } from "@/lib/obs/trilha";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
-import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import type { ContentCard, CardAttachment } from "@/lib/types";
 import CardArtAttachments, { MAX_ARTES } from "@/components/kanban/CardArtAttachments";
@@ -24,6 +23,8 @@ import PreviaInstagram from "@/components/conteudo/PreviaInstagram";
 import ParaAgendar from "@/components/conteudo/ParaAgendar";
 import KitDaMarca from "@/components/conteudo/KitDaMarca";
 import CobrarCliente from "@/components/conteudo/CobrarCliente";
+import ComentariosDoCard from "@/components/conteudo/ComentariosDoCard";
+import CardDoDesigner from "@/components/design/CardDoDesigner";
 import { artesParaAgendar, legendaCompleta } from "@/lib/conteudo/previa";
 import { ETAPAS, ROTULO_BLOQUEADO, corDoStatus, estaBloqueado, etapaDoStatus, infoDoStatus, statusNaEtapa, type Etapa } from "@/lib/conteudo/etapas";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
@@ -46,28 +47,29 @@ import { MarkdownEditor, MarkdownView, htmlToMarkdown } from "@/components/Markd
 // Campo apagado vai como null: `x || undefined` sumia com a chave e o valor antigo ficava no banco.
 const ouNulo = (v: string) => (v.trim() ? v : null);
 
-const ROLE_COLORS: Record<string, string> = {
-  admin: "text-primary",
-  manager: "text-primary",
-  traffic: "text-primary",
-  social: "text-primary",
-  designer: "text-primary",
-};
-
-function timeAgo(iso: string): string {
-  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return "agora";
-  if (diff < 3600) return `${Math.floor(diff / 60)}min`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-  return `${Math.floor(diff / 86400)}d`;
-}
-
 interface Props {
   card: ContentCard;
   onClose: () => void;
+  /**
+   * Como o card abre. "arte" = o card do designer (briefing, referências, kit da marca e a entrega
+   * na frente; legenda e agendamento recolhidos). Sem isto: o designer abre no modo arte e o resto
+   * do time no card completo — cada um troca pelo botão do topo.
+   */
+  modo?: "arte" | "completo";
 }
 
-export default function ContentCardModal({ card: cardProp, onClose }: Props) {
+export default function ContentCardModal({ modo, ...props }: Props) {
+  const { role } = useRole();
+  const [escolhido, setEscolhido] = useState<"arte" | "completo" | null>(modo ?? null);
+  const atual = escolhido ?? (role === "designer" ? "arte" : "completo");
+  const podeModoArte = role === "designer" || role === "admin" || role === "manager";
+  if (atual === "arte") {
+    return <CardDoDesigner card={props.card} onClose={props.onClose} onVerCompleto={() => setEscolhido("completo")} />;
+  }
+  return <CardCompleto {...props} onModoArte={podeModoArte ? () => setEscolhido("arte") : undefined} />;
+}
+
+function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo"> & { onModoArte?: () => void }) {
   // CARD VIVO (18/09): a prop era um retrato do momento do clique. Depois de "A fazer" ou de anexar,
   // o store mudava (designRequestId, anexos, entrega) mas o modal seguia mostrando o retrato — o
   // botão "Solicitar Design" continuava lá, a arte não aparecia, e a pessoa clicava de novo.
@@ -75,18 +77,12 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
   const card = cardVivo ?? cardProp;
   const clients = useClientsStore((s) => s.clients);
   const updateContentCard = useContentStore((s) => s.updateContentCard);
-  const addCardComment = useContentStore((s) => s.addCardComment);
   const approveContent = useContentStore((s) => s.approveContent);
   const rejectContent = useContentStore((s) => s.rejectContent);
   const { mover } = useProducao();
   const [pendencia, setPendencia] = useState<Pendencia>(null);
   const pushNotification = useNotificationsStore((s) => s.push);
   const { role, currentUser } = useRole();
-  const team = useTeamMembers();
-  // Quem pode ser marcado num comentário: designers e socials (quem mexe na arte).
-  const mentionable = [...team.designer, ...team.social].filter((m) => m.name && m.name !== currentUser);
-  const [mentions, setMentions] = useState<string[]>([]);
-  const toggleMention = (name: string) => setMentions((m) => m.includes(name) ? m.filter((x) => x !== name) : [...m, name]);
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [observations, setObservations] = useState(card.observations ?? "");
@@ -109,7 +105,6 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
   const [tentativaAnexos, setTentativaAnexos] = useState(0);
   const [salvando, setSalvando] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [commentText, setCommentText] = useState("");
   const [editingBriefing, setEditingBriefing] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [genLegenda, setGenLegenda] = useState(false);       // gerando legenda por IA
@@ -125,7 +120,6 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
     legenda_corrigida: string | null;
   } | null>(null);
   const [enviandoCliente, setEnviandoCliente] = useState(false); // mandando as artes pro grupo do cliente aprovar
-  const commentsEndRef = useRef<HTMLDivElement>(null);
 
   // 📤 Envia as artes ENTREGUES pro grupo do cliente aprovar (mensagem padronizada, pelo CS).
   // Disparo humano — o social/gestor clica. Confirma antes (é mensagem pra fora).
@@ -213,8 +207,8 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
     finally { setRevisandoPost(false); }
   }
 
-  // Comentários REATIVOS: lê do store (não da prop estática) — assim o comentário recém-escrito
-  // aparece na hora. Antes vinha de card.comments (prop congelada) e "não ficava" na tela.
+  // Comentários REATIVOS: lê do store (não da prop estática) — só para a contagem do cabeçalho; a
+  // conversa em si mora em ComentariosDoCard.
   const liveComments = useContentStore((s) => s.contentCards.find((c) => c.id === card.id)?.comments);
   const comments = liveComments ?? card.comments ?? [];
 
@@ -295,22 +289,6 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
     await updateContentCard(card.id, { title: t }).catch(() => setTitle(card.title ?? ""));
   };
 
-  const handleComment = () => {
-    if (!commentText.trim()) return;
-    const body = commentText.trim();
-    // Prefixa o comentário com @PrimeiroNome de quem foi marcado (fica visível no thread).
-    const prefix = mentions.length ? mentions.map((m) => `@${m.split(" ")[0]}`).join(" ") + " " : "";
-    addCardComment(card.id, currentUser, role, prefix + body);
-    // Notifica cada pessoa marcada pra ela ver rápido (notificação global, mas endereçada).
-    mentions.forEach((name) => {
-      // Com o card: quem foi marcado abre o comentário, não a ficha do cliente.
-      pushNotification("content", `${name}, você foi marcado`, `${currentUser} te marcou em "${card.title}" (${card.clientName}): "${body.slice(0, 80)}${body.length > 80 ? "..." : ""}"`, card.clientId, card.id);
-    });
-    setCommentText("");
-    setMentions([]);
-    setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-  };
-
   // Arquiva a DEMANDA (soft-delete): some do quadro ativo mas fica no banco, recuperável em "Arquivadas".
   const handleArchive = async () => {
     setArchiving(true);
@@ -389,6 +367,13 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
             )}
             <p className="text-sm text-primary mt-0.5">{card.clientName}</p>
           </div>
+          {onModoArte && (
+            <button type="button" onClick={() => { if (!isDirty || window.confirm("Você tem alterações não salvas neste card. Descartar e trocar de modo?")) onModoArte(); }}
+              title="Briefing, referências, kit da marca e a entrega na frente"
+              className="shrink-0 mr-8 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-card text-xs font-medium text-foreground hover:border-primary/40 transition-colors">
+              <Palette size={13} className="text-chart-4" aria-hidden="true" /> Modo arte
+            </button>
+          )}
         </DialogHeader>
 
         {/* Body */}
@@ -666,80 +651,8 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
               </p>
             </div>
 
-            {/* Comment input no topo (Trello-style) */}
-            <div className="px-5 py-3 border-b border-border shrink-0">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleComment()}
-                  placeholder="Escreva um comentário..."
-                  className="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary"
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleComment}
-                  disabled={!commentText.trim()}
-                  className="shrink-0 px-3"
-                >
-                  <Send size={14} />
-                </Button>
-              </div>
-              {mentionable.length > 0 && (
-                <div className="flex items-center gap-1 flex-wrap mt-2">
-                  <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><AtSign size={10} /> Marcar:</span>
-                  {mentionable.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => toggleMention(m.name)}
-                      title={`Marcar ${m.name} (${m.role})`}
-                      className={`text-[10px] px-1.5 py-0.5 rounded-full border transition-colors ${
-                        mentions.includes(m.name)
-                          ? "bg-primary/20 text-primary border-primary/30"
-                          : "bg-muted text-muted-foreground border-border hover:text-foreground"
-                      }`}
-                    >
-                      {m.name.split(" ")[0]}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Activity feed scrollável */}
-            <div className="flex-1 overflow-auto px-5 py-4 space-y-3">
-              {comments.length === 0 ? (
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Inicie a discussão sobre este conteúdo. Comentários ficam vinculados ao card e aparecem na timeline do cliente.
-                </p>
-              ) : (
-                comments.map((cmt) => (
-                  <div key={cmt.id} className="flex gap-2.5">
-                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className={`text-[10px] font-bold ${ROLE_COLORS[cmt.role] ?? "text-primary"}`}>
-                        {cmt.author.split(" ").map((w) => w[0]).join("").slice(0, 2)}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-medium text-foreground">{cmt.author}</span>
-                        <span className="text-[10px] text-muted-foreground">{timeAgo(cmt.createdAt)}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-wrap">
-                        {cmt.text.split(/(@[^\s@]+)/g).map((part, i) =>
-                          part.startsWith("@")
-                            ? <span key={i} className="text-primary font-semibold">{part}</span>
-                            : part
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              )}
-              <div ref={commentsEndRef} />
-            </div>
+            {/* A conversa (campo em cima, marcar, lista) — a mesma do card do designer. */}
+            <ComentariosDoCard card={card} className="flex-1 px-5 py-3" />
           </div>
         </div>
 

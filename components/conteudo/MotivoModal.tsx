@@ -34,15 +34,17 @@ const TEXTOS: Record<TipoMotivo, { titulo: string; ajuda: string; placeholder: s
   },
 };
 
-export default function MotivoModal({ tipo, tituloCard, onConfirmar, onClose }: {
+export default function MotivoModal({ tipo, tituloCard, onConfirmar, onClose, inicial }: {
   tipo: TipoMotivo;
   tituloCard: string;
+  /** Texto que já vem escrito (ex.: "Falta no pedido: briefing, formato."). */
+  inicial?: string;
   /** Devolve true quando deu certo (fecha o modal); false mantém aberto com o texto. */
   onConfirmar: (motivo: string) => Promise<boolean>;
   onClose: () => void;
 }) {
   const t = TEXTOS[tipo];
-  const [motivo, setMotivo] = useState("");
+  const [motivo, setMotivo] = useState(inicial ?? "");
   const [enviando, setEnviando] = useState(false);
   const Icone = tipo === "alteracao" ? RotateCcw : Undo2;
 

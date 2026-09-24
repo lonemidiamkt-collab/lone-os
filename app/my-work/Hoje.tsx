@@ -12,6 +12,8 @@ import { chamar } from "@/lib/api/chamar";
 import { ETAPAS_DE_APROVACAO, corDoStatus, rotuloCompleto, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { ROTULO_ESTADO_DESIGN, designerDeve } from "@/lib/conteudo/producao";
 import { montarItens, type ItemQuadro } from "@/lib/conteudo/quadro";
+import { agendaDoDesigner } from "@/lib/conteudo/fila-designer";
+import HojeDoDesigner from "@/components/design/HojeDoDesigner";
 import { useClientsStore } from "@/stores/useClientsStore";
 import EmptyState from "@/components/ui/EmptyState";
 import { useContentStore } from "@/stores/useContentStore";
@@ -82,6 +84,8 @@ export default function Hoje() {
   }, []);
 
   const isAdmin = role === "admin" || role === "manager";
+  // O designer abre o Hoje pela ARTE (set/2026): a fila de arte vem primeiro, as tarefas depois.
+  const ehDesigner = role === "designer";
   const pSort = (a: { priority: string }, b: { priority: string }) => {
     const pOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
     return (pOrder[a.priority] ?? 3) - (pOrder[b.priority] ?? 3);
@@ -115,6 +119,16 @@ export default function Hoje() {
   );
   // Sem a carteira, a regra de dono não sabe o que é do designer — não pode afirmar "tudo em dia".
   const designerSemCarteira = role === "designer" && !clientesCarregados;
+  // A fila de arte do designer, na ordem em que ela deve ser feita (a mesma conta do /design).
+  const agendaArte = useMemo(() => {
+    if (!ehDesigner) return null;
+    const meus = montarItens(contentCards, designRequests, clients.map((c) => ({ id: c.id, assignedDesigner: c.assignedDesigner })))
+      .filter((it) => it.designer === currentUser);
+    return agendaDoDesigner(meus, todaySP());
+  }, [ehDesigner, contentCards, designRequests, clients, currentUser]);
+  const [verTodasTarefas, setVerTodasTarefas] = useState(false);
+  // Para o designer, as tarefas são secundárias: as 5 primeiras, e o resto a um clique.
+  const tarefasVisiveis = ehDesigner && !verTodasTarefas ? myTasks.slice(0, 5) : myTasks;
 
   // Approvals: Admin/Manager = all, Staff = my cards only
   const pendingApprovals = useMemo(() =>
@@ -131,9 +145,18 @@ export default function Hoje() {
     [notifications]
   );
 
-  const totalItems = myTasks.length + myCards.length + myDesignReqs.length + pendingApprovals.length + reunioes.length;
+  const artesDoDesigner = agendaArte ? agendaArte.total : 0;
+  const totalItems = ehDesigner
+    ? myTasks.length + artesDoDesigner + reunioes.length
+    : myTasks.length + myCards.length + myDesignReqs.length + pendingApprovals.length + reunioes.length;
 
-  const FILTERS: { key: FilterType; label: string; count: number; icon: typeof Check }[] = [
+  // Designer: Artes primeiro; Conteúdo e Aprovações são do social (sempre zero para ele) e saem.
+  const FILTERS: { key: FilterType; label: string; count: number; icon: typeof Check }[] = ehDesigner ? [
+    { key: "all", label: "Tudo", count: totalItems, icon: Inbox },
+    { key: "design", label: "Artes", count: artesDoDesigner, icon: Palette },
+    { key: "tasks", label: "Tarefas", count: myTasks.length, icon: Check },
+    { key: "meetings", label: "Reuniões", count: reunioes.length, icon: CalendarClock },
+  ] : [
     { key: "all", label: "Tudo", count: totalItems, icon: Inbox },
     { key: "tasks", label: "Tarefas", count: myTasks.length, icon: Check },
     { key: "content", label: "Conteúdo", count: myCards.length, icon: FileText },
@@ -145,7 +168,7 @@ export default function Hoje() {
   return (
     <div className="space-y-6">
       {/* Filtros com contagem */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className={`grid grid-cols-2 gap-3 ${ehDesigner ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
         {FILTERS.map((f) => {
           const Icon = f.icon;
           const active = filter === f.key;
@@ -172,7 +195,11 @@ export default function Hoje() {
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
         {/* Main content */}
         <div className="space-y-4">
-          {/* Tasks */}
+          {/* A FILA DE ARTE DO DESIGNER — primeiro: é o trabalho dele o dia todo. */}
+          {ehDesigner && agendaArte && (filter === "all" || filter === "design") && !designerSemCarteira && (
+            <HojeDoDesigner agenda={agendaArte} hoje={todaySP()} clientes={clients} />
+          )}
+
           {/* REUNIÕES — primeiro, porque é o único item da lista com hora marcada e outra pessoa
               esperando do outro lado. Perder uma custa diferente de perder um prazo interno. */}
           {(filter === "all" || filter === "meetings") && reunioes.length > 0 && (
@@ -263,10 +290,15 @@ export default function Hoje() {
                 Minhas Tarefas ({myTasks.length})
               </h3>
               <div className="space-y-2">
-                {myTasks.map((task) => (
+                {tarefasVisiveis.map((task) => (
                   <TaskRow key={task.id} task={task} />
                 ))}
               </div>
+              {tarefasVisiveis.length < myTasks.length && (
+                <button onClick={() => setVerTodasTarefas(true)} className="mt-2 text-xs text-muted-foreground hover:text-foreground">
+                  Ver as outras {myTasks.length - tarefasVisiveis.length}
+                </button>
+              )}
             </div>
           )}
 
@@ -286,7 +318,7 @@ export default function Hoje() {
           )}
 
           {/* Design requests */}
-          {(filter === "all" || filter === "design") && myDesignReqs.length > 0 && (
+          {!ehDesigner && (filter === "all" || filter === "design") && myDesignReqs.length > 0 && (
             <div className="card">
               <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
                 <Palette size={14} className="text-primary" />
@@ -294,12 +326,12 @@ export default function Hoje() {
               </h3>
               <div className="space-y-2">
                 {myDesignReqs.map((it) => (
-                  <Link key={it.card.id} href={`${role === "designer" ? "/design" : "/social"}?card=${it.card.id}`}
+                  <Link key={it.card.id} href={`/social?card=${it.card.id}`}
                     className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-primary/20 transition-all">
                     <span className={`w-2 h-2 rounded-full shrink-0 ${it.estado === "alteracao" || it.estado === "bloqueado" ? "bg-destructive" : "bg-chart-4"}`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate">{it.card.title}</p>
-                      <p className="text-[10px] text-muted-foreground">{it.card.clientName}{it.card.format ? ` · ${it.card.format}` : ""}{it.designer && role !== "designer" ? ` · ${it.designer}` : ""}</p>
+                      <p className="text-[10px] text-muted-foreground">{it.card.clientName}{it.card.format ? ` · ${it.card.format}` : ""}{it.designer ? ` · ${it.designer}` : ""}</p>
                     </div>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
                       it.estado === "alteracao" || it.estado === "bloqueado" ? "text-destructive bg-destructive/10 border-destructive/20" : "text-chart-4 bg-chart-4/10 border-chart-4/20"

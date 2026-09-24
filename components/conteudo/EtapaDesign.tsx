@@ -5,6 +5,10 @@
 // da arte, padrão do cliente, prazo, dono, comentário, entregas, alterações, proposta por IA) mora
 // aqui, no card — e as ações (pedir arte, pegar, entregar, pedir alteração, devolver) passam pela
 // mesma transição que o quadro usa.
+//
+// As peças de apoio (histórico, comentário do designer, proposta por IA, arquivos do pedido) são
+// exportadas: o card do designer (components/design/CardDoDesigner.tsx) monta a mesma arte na ordem
+// de quem faz — briefing e referências primeiro.
 
 import { useEffect, useState } from "react";
 import {
@@ -24,11 +28,12 @@ import { cn, todaySP } from "@/lib/utils";
 import { donoDaDemanda } from "@/lib/design/dono";
 import { etapaDoStatus } from "@/lib/conteudo/etapas";
 import { ROTULO_ESTADO_DESIGN, designerDeve, estadoDoDesign, pedidoAberto } from "@/lib/conteudo/producao";
+import { faltasNoPedido, motivoDasFaltas } from "@/lib/conteudo/fila-designer";
 import { pedidoDoCard, paraPedidoDesign } from "@/lib/conteudo/quadro";
 import { diasEntre } from "@/lib/conteudo/no-ar";
-import type { ContentCard } from "@/lib/types";
+import type { ContentCard, DesignRequest } from "@/lib/types";
 
-interface Historico {
+export interface HistoricoArte {
   entregas: { versao: number; por: string; em: string; substituida: boolean; motivoRevisao: string | null }[];
   alteracoes: { em: string; por: string | null; motivo: string | null; origem: string }[];
 }
@@ -42,12 +47,163 @@ const TOM: Record<string, string> = {
   entregue: "bg-lone-success-bg text-lone-success border-lone-success-border",
 };
 
-function dataHora(iso: string): string {
+export function dataHora(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 function ddmmaaaa(ymd: string): string {
   return ymd.slice(0, 10).split("-").reverse().join("/");
 }
+
+// ─── Peças de apoio (também usadas pelo card do designer) ────────────────────
+
+/** Histórico da arte (versões e alterações). Recarrega quando a entrega ou a alteração mudam. */
+export function useHistoricoArte(card: Pick<ContentCard, "id" | "designerDeliveredAt" | "alteracaoPendenteEm">): HistoricoArte | null {
+  const [historico, setHistorico] = useState<HistoricoArte | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    chamar<HistoricoArte>(`/api/cards/${card.id}/historico-arte`).then((r) => { if (vivo && r.ok && r.data) setHistorico(r.data); });
+    return () => { vivo = false; };
+  }, [card.id, card.designerDeliveredAt, card.alteracaoPendenteEm]);
+  return historico;
+}
+
+/** Versões entregues e alterações pedidas, da mais nova para a mais velha. */
+export function HistoricoDaArte({ historico, aberto }: { historico: HistoricoArte | null; aberto?: boolean }) {
+  if (!historico || (historico.entregas.length === 0 && historico.alteracoes.length === 0)) return null;
+  return (
+    <details className="rounded-lg border border-border bg-card p-3" open={aberto}>
+      <summary className="cursor-pointer text-xs font-medium text-foreground flex items-center gap-1.5">
+        <History size={12} aria-hidden="true" /> Histórico da arte · {historico.entregas.length} entrega{historico.entregas.length === 1 ? "" : "s"} · {historico.alteracoes.length} alteraç{historico.alteracoes.length === 1 ? "ão" : "ões"}
+      </summary>
+      <ol className="mt-2 space-y-1.5">
+        {[
+          ...historico.entregas.map((e) => ({ em: e.em, tipo: "entrega" as const, texto: `V${e.versao} entregue por ${e.por || "—"}${e.substituida ? " (substituída)" : ""}` })),
+          ...historico.alteracoes.map((a) => ({ em: a.em, tipo: "alteracao" as const, texto: `Alteração${a.por ? ` pedida por ${a.por}` : ""}${a.motivo ? `: ${a.motivo}` : ""}` })),
+        ].sort((a, b) => b.em.localeCompare(a.em)).map((h, i) => (
+          <li key={i} className="flex gap-2 text-[11px] leading-snug">
+            <span className="text-muted-foreground tabular-nums shrink-0">{dataHora(h.em)}</span>
+            <span className={h.tipo === "alteracao" ? "text-destructive" : "text-foreground"}>{h.texto}</span>
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}
+
+/** Comentário do designer no pedido — o social vê no card. Quem não é designer/gestão só lê. */
+export function ComentarioDoDesigner({ pedido, editavel }: { pedido: DesignRequest; editavel: boolean }) {
+  const updateDesignRequest = useContentStore((s) => s.updateDesignRequest);
+  const [nota, setNota] = useState(pedido.designerNote ?? "");
+  const [salvando, setSalvando] = useState(false);
+  useEffect(() => { setNota(pedido.designerNote ?? ""); }, [pedido.id, pedido.designerNote]);
+
+  const salvar = async () => {
+    setSalvando(true);
+    try {
+      await updateDesignRequest(pedido.id, { designerNote: nota.trim() });
+      toast.success(nota.trim() ? "Comentário salvo — o social vê no card." : "Comentário apagado.");
+    } catch (err) {
+      toast.error(`Não consegui salvar o comentário${err instanceof Error ? ` (${err.message})` : ""}.`);
+    } finally { setSalvando(false); }
+  };
+
+  if (!editavel && !pedido.designerNote) return null;
+  return (
+    <div className="space-y-1.5">
+      <p className="text-lone-eyebrow uppercase text-muted-foreground">Comentário do designer</p>
+      {editavel ? (
+        <>
+          <textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={2}
+            placeholder="Precisa de algo? Ex.: faltou o preço no briefing — o social vê no card."
+            aria-label="Comentário do designer"
+            className="w-full bg-background border border-input rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 resize-none" />
+          <button type="button" onClick={() => void salvar()} disabled={salvando || nota.trim() === (pedido.designerNote ?? "").trim()}
+            className="h-7 px-3 rounded-md bg-primary text-primary-foreground text-[11px] font-medium hover:opacity-90 disabled:opacity-40">
+            {salvando ? "Salvando…" : "Salvar comentário"}
+          </button>
+        </>
+      ) : (
+        <p className="text-sm text-foreground bg-card border border-border rounded-lg px-3 py-2">{pedido.designerNote}</p>
+      )}
+    </div>
+  );
+}
+
+/** Proposta por IA com a identidade do cliente — vira referência no pedido, não entrega. */
+export function PropostaIa({ pedido }: { pedido: DesignRequest }) {
+  const [gerando, setGerando] = useState(false);
+  const [geracao, setGeracao] = useState<{ id: string } | null>(null);
+  const [motivo, setMotivo] = useState<string | null>(null);
+
+  const gerar = async () => {
+    setGerando(true);
+    try {
+      const r = await chamar<{ urls: string[]; geracaoId: string; entradas?: { logo?: boolean; estilos?: number; textos?: string[] } }>(`/api/design-requests/${pedido.id}/variacoes-ia`, undefined, { method: "POST" });
+      if (!r.ok || !r.data) { toast.error(r.erro ?? "Não consegui gerar."); return; }
+      useContentStore.setState((s) => ({
+        designRequests: s.designRequests.map((d) => d.id === pedido.id ? { ...d, attachments: [...(d.attachments ?? []), ...r.data!.urls] } : d),
+      }));
+      setGeracao({ id: r.data.geracaoId });
+      const e = r.data.entradas;
+      toast.success(`${r.data.urls.length} proposta(s) anexada(s) — ${e?.logo ? "com logo" : "sem logo"}, ${e?.estilos ?? 0} artes de estilo, ${e?.textos?.length ?? 0} textos exatos.`);
+    } finally { setGerando(false); }
+  };
+
+  const feedback = async (tipo: "serviu" | "nao_serviu", m = "") => {
+    if (!geracao) return;
+    const r = await chamar(`/api/ia/geracoes/${geracao.id}/feedback`, { feedback: tipo, motivo: m });
+    if (r.ok) { toast.success(tipo === "serviu" ? "Anotado: serviu." : "Anotado: não serviu — vai calibrar as instruções."); setGeracao(null); setMotivo(null); }
+    else toast.error(`Não consegui anotar: ${r.erro}`);
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+      <button type="button" disabled={gerando} onClick={() => void gerar()}
+        className="inline-flex items-center gap-1 rounded-md border border-primary/30 px-2 py-1 text-primary hover:bg-primary/10 disabled:opacity-50"
+        title="Propostas com a logo, as artes recentes, o estilo lido e os textos exatos do cliente. Vira referência, não entrega.">
+        <Sparkles size={11} aria-hidden="true" /> {gerando ? "Gerando (≈30 s)…" : pedido.parentAdId ? "Gerar variações (IA)" : "Proposta de arte (IA)"}
+      </button>
+      {geracao && (
+        <span className="inline-flex items-center gap-1">
+          Serviu?
+          <button onClick={() => void feedback("serviu")} className="rounded border border-border px-1.5 py-0.5 hover:bg-lone-success-bg" aria-label="A proposta ajudou"><ThumbsUp size={10} /></button>
+          <button onClick={() => setMotivo("")} className="rounded border border-border px-1.5 py-0.5 hover:bg-destructive/10" aria-label="Não ajudou"><ThumbsDown size={10} /></button>
+        </span>
+      )}
+      {geracao && motivo !== null && (
+        <span className="flex items-center gap-1.5 w-full">
+          <input autoFocus value={motivo} onChange={(e) => setMotivo(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void feedback("nao_serviu", motivo); if (e.key === "Escape") setMotivo(null); }}
+            placeholder="O que saiu errado? (logo, cores, texto inventado…)" aria-label="O que saiu errado"
+            className="flex-1 min-w-0 rounded-md border border-border bg-background px-2 h-7 text-[11px] text-foreground outline-none focus:border-primary/50" />
+          <button onClick={() => void feedback("nao_serviu", motivo)} className="rounded-md border border-border px-2 h-7 text-[11px] text-foreground hover:bg-muted">Enviar</button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Arquivos do pedido: propostas da IA e o que foi anexado antes das artes irem pro card. */
+export function ArquivosDoPedido({ urls, aberto }: { urls: readonly string[]; aberto?: boolean }) {
+  if (!urls.length) return null;
+  return (
+    <details className="rounded-lg border border-border bg-card p-3" open={aberto}>
+      <summary className="cursor-pointer text-xs font-medium text-foreground">Arquivos do pedido ({urls.length})</summary>
+      <ul className="mt-2 space-y-1">
+        {urls.map((url, i) => (
+          <li key={`${url}-${i}`} className="flex items-center gap-2 text-xs">
+            <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 truncate text-primary hover:underline inline-flex items-center gap-1">
+              <ExternalLink size={11} aria-hidden="true" /> Arquivo {i + 1}
+            </a>
+            <a href={url} download className="text-muted-foreground hover:text-foreground" aria-label={`Baixar arquivo ${i + 1}`}><Download size={12} /></a>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+// ─── A seção "Arte" do card completo ─────────────────────────────────────────
 
 export default function EtapaDesign({ card, briefingIa }: {
   card: ContentCard;
@@ -70,35 +226,10 @@ export default function EtapaDesign({ card, briefingIa }: {
 
   const [entregando, setEntregando] = useState(false);
   const [motivo, setMotivo] = useState<TipoMotivo | null>(null);
-  const [historico, setHistorico] = useState<Historico | null>(null);
-  const [nota, setNota] = useState(pedido?.designerNote ?? "");
-  const [salvandoNota, setSalvandoNota] = useState(false);
-  const [gerandoIa, setGerandoIa] = useState(false);
-  const [geracaoIa, setGeracaoIa] = useState<{ id: string } | null>(null);
-  const [motivoIa, setMotivoIa] = useState<string | null>(null);
+  const historico = useHistoricoArte(card);
   const [ocupado, setOcupado] = useState(false);
 
-  useEffect(() => { setNota(pedido?.designerNote ?? ""); }, [pedido?.id, pedido?.designerNote]);
-
-  // Histórico da arte (versões e alterações). Recarrega quando a entrega ou a alteração mudam.
-  useEffect(() => {
-    let vivo = true;
-    chamar<Historico>(`/api/cards/${card.id}/historico-arte`).then((r) => { if (vivo && r.ok && r.data) setHistorico(r.data); });
-    return () => { vivo = false; };
-  }, [card.id, card.designerDeliveredAt, card.alteracaoPendenteEm]);
-
   const executar = async (fn: () => Promise<unknown>) => { setOcupado(true); try { await fn(); } finally { setOcupado(false); } };
-
-  const salvarNota = async () => {
-    if (!pedido) return;
-    setSalvandoNota(true);
-    try {
-      await updateDesignRequest(pedido.id, { designerNote: nota.trim() });
-      toast.success(nota.trim() ? "Comentário salvo — o social vê no card." : "Comentário apagado.");
-    } catch (err) {
-      toast.error(`Não consegui salvar o comentário${err instanceof Error ? ` (${err.message})` : ""}.`);
-    } finally { setSalvandoNota(false); }
-  };
 
   const assumir = async () => {
     if (!pedido) return;
@@ -112,31 +243,12 @@ export default function EtapaDesign({ card, briefingIa }: {
     }
   };
 
-  const gerarIa = async () => {
-    if (!pedido) return;
-    setGerandoIa(true);
-    try {
-      const r = await chamar<{ urls: string[]; geracaoId: string; entradas?: { logo?: boolean; estilos?: number; textos?: string[] } }>(`/api/design-requests/${pedido.id}/variacoes-ia`, undefined, { method: "POST" });
-      if (!r.ok || !r.data) { toast.error(r.erro ?? "Não consegui gerar."); return; }
-      useContentStore.setState((s) => ({
-        designRequests: s.designRequests.map((d) => d.id === pedido.id ? { ...d, attachments: [...(d.attachments ?? []), ...r.data!.urls] } : d),
-      }));
-      setGeracaoIa({ id: r.data.geracaoId });
-      const e = r.data.entradas;
-      toast.success(`${r.data.urls.length} proposta(s) anexada(s) — ${e?.logo ? "com logo" : "sem logo"}, ${e?.estilos ?? 0} artes de estilo, ${e?.textos?.length ?? 0} textos exatos.`);
-    } finally { setGerandoIa(false); }
-  };
-
-  const feedbackIa = async (feedback: "serviu" | "nao_serviu", m = "") => {
-    if (!geracaoIa) return;
-    const r = await chamar(`/api/ia/geracoes/${geracaoIa.id}/feedback`, { feedback, motivo: m });
-    if (r.ok) { toast.success(feedback === "serviu" ? "Anotado: serviu." : "Anotado: não serviu — vai calibrar as instruções."); setGeracaoIa(null); setMotivoIa(null); }
-    else toast.error(`Não consegui anotar: ${r.erro}`);
-  };
-
   const urgente = prazo && designerDeve(estado) ? diasEntre(todaySP(), prazo) : null;
   const botao = "inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium transition-colors disabled:opacity-40";
-  const anexosDoPedido = pedido?.attachments ?? [];
+  // Saúde do briefing — a mesma regra do card do designer (lib/conteudo/fila-designer.ts).
+  const faltas = pedido ? faltasNoPedido({
+    briefing: card.briefing, briefingDoPedido: pedido.briefing, formato: card.format || pedido.format, prazo, guidelines: cliente?.fixedBriefing,
+  }) : [];
 
   return (
     <section aria-label="Arte do card" className="rounded-xl border border-border bg-muted/20">
@@ -170,21 +282,11 @@ export default function EtapaDesign({ card, briefingIa }: {
         )}
 
         {/* Saúde do briefing — o que falta antes de começar (o designer usava no modal da demanda). */}
-        {(ehDesigner || gestao) && pedido && designerDeve(estado) && (() => {
-          const checks = [
-            { rotulo: "Briefing", ok: ((card.briefing || pedido.briefing || "").trim().length > 10) },
-            { rotulo: "Formato", ok: !!(card.format || pedido.format) },
-            { rotulo: "Prazo", ok: !!prazo },
-            { rotulo: "Guidelines do cliente", ok: !!cliente?.fixedBriefing },
-          ];
-          const faltam = checks.filter((c) => !c.ok);
-          if (faltam.length === 0) return null;
-          return (
-            <p className="text-[11px] text-lone-warning bg-lone-warning-bg border border-lone-warning-border rounded-lg px-3 py-2">
-              Falta no pedido: {faltam.map((c) => c.rotulo.toLowerCase()).join(", ")}. Se travar o trabalho, devolva ao social com o motivo.
-            </p>
-          );
-        })()}
+        {(ehDesigner || gestao) && pedido && designerDeve(estado) && faltas.length > 0 && (
+          <p className="text-[11px] text-lone-warning bg-lone-warning-bg border border-lone-warning-border rounded-lg px-3 py-2">
+            Falta no pedido: {faltas.join(", ")}. Se travar o trabalho, devolva ao social com o motivo.
+          </p>
+        )}
 
         {/* Padrão do cliente (IA) — o que evita a arte voltar por "não seguiu o padrão". */}
         {pedido?.briefingIa && (
@@ -272,95 +374,19 @@ export default function EtapaDesign({ card, briefingIa }: {
         <CompararVersoes cardId={card.id} alteracaoPendente={estado === "alteracao" ? card.alteracaoMotivo : null}
           gatilho={`${card.designerDeliveredAt ?? ""}|${card.alteracaoPendenteEm ?? ""}`} />
 
-        {/* Proposta por IA com a identidade do cliente — vira referência, não entrega. */}
-        {(ehDesigner || gestao) && pedido && designerDeve(estado) && (
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-            <button type="button" disabled={gerandoIa} onClick={() => void gerarIa()}
-              className="inline-flex items-center gap-1 rounded-md border border-primary/30 px-2 py-1 text-primary hover:bg-primary/10 disabled:opacity-50"
-              title="Propostas com a logo, as artes recentes, o estilo lido e os textos exatos do cliente. Vira referência, não entrega.">
-              <Sparkles size={11} aria-hidden="true" /> {gerandoIa ? "Gerando (≈30 s)…" : pedido.parentAdId ? "Gerar variações (IA)" : "Proposta de arte (IA)"}
-            </button>
-            {geracaoIa && (
-              <span className="inline-flex items-center gap-1">
-                Serviu?
-                <button onClick={() => void feedbackIa("serviu")} className="rounded border border-border px-1.5 py-0.5 hover:bg-lone-success-bg" aria-label="A proposta ajudou"><ThumbsUp size={10} /></button>
-                <button onClick={() => setMotivoIa("")} className="rounded border border-border px-1.5 py-0.5 hover:bg-destructive/10" aria-label="Não ajudou"><ThumbsDown size={10} /></button>
-              </span>
-            )}
-            {geracaoIa && motivoIa !== null && (
-              <span className="flex items-center gap-1.5 w-full">
-                <input autoFocus value={motivoIa} onChange={(e) => setMotivoIa(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") void feedbackIa("nao_serviu", motivoIa); if (e.key === "Escape") setMotivoIa(null); }}
-                  placeholder="O que saiu errado? (logo, cores, texto inventado…)" aria-label="O que saiu errado"
-                  className="flex-1 min-w-0 rounded-md border border-border bg-background px-2 h-7 text-[11px] text-foreground outline-none focus:border-primary/50" />
-                <button onClick={() => void feedbackIa("nao_serviu", motivoIa)} className="rounded-md border border-border px-2 h-7 text-[11px] text-foreground hover:bg-muted">Enviar</button>
-              </span>
-            )}
-          </div>
-        )}
+        {(ehDesigner || gestao) && pedido && designerDeve(estado) && <PropostaIa pedido={pedido} />}
 
-        {/* Arquivos do pedido: propostas da IA e o que foi anexado antes das artes irem pro card. */}
-        {anexosDoPedido.length > 0 && (
-          <details className="rounded-lg border border-border bg-card p-3">
-            <summary className="cursor-pointer text-xs font-medium text-foreground">Arquivos do pedido ({anexosDoPedido.length})</summary>
-            <ul className="mt-2 space-y-1">
-              {anexosDoPedido.map((url, i) => (
-                <li key={`${url}-${i}`} className="flex items-center gap-2 text-xs">
-                  <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 truncate text-primary hover:underline inline-flex items-center gap-1">
-                    <ExternalLink size={11} aria-hidden="true" /> Arquivo {i + 1}
-                  </a>
-                  <a href={url} download className="text-muted-foreground hover:text-foreground" aria-label={`Baixar arquivo ${i + 1}`}><Download size={12} /></a>
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
+        <ArquivosDoPedido urls={pedido?.attachments ?? []} />
 
-        {/* Comentário do designer — o social vê aqui mesmo, no card. */}
-        {pedido && (ehDesigner || gestao || !!pedido.designerNote) && (
-          <div className="space-y-1.5">
-            <p className="text-lone-eyebrow uppercase text-muted-foreground">Comentário do designer</p>
-            {ehDesigner || gestao ? (
-              <>
-                <textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={2}
-                  placeholder="Precisa de algo? Ex.: faltou o preço no briefing — o social vê no card."
-                  aria-label="Comentário do designer"
-                  className="w-full bg-background border border-input rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 resize-none" />
-                <button type="button" onClick={() => void salvarNota()} disabled={salvandoNota || nota.trim() === (pedido.designerNote ?? "").trim()}
-                  className="h-7 px-3 rounded-md bg-primary text-primary-foreground text-[11px] font-medium hover:opacity-90 disabled:opacity-40">
-                  {salvandoNota ? "Salvando…" : "Salvar comentário"}
-                </button>
-              </>
-            ) : (
-              <p className="text-sm text-foreground bg-card border border-border rounded-lg px-3 py-2">{pedido.designerNote}</p>
-            )}
-          </div>
-        )}
+        {pedido && <ComentarioDoDesigner pedido={pedido} editavel={ehDesigner || gestao} />}
 
-        {/* Histórico: versões entregues e alterações pedidas. */}
-        {historico && (historico.entregas.length > 0 || historico.alteracoes.length > 0) && (
-          <details className="rounded-lg border border-border bg-card p-3" open={historico.alteracoes.length > 0 && estado === "alteracao"}>
-            <summary className="cursor-pointer text-xs font-medium text-foreground flex items-center gap-1.5">
-              <History size={12} aria-hidden="true" /> Histórico da arte · {historico.entregas.length} entrega{historico.entregas.length === 1 ? "" : "s"} · {historico.alteracoes.length} alteraç{historico.alteracoes.length === 1 ? "ão" : "ões"}
-            </summary>
-            <ol className="mt-2 space-y-1.5">
-              {[
-                ...historico.entregas.map((e) => ({ em: e.em, tipo: "entrega" as const, texto: `V${e.versao} entregue por ${e.por || "—"}${e.substituida ? " (substituída)" : ""}` })),
-                ...historico.alteracoes.map((a) => ({ em: a.em, tipo: "alteracao" as const, texto: `Alteração${a.por ? ` pedida por ${a.por}` : ""}${a.motivo ? `: ${a.motivo}` : ""}` })),
-              ].sort((a, b) => b.em.localeCompare(a.em)).map((h, i) => (
-                <li key={i} className="flex gap-2 text-[11px] leading-snug">
-                  <span className="text-muted-foreground tabular-nums shrink-0">{dataHora(h.em)}</span>
-                  <span className={h.tipo === "alteracao" ? "text-destructive" : "text-foreground"}>{h.texto}</span>
-                </li>
-              ))}
-            </ol>
-          </details>
-        )}
+        <HistoricoDaArte historico={historico} aberto={!!historico && historico.alteracoes.length > 0 && estado === "alteracao"} />
       </div>
 
       {entregando && <EntregarArteModal card={card} onClose={() => setEntregando(false)} />}
       {motivo && (
         <MotivoModal tipo={motivo} tituloCard={card.title} onClose={() => setMotivo(null)}
+          inicial={motivo === "devolver" ? motivoDasFaltas(faltas) : undefined}
           onConfirmar={(m) => acao(card, motivo === "alteracao" ? { tipo: "pedir_alteracao", motivo: m } : { tipo: "bloquear", motivo: m })} />
       )}
     </section>
