@@ -120,7 +120,7 @@ export default function LoginScreen() {
   // ─── Boas-vindas ───
   if (welcomeState?.show) {
     return (
-      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4">
+      <div className="tema-escuro relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4">
         <video className="absolute inset-0 h-full w-full object-cover opacity-60" autoPlay muted loop playsInline aria-hidden>
           <source src="/login-video.mp4" type="video/mp4" />
         </video>
@@ -151,7 +151,9 @@ export default function LoginScreen() {
 
   // ─── Login (vídeo de fundo + card) ───
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-background">
+    // Login é momento de marca: sempre na paleta escura (.tema-escuro), qualquer que seja o tema
+    // escolhido — no claro o vídeo ficava lavado e o botão desabilitado parecia lilás.
+    <div className="tema-escuro relative min-h-screen overflow-x-hidden bg-background text-foreground">
       {/* Vídeo full-bleed SÓ no desktop — o render é paisagem e crop mal em tela vertical. No mobile
           a logo aparece num quadrado no topo (hero), inteira e sem crop torto. */}
       <video className="pointer-events-none absolute inset-0 hidden h-full w-full object-cover object-center lg:block" autoPlay muted loop playsInline aria-hidden>
