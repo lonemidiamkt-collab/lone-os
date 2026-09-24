@@ -343,8 +343,8 @@ export const AUTOMACOES: Automacao[] = [
     familia: "Dados e sync", destino: "sistema", cron: "0 6 * * *", agendaBRT: "todo dia, 3h", maxSilencioHoras: 26,
   }),
   ep("sync-posts", {
-    nome: "Postagens do mês", descricao: "Recalcula posts do mês e último post de cada cliente a partir do Instagram real.",
-    familia: "Dados e sync", destino: "sistema", cron: "30 9 * * *", agendaBRT: "todo dia, 6h30", maxSilencioHoras: 26, ensaio: "preview=1",
+    nome: "Postagens do mês + No ar", descricao: "Recalcula posts do mês e último post de cada cliente a partir do Instagram real, e fecha como \"No ar\" o card planejado que casou com um post real (mesmo cliente, ±1 dia, mesmo formato primeiro).",
+    familia: "Dados e sync", destino: "sistema", cron: "30 9 * * *", agendaBRT: "todo dia, 6h30", maxSilencioHoras: 26, ensaio: "dry=1",
   }),
   ep("warmup-snapshots", {
     nome: "Aquecer relatórios públicos", descricao: "Gera o cache dos relatórios públicos (semana, 2 semanas, mês) de quem tem link ativo.",

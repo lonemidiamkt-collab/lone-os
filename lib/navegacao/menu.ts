@@ -27,7 +27,7 @@ import type { Role } from "@/lib/types";
 
 /** Contadores que a barra lateral calcula a partir dos stores e pendura nos itens. */
 export type ChaveBadge =
-  | "atRisk" | "socialClients" | "socialPending" | "socialApproval" | "socialOnboarding"
+  | "atRisk" | "socialPending" | "socialApproval" | "socialOnboarding"
   | "designQueued" | "trafficRotina";
 
 export interface ItemMenu {
@@ -100,7 +100,7 @@ export const MENU: readonly GrupoMenu[] = [
         descricao: "Tarefas do time, prazos e conclusão" },
       { id: "meu-trabalho-agenda", rotulo: "Agenda", icone: Calendar, href: "/my-work?view=agenda",
         papeis: OPERACAO, tambemEm: ["/calendar"],
-        descricao: "Calendário de posts, tarefas, reuniões e lembretes", termos: ["calendário", "calendario"] },
+        descricao: "Calendário de posts, tarefas, reuniões e lembretes", termos: ["calendário", "calendario", "calendário de conteúdo", "datas de post"] },
       { id: "processos", rotulo: "Processos", icone: BookOpen, href: "/processos", papeis: TODOS,
         descricao: "Como cada coisa é feita aqui", termos: ["manual", "procedimento"] },
     ],
@@ -136,17 +136,18 @@ export const MENU: readonly GrupoMenu[] = [
   {
     id: "conteudo", rotulo: "Conteúdo", icone: Clapperboard,
     itens: [
+      // Leva 5a: a Carteira saiu daqui (a lista de clientes é uma só: Clientes › Meus Clientes) e
+      // Métricas + Entregas Mensais viraram Resultados, contados no Instagram real.
       { id: "social", rotulo: "Social Media", icone: Instagram, href: "/social", papeis: CONTEUDO,
-        descricao: "Carteira, board de produção e aprovação", termos: ["kanban", "posts", "instagram"],
+        descricao: "Board de produção, aprovação e resultados", termos: ["kanban", "posts", "instagram"],
         secoes: [
           { titulo: "Social Media", itens: [
-            { id: "social-carteira", rotulo: "Carteira", icone: Users2, href: "/social", aba: "carteira", badge: "socialClients" },
             { id: "social-board", rotulo: "Board de Produção", icone: Layers, href: "/social", aba: "kanban", badge: "socialPending" },
             { id: "social-aprovacao", rotulo: "Inbox de Aprovação", icone: Inbox, href: "/social", aba: "aprovacao", badge: "socialApproval" },
           ] },
           { titulo: "Análise", itens: [
-            { id: "social-metricas", rotulo: "Métricas", icone: BarChart2, href: "/social", aba: "metricas" },
-            { id: "social-entregas", rotulo: "Entregas Mensais", icone: Activity, href: "/social", aba: "entregas" },
+            { id: "social-resultados", rotulo: "Resultados", icone: BarChart2, href: "/social", aba: "resultados",
+              termos: ["métricas", "metricas", "entregas", "entregas mensais", "no prazo", "atrasados", "formatos"] },
           ] },
           { titulo: "Arquivos", itens: [
             { id: "social-onboarding", rotulo: "Onboarding", icone: ClipboardCheck, href: "/social", aba: "onboarding", badge: "socialOnboarding" },
@@ -158,11 +159,11 @@ export const MENU: readonly GrupoMenu[] = [
         descricao: "Radar de referências e calendário estratégico", termos: ["radar", "pauta"] },
       { id: "designer", rotulo: "Designer", icone: Palette, href: "/design", papeis: CONTEUDO, badge: "designQueued",
         descricao: "Fila de artes e quadros dos designers", termos: ["design", "arte"],
+        // "Clientes do Quadro" saiu na Leva 5a: a carteira é a lista única (Clientes › Meus Clientes).
         secoes: [
           { titulo: "Designer", itens: [
             { id: "design-kanbans", rotulo: "Kanbans Social Media", icone: Columns3, href: "/design", aba: "kanbans" },
             { id: "design-quadro", rotulo: "Quadro de Tarefas", icone: Layers, href: "/design", aba: "requests", badge: "designQueued" },
-            { id: "design-clientes", rotulo: "Clientes do Quadro", icone: UserCheck, href: "/design", aba: "clientes" },
             { id: "design-performance", rotulo: "Performance", icone: Activity, href: "/design", aba: "performance" },
             { id: "design-historico", rotulo: "Histórico", icone: History, href: "/design", aba: "history" },
           ] },
@@ -176,13 +177,17 @@ export const MENU: readonly GrupoMenu[] = [
         descricao: "Base completa de clientes", termos: ["cadastro"],
         secoes: [
           { titulo: "Filtros", itens: [
+            { id: "clientes-meus", rotulo: "Meus clientes", icone: UserCheck, href: "/clients?resp=mine" },
             { id: "clientes-risco", rotulo: "Em Risco", icone: AlertTriangle, href: "/clients?filter=at_risk", badge: "atRisk" },
             { id: "clientes-objetivos", rotulo: "Objetivos", icone: Target, href: "/clients?filter=goals" },
           ] },
         ] },
-      // A carteira de quem EXECUTA (tráfego, social, designer). A gestão não vê: tem /clients.
-      { id: "meus-clientes", rotulo: "Meus Clientes", icone: UserCheck, href: "/meus-clientes", papeis: ["traffic", "social", "designer"],
-        descricao: "Sua carteira e o briefing de cada cliente", termos: ["briefing", "carteira"] },
+      // A carteira de quem EXECUTA (tráfego, social, designer). Leva 5a: uma lista só — é a mesma
+      // tela de Clientes, aberta no filtro "Meus clientes". /meus-clientes redireciona pra cá, e a
+      // ficha do cliente (/clients/…) acende este item. A gestão tem o item Clientes (com o mesmo filtro).
+      { id: "meus-clientes", rotulo: "Meus Clientes", icone: UserCheck, href: "/clients?resp=mine", papeis: ["traffic", "social", "designer"],
+        tambemEm: ["/meus-clientes", "/clients"],
+        descricao: "Sua carteira e o briefing de cada cliente", termos: ["briefing", "carteira", "clientes do quadro"] },
       { id: "churn", rotulo: "Termômetro de Churn", icone: Thermometer, href: "/churn", papeis: GESTAO,
         descricao: "Score preditivo de risco", termos: ["risco", "termômetro"] },
       { id: "jornada", rotulo: "Jornada CS", icone: HeartPulse, href: "/jornada", papeis: ["admin", "manager", "social"],

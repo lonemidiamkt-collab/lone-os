@@ -1,5 +1,9 @@
 // components/planejamento/pauta-card.ts — pauta do Radar → card de conteúdo pré-preenchido.
 // "Vou usar" só marcava a pauta; a ideia morria ali e o social tinha que redigitar tudo no quadro.
+// Leva 5a: "Usar esta pauta" cria o card já com cliente, título, briefing, formato e DATA SUGERIDA
+// (o próximo dia de postagem livre do cliente), e a pauta fica ligada ao card.
+
+import { proximoSlot } from "@/components/kanban/lote";
 
 export interface PautaParaCard {
   client_id: string;
@@ -35,8 +39,23 @@ export function briefingDaPauta(p: PautaParaCard): string {
   return partes.join("\n\n");
 }
 
-/** Corpo para /api/content-cards/create. Entra em "ideias": o social decide data e ajusta. */
-export function cardDaPauta(p: PautaParaCard, socialMedia: string | null, criadoPor: string) {
+/**
+ * Data sugerida para o card: o próximo dia de postagem (seg/qua/sex) depois de hoje que ainda não
+ * tem card desse cliente. `ocupadas` = datas "YYYY-MM-DD" que o cliente já tem no board (e as que
+ * outras pautas acabaram de pegar nesta sessão). Olha até ~3 meses; depois disso devolve o 1º slot.
+ */
+export function dataSugerida(hoje: string, ocupadas: Iterable<string> = []): string {
+  const tomadas = new Set(ocupadas);
+  let d = proximoSlot(hoje);
+  for (let i = 0; i < 40 && tomadas.has(d); i++) d = proximoSlot(d);
+  return tomadas.has(d) ? proximoSlot(hoje) : d;
+}
+
+/** Chave de idempotência: repetir o clique (ou o retry depois de uma falha) não duplica o card. */
+export const chaveDaPauta = (pautaId: string) => `radar-pauta|${pautaId}`;
+
+/** Corpo para /api/content-cards/create. Entra em "ideias", já com a data sugerida; o social ajusta. */
+export function cardDaPauta(p: PautaParaCard & { id?: string }, socialMedia: string | null, criadoPor: string, dueDate?: string | null) {
   return {
     clientId: p.client_id,
     clientName: p.cliente_nome,
@@ -47,5 +66,7 @@ export function cardDaPauta(p: PautaParaCard, socialMedia: string | null, criado
     briefing: briefingDaPauta(p),
     socialMedia: socialMedia || null,
     createdBy: criadoPor,
+    dueDate: dueDate ?? null,
+    ...(p.id ? { idempotencyKey: chaveDaPauta(p.id) } : {}),
   };
 }

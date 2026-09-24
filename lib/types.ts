@@ -279,6 +279,10 @@ export interface ContentCard {
     postLive: boolean;             // post está no ar
     copyCorrect: boolean;          // copy/legenda correta
   };
+  // "No ar" automático (Leva 5a): o post do Instagram que fechou o card. Vazio antes da migration
+  // 20260924190000 ou quando alguém fechou à mão.
+  igMediaId?: string;
+  igPermalink?: string;
   // Timesheet Invisível
   workStartedAt?: string;          // ISO — when work started (in_production)
   totalTimeSpentMs?: number;       // accumulated milliseconds of active work
@@ -391,14 +395,6 @@ export interface ChatMessage {
   timestamp: string;
 }
 
-export interface GlobalChatMessage {
-  id: string;
-  user: string;
-  role: Role;
-  text: string;
-  timestamp: string;
-}
-
 export interface OnboardingItem {
   id: string;
   label: string;
@@ -482,29 +478,6 @@ export interface TrafficRoutineCheck {
   note?: string;
 }
 
-// --- Social Monthly Reports ---
-
-export interface SocialMonthlyReport {
-  id: string;
-  clientId: string;
-  clientName: string;
-  month: string;
-  createdBy: string;
-  createdAt: string;
-  postsPublished: number;
-  postsGoal: number;
-  reelsCount: number;
-  storiesCount: number;
-  reach: number;
-  impressions: number;
-  engagement: number;       // total interactions
-  engagementRate: number;   // %
-  followersGained: number;
-  followersLost: number;
-  topPost?: string;
-  observations?: string;
-}
-
 // --- Content Approval ---
 
 export interface ContentApproval {
@@ -514,27 +487,6 @@ export interface ContentApproval {
   reviewedBy?: string;
   reviewedAt?: string;
   reason?: string;
-}
-
-// --- Social Media Monthly Delivery Report (auto-generated) ---
-
-export interface MonthlyDeliveryReport {
-  id: string;
-  clientId: string;
-  clientName: string;
-  socialMedia: string;       // who was responsible
-  month: string;             // "2026-01", "2026-02"
-  postsGoal: number;         // expected deliveries
-  postsDelivered: number;    // actual published count
-  completionRate: number;    // % (delivered/goal * 100)
-  cardsByStatus: {
-    published: number;
-    scheduled: number;
-    inProduction: number;
-    ideas: number;
-  };
-  formats: { format: string; count: number }[];  // breakdown by format
-  generatedAt: string;       // ISO when report was auto-generated
 }
 
 // --- Social Media Performance Score ---

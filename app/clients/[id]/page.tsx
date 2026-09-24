@@ -325,6 +325,11 @@ export default function ClientDetailPage() {
   const obProgress = obItems.length > 0 ? Math.round((obCompleted / obItems.length) * 100) : 0;
 
   const isAdmin = role === "admin" || role === "manager";
+  // O cliente é da carteira de quem está vendo (pelo campo do papel dele)?
+  const naMinhaCarteira =
+    (role === "traffic" && client.assignedTraffic === currentUser) ||
+    (role === "social" && client.assignedSocial === currentUser) ||
+    (role === "designer" && client.assignedDesigner === currentUser);
   const visibleTabs = TABS.filter((tab) => {
     if (tab === "wallet" || tab === "contratos" || tab === "portal" || tab === "ficha-viva") return isAdmin;
     // Crescimento = faturamento/vendas/ticket do cliente. O designer não precisa desse dado de negócio.
@@ -624,7 +629,9 @@ export default function ClientDetailPage() {
           {/* ── BRIEFING ─────────────────────────────────────────────────────── */}
           {activeTab === "briefing" && (
             <div className="space-y-4">
-              {isAdmin && <BriefingEstrategico clientId={clientId} />}
+              {/* Quem executa edita o briefing estratégico dos PRÓPRIOS clientes — era o que a tela
+                  /meus-clientes fazia; ela virou o filtro "Meus clientes" desta lista (Leva 5a). */}
+              {(isAdmin || naMinhaCarteira) && <BriefingEstrategico clientId={clientId} />}
               {(isAdmin || role === "social") && <CalendarioEstrategico clientId={clientId} />}
               <BriefingTab clientId={clientId} />
               <ClientCsRules clientId={clientId} />

@@ -85,7 +85,10 @@ export default function ClientsPage() {
       .catch(() => {});
     return () => { vivo = false; };
   }, []);
-  const [responsibleFilter, setResponsibleFilter] = useState("mine");
+  // "Meus clientes" × "Todos" (Leva 5a: esta é a lista ÚNICA — /meus-clientes, a Carteira do Social e
+  // os "Clientes do Quadro" do Designer viraram este filtro). "" = padrão do papel: quem executa abre
+  // na própria carteira, a gestão abre em todos. ?resp=mine|all na URL escolhe.
+  const [responsibleFilter, setResponsibleFilter] = useState("");
 
   const [showNewModal, setShowNewModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
@@ -229,6 +232,12 @@ export default function ClientsPage() {
     if (role === "designer") return c.assignedDesigner;
     return "";
   };
+  const filtroResp = responsibleFilter || (isOperator ? "mine" : "all");
+  // "Meus": quem executa, pelo campo do próprio papel; a gestão, por qualquer um dos três (há gestor
+  // que também atende cliente como social ou tráfego).
+  const ehMeu = (c: Client): boolean => isOperator
+    ? getAssignedField(c) === currentUser
+    : [c.assignedTraffic, c.assignedSocial, c.assignedDesigner].includes(currentUser);
 
   // Collect unique responsible names for the dropdown (for operator roles) — sem vazios nem arquivados
   const responsibleNames = isOperator
@@ -247,11 +256,9 @@ export default function ClientsPage() {
     const matchStatus = statusFilter === "all" || c.status === statusFilter;
     // Role-based filter: operators see only their clients by default
     const matchResponsible =
-      !isOperator || responsibleFilter === "all"
-        ? true
-        : responsibleFilter === "mine"
-          ? getAssignedField(c) === currentUser
-          : getAssignedField(c) === responsibleFilter;
+      filtroResp === "all" ? true
+        : filtroResp === "mine" ? ehMeu(c)
+        : isOperator ? getAssignedField(c) === filtroResp : true;
     const r = reunioes.get(c.id);
     const matchReuniao = (() => {
       if (filtroReuniao === "all") return true;
@@ -407,13 +414,14 @@ export default function ClientsPage() {
       )}
 
       <div className="flex flex-col flex-1 overflow-auto">
-        <Header title="Clientes" subtitle="Base completa de clientes e seus dados" />
+        <Header title="Clientes" subtitle={isAdmin ? "Base completa de clientes e seus dados" : "Sua carteira e a base de clientes da agência"} />
         <Suspense fallback={null}>
           <FiltroDaUrl
             aoMudar={(f) => {
               setStatusFilter(f ?? "all");
               if (f) setResponsibleFilter("all");
             }}
+            aoMudarResp={(r) => setResponsibleFilter(r ?? "")}
           />
         </Suspense>
 
@@ -423,7 +431,7 @@ export default function ClientsPage() {
             {/* Summary cards */}
             <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
               {[
-                { label: isOperator ? "Meus Clientes" : "Total de Clientes", value: filtered.length, color: "text-foreground", bg: "bg-muted" },
+                { label: filtroResp === "mine" ? "Meus Clientes" : "Total de Clientes", value: filtered.length, color: "text-foreground", bg: "bg-muted" },
                 { label: `${TITULO_RESULTADO_ANUNCIO}: bom`, value: filtered.filter((c) => c.status === "good").length, color: "text-primary", bg: "bg-primary/10" },
                 { label: `${TITULO_RESULTADO_ANUNCIO}: ruim`, value: filtered.filter((c) => c.status === "at_risk").length, color: "text-lone-danger", bg: "bg-lone-danger-bg" },
                 { label: "Em Onboarding", value: filtered.filter((c) => c.status === "onboarding").length, color: "text-primary", bg: "bg-primary/10" },
@@ -439,7 +447,7 @@ export default function ClientsPage() {
             {/* ── AS TRÊS ABAS ─────────────────────────────────────────────
                 Roberto (§17): "dentro de Clientes criar Ativos / Em encerramento / Desativados."
                 Encerrando é aba própria porque é trabalho em aberto, não arquivo. */}
-            <div className="flex gap-1 mb-4 border-b border-border">
+            {isAdmin && <div className="flex gap-1 mb-4 border-b border-border">
               {([
                 ["ativos", "Ativos"],
                 ["encerrando", "Em encerramento"],
@@ -453,7 +461,7 @@ export default function ClientsPage() {
                   {r}
                 </button>
               ))}
-            </div>
+            </div>}
 
             {abaLista !== "ativos" && (
               <ClientesDesativados aba={abaLista} />
@@ -512,19 +520,18 @@ export default function ClientsPage() {
                 <option value="meta_nao_batida">Meta não batida</option>
                 <option value="mais_de_30d">Última há +30 dias</option>
               </select>
-              {isOperator && (
-                <select
-                  value={responsibleFilter}
-                  onChange={(e) => setResponsibleFilter(e.target.value)}
-                  className="bg-card border border-border text-sm text-secondary-foreground rounded-lg px-3 py-2 outline-none focus:border-primary"
-                >
-                  <option value="mine">Meus clientes</option>
-                  <option value="all">Todos os clientes</option>
-                  {responsibleNames.filter((n) => n !== currentUser).map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </select>
-              )}
+              <select
+                aria-label="De quem"
+                value={filtroResp}
+                onChange={(e) => setResponsibleFilter(e.target.value)}
+                className="bg-card border border-border text-sm text-secondary-foreground rounded-lg px-3 py-2 outline-none focus:border-primary"
+              >
+                <option value="mine">Meus clientes</option>
+                <option value="all">Todos os clientes</option>
+                {responsibleNames.filter((n) => n !== currentUser).map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
               {isAdmin && (
                 <button
                   onClick={() => setShowArchived((v) => !v)}
@@ -538,13 +545,16 @@ export default function ClientsPage() {
                   Arquivados
                 </button>
               )}
-              <button
-                onClick={() => setShowNewModal(true)}
-                className="btn-primary flex items-center gap-2 whitespace-nowrap"
-              >
-                <UserPlus size={15} />
-                Novo Cliente
-              </button>
+              {/* Cadastrar cliente é da gestão (o ⌘K e o atalho g c já eram só dela). */}
+              {isAdmin && (
+                <button
+                  onClick={() => setShowNewModal(true)}
+                  className="btn-primary flex items-center gap-2 whitespace-nowrap"
+                >
+                  <UserPlus size={15} />
+                  Novo Cliente
+                </button>
+              )}
             </div>
 
             {/* Client Cards / Arquivados */}
@@ -770,10 +780,18 @@ export default function ClientsPage() {
 
 // ?filter=at_risk|onboarding vindo do menu ou de um link. Reage também quando a URL muda com a
 // tela já aberta (clicar "Em Risco" estando em Clientes); sem filtro depois de um, volta pra "all".
-function FiltroDaUrl({ aoMudar }: { aoMudar: (f: "at_risk" | "onboarding" | null) => void }) {
-  const bruto = useSearchParams().get("filter");
+// ?resp=mine|all: "Meus clientes" (o item do menu de quem executa e o /meus-clientes antigo).
+function FiltroDaUrl({ aoMudar, aoMudarResp }: {
+  aoMudar: (f: "at_risk" | "onboarding" | null) => void;
+  aoMudarResp: (r: "mine" | "all" | null) => void;
+}) {
+  const params = useSearchParams();
+  const bruto = params.get("filter");
   const filtro = bruto === "at_risk" || bruto === "onboarding" ? bruto : null;
+  const respBruto = params.get("resp");
+  const resp = respBruto === "mine" || respBruto === "all" ? respBruto : null;
   const anterior = useRef<string | null>(null);
+  const respAnterior = useRef<string | null>(null);
   useEffect(() => {
     if (filtro === anterior.current) return;
     const tinha = anterior.current;
@@ -782,5 +800,12 @@ function FiltroDaUrl({ aoMudar }: { aoMudar: (f: "at_risk" | "onboarding" | null
     // aoMudar é recriado a cada render da página; só a mudança de filtro importa aqui.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtro]);
+  useEffect(() => {
+    if (resp === respAnterior.current) return;
+    const tinha = respAnterior.current;
+    respAnterior.current = resp;
+    if (resp || tinha) aoMudarResp(resp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resp]);
   return null;
 }

@@ -24,14 +24,15 @@ export async function GET(req: NextRequest) {
   const versao = await versaoDoConteudo();
   if (versao && url.searchParams.get("v") === versao) return new NextResponse(null, { status: 204 });
 
-  const [contentCards, designRequests, contentApprovals, socialReports] = await Promise.all([
+  // `socialReports` saiu (Leva 5a): o relatório social manual nunca foi usado (0 na base); os
+  // resultados de conteúdo são contados no Instagram (/api/conteudo/resultados).
+  const [contentCards, designRequests, contentApprovals] = await Promise.all([
     db.fetchContentCards(socialMedia ? { socialMedia } : undefined),
     db.fetchDesignRequests(),
     db.fetchContentApprovals(),
-    db.fetchSocialReports(),
   ]);
 
-  return NextResponse.json({ contentCards, designRequests, contentApprovals, socialReports, versao });
+  return NextResponse.json({ contentCards, designRequests, contentApprovals, versao });
 }
 
 async function versaoDoConteudo(): Promise<string | null> {

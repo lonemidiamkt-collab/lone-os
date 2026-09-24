@@ -53,8 +53,18 @@ const ANTIGO_SECUNDARIO: Record<string, { rotas: string[]; abas: string[] }> = {
 };
 // Abas que mudaram de nome sem sumir: o pedido antigo cai na nova (a tela aceita os dois nomes).
 //  - Leva 4: /traffic#rotina ("Rotina Diária") virou /traffic#hoje ("Hoje", o cockpit do gestor).
+//  - Leva 5a: /social#metricas e /social#entregas viraram /social#resultados (contado no Instagram).
 const ABAS_RENOMEADAS: Record<string, string> = {
   "/traffic#rotina": "/traffic#hoje",
+  "/social#metricas": "/social#resultados",
+  "/social#entregas": "/social#resultados",
+};
+// Abas que viraram OUTRA TELA (a aba sumiu; o conteúdo mora no endereço indicado).
+//  - Leva 5a: a Carteira do Social e os "Clientes do Quadro" do Designer eram listas de cliente
+//    paralelas — viraram o filtro "Meus clientes" da lista única (/clients?resp=mine).
+const ABAS_QUE_VIRARAM_TELA: Record<string, string> = {
+  "/social#carteira": "/clients?resp=mine",
+  "/design#clientes": "/clients?resp=mine",
 };
 
 function rotasAntigas(role: Role): Set<string> {
@@ -73,12 +83,16 @@ function rotasAntigas(role: Role): Set<string> {
 //  - /integrations: já estava na busca ⌘K pra esses mesmos papéis; na Leva 4 virou /conexao-meta
 //    (Sistema › Conexão Meta, a mesma tela) e /integrations redireciona pra lá;
 //  - /my-work?view=…: as novas vistas do Meu Trabalho (conteúdo de /tarefas e /calendar, que já eram do papel).
+//  - /clients?resp=mine (Leva 5a): a lista única de clientes no filtro "Meus clientes" — para quem
+//    executa é o que /meus-clientes mostrava (a carteira dele); a ficha do cliente (/clients/…) ele já
+//    abria pelo Social, Designer, Tráfego, notificações e ⌘K. Para a gestão é um filtro da tela que já tinha.
+const MINHA_CARTEIRA = ["/clients?resp=mine", "/clients"];
 const ACRESCIMOS: Record<Role, string[]> = {
-  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda"],
-  manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda"],
-  traffic:   ["/settings", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda"],
-  social:    ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda"],
-  designer:  ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda"],
+  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine"],
+  manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine"],
+  traffic:   ["/settings", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
+  social:    ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
+  designer:  ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
   comercial: ["/settings", "/"], // Início por papel (Leva 3): o comercial ganhou o dele
 };
 
@@ -146,7 +160,8 @@ describe("menu — ninguém ganha nem perde tela", () => {
       if (!it.roles.includes(role)) continue;
       for (const aba of ANTIGO_SECUNDARIO[it.href]?.abas ?? []) {
         const antiga = `${it.href}#${aba}`;
-        if (!novas.has(ABAS_RENOMEADAS[antiga] ?? antiga)) faltando.push(antiga);
+        const virouTela = ABAS_QUE_VIRARAM_TELA[antiga];
+        if (virouTela ? !papelVe(role, virouTela) : !novas.has(ABAS_RENOMEADAS[antiga] ?? antiga)) faltando.push(antiga);
       }
     }
     expect(faltando).toEqual([]);
@@ -197,6 +212,26 @@ describe("menu — ninguém ganha nem perde tela", () => {
     expect(papelVe("manager", "/prospeccao")).toBe(true);
   });
 
+  it("Leva 5a: Social com Resultados no lugar de Métricas/Entregas; Carteira e Clientes do Quadro viram a lista única", () => {
+    for (const r of ["admin", "manager", "social", "designer"] as Role[]) {
+      const abas = abasDoPapel(r);
+      expect(abas.has("/social#resultados")).toBe(true);
+      for (const velha of ["/social#metricas", "/social#entregas", "/social#carteira", "/design#clientes"]) expect(abas.has(velha)).toBe(false);
+      expect(papelVe(r, "/clients?resp=mine")).toBe(true);
+    }
+    for (const r of ["traffic", "social", "designer"] as Role[]) {
+      const meus = menuDoPapel(r).flatMap((g) => g.itens).find((i) => i.id === "meus-clientes")!;
+      expect(meus.href).toBe("/clients?resp=mine");
+      expect(papelVe(r, "/meus-clientes")).toBe(true); // endereço antigo continua valendo
+    }
+    expect(papelVe("comercial", "/clients?resp=mine")).toBe(false);
+    // Quem procura "métricas" ou "entregas" acha Resultados.
+    const res = telasParaBusca("social").find((t) => t.id === "tela-social-resultados")!;
+    expect(res).toMatchObject({ href: "/social", aba: "resultados" });
+    expect(res.texto).toContain("metricas");
+    expect(res.texto).toContain("entregas");
+  });
+
   it("/tarefas vira vista do Meu Trabalho, menos pro comercial (que não tem Meu Trabalho)", () => {
     for (const r of OP) expect(papelVe(r, "/my-work?view=tarefas")).toBe(true);
     expect(papelVe("comercial", "/my-work?view=tarefas")).toBe(false);
@@ -244,8 +279,16 @@ describe("menu — qual área acende", () => {
   });
 
   it("tela que o papel não vê não acende nada", () => {
-    expect(onde("traffic", "/clients/abc")).toBeNull();
+    expect(onde("traffic", "/contratos")).toBeNull();
     expect(onde("comercial", "/traffic")).toBeNull();
+    expect(onde("comercial", "/clients/abc")).toBeNull();
+  });
+
+  it("Leva 5a: a ficha e a lista de clientes acendem Meus Clientes pra quem executa", () => {
+    expect(onde("traffic", "/clients/abc")).toBe("clientes/meus-clientes");
+    expect(onde("social", "/clients?resp=mine")).toBe("clientes/meus-clientes");
+    expect(onde("designer", "/meus-clientes")).toBe("clientes/meus-clientes");
+    expect(onde("admin", "/clients?resp=mine")).toBe("clientes/clientes");
   });
 
   it("pontuarHref: prefixo só por segmento inteiro", () => {

@@ -6,7 +6,7 @@ import { getServerUser } from "@/lib/supabase/auth-server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { encryptVault } from "@/lib/crypto/vault";
 import * as db from "@/lib/supabase/queries";
-import type { Role, ClientAccess } from "@/lib/types";
+import type { ClientAccess } from "@/lib/types";
 
 // Mantém o cadastro do admin (tabela `clients`) em sincronia com o Cofre do social
 // (tabela `client_access`). Assim, quando o social atualiza uma senha que o cliente
@@ -52,10 +52,6 @@ export async function POST(req: NextRequest) {
     }
     case "updateOnboarding": {
       await db.updateOnboardingItemDb(body.itemId, body.completed, body.actor);
-      return NextResponse.json({ ok: true });
-    }
-    case "insertGlobalChat": {
-      await db.insertGlobalChatMessage(body.user, body.role as Role, body.text);
       return NextResponse.json({ ok: true });
     }
     case "insertMood": {

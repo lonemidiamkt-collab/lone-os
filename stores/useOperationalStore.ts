@@ -3,10 +3,8 @@ import { devtools, subscribeWithSelector } from "zustand/middleware";
 import type {
   TimelineEntry,
   OnboardingItem,
-  GlobalChatMessage,
   Task,
   Notice,
-  Role,
   CreativeAsset,
   SocialProofEntry,
   CrisisNote,
@@ -21,7 +19,6 @@ import { supabase, REALTIME_ENABLED } from "@/lib/supabase/client";
 interface OperationalState {
   timeline: Record<string, TimelineEntry[]>;
   onboarding: Record<string, OnboardingItem[]>;
-  globalChat: GlobalChatMessage[];
   tasks: Task[];
   notices: Notice[];
   creativeAssets: Record<string, CreativeAsset[]>;
@@ -37,7 +34,6 @@ interface OperationalState {
 
   addTimelineEntry: (entry: Omit<TimelineEntry, "id">) => Promise<void>;
   toggleOnboardingItem: (clientId: string, itemId: string, actor: string) => Promise<void>;
-  sendGlobalMessage: (user: string, role: Role, text: string) => void;
 
   addCreativeAsset: (asset: Omit<CreativeAsset, "id">) => Promise<void>;
   addSocialProof: (entry: Omit<SocialProofEntry, "id" | "createdAt">) => Promise<void>;
@@ -74,7 +70,6 @@ export const selectClientTimeline = (clientId: string) => (s: OperationalState) 
 export const selectOnboarding = (s: OperationalState) => s.onboarding;
 export const selectClientOnboarding = (clientId: string) => (s: OperationalState) =>
   s.onboarding[clientId] ?? [];
-export const selectGlobalChat = (s: OperationalState) => s.globalChat;
 export const selectTasks = (s: OperationalState) => s.tasks;
 export const selectNotices = (s: OperationalState) => s.notices;
 
@@ -83,7 +78,6 @@ export const useOperationalStore = create<OperationalState>()(
     subscribeWithSelector((set, get) => ({
       timeline: {},
       onboarding: {},
-      globalChat: [],
       tasks: [],
       notices: [],
       creativeAssets: {},
@@ -99,8 +93,8 @@ export const useOperationalStore = create<OperationalState>()(
         try {
           const res = await authedFetch("/api/data/operational");
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const { timeline, onboardingItems, globalChat, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodEntries, clientAccess } = await res.json();
-          set({ timeline, onboarding: onboardingItems, globalChat, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodHistory: moodEntries, clientAccess, initialized: true }, false, "ops/init/done");
+          const { timeline, onboardingItems, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodEntries, clientAccess } = await res.json();
+          set({ timeline, onboarding: onboardingItems, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodHistory: moodEntries, clientAccess, initialized: true }, false, "ops/init/done");
         } catch {}
       },
 
@@ -126,20 +120,6 @@ export const useOperationalStore = create<OperationalState>()(
           .on("postgres_changes", { event: "DELETE", schema: "public", table: "tasks" }, (p) => {
             const id = (p.old as { id?: string })?.id;
             if (id) set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }), false, "ops/rt/task/delete");
-          })
-          .on("postgres_changes", { event: "INSERT", schema: "public", table: "global_chat_messages" }, (p) => {
-            if (!p.new) return;
-            const row = p.new as Record<string, unknown>;
-            const msg: GlobalChatMessage = {
-              id: row.id as string,
-              user: row.user as string,
-              role: row.role as Role,
-              text: row.text as string,
-              timestamp: row.created_at as string,
-            };
-            set((s) => ({
-              globalChat: s.globalChat.some((m) => m.id === msg.id) ? s.globalChat : [...s.globalChat, msg],
-            }), false, "ops/rt/globalchat/insert");
           })
           .subscribe();
         return () => { supabase.removeChannel(channel); };
@@ -184,26 +164,6 @@ export const useOperationalStore = create<OperationalState>()(
             },
           }), false, "ops/onboarding/toggle/rollback");
         }
-      },
-
-      sendGlobalMessage: (user, role, text) => {
-        const tempMsg: GlobalChatMessage = {
-          id: `temp-gc-${Date.now()}`,
-          user,
-          role,
-          text,
-          timestamp: new Date().toISOString(),
-        };
-        set((s) => ({ globalChat: [...s.globalChat, tempMsg] }), false, "ops/globalchat/optimistic");
-        authedFetch("/api/data/operational/mutations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "insertGlobalChat", user, role, text }),
-        }).catch(() => {
-          set((s) => ({
-            globalChat: s.globalChat.filter((m) => m.id !== tempMsg.id),
-          }), false, "ops/globalchat/rollback");
-        });
       },
 
       addMoodEntry: (clientId, mood, note, actor) => {

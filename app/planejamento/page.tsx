@@ -28,6 +28,11 @@ export default function PlanejamentoPage() {
   const [baixando, setBaixando] = useState("");
 
   useEffect(() => { initClients(); }, [initClients]);
+  // ?cliente=<id> abre já no cliente (vem do "Mover para Ativo e planejar" do fim do onboarding).
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("cliente");
+    if (id) setClientId(id);
+  }, []);
   const carregarRecentes = () => {
     setErroRecentes(null);
     chamar<{ items?: Recente[] }>("/api/cs/calendario/recentes").then((r) => {

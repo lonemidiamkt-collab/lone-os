@@ -18,13 +18,12 @@ export async function GET(req: NextRequest) {
   const canSeeCofre = user.isAdmin || ["admin", "manager", "social"].includes(role);
 
   const [
-    timeline, onboardingItems, globalChat, tasks, notices,
+    timeline, onboardingItems, tasks, notices,
     creativeAssets, socialProofs, crisisNotes, quinzReports,
     moodEntries, clientAccessCifrado,
   ] = await Promise.all([
     db.fetchTimeline(),
     db.fetchOnboardingItems(),
-    db.fetchGlobalChat(),
     db.fetchTasks(),
     db.fetchNotices(),
     db.fetchCreativeAssets(),
@@ -52,8 +51,9 @@ export async function GET(req: NextRequest) {
     clientAccess[id] = aberto;
   }
 
+  // `globalChat` saiu (Leva 5a): o Chat Interno não tem tela desde a Leva 1 (2 mensagens na vida).
   return NextResponse.json({
-    timeline, onboardingItems, globalChat, tasks, notices,
+    timeline, onboardingItems, tasks, notices,
     creativeAssets, socialProofs, crisisNotes, quinzReports,
     moodEntries, clientAccess,
   });

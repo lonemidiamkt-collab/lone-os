@@ -37,7 +37,7 @@ const STEPS: TourStep[] = [
   },
   {
     title: "Ações Rápidas",
-    description: "Crie rapidamente novos clientes, conteúdos ou inicie um chat da equipe usando o botão + no topo.",
+    description: "Crie rapidamente novos clientes ou conteúdos usando o botão + no topo.",
     position: "top-right",
     icon: Plus,
   },

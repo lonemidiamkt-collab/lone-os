@@ -13,15 +13,6 @@ export async function POST(req: NextRequest) {
   const { action } = body;
 
   switch (action) {
-    case "insertSocialReport": {
-      await db.insertSocialReport(body.report);
-      const socialReports = await db.fetchSocialReports();
-      return NextResponse.json({ socialReports });
-    }
-    case "updateSocialReport": {
-      await db.updateSocialReportDb(body.id, body.updates);
-      return NextResponse.json({ ok: true });
-    }
     case "upsertContentApproval": {
       await db.upsertContentApproval(body.approval);
       return NextResponse.json({ ok: true });

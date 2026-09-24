@@ -14,7 +14,7 @@ const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { sta
 const card = (id: string, title: string) => ({ id, title, clientId: "c1", clientName: "Cliente", socialMedia: "Carlos", status: "ideas" as const, priority: "medium" as const, format: "Post" }) as unknown as import("@/lib/types").ContentCard;
 
 beforeEach(() => {
-  useContentStore.setState({ contentCards: [card("a", "Antigo")], designRequests: [], contentApprovals: [], socialReports: [], initialized: true, loading: false, versao: "v1" });
+  useContentStore.setState({ contentCards: [card("a", "Antigo")], designRequests: [], contentApprovals: [], initialized: true, loading: false, versao: "v1" });
 });
 
 describe("refresh não apaga o que acabou de ser criado", () => {
@@ -28,14 +28,14 @@ describe("refresh não apaga o que acabou de ser criado", () => {
     await useContentStore.getState().addContentCard(card("", "Novo") as never); // 2) pessoa cria o card
     expect(useContentStore.getState().contentCards.map((c) => c.title)).toEqual(["Antigo", "Novo"]);
 
-    soltar(json({ contentCards: [card("a", "Antigo")], designRequests: [], contentApprovals: [], socialReports: [], versao: "v0" })); // 3) resposta velha, sem o novo
+    soltar(json({ contentCards: [card("a", "Antigo")], designRequests: [], contentApprovals: [], versao: "v0" })); // 3) resposta velha, sem o novo
     await busca;
     // ANTES: ["Antigo"] — o card sumia. AGORA: descartada.
     expect(useContentStore.getState().contentCards.map((c) => c.title)).toEqual(["Antigo", "Novo"]);
   });
 
   it("busca normal (sem escrita no meio) continua substituindo pelo servidor", async () => {
-    respostas["/api/data/content"] = async () => json({ contentCards: [card("a", "Antigo"), card("b", "Do servidor")], designRequests: [], contentApprovals: [], socialReports: [], versao: "v2" });
+    respostas["/api/data/content"] = async () => json({ contentCards: [card("a", "Antigo"), card("b", "Do servidor")], designRequests: [], contentApprovals: [], versao: "v2" });
     await useContentStore.getState().refresh();
     expect(useContentStore.getState().contentCards.map((c) => c.title)).toEqual(["Antigo", "Do servidor"]);
     expect(useContentStore.getState().versao).toBe("v2");

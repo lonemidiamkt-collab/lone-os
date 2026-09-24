@@ -1,4 +1,4 @@
-import type { Client, Task, ContentCard, DesignRequest, Notice, QuinzReport, TimelineEntry, GlobalChatMessage, OnboardingItem, MoodEntry, CreativeAsset, TrafficRoutineCheck, SocialMonthlyReport, AdAccount, AdCampaign } from "./types";
+import type { Client, Task, ContentCard, DesignRequest, Notice, QuinzReport, TimelineEntry, OnboardingItem, MoodEntry, CreativeAsset, TrafficRoutineCheck, AdAccount, AdCampaign } from "./types";
 
 // ═══════════════════════════════════════════════════════════
 // LONE OS — Production Data (All mock data purged)
@@ -12,12 +12,10 @@ export const mockDesignRequests: DesignRequest[] = [];
 export const mockNotices: Notice[] = [];
 export const mockQuinzReports: QuinzReport[] = [];
 export const mockTimeline: Record<string, TimelineEntry[]> = {};
-export const mockGlobalChat: GlobalChatMessage[] = [];
 export const mockMoodHistory: Record<string, MoodEntry[]> = {};
 export const mockCreativeAssets: Record<string, CreativeAsset[]> = {};
 export const mockClientChats: Record<string, import("./types").ChatMessage[]> = {};
 export const mockTrafficRoutineChecks: TrafficRoutineCheck[] = [];
-export const mockSocialReports: SocialMonthlyReport[] = [];
 export const mockAdAccounts: AdAccount[] = [];
 export const mockAdCampaigns: AdCampaign[] = [];
 

@@ -24,10 +24,10 @@ import { supabase } from "./client";
 import { supabaseAdmin } from "./server";
 import type {
   Client, Task, ContentCard, DesignRequest, AppNotification,
-  TimelineEntry, ChatMessage, GlobalChatMessage, OnboardingItem,
+  TimelineEntry, ChatMessage, OnboardingItem,
   MoodEntry, MoodType, CreativeAsset, SocialProofEntry, CrisisNote,
   Notice, QuinzReport, ClientAccess,
-  TrafficRoutineCheck, SocialMonthlyReport, ContentApproval,
+  TrafficRoutineCheck, ContentApproval,
   Role, CardAttachment, CsClientRule, CrmLead, CrmEstagio, CrmLeadActivity, CrmAtividadeTipo, CrmMeta,
 } from "@/lib/types";
 
@@ -403,6 +403,8 @@ export function snakeToContentCard(row: Record<string, unknown>): ContentCard {
     totalTimeSpentMs: (row.total_time_spent_ms as number) ?? 0,
     publishVerifiedAt: (row.publish_verified_at as string) ?? undefined,
     publishVerifiedBy: (row.publish_verified_by as string) ?? undefined,
+    igMediaId: (row.ig_media_id as string) ?? undefined,
+    igPermalink: (row.ig_permalink as string) ?? undefined,
     requestedByTraffic: (row.requested_by_traffic as string) ?? undefined,
     trafficSuggestion: (row.traffic_suggestion as string) ?? undefined,
   };
@@ -706,29 +708,7 @@ export async function insertClientChatMessage(clientId: string, user: string, te
   if (error) console.error("[DB] insertClientChat:", error);
 }
 
-// ═══════════════════════════════════════════════════════════
-// GLOBAL CHAT
-// ═══════════════════════════════════════════════════════════
-
-export async function fetchGlobalChat(): Promise<GlobalChatMessage[]> {
-  const { data, error } = await db.from("global_chat").select("*").order("created_at");
-  if (error) { console.error("[DB] fetchGlobalChat:", error); return []; }
-  return (data ?? []).map((row: Record<string, unknown>) => ({
-    id: row.id as string,
-    user: row.user as string,
-    role: row.role as Role,
-    text: row.text as string,
-    timestamp: row.timestamp as string,
-  }));
-}
-
-export async function insertGlobalChatMessage(user: string, role: Role, text: string): Promise<void> {
-  const timestamp = new Date().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-  const { error } = await db.from("global_chat").insert({
-    user, role, text, timestamp,
-  });
-  if (error) console.error("[DB] insertGlobalChat:", error);
-}
+// (Chat Interno — global_chat — saiu na Leva 5a: sem tela desde a Leva 1. A tabela fica.)
 
 // ═══════════════════════════════════════════════════════════
 // ONBOARDING ITEMS
@@ -1265,75 +1245,7 @@ export async function fetchClientGroupMessageLog(sinceDateKey: string): Promise<
   }));
 }
 
-// ═══════════════════════════════════════════════════════════
-// SOCIAL REPORTS
-// ═══════════════════════════════════════════════════════════
-
-export async function fetchSocialReports(): Promise<SocialMonthlyReport[]> {
-  const { data, error } = await db.from("social_reports").select("*").order("created_at", { ascending: false });
-  if (error) { console.error("[DB] fetchSocialReports:", error); return []; }
-  return (data ?? []).map((row: Record<string, unknown>) => ({
-    id: row.id as string,
-    clientId: row.client_id as string,
-    clientName: row.client_name as string,
-    month: row.month as string,
-    createdBy: row.created_by as string,
-    createdAt: (row.created_at as string) ?? "",
-    postsPublished: (row.posts_published as number) ?? 0,
-    postsGoal: (row.posts_goal as number) ?? 12,
-    reelsCount: (row.reels_count as number) ?? 0,
-    storiesCount: (row.stories_count as number) ?? 0,
-    reach: (row.reach as number) ?? 0,
-    impressions: (row.impressions as number) ?? 0,
-    engagement: (row.engagement as number) ?? 0,
-    engagementRate: Number(row.engagement_rate ?? 0),
-    followersGained: (row.followers_gained as number) ?? 0,
-    followersLost: (row.followers_lost as number) ?? 0,
-    topPost: (row.top_post as string) ?? undefined,
-    observations: (row.observations as string) ?? undefined,
-  }));
-}
-
-export async function insertSocialReport(report: Omit<SocialMonthlyReport, "id" | "createdAt">): Promise<void> {
-  const { error } = await db.from("social_reports").insert({
-    client_id: report.clientId,
-    client_name: report.clientName,
-    month: report.month,
-    created_by: report.createdBy,
-    posts_published: report.postsPublished,
-    posts_goal: report.postsGoal,
-    reels_count: report.reelsCount,
-    stories_count: report.storiesCount,
-    reach: report.reach,
-    impressions: report.impressions,
-    engagement: report.engagement,
-    engagement_rate: report.engagementRate,
-    followers_gained: report.followersGained,
-    followers_lost: report.followersLost,
-    top_post: report.topPost,
-    observations: report.observations,
-  });
-  if (error) console.error("[DB] insertSocialReport:", error);
-}
-
-export async function updateSocialReportDb(id: string, updates: Partial<SocialMonthlyReport>): Promise<void> {
-  const row: Record<string, unknown> = {};
-  if (updates.postsPublished !== undefined) row.posts_published = updates.postsPublished;
-  if (updates.postsGoal !== undefined) row.posts_goal = updates.postsGoal;
-  if (updates.reelsCount !== undefined) row.reels_count = updates.reelsCount;
-  if (updates.storiesCount !== undefined) row.stories_count = updates.storiesCount;
-  if (updates.reach !== undefined) row.reach = updates.reach;
-  if (updates.impressions !== undefined) row.impressions = updates.impressions;
-  if (updates.engagement !== undefined) row.engagement = updates.engagement;
-  if (updates.engagementRate !== undefined) row.engagement_rate = updates.engagementRate;
-  if (updates.followersGained !== undefined) row.followers_gained = updates.followersGained;
-  if (updates.followersLost !== undefined) row.followers_lost = updates.followersLost;
-  if (updates.topPost !== undefined) row.top_post = updates.topPost;
-  if (updates.observations !== undefined) row.observations = updates.observations;
-  if (Object.keys(row).length === 0) return;
-  const { error } = await db.from("social_reports").update(row).eq("id", id);
-  if (error) console.error("[DB] updateSocialReport:", error);
-}
+// (Relatório social manual — social_reports — saiu na Leva 5a: 0 usos. A tabela fica.)
 
 // ═══════════════════════════════════════════════════════════
 // CONTENT APPROVALS

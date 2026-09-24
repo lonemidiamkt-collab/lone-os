@@ -96,7 +96,6 @@ export default function Sidebar() {
   // ── Contadores ────────────────────────────────────────────────
   // Social vê os números do PRÓPRIO quadro (é onde a tela dele abre); o resto vê a agência.
   const soDoSocial = role === "social";
-  const clientesSocial = clients.filter((c) => c.assignedSocial && (!soDoSocial || c.assignedSocial === currentUser));
   const cardsSocial = soDoSocial ? contentCards.filter((c) => c.socialMedia === currentUser) : contentCards;
   const hoje = todaySP();
   const carteiraTrafego = clients.filter((c) => emOperacao(c) && (role !== "traffic" || c.assignedTraffic === currentUser));
@@ -110,7 +109,6 @@ export default function Sidebar() {
 
   const badges: Record<ChaveBadge, number> = {
     atRisk: clients.filter((c) => c.status === "at_risk").length,
-    socialClients: clientesSocial.length,
     socialPending: cardsSocial.filter((c) => !["scheduled", "published"].includes(c.status)).length,
     // Card já aprovado pelo cliente continua em client_approval até alguém agendar — não é pendência.
     socialApproval: cardsSocial.filter(

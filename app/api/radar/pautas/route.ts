@@ -3,18 +3,25 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { getServerUser } from "@/lib/supabase/auth-server";
+import { requireRole } from "@/lib/api/require-role";
+import { todaySP } from "@/lib/utils";
 
-// GET  /api/radar/pautas — o que o Radar achou, pronto para o social media decidir.
-// POST /api/radar/pautas — registra a decisão (usada / descartada / guardada).
+// Quem abre o Planejamento (lib/navegacao/menu.ts → CONTEUDO). Antes bastava estar logado.
+const PAPEIS = ["admin", "manager", "social", "designer"] as const;
+
+// GET  /api/radar/pautas — o que o Radar achou, pronto para o social media decidir. Vem junto, por
+//      cliente, as datas que ele já tem no board (`ocupadas`) — é com elas que a tela sugere a data
+//      do card ("Usar esta pauta" cria o card já no próximo dia de postagem livre).
+// POST /api/radar/pautas — registra a decisão (usada / descartada / guardada). Com `cardId`, liga a
+//      pauta ao card que saiu dela (radar_pautas.content_card_id, migration 20260924190000).
 //
 // Sem esta tela o Radar produz e ninguém vê — foi o que aconteceu com os alertas de queda, que
 // ficaram meses sendo detectados sem nunca chegar a ninguém. E a decisão não é só burocracia: pauta
 // descartada com motivo é o único jeito de o sistema aprender o que NÃO serve para este time.
 
 export async function GET(req: NextRequest) {
-  const user = await getServerUser(req);
-  if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
+  const gate = await requireRole(req, [...PAPEIS]);
+  if (gate instanceof NextResponse) return gate;
 
   const status = req.nextUrl.searchParams.get("status") || "nova";
   const { data: pautas, error } = await supabaseAdmin
@@ -56,7 +63,20 @@ export async function GET(req: NextRequest) {
     .select("id, forca, status, perfis_count, midias_count");
   const porTrend = new Map((trends ?? []).map((t) => [t.id as string, t]));
 
+  // Datas que cada cliente já tem no board daqui pra frente: a data sugerida pula essas.
+  const clientIds = [...new Set((pautas ?? []).map((p) => p.client_id as string).filter(Boolean))];
+  const ocupadas: Record<string, string[]> = {};
+  if (clientIds.length) {
+    const { data: cards } = await supabaseAdmin.from("content_cards").select("client_id, due_date")
+      .in("client_id", clientIds).is("archived_at", null).gte("due_date", todaySP());
+    for (const c of cards ?? []) {
+      const id = c.client_id as string;
+      (ocupadas[id] ??= []).push(c.due_date as string);
+    }
+  }
+
   return NextResponse.json({
+    ocupadas,
     pautas: (pautas ?? []).map((p) => ({
       ...p,
       forca: porTrend.get(p.trend_id as string)?.forca ?? null,
@@ -67,10 +87,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getServerUser(req);
-  if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
+  const gate = await requireRole(req, [...PAPEIS]);
+  if (gate instanceof NextResponse) return gate;
+  const { user } = gate;
 
-  const body = (await req.json().catch(() => ({}))) as { id?: string; decisao?: string; motivo?: string };
+  const body = (await req.json().catch(() => ({}))) as { id?: string; decisao?: string; motivo?: string; cardId?: string };
   if (!body.id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
   if (!["usada", "descartada", "guardada"].includes(String(body.decisao))) {
     return NextResponse.json({ error: "decisão inválida" }, { status: 400 });
@@ -80,13 +101,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "diga por que descartou" }, { status: 400 });
   }
 
-  const { error } = await supabaseAdmin.from("radar_pautas").update({
+  const linha: Record<string, unknown> = {
     status: body.decisao,
     decidido_por: user.email ?? "equipe",
     decidido_em: new Date().toISOString(),
     motivo_descarte: body.decisao === "descartada" ? String(body.motivo).slice(0, 120) : null,
-  }).eq("id", body.id);
+  };
+  // Liga a pauta ao card que saiu dela. A coluna vem da migration 20260924190000: antes dela, a
+  // decisão grava igual e só o vínculo fica de fora (select * em vez de pedir a coluna — pedir
+  // coluna inexistente dá 400 e vira alerta no Sentry).
+  let ligada = false;
+  if (body.decisao === "usada" && typeof body.cardId === "string" && body.cardId) {
+    const { data: atual } = await supabaseAdmin.from("radar_pautas").select("*").eq("id", body.id).maybeSingle();
+    if (atual && "content_card_id" in atual) { linha.content_card_id = body.cardId; ligada = true; }
+  }
+
+  const { error } = await supabaseAdmin.from("radar_pautas").update(linha).eq("id", body.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, ligada });
 }

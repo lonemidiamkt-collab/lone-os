@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { toast } from "sonner";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
-import type { ContentCard, DesignRequest, ContentApproval, SocialMonthlyReport, CardComment, Role } from "@/lib/types";
+import type { ContentCard, DesignRequest, ContentApproval, CardComment, Role } from "@/lib/types";
 import { supabase, REALTIME_ENABLED } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
@@ -12,7 +12,6 @@ interface ContentState {
   contentCards: ContentCard[];
   designRequests: DesignRequest[];
   contentApprovals: ContentApproval[];
-  socialReports: SocialMonthlyReport[];
   loading: boolean;
   initialized: boolean;
   /** A primeira carga falhou: a tela mostra erro (não "nenhum card") e o polling tenta de novo. */
@@ -34,8 +33,6 @@ interface ContentState {
   updateDesignRequest: (id: string, updates: Partial<DesignRequest>) => Promise<void>;
   deleteDesignRequest: (id: string) => Promise<void>;
 
-  addSocialReport: (report: Omit<SocialMonthlyReport, "id" | "createdAt">) => Promise<SocialMonthlyReport>;
-  updateSocialReport: (id: string, updates: Partial<SocialMonthlyReport>) => Promise<void>;
 
   addCardComment: (cardId: string, author: string, role: Role, text: string) => void;
 }
@@ -43,7 +40,6 @@ interface ContentState {
 export const selectContentCards = (s: ContentState) => s.contentCards;
 export const selectDesignRequests = (s: ContentState) => s.designRequests;
 export const selectContentApprovals = (s: ContentState) => s.contentApprovals;
-export const selectSocialReports = (s: ContentState) => s.socialReports;
 export const selectContentLoading = (s: ContentState) => s.loading;
 export const selectCardsByClient = (clientId: string) => (s: ContentState) =>
   s.contentCards.filter((c) => c.clientId === clientId);
@@ -72,7 +68,6 @@ export const useContentStore = create<ContentState>()(
       contentCards: [],
       designRequests: [],
       contentApprovals: [],
-      socialReports: [],
       loading: false,
       initialized: false,
       loadError: false,
@@ -81,15 +76,15 @@ export const useContentStore = create<ContentState>()(
         if (get().initialized || get().loading) return;
         set({ loading: true }, false, "content/init/start");
         const params = filter?.socialMedia ? `?socialMedia=${encodeURIComponent(filter.socialMedia)}` : "";
-        const r = await chamar<{ contentCards?: ContentCard[]; designRequests?: DesignRequest[]; contentApprovals?: ContentApproval[]; socialReports?: SocialMonthlyReport[]; versao?: string }>(`/api/data/content${params}`);
+        const r = await chamar<{ contentCards?: ContentCard[]; designRequests?: DesignRequest[]; contentApprovals?: ContentApproval[]; versao?: string }>(`/api/data/content${params}`);
         if (!r.ok || !r.data || !Array.isArray(r.data.contentCards)) {
           trilha("init:erro", { status: r.status });
           set({ loading: false, loadError: true }, false, "content/init/error");
           return;
         }
-        const { contentCards, designRequests = [], contentApprovals = [], socialReports = [], versao } = r.data;
+        const { contentCards, designRequests = [], contentApprovals = [], versao } = r.data;
         trilha("init:ok", { cards: contentCards.length, demandas: designRequests.length });
-        set({ contentCards, designRequests, contentApprovals, socialReports, versao, loading: false, initialized: true, loadError: false }, false, "content/init/done");
+        set({ contentCards, designRequests, contentApprovals, versao, loading: false, initialized: true, loadError: false }, false, "content/init/done");
       },
 
       refresh: async (filter) => {
@@ -111,7 +106,7 @@ export const useContentStore = create<ContentState>()(
           ultimoRefresh = Date.now();
           if (res.status === 204) return; // nada mudou desde o último tick — zero bytes, zero re-render
           if (!res.ok) { trilha("refresh:erro", { status: res.status }); return; }
-          const { contentCards, designRequests, contentApprovals, socialReports, versao } = await res.json();
+          const { contentCards, designRequests, contentApprovals, versao } = await res.json();
           // Escrita local depois que esta busca saiu? A resposta é velha: descarta e busca de novo.
           if (mutadoEm > disparadoEm || criacoesEmVoo.size > 0) {
             trilha("refresh:descartado-por-escrita-local");
@@ -123,7 +118,7 @@ export const useContentStore = create<ContentState>()(
           const cards = get().contentCards, reqs = get().designRequests;
           const cardsTemp = cards.filter((c) => c.id.startsWith("temp-"));
           const reqsTemp = reqs.filter((r) => r.id.startsWith("temp-"));
-          set({ contentCards: [...contentCards, ...cardsTemp], designRequests: [...reqsTemp, ...designRequests], contentApprovals, socialReports, versao }, false, "content/refresh");
+          set({ contentCards: [...contentCards, ...cardsTemp], designRequests: [...reqsTemp, ...designRequests], contentApprovals, versao }, false, "content/refresh");
         } catch {} finally { refreshEmVoo = false; }
       },
 
@@ -342,36 +337,6 @@ export const useContentStore = create<ContentState>()(
               useNotificationsStore.getState().push("system", "Falha ao reprovar a arte", `Não deu pra salvar a reprovação${card ? ` de "${card.title}"` : ""}. Verifique a conexão e tente de novo.`, card?.clientId);
             });
           });
-      },
-
-      addSocialReport: async (report) => {
-        const tempId = `temp-sr-${Date.now()}`;
-        const optimistic: SocialMonthlyReport = { ...report, id: tempId, createdAt: new Date().toISOString() } as SocialMonthlyReport;
-        set((s) => ({ socialReports: [optimistic, ...s.socialReports] }), false, "content/socialReport/add/optimistic");
-        try {
-          const r = await authedFetch("/api/data/content/mutations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "insertSocialReport", report }) });
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          const { socialReports: updated } = await r.json();
-          set({ socialReports: updated }, false, "content/socialReport/add/confirmed");
-          return updated.find((sr: SocialMonthlyReport) => sr.id !== tempId) ?? optimistic;
-        } catch (err) {
-          set((s) => ({ socialReports: s.socialReports.filter((r) => r.id !== tempId) }), false, "content/socialReport/add/rollback");
-          throw err;
-        }
-      },
-
-      updateSocialReport: async (id, updates) => {
-        const prev = get().socialReports.find((r) => r.id === id);
-        set((s) => ({
-          socialReports: s.socialReports.map((r) => r.id === id ? { ...r, ...updates } : r),
-        }), false, "content/socialReport/update/optimistic");
-        try {
-          const res = await authedFetch("/api/data/content/mutations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "updateSocialReport", id, updates }) });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        } catch (err) {
-          if (prev) set((s) => ({ socialReports: s.socialReports.map((r) => r.id === id ? prev : r) }), false, "content/socialReport/update/rollback");
-          throw err;
-        }
       },
 
       addDesignRequest: async (req) => {

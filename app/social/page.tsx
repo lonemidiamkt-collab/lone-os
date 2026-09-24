@@ -8,29 +8,26 @@ import KanbanBoard from "@/components/KanbanBoard";
 import ContentCardModal from "@/components/ContentCardModal";
 import CsAgentInbox from "@/components/cs/CsAgentInbox";
 import DailyClosePanel from "@/components/social/DailyClosePanel";
+import ResultadosTab from "@/components/social/ResultadosTab";
 import ArchivedDemandsModal from "@/components/ArchivedDemandsModal";
 import SignedImage from "@/components/shared/SignedImage";
-import ContentIdeasModal from "@/components/ContentIdeasModal";
-import Client360Modal from "@/components/Client360Modal";
-import CampaignModal from "@/components/CampaignModal";
 import DriveButton from "@/components/DriveButton";
 import MateriaisResumo from "@/components/clients/MateriaisResumo";
-import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import { MarkdownEditor } from "@/components/Markdown";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 import { STATUS_COR } from "@/components/kanban/status-cores";
 import { slotsSegQuaSex, proximoSlot, chaveDaLinha } from "@/components/kanban/lote";
-import type { ContentCard, Client, MoodType, Priority, MonthlyDeliveryReport, MoodEntry, OnboardingItem } from "@/lib/types";
-import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS, spDateStr, todaySP } from "@/lib/utils";
+import type { ContentCard, Client, Priority } from "@/lib/types";
+import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS, todaySP } from "@/lib/utils";
 import {
   AlertTriangle, Calendar, Instagram, ImageIcon,
-  Smile, UserPlus, X, ExternalLink,
-  Sparkles, Clock, Target, Zap, BarChart2,
-  TrendingUp, Hash, Check, Plus, ChevronDown,
+  UserPlus, X,
+  Clock, Target, Zap, BarChart2,
+  Check, Plus, ChevronDown,
   Key, Eye, EyeOff, Save,
   Download, CheckCircle, FileWarning, ShieldCheck, AlertCircle, Layers, Trash2, Copy, Archive,
-  Palette, Search, Meh, Frown, Lock, UsersRound, Music, FolderOpen, FileText,
+  Palette, Search, Lock, UsersRound, Music, FolderOpen, FileText,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
@@ -95,23 +92,6 @@ const DEADLINE_BADGE: Record<string, { label: string; color: string }> = {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const HEALTH_CONFIG: Record<string, { label: string; led: string; color: string; bg: string; border: string }> = {
-  good:       { label: "On Fire",    led: "led led-healthy",  color: "text-primary",       bg: "bg-primary/5",    border: "border-primary/20" },
-  average:    { label: "Atenção",    led: "led led-attention", color: "text-lone-warning",      bg: "bg-lone-warning-bg",     border: "border-lone-warning-border" },
-  at_risk:    { label: "Crítico",    led: "led led-critical",  color: "text-destructive",       bg: "bg-destructive/5",    border: "border-destructive/20" },
-  onboarding: { label: "Onboarding", led: "led led-healthy",  color: "text-primary",       bg: "bg-primary/5",    border: "border-primary/20" },
-};
-
-const MOOD_CONFIG = {
-  happy:   { icone: Smile, label: "Satisfeito", color: "text-primary" },
-  neutral: { icone: Meh,   label: "Neutro",     color: "text-muted-foreground" },
-  angry:   { icone: Frown, label: "Irritado",   color: "text-destructive" },
-};
-
-const TONE_LABELS: Record<string, string> = {
-  formal: "Formal", funny: "Engraçado", authoritative: "Autoritário", casual: "Casual",
-};
-
 const CONTENT_COLUMNS = [
   { id: "ideas",          title: "Ideias",             color: STATUS_COR.ideas },
   { id: "script",         title: "Roteiro",            color: STATUS_COR.script },
@@ -164,11 +144,12 @@ function Confetti() {
 interface OnboardingCompleteModalProps {
   client: Client;
   onMoveActive: () => void;
-  onMoveActiveAndIdeas: () => void;
+  /** Move para ativo e abre o Planejamento já no cliente (Radar + calendário estratégico). */
+  onMoveActiveAndPlan: () => void;
   onClose: () => void;
 }
 
-function OnboardingCompleteModal({ client, onMoveActive, onMoveActiveAndIdeas, onClose }: OnboardingCompleteModalProps) {
+function OnboardingCompleteModal({ client, onMoveActive, onMoveActiveAndPlan, onClose }: OnboardingCompleteModalProps) {
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
@@ -177,15 +158,15 @@ function OnboardingCompleteModal({ client, onMoveActive, onMoveActiveAndIdeas, o
           <CheckCircle size={32} className="mx-auto mb-3 text-primary" />
           <h3 className="text-lg font-semibold text-foreground mb-2">Onboarding Concluído!</h3>
           <p className="text-sm text-muted-foreground">
-            Deseja mover <span className="text-foreground font-semibold">{client.name}</span> para Ativo e gerar as primeiras pautas com IA?
+            Deseja mover <span className="text-foreground font-semibold">{client.name}</span> para Ativo e já abrir o planejamento de conteúdo dele?
           </p>
         </div>
         <div className="space-y-2">
           <button
-            onClick={onMoveActiveAndIdeas}
+            onClick={onMoveActiveAndPlan}
             className="w-full px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
           >
-            Mover para Ativo + Gerar Pautas
+            Mover para Ativo e planejar
           </button>
           <button
             onClick={onMoveActive}
@@ -198,348 +179,6 @@ function OnboardingCompleteModal({ client, onMoveActive, onMoveActiveAndIdeas, o
             className="w-full px-4 py-2.5 rounded-xl text-muted-foreground text-sm font-medium hover:text-foreground transition-colors"
           >
             Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Personal Dashboard ───────────────────────────────────────────────────────
-
-interface PersonalDashboardProps {
-  userName: string;
-  cards: ContentCard[];
-  clients: Client[];
-  moodHistory: Record<string, MoodEntry[]>;
-}
-
-function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDashboardProps) {
-  const myCards = cards.filter((c) => c.socialMedia === userName);
-  const activeCards = myCards.filter((c) => c.status !== "published");
-  const publishedCards = myCards.filter((c) => c.status === "published");
-
-  // Cards vencendo hoje/amanhã e vencidos — usa getDeadlineUrgency (parse LOCAL de "YYYY-MM-DD"),
-  // senão new Date() cru lê UTC 00:00 e marca o card que vence HOJE como vencido o dia todo.
-  const dueSoon = activeCards.filter((c) => {
-    const u = getDeadlineUrgency(c.dueDate);
-    return u === "overdue" || u === "today" || u === "tomorrow";
-  });
-
-  // Overdue cards
-  const overdue = activeCards.filter((c) => getDeadlineUrgency(c.dueDate) === "overdue");
-
-  // SLA alerts: cards stuck 24h+
-  const slaAlerts = activeCards.filter((c) => {
-    const sla = getSlaBadge(c.status, c.columnEnteredAt, c.statusChangedAt);
-    return sla !== null;
-  });
-
-  // Clients without mood check-in for 3+ days
-  const noCheckin = clients.filter((c) => {
-    const entries = moodHistory[c.id];
-    if (!entries || entries.length === 0) return true;
-    const lastDate = new Date(entries[0].date);
-    const diffDays = (Date.now() - lastDate.getTime()) / 86400000;
-    return diffDays >= 3;
-  });
-
-  const firstName = userName.split(" ")[0];
-
-  return (
-    <div className="space-y-4 animate-fade-in">
-      {/* Greeting */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground tracking-tight">
-            Bom dia, {firstName}
-          </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {activeCards.length} conteúdo(s) em andamento · {publishedCards.length} publicado(s) este mês
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-2xl font-semibold text-primary tracking-tight">{myCards.length}</p>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total cards</p>
-        </div>
-      </div>
-
-      {/* Alert cards row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {/* Overdue / Due soon */}
-        <div className={`rounded-xl p-4 border ${
-          overdue.length > 0
-            ? "bg-destructive/5 border-destructive/20"
-            : dueSoon.length > 0
-              ? "bg-primary/5 border-primary/20"
-              : "bg-card border-border"
-        }`}>
-          <div className="flex items-center gap-2 mb-2">
-            <Clock size={13} className={overdue.length > 0 ? "text-destructive" : "text-primary"} />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Entregas</span>
-          </div>
-          {overdue.length > 0 ? (
-            <div>
-              <p className="text-xl font-semibold text-destructive tracking-tight">{overdue.length}</p>
-              <p className="text-[10px] text-destructive/70">vencido(s)</p>
-            </div>
-          ) : dueSoon.length > 0 ? (
-            <div>
-              <p className="text-xl font-semibold text-primary tracking-tight">{dueSoon.length}</p>
-              <p className="text-[10px] text-muted-foreground">até amanhã</p>
-            </div>
-          ) : (
-            <div>
-              <p className="text-xl font-semibold text-muted-foreground tracking-tight">0</p>
-              <p className="text-[10px] text-muted-foreground">tudo em dia</p>
-            </div>
-          )}
-        </div>
-
-        {/* SLA alerts */}
-        <div className={`rounded-xl p-4 border ${
-          slaAlerts.length > 0 ? "bg-lone-warning-bg border-lone-warning-border" : "bg-card border-border"
-        }`}>
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle size={13} className={slaAlerts.length > 0 ? "text-lone-warning" : "text-muted-foreground"} />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Gargalos</span>
-          </div>
-          <p className={`text-xl font-semibold tracking-tight ${slaAlerts.length > 0 ? "text-lone-warning" : "text-muted-foreground"}`}>
-            {slaAlerts.length}
-          </p>
-          <p className="text-[10px] text-muted-foreground">card(s) parado(s) 24h+</p>
-        </div>
-
-        {/* Check-in needed */}
-        <div className={`rounded-xl p-4 border ${
-          noCheckin.length > 0 ? "bg-primary/5 border-primary/20" : "bg-card border-border"
-        }`}>
-          <div className="flex items-center gap-2 mb-2">
-            <Smile size={13} className={noCheckin.length > 0 ? "text-primary" : "text-muted-foreground"} />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Check-in</span>
-          </div>
-          <p className={`text-xl font-semibold tracking-tight ${noCheckin.length > 0 ? "text-primary" : "text-muted-foreground"}`}>
-            {noCheckin.length}
-          </p>
-          <p className="text-[10px] text-muted-foreground">sem check-in 3+ dias</p>
-        </div>
-      </div>
-
-      {/* Due soon list */}
-      {dueSoon.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-4">
-          <h4 className="text-[10px] text-muted-foreground uppercase tracking-wider mb-3">Próximas entregas</h4>
-          <div className="space-y-2">
-            {dueSoon.slice(0, 4).map((card) => {
-              const isOverdue = overdue.some((o) => o.id === card.id);
-              return (
-                <div key={card.id} className="flex items-center gap-3 text-xs">
-                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOverdue ? "bg-destructive" : "bg-primary"}`} />
-                  <span className="text-foreground truncate flex-1">{card.title}</span>
-                  <span className="text-muted-foreground shrink-0">{card.clientName}</span>
-                  <span className={`shrink-0 font-medium ${isOverdue ? "text-destructive" : "text-muted-foreground"}`}>
-                    {card.dueDate}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── ClientCard ────────────────────────────────────────────────────────────────
-
-interface ClientCardProps {
-  client: Client;
-  moodEntries: MoodEntry[];
-  onboarding: OnboardingItem[];
-  onMood: (clientId: string) => void;
-  onIdeas: (client: Client) => void;
-  onOpen360: () => void;
-}
-
-function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen360 }: ClientCardProps) {
-  const health = HEALTH_CONFIG[client.status] ?? HEALTH_CONFIG.good;
-  const lastMood = moodEntries?.[0];
-  const mood = lastMood ? MOOD_CONFIG[lastMood.mood] : null;
-
-  const postsNow = client.postsThisMonth ?? 0;
-  const postsGoal = client.postsGoal ?? 12;
-  const postsPct = Math.min(100, Math.round((postsNow / postsGoal) * 100));
-
-  const obItems = onboarding ?? [];
-  const obDone = obItems.filter((i) => i.completed).length;
-  const obPct = obItems.length > 0 ? Math.round((obDone / obItems.length) * 100) : 0;
-
-  const isAtRisk = client.status === "at_risk";
-
-  return (
-    <div
-      className={`bg-card border rounded-xl p-5 hover:border-primary/40 transition-all cursor-pointer ${
-        isAtRisk ? "border-destructive/30" : "border-border"
-      }`}
-      onClick={onOpen360}
-    >
-      {/* Row 1: Avatar + Name + Status LED */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-semibold text-primary shrink-0 tracking-tight">
-          {client.name.split(" ").map(w => w[0]).join("").slice(0, 2)}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-foreground text-sm tracking-tight truncate">{client.name}</h3>
-            <div className={health.led} title={health.label} />
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-            <span>{client.industry}</span>
-            {client.instagramUser && (
-              <>
-                <span className="text-muted-foreground">·</span>
-                <span className="text-muted-foreground">{client.instagramUser}</span>
-              </>
-            )}
-          </div>
-        </div>
-        <span className={`text-[10px] font-medium uppercase tracking-wider px-2 py-1 rounded-md border ${health.bg} ${health.color} ${health.border}`}>
-          {health.label}
-        </span>
-      </div>
-
-      {/* Row 2: Metrics row */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        {/* Posts progress */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Posts</span>
-            <span className="text-[10px] text-muted-foreground font-medium">{postsNow}/{postsGoal}</span>
-          </div>
-          <div className="h-1 bg-muted rounded-full overflow-hidden">
-            <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${postsPct}%` }} />
-          </div>
-        </div>
-
-        {/* Mood */}
-        <div className="text-right">
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Humor</span>
-          {mood ? (
-            <span className="text-xs text-muted-foreground mt-1 inline-flex items-center gap-1"><mood.icone size={12} className={mood.color} /> {mood.label}</span>
-          ) : (
-            <span className="text-xs text-muted-foreground mt-1 block">—</span>
-          )}
-        </div>
-
-      </div>
-
-      {/* Onboarding progress (only if onboarding) */}
-      {client.status === "onboarding" && obItems.length > 0 && (
-        <div className="mb-4 p-3 bg-primary/5 rounded-lg border border-primary/10">
-          <div className="flex items-center justify-between text-[10px] mb-1.5">
-            <span className="text-primary uppercase tracking-wider font-medium">Onboarding</span>
-            <span className="text-primary font-semibold">{obPct}%</span>
-          </div>
-          <div className="h-1 bg-primary/10 rounded-full overflow-hidden">
-            <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${obPct}%` }} />
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-1.5">{obDone} de {obItems.length} etapas</p>
-        </div>
-      )}
-
-      {/* Bottom actions */}
-      <div className="flex items-center justify-between pt-3 border-t border-border/80">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={(e) => { e.stopPropagation(); onIdeas(client); }}
-            className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
-            title="Gerar ideias"
-          >
-            <Sparkles size={14} />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onMood(client.id); }}
-            className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
-            title="Check-in de humor"
-          >
-            <Smile size={14} />
-          </button>
-          <Link
-            href={`/clients/${client.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
-            title="Ver perfil"
-          >
-            <ExternalLink size={14} />
-          </Link>
-        </div>
-        {client.toneOfVoice && (
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-            {TONE_LABELS[client.toneOfVoice] ?? client.toneOfVoice}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Mood check-in inline modal ────────────────────────────────────────────────
-
-interface MoodModalProps {
-  clientName: string;
-  onSave: (mood: MoodType, note: string) => void;
-  onClose: () => void;
-}
-
-function MoodModal({ clientName, onSave, onClose }: MoodModalProps) {
-  const [selected, setSelected] = useState<MoodType | null>(null);
-  const [note, setNote] = useState("");
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl p-6 animate-fade-in">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-foreground text-sm">Check-in de Humor</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
-        </div>
-        <p className="text-xs text-muted-foreground mb-4">
-          Como foi a última interação com <span className="text-foreground font-medium">{clientName}</span>?
-        </p>
-        <div className="flex gap-3 mb-4">
-          {(["happy", "neutral", "angry"] as MoodType[]).map((m) => {
-            const cfg = MOOD_CONFIG[m];
-            return (
-              <button
-                key={m}
-                onClick={() => setSelected(m)}
-                className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-all ${
-                  selected === m
-                    ? "bg-primary/15 border-primary/40 text-foreground"
-                    : "border-border text-muted-foreground hover:border-muted hover:text-foreground"
-                }`}
-              >
-                <cfg.icone size={24} className={cfg.color} />
-                <span className="text-xs font-medium">{cfg.label}</span>
-              </button>
-            );
-          })}
-        </div>
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={2}
-          placeholder="Nota opcional (ex: pediu relatório, reclamou de algo...)"
-          className="w-full bg-muted rounded-lg px-3 py-2 text-xs text-foreground placeholder-muted-foreground outline-none focus:ring-1 focus:ring-primary resize-none mb-4"
-        />
-        <div className="flex gap-2">
-          <button onClick={onClose} className="btn-ghost text-xs flex-1">Cancelar</button>
-          <button
-            onClick={() => { if (selected) { onSave(selected, note); onClose(); }}}
-            disabled={!selected}
-            className="btn-primary text-xs flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Salvar check-in
           </button>
         </div>
       </div>
@@ -1919,7 +1558,9 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function SocialPage() {
-  const [activeTab, setActiveTab] = useState<"carteira" | "kanban" | "onboarding" | "acessos" | "metricas" | "entregas" | "aprovacao">("carteira"); // SocialTab — kept inline for readability
+  // Leva 5a: a Carteira saiu (a lista de clientes é uma só, em /clients?resp=mine) e Métricas +
+  // Entregas viraram "Resultados", contados no Instagram real. O Social abre no board.
+  const [activeTab, setActiveTab] = useState<"kanban" | "onboarding" | "acessos" | "resultados" | "aprovacao">("kanban"); // SocialTab — kept inline for readability
   const [adminWorkspace, setAdminWorkspaceRaw] = useState("Todos");
   const setAdminWorkspace = (value: string) => {
     setAdminWorkspaceRaw(value);
@@ -1933,12 +1574,7 @@ export default function SocialPage() {
   const [nonDeliveryCard, setNonDeliveryCard] = useState<ContentCard | null>(null);
   const [cardToDelete, setCardToDelete] = useState<ContentCard | null>(null);
   const [nonDeliveryReason, setNonDeliveryReason] = useState("");
-  const [ideasClient, setIdeasClient] = useState<Client | null>(null);
-  const [moodClientId, setMoodClientId] = useState<string | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [client360, setClient360] = useState<Client | null>(null);
-  const [campaignClient, setCampaignClient] = useState<Client | null>(null);
-  const [healthFilter, setHealthFilter] = useState<string>("all");
   const [boardSearch, setBoardSearch] = useState("");
   const [onboardingCompleteClient, setOnboardingCompleteClient] = useState<Client | null>(null);
   const [newCardDate, setNewCardDate] = useState<string | null>(null);
@@ -1975,9 +1611,7 @@ export default function SocialPage() {
   const subContent = useContentStore((s) => s.subscribeRealtime);
 
   const onboarding = useOperationalStore((s) => s.onboarding);
-  const moodHistory = useOperationalStore((s) => s.moodHistory);
   const clientAccess = useOperationalStore((s) => s.clientAccess);
-  const addMoodEntry = useOperationalStore((s) => s.addMoodEntry);
   const toggleOnboardingItem = useOperationalStore((s) => s.toggleOnboardingItem);
   const updateClientAccess = useOperationalStore((s) => s.updateClientAccess);
   const initOps = useOperationalStore((s) => s.init);
@@ -2013,10 +1647,14 @@ export default function SocialPage() {
 
   // ── NavContext: secondary sidebar tab navigation ──────────────
   const { pendingTab, setPendingTab, setCurrentTab, secondaryOpen } = useNav();
-  const VALID_SOCIAL_TABS = ["carteira","kanban","onboarding","acessos","metricas","entregas","aprovacao"] as const;
+  const VALID_SOCIAL_TABS = ["kanban","onboarding","acessos","resultados","aprovacao"] as const;
   type SocialTab = typeof VALID_SOCIAL_TABS[number];
-  // Links antigos: "relatorios" era a aba da fila de aprovação; chat/calendário saíram.
-  const ABAS_ANTIGAS: Record<string, SocialTab> = { relatorios: "aprovacao", calendar: "kanban", chat: "carteira" };
+  // Links antigos: "relatorios" era a aba da fila de aprovação; chat/calendário saíram; a Carteira
+  // virou a lista única de /clients (Leva 5a) e Métricas/Entregas viraram Resultados.
+  const ABAS_ANTIGAS: Record<string, SocialTab> = {
+    relatorios: "aprovacao", calendar: "kanban", chat: "kanban", carteira: "kanban",
+    metricas: "resultados", entregas: "resultados",
+  };
 
   useEffect(() => {
     if (!pendingTab) return;
@@ -2128,11 +1766,7 @@ export default function SocialPage() {
 
   const activeWorkspace = canSelectWorkspace ? adminWorkspace : currentUser;
 
-  const filteredClients = clients.filter((c) => {
-    const matchWorkspace = activeWorkspace === "Todos" ? true : c.assignedSocial === activeWorkspace;
-    const matchHealth = healthFilter === "all" ? true : c.status === healthFilter;
-    return matchWorkspace && matchHealth;
-  });
+  const filteredClients = clients.filter((c) => activeWorkspace === "Todos" || c.assignedSocial === activeWorkspace);
 
   const boardQuery = boardSearch.trim().toLowerCase();
   const filteredCards = contentCards.filter((c) => {
@@ -2146,57 +1780,6 @@ export default function SocialPage() {
   });
 
   const onboardingClients = filteredClients.filter((c) => c.status === "onboarding");
-  const moodClientName = moodClientId ? clients.find((c) => c.id === moodClientId)?.name ?? "" : "";
-
-  // Thermometer counts
-  const counts = {
-    good: filteredClients.filter((c) => c.status === "good").length,
-    average: filteredClients.filter((c) => c.status === "average").length,
-    at_risk: filteredClients.filter((c) => c.status === "at_risk").length,
-    onboarding: filteredClients.filter((c) => c.status === "onboarding").length,
-  };
-
-  const monthlyDeliveryReports = useMemo<MonthlyDeliveryReport[]>(() => {
-    const reports: MonthlyDeliveryReport[] = [];
-    const monthSet = new Set<string>();
-    contentCards.forEach((c) => {
-      if (c.dueDate) monthSet.add(c.dueDate.slice(0, 7));
-      if (c.statusChangedAt) monthSet.add(spDateStr(c.statusChangedAt).slice(0, 7));
-    });
-    const currentMonth = todaySP().slice(0, 7);
-    monthSet.add(currentMonth);
-    const activeClients = clients.filter((cl) => cl.status !== "onboarding");
-    for (const month of Array.from(monthSet).sort()) {
-      for (const client of activeClients) {
-        const clientCards = contentCards.filter((c) => c.clientId === client.id && c.dueDate?.startsWith(month));
-        const publishedThisMonth = contentCards.filter(
-          (c) => c.clientId === client.id && c.status === "published" &&
-            (c.statusChangedAt ? spDateStr(c.statusChangedAt).startsWith(month) : c.dueDate?.startsWith(month))
-        );
-        const goal = client.postsGoal ?? 12;
-        const delivered = publishedThisMonth.length;
-        const scheduled = clientCards.filter((c) => c.status === "scheduled").length;
-        const inProd = clientCards.filter((c) => ["in_production", "approval", "client_approval", "script"].includes(c.status)).length;
-        const ideas = clientCards.filter((c) => c.status === "ideas").length;
-        const formatMap = new Map<string, number>();
-        publishedThisMonth.forEach((c) => { formatMap.set(c.format, (formatMap.get(c.format) ?? 0) + 1); });
-        reports.push({
-          id: `mdr-${client.id}-${month}`,
-          clientId: client.id,
-          clientName: client.name,
-          socialMedia: client.assignedSocial,
-          month,
-          postsGoal: goal,
-          postsDelivered: delivered,
-          completionRate: goal > 0 ? Math.round((delivered / goal) * 100) : 0,
-          cardsByStatus: { published: delivered, scheduled, inProduction: inProd, ideas },
-          formats: Array.from(formatMap).map(([format, count]) => ({ format, count })),
-          generatedAt: new Date().toISOString(),
-        });
-      }
-    }
-    return reports;
-  }, [contentCards, clients]);
 
   const handleOnboardingToggle = (clientId: string, itemId: string) => {
     const client = clients.find((c) => c.id === clientId);
@@ -2215,7 +1798,7 @@ export default function SocialPage() {
 
   return (
     <div className="flex flex-col flex-1 overflow-auto">
-      <Header title="Social Media" subtitle="CRM de carteira, board e aprovação de conteúdo" />
+      <Header title="Social Media" subtitle="Board de produção, aprovação e resultados de conteúdo" />
 
       {/* Confetti overlay */}
       {onboardingCompleteClient && <Confetti />}
@@ -2224,10 +1807,11 @@ export default function SocialPage() {
       {onboardingCompleteClient && (
         <OnboardingCompleteModal
           client={onboardingCompleteClient}
-          onMoveActiveAndIdeas={() => {
+          onMoveActiveAndPlan={() => {
             updateClientStatus(onboardingCompleteClient.id, "good", currentUser);
-            setIdeasClient(onboardingCompleteClient);
+            const id = onboardingCompleteClient.id;
             setOnboardingCompleteClient(null);
+            router.push(`/planejamento?cliente=${id}`);
           }}
           onMoveActive={() => {
             updateClientStatus(onboardingCompleteClient.id, "good", currentUser);
@@ -2370,24 +1954,6 @@ export default function SocialPage() {
           </div>
         </div>
       )}
-      {client360 && (
-        <Client360Modal
-          client={client360}
-          onClose={() => setClient360(null)}
-          onOpenIdeas={() => { setIdeasClient(client360); setClient360(null); }}
-          onOpenCampaign={() => { setCampaignClient(client360); setClient360(null); }}
-          onOpenMood={() => { setMoodClientId(client360.id); setClient360(null); }}
-        />
-      )}
-      {campaignClient && <CampaignModal client={campaignClient} onClose={() => setCampaignClient(null)} />}
-      {ideasClient && <ContentIdeasModal client={ideasClient} onClose={() => setIdeasClient(null)} />}
-      {moodClientId && (
-        <MoodModal
-          clientName={moodClientName}
-          onSave={(mood, note) => addMoodEntry(moodClientId, mood, note, currentUser)}
-          onClose={() => setMoodClientId(null)}
-        />
-      )}
       {/* AddMemberModal removed — team managed via CEO area */}
       {newCardDate !== null && (
         <NewContentCardModal
@@ -2411,9 +1977,8 @@ export default function SocialPage() {
 
       <div className="p-6 space-y-5 animate-fade-in">
 
-        {/* Banner de feriados/datas comemorativas do mês — pra planejamento de conteúdo */}
-        <MonthObservancesAlert title="Datas e feriados deste mês" />
-
+        {/* O bloco "Datas e feriados deste mês" saiu (Leva 5a): repetia o calendário principal.
+            Datas, feriados e posts moram na Agenda (Meu Trabalho › Agenda, filtro Conteúdo). */}
         {/* Workspace header */}
         <div className="flex items-center justify-between gap-3">
           {canSelectWorkspace ? (
@@ -2499,19 +2064,18 @@ export default function SocialPage() {
         {/* Abas: uma navegação por tela. Com o painel lateral aberto (computador), as abas moram lá
             com os mesmos nomes e a mesma ordem; no celular, ou com o painel fechado, aparecem aqui. */}
         <div className={`flex gap-1 border-b border-border overflow-x-auto ${secondaryOpen ? "lg:hidden" : ""}`}>
-          {(["carteira", "kanban", "aprovacao", "metricas", "entregas", "onboarding", "acessos"] as const).map((tab) => {
+          {(["kanban", "aprovacao", "resultados", "onboarding", "acessos"] as const).map((tab) => {
             const LABELS: Record<typeof tab, string> = {
-              carteira: "Carteira", kanban: "Board de Produção", aprovacao: "Inbox de Aprovação",
-              metricas: "Métricas", entregas: "Entregas Mensais",
+              kanban: "Board de Produção", aprovacao: "Inbox de Aprovação",
+              resultados: "Resultados",
               onboarding: "Onboarding", acessos: "Acessos & Senhas",
             };
             // Live badge counts per tab
             const pendingKanban = filteredCards.filter((c) => !["scheduled","published"].includes(c.status)).length;
             const approvalCount = filteredCards.filter((c) => c.status === "client_approval").length; // alinhado com a fila da aba
             const badgeMap: Partial<Record<typeof tab, number>> = {
-              carteira:   filteredClients.length,
               kanban:     pendingKanban,
-              onboarding: counts.onboarding,
+              onboarding: onboardingClients.length,
               aprovacao: approvalCount,
             };
             const badge = badgeMap[tab];
@@ -2538,85 +2102,6 @@ export default function SocialPage() {
             );
           })}
         </div>
-
-        {/* ── CARTEIRA TAB ───────────────────────────────────────────────────── */}
-        {activeTab === "carteira" && (
-          <div className="space-y-6 animate-fade-in">
-
-            {/* Personal Dashboard — shows for logged social user */}
-            {currentUser && (
-              <PersonalDashboard
-                userName={currentUser}
-                cards={contentCards}
-                clients={filteredClients}
-                moodHistory={moodHistory}
-              />
-            )}
-
-            {/* Status overview — minimal stat row */}
-            <div className="grid grid-cols-4 gap-3">
-              {[
-                { key: "good",       label: "On Fire",    count: counts.good,       led: "led led-healthy" },
-                { key: "average",    label: "Atenção",    count: counts.average,    led: "led led-attention" },
-                { key: "at_risk",    label: "Crítico",    count: counts.at_risk,    led: "led led-critical" },
-                { key: "onboarding", label: "Onboarding", count: counts.onboarding, led: "led led-healthy" },
-              ].map((stat) => (
-                <button
-                  key={stat.key}
-                  onClick={() => setHealthFilter(healthFilter === stat.key ? "all" : stat.key)}
-                  className={`rounded-xl p-4 border transition-all text-left ${
-                    healthFilter === stat.key
-                      ? "bg-primary/5 border-primary/30"
-                      : "bg-card border-border hover:border-border"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className={stat.led} />
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{stat.label}</span>
-                  </div>
-                  <p className={`text-2xl font-semibold tracking-tight ${healthFilter === stat.key ? "text-primary" : "text-foreground"}`}>
-                    {stat.count}
-                  </p>
-                </button>
-              ))}
-            </div>
-
-            {/* Active filter indicator */}
-            {healthFilter !== "all" && (
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Filtrando por:</span>
-                <span className="text-xs text-primary font-medium">{HEALTH_CONFIG[healthFilter]?.label}</span>
-                <button
-                  onClick={() => setHealthFilter("all")}
-                  className="text-xs text-muted-foreground hover:text-muted-foreground transition-colors ml-1"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            )}
-
-            {/* Client cards grid */}
-            {filteredClients.length === 0 ? (
-              <div className="bg-card border border-border rounded-xl text-center py-16 text-muted-foreground text-sm">
-                Nenhum cliente neste workspace.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                {filteredClients.map((client) => (
-                  <ClientCard
-                    key={client.id}
-                    client={client}
-                    moodEntries={moodHistory[client.id] ?? []}
-                    onboarding={onboarding[client.id] ?? []}
-                    onMood={(id) => { setMoodClientId(id); }}
-                    onIdeas={(c) => { setIdeasClient(c); }}
-                    onOpen360={() => setClient360(client)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ── KANBAN TAB ────────────────────────────────────────────────────── */}
         {activeTab === "kanban" && (
@@ -2681,6 +2166,13 @@ export default function SocialPage() {
               >
                 <Archive size={13} /> Arquivadas
               </button>
+              {/* As datas de post moram na Agenda principal (filtro Conteúdo) — Leva 5a. */}
+              <Link
+                href="/my-work?view=agenda&tipo=conteudo"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all shrink-0"
+              >
+                <Calendar size={13} /> Calendário
+              </Link>
             </div>
 
             <DailyClosePanel cards={filteredCards} clientes={filteredClients.map((c) => ({ id: c.id, name: c.nomeFantasia || c.name }))} />
@@ -2867,199 +2359,10 @@ export default function SocialPage() {
           />
         )}
 
-        {/* ── MÉTRICAS TAB ──────────────────────────────────────────────────── */}
-        {activeTab === "metricas" && (
-          <div className="animate-fade-in space-y-6">
-
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-              {(() => {
-                const active = filteredCards.filter((c) => c.status !== "published");
-                const published = filteredCards.filter((c) => c.status === "published");
-                const slaIssues = active.filter((c) => getSlaBadge(c.status, c.columnEnteredAt, c.statusChangedAt) !== null);
-                const overdue = active.filter((c) => getDeadlineUrgency(c.dueDate) === "overdue");
-                return [
-                  { label: "Em andamento", value: active.length, color: "text-primary" },
-                  { label: "Publicados", value: published.length, color: "text-primary" },
-                  { label: "Gargalos (SLA)", value: slaIssues.length, color: slaIssues.length > 0 ? "text-destructive" : "text-muted-foreground" },
-                  { label: "Vencidos", value: overdue.length, color: overdue.length > 0 ? "text-destructive" : "text-muted-foreground" },
-                ].map((kpi) => (
-                  <div key={kpi.label} className="bg-card border border-border rounded-xl p-4">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{kpi.label}</p>
-                    <p className={`text-2xl font-semibold tracking-tight ${kpi.color}`}>{kpi.value}</p>
-                  </div>
-                ));
-              })()}
-            </div>
-
-            {/* Pipeline Overview */}
-            <div className="bg-card border border-border rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <BarChart2 size={15} className="text-primary" />
-                <h3 className="font-semibold text-sm tracking-tight">Pipeline de Conteúdo</h3>
-                <span className="text-xs text-muted-foreground ml-auto">{filteredCards.length} total</span>
-              </div>
-              <div className="space-y-2.5">
-                {CONTENT_COLUMNS.map((col) => {
-                  const count = filteredCards.filter((c) => c.status === col.id).length;
-                  const pct = filteredCards.length > 0 ? Math.round((count / filteredCards.length) * 100) : 0;
-                  return (
-                    <div key={col.id}>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-foreground">{col.title}</span>
-                        <span className="text-muted-foreground">{count} ({pct}%)</span>
-                      </div>
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full transition-all ${col.color}`} style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Posts quota + SLA side by side */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              {/* Posts quota per client */}
-              <div className="bg-card border border-border rounded-xl p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <TrendingUp size={15} className="text-primary" />
-                  <h3 className="font-semibold text-sm tracking-tight">Meta de Posts</h3>
-                </div>
-                <div className="space-y-3">
-                  {filteredClients.filter((c) => c.postsGoal).map((client) => {
-                    const postsNow = client.postsThisMonth ?? 0;
-                    const goal = client.postsGoal ?? 12;
-                    const pct = Math.min(Math.round((postsNow / goal) * 100), 100);
-                    return (
-                      <div key={client.id}>
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="text-foreground font-medium">{client.name}</span>
-                          <span className={pct >= 80 ? "text-primary" : "text-muted-foreground"}>{postsNow}/{goal}</span>
-                        </div>
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full rounded-full transition-all bg-primary" style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {filteredClients.filter((c) => c.postsGoal).length === 0 && (
-                    <p className="text-xs text-muted-foreground">Nenhum cliente com meta definida.</p>
-                  )}
-                </div>
-              </div>
-
-              {/* SLA Report */}
-              <div className="bg-card border border-border rounded-xl p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <Clock size={15} className="text-primary" />
-                  <h3 className="font-semibold text-sm tracking-tight">SLA — Cards Parados</h3>
-                </div>
-                {(() => {
-                  const slaCards = filteredCards
-                    .filter((c) => c.status !== "published")
-                    .map((c) => ({ card: c, sla: getSlaBadge(c.status, c.columnEnteredAt, c.statusChangedAt) }))
-                    .filter((x) => x.sla !== null)
-                    .sort((a, b) => {
-                      if (a.sla!.level === "critical" && b.sla!.level !== "critical") return -1;
-                      if (a.sla!.level !== "critical" && b.sla!.level === "critical") return 1;
-                      return 0;
-                    });
-                  if (slaCards.length === 0) {
-                    return <p className="text-xs text-muted-foreground">Nenhum gargalo no momento.</p>;
-                  }
-                  return (
-                    <div className="space-y-2">
-                      {slaCards.map(({ card, sla }) => (
-                        <div
-                          key={card.id}
-                          onClick={() => setSelectedCard(card)}
-                          className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/50 border border-border/50 cursor-pointer hover:border-primary/30 transition-colors"
-                        >
-                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-md border ${SLA_STYLES[sla!.level]}`}>
-                            {sla!.label}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs text-foreground truncate">{card.title}</p>
-                            <p className="text-[10px] text-muted-foreground">{card.clientName}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-
-            {/* Format breakdown */}
-            <div className="bg-card border border-border rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Hash size={15} className="text-primary" />
-                <h3 className="font-semibold text-sm tracking-tight">Distribuição por Formato</h3>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {(() => {
-                  const formats = [...new Set(filteredCards.map((c) => c.format))];
-                  return formats.map((fmt) => {
-                    const count = filteredCards.filter((c) => c.format === fmt).length;
-                    const pct = filteredCards.length > 0 ? Math.round((count / filteredCards.length) * 100) : 0;
-                    return (
-                      <div key={fmt} className="bg-muted/50 rounded-xl p-3 border border-border/50">
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{fmt}</p>
-                        <p className="text-xl font-semibold text-foreground tracking-tight">{count}</p>
-                        <p className="text-[10px] text-muted-foreground">{pct}%</p>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            </div>
-
-            {/* Deadline alerts */}
-            {(() => {
-              const overdue = filteredCards.filter((c) => getDeadlineUrgency(c.dueDate) === "overdue" && c.status !== "published");
-              const dueToday = filteredCards.filter((c) => getDeadlineUrgency(c.dueDate) === "today" && c.status !== "published");
-              if (overdue.length === 0 && dueToday.length === 0) return null;
-              return (
-                <div className="bg-card border border-border rounded-xl p-5 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle size={15} className="text-destructive" />
-                    <h3 className="font-semibold text-sm tracking-tight">Alertas de Prazo</h3>
-                  </div>
-                  {overdue.length > 0 && (
-                    <div className="p-3 bg-destructive/5 border border-destructive/15 rounded-lg">
-                      <p className="text-xs font-semibold text-destructive mb-2">Vencidos ({overdue.length})</p>
-                      {overdue.map((c) => (
-                        <button key={c.id} onClick={() => setSelectedCard(c)} className="block text-xs text-muted-foreground hover:text-foreground text-left mb-1">
-                          · {c.title} <span className="text-muted-foreground">({c.clientName})</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {dueToday.length > 0 && (
-                    <div className="p-3 bg-lone-warning-bg border border-lone-warning-border rounded-lg">
-                      <p className="text-xs font-semibold text-lone-warning mb-2">Vencem hoje ({dueToday.length})</p>
-                      {dueToday.map((c) => (
-                        <button key={c.id} onClick={() => setSelectedCard(c)} className="block text-xs text-muted-foreground hover:text-foreground text-left mb-1">
-                          · {c.title} <span className="text-muted-foreground">({c.clientName})</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-          </div>
-        )}
-
-        {/* ── ENTREGAS TAB ──────────────────────────────────────────────── */}
-        {activeTab === "entregas" && (
-          <MonthlyDeliveriesTab
-            reports={monthlyDeliveryReports}
-            workspace={activeWorkspace}
-          />
-        )}
+        {/* ── RESULTADOS (Leva 5a) ─────────────────────────────────────────────
+            Substitui Métricas e Entregas Mensais: conta posts reais do Instagram, no prazo ×
+            atrasado contra o card que casou, e o mix de formatos — por cliente e por pessoa. */}
+        {activeTab === "resultados" && <ResultadosTab workspace={activeWorkspace} />}
 
         {/* ── INBOX DE APROVAÇÃO ─────────────────────────────────────────── */}
         {activeTab === "aprovacao" && (
@@ -3172,112 +2475,6 @@ function ApprovalQueueTab({
       {approvalCards.length === 0 && (
         <EmptyState icon={<Check size={20} />} title="Nada aguardando o cliente" subtitle="Cards em Aprovação Cliente aparecem aqui pra aprovar ou recusar." />
       )}
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════
-// MONTHLY DELIVERIES TAB
-// ══════════════════════════════════════════════════════════════
-
-function formatMonthLabel(month: string): string {
-  const [y, m] = month.split("-");
-  const names = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-  return `${names[parseInt(m) - 1]} ${y}`;
-}
-
-function MonthlyDeliveriesTab({
-  reports,
-  workspace,
-}: {
-  reports: MonthlyDeliveryReport[];
-  workspace: string;
-}) {
-  const months = [...new Set(reports.map((r) => r.month))].sort().reverse();
-  const [selectedMonth, setSelectedMonth] = useState(months[0] ?? "");
-
-  const filteredReports = useMemo(
-    () => reports.filter((r) => r.month === selectedMonth && (workspace === "Todos" || r.socialMedia === workspace)),
-    [reports, selectedMonth, workspace]
-  );
-
-  const totalGoal = filteredReports.reduce((s, r) => s + r.postsGoal, 0);
-  const totalDelivered = filteredReports.reduce((s, r) => s + r.postsDelivered, 0);
-  const overallRate = totalGoal > 0 ? Math.round((totalDelivered / totalGoal) * 100) : 0;
-
-  return (
-    <div className="animate-fade-in space-y-6">
-      {/* Month Selector */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-sm text-muted-foreground font-medium">Mês:</span>
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5 flex-wrap">
-          {months.map((m) => (
-            <button key={m} onClick={() => setSelectedMonth(m)}
-              className={`text-xs px-3 py-1.5 rounded-md transition-colors ${selectedMonth === m ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            >{formatMonthLabel(m)}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* Summary */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Meta Total</p>
-          <p className="text-2xl font-semibold text-foreground">{totalGoal}</p>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Entregues</p>
-          <p className="text-2xl font-semibold text-primary">{totalDelivered}</p>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Taxa</p>
-          <p className="text-2xl font-semibold text-foreground">{overallRate}%</p>
-        </div>
-      </div>
-
-      {/* Per-client reports */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-foreground">Entregas por Cliente — {selectedMonth && formatMonthLabel(selectedMonth)}</h3>
-        {/* Conta só card movido pra "Publicado" no quadro — post feito fora do quadro não entra. Não é nota de ninguém. */}
-        <p className="text-[11px] text-muted-foreground">Conta só o que foi marcado como Publicado no quadro. Para o que foi ao ar de fato, veja a Meta de Posts (Instagram) em Métricas.</p>
-        {filteredReports.length === 0 && (
-          <div className="bg-card border border-border rounded-xl p-10 text-center text-muted-foreground text-sm">Nenhum dado de entregas para este mês.</div>
-        )}
-        {filteredReports.map((report) => {
-          const rateColor = "text-foreground";
-          const barColor = "bg-primary";
-          return (
-            <div key={report.id} className="bg-card border border-border rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="font-medium text-foreground text-sm">{report.clientName}</p>
-                  <p className="text-xs text-muted-foreground">Responsável: {report.socialMedia}</p>
-                </div>
-                <div className="text-right">
-                  <p className={`text-xl font-semibold ${rateColor}`}>{report.completionRate}%</p>
-                  <p className="text-xs text-muted-foreground">{report.postsDelivered}/{report.postsGoal} posts</p>
-                </div>
-              </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden mb-3">
-                <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(report.completionRate, 100)}%` }} />
-              </div>
-              <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                <span>Publicados: <strong className="text-foreground">{report.cardsByStatus.published}</strong></span>
-                <span>Agendados: <strong className="text-foreground">{report.cardsByStatus.scheduled}</strong></span>
-                <span>Em produção: <strong className="text-foreground">{report.cardsByStatus.inProduction}</strong></span>
-                <span>Ideias: <strong className="text-foreground">{report.cardsByStatus.ideas}</strong></span>
-              </div>
-              {report.formats.length > 0 && (
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  {report.formats.map((f) => (
-                    <span key={f.format} className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">{f.format}: {f.count}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

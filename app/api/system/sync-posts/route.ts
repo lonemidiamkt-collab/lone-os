@@ -10,8 +10,15 @@
 // verdade: recalcula a partir de `client_ig_posts` (o Instagram real) e só cai no board quando
 // o cliente não tem Instagram vinculado.
 //
-// Roda depois do ig-snapshots (que às 6h atualiza os posts). Cron: `30 9 * * *` = 6h30 BRT.
-//   ?preview=1 → mostra o que mudaria, sem gravar
+// Roda depois do ig-snapshots (que às 3h atualiza os posts). Cron: `30 9 * * *` = 6h30 BRT.
+//
+// "NO AR" AUTOMÁTICO (Leva 5a). Na mesma passada, o post real fecha o card que o planejou: mesmo
+// cliente, até 1 dia antes/depois da data do card, mesmo formato primeiro, horário mais perto
+// depois; um post fecha no máximo um card (regra em lib/conteudo/no-ar.ts). O board tinha ~24 cards
+// "publicados" contra ~451 posts reais — ninguém arrasta o card depois que o post sai.
+//
+//   ?dry=1 (ou ?preview=1) → mostra o que mudaria e QUAIS cards fechariam, sem gravar
+//   ?dias=N                → quantos dias para trás o "No ar" olha (padrão 60; 1ª carga: ?dias=180)
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,10 +28,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { mesAtualBRT } from "@/lib/metrics/posts";
+import { noArPeloInstagram } from "@/lib/conteudo/dados";
 
 export async function POST(req: NextRequest) {
   const denied = requireCron(req); if (denied) return denied;
-  const previewOnly = req.nextUrl.searchParams.get("preview") !== null;
+  const sp = req.nextUrl.searchParams;
+  // `dry` é o nome padrão de ensaio das rotas novas; `preview` fica por compatibilidade.
+  const previewOnly = (sp.get("dry") !== null && sp.get("dry") !== "0") || sp.get("preview") !== null;
+  const diasNoAr = Number(sp.get("dias")) || undefined;
 
   const mes = mesAtualBRT();
   const inicioMes = `${mes}-01T00:00:00-03:00`;
@@ -99,10 +110,34 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ── NO AR AUTOMÁTICO ────────────────────────────────────────────────────
+  // Depois da contagem: fechar card não muda o número de quem tem Instagram (a conta já vem do
+  // perfil). Falha aqui não derruba o que já foi gravado acima — volta na resposta.
+  const nomes = new Map(clientes.map((c) => [c.id as string, ((c.nome_fantasia as string) || (c.name as string))]));
+  const noAr = await noArPeloInstagram({ ensaio: previewOnly, dias: diasNoAr, nomes });
+
   return NextResponse.json({
     ok: true, mes, preview: previewOnly,
     clientes: clientes.length, mudancas: mudancas.length, atualizados,
     detalhe: mudancas.slice(0, 30),
+    no_ar: {
+      janela: noAr.janela,
+      guarda_link: noAr.guardaLink,
+      a_fechar: noAr.aFechar,
+      fechados: noAr.fechados,
+      falhas: noAr.falhas.slice(0, 20),
+      erro: noAr.erro ?? null,
+      // O ensaio lista tudo o que fecharia; a execução real, só o começo (o resto está no board).
+      cards: noAr.detalhe.slice(0, previewOnly ? 500 : 50).map((f) => ({
+        cliente: f.cliente,
+        card: f.titulo,
+        planejado: f.dataPlanejada,
+        postado: dataBRT(f.postedAt),
+        dias: f.dias,
+        formato: f.mesmoFormato ? f.formatoPost : `${f.formatoCard} → ${f.formatoPost}`,
+        link: f.permalink,
+      })),
+    },
   });
 }
 

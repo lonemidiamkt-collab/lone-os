@@ -6,7 +6,6 @@ import type {
   Role,
   TimelineEntry,
   ChatMessage,
-  GlobalChatMessage,
   OnboardingItem,
   ClientStatus,
   ContentCard,
@@ -25,9 +24,7 @@ import type {
   DesignRequest,
   Task,
   TrafficRoutineCheck,
-  SocialMonthlyReport,
   ContentApproval,
-  MonthlyDeliveryReport,
   SocialPerformanceScore,
   PerformanceLevel,
   Reminder,
@@ -36,7 +33,6 @@ import {
   mockClients,
   // mockClientChats — removed (no mock data)
   mockTimeline,
-  mockGlobalChat,
   mockContentCards,
   mockMoodHistory,
   mockCreativeAssets,
@@ -46,7 +42,6 @@ import {
   mockDesignRequests,
   mockTasks,
   mockTrafficRoutineChecks,
-  mockSocialReports,
 } from "@/lib/mockData";
 import * as db from "@/lib/supabase/queries";
 import { supabase } from "@/lib/supabase/client";
@@ -66,7 +61,6 @@ interface PersistedState {
   moodHistory: Record<string, MoodEntry[]>;
   creativeAssets: Record<string, CreativeAsset[]>;
   clientChats: Record<string, ChatMessage[]>;
-  globalChat: GlobalChatMessage[];
   onboarding: Record<string, OnboardingItem[]>;
   notices: Notice[];
   socialProofs: Record<string, SocialProofEntry[]>;
@@ -78,7 +72,6 @@ interface PersistedState {
   designRequests: DesignRequest[];
   tasks: Task[];
   trafficRoutineChecks: TrafficRoutineCheck[];
-  socialReports: SocialMonthlyReport[];
   contentApprovals: ContentApproval[];
   clientAccess: Record<string, ClientAccess>;
   reminders: Reminder[];
@@ -168,7 +161,6 @@ interface AppStateContextValue {
   contentCards: ContentCard[];
   timeline: Record<string, TimelineEntry[]>;
   clientChats: Record<string, ChatMessage[]>;
-  globalChat: GlobalChatMessage[];
   onboarding: Record<string, OnboardingItem[]>;
   moodHistory: Record<string, MoodEntry[]>;
   creativeAssets: Record<string, CreativeAsset[]>;
@@ -184,9 +176,6 @@ interface AppStateContextValue {
   tasks: Task[];
   trafficRoutineChecks: TrafficRoutineCheck[];
   addTrafficRoutineCheck: (check: Omit<TrafficRoutineCheck, "id" | "completedAt">) => void;
-  socialReports: SocialMonthlyReport[];
-  addSocialReport: (report: Omit<SocialMonthlyReport, "id" | "createdAt">) => SocialMonthlyReport;
-  updateSocialReport: (id: string, updates: Partial<SocialMonthlyReport>) => void;
   contentApprovals: ContentApproval[];
   approveContent: (cardId: string, reviewer: string) => void;
   rejectContent: (cardId: string, reviewer: string, reason: string) => void;
@@ -223,10 +212,8 @@ interface AppStateContextValue {
   updateClientStatus: (clientId: string, status: ClientStatus, actor: string) => void;
   addTimelineEntry: (entry: Omit<TimelineEntry, "id">) => void;
   sendClientMessage: (clientId: string, user: string, text: string) => void;
-  sendGlobalMessage: (user: string, role: Role, text: string) => void;
   toggleOnboardingItem: (clientId: string, itemId: string, actor: string) => void;
 
-  monthlyDeliveryReports: MonthlyDeliveryReport[];
   socialPerformanceScores: SocialPerformanceScore[];
 
   // Reminders
@@ -265,7 +252,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [moodHistory, setMoodHistory] = useState<Record<string, MoodEntry[]>>(() => cached.current?.moodHistory ?? {});
   const [creativeAssets, setCreativeAssets] = useState<Record<string, CreativeAsset[]>>(() => cached.current?.creativeAssets ?? {});
   const [clientChats, setClientChats] = useState<Record<string, ChatMessage[]>>(() => cached.current?.clientChats ?? {});
-  const [globalChat, setGlobalChat] = useState<GlobalChatMessage[]>(() => cached.current?.globalChat ?? []);
   const [onboarding, setOnboarding] = useState<Record<string, OnboardingItem[]>>(() => cached.current?.onboarding ?? {});
   const [notices, setNotices] = useState<Notice[]>(() => cached.current?.notices ?? []);
   const [socialProofs, setSocialProofs] = useState<Record<string, SocialProofEntry[]>>(() => cached.current?.socialProofs ?? {});
@@ -278,7 +264,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [designRequests, setDesignRequests] = useState<DesignRequest[]>(() => cached.current?.designRequests ?? []);
   const [tasks, setTasks] = useState<Task[]>(() => cached.current?.tasks ?? []);
   const [trafficRoutineChecks, setTrafficRoutineChecks] = useState<TrafficRoutineCheck[]>(() => cached.current?.trafficRoutineChecks ?? []);
-  const [socialReports, setSocialReports] = useState<SocialMonthlyReport[]>(() => cached.current?.socialReports ?? []);
   const [contentApprovals, setContentApprovals] = useState<ContentApproval[]>(() => cached.current?.contentApprovals ?? []);
 
   const [clientAccess, setClientAccess] = useState<Record<string, ClientAccess>>(() => cached.current?.clientAccess ?? initClientAccess());
@@ -316,7 +301,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setMoodHistory(mockMoodHistory);
     setCreativeAssets(mockCreativeAssets);
     setClientChats(initClientChats());
-    setGlobalChat(mockGlobalChat);
     setOnboarding(initOnboarding());
     setNotices(mockNotices);
     setSocialProofs({});
@@ -328,7 +312,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setDesignRequests(mockDesignRequests);
     setTasks(mockTasks);
     setTrafficRoutineChecks(mockTrafficRoutineChecks);
-    setSocialReports(mockSocialReports);
     setContentApprovals([]);
     setClientAccess(initClientAccess());
     setReminders([]);
@@ -366,7 +349,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           dbNotices,
           dbTimeline,
           dbClientChats,
-          dbGlobalChat,
           dbOnboarding,
           dbMood,
           dbCreative,
@@ -376,7 +358,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           dbQuinz,
           dbAccess,
           dbRoutineChecks,
-          dbSocialReports,
           dbApprovals,
         ] = await Promise.all([
           db.fetchClients(),
@@ -386,7 +367,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           db.fetchNotices(),
           db.fetchTimeline(),
           db.fetchClientChats(),
-          db.fetchGlobalChat(),
           db.fetchOnboardingItems(),
           db.fetchMoodEntries(),
           db.fetchCreativeAssets(),
@@ -399,7 +379,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           // (useOperationalStore → /api/data/operational com canSeeCofre, service role). Aqui fica vazio.
           Promise.resolve({} as Record<string, import("@/lib/types").ClientAccess>),
           db.fetchTrafficRoutineChecks(),
-          db.fetchSocialReports(),
           db.fetchContentApprovals(),
         ]);
 
@@ -443,7 +422,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         if (dbNotices.length > 0) setNotices(dbNotices);
         if (Object.keys(dbTimeline).length > 0) setTimeline(dbTimeline);
         if (Object.keys(dbClientChats).length > 0) setClientChats(dbClientChats);
-        if (dbGlobalChat.length > 0) setGlobalChat(dbGlobalChat);
         if (Object.keys(dbOnboarding).length > 0) setOnboarding(dbOnboarding);
         if (Object.keys(dbMood).length > 0) setMoodHistory(dbMood);
         if (Object.keys(dbCreative).length > 0) setCreativeAssets(dbCreative);
@@ -453,7 +431,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         if (dbQuinz.length > 0) setQuinzReports(dbQuinz);
         if (Object.keys(dbAccess).length > 0) setClientAccess(dbAccess);
         if (dbRoutineChecks.length > 0) setTrafficRoutineChecks(dbRoutineChecks);
-        if (dbSocialReports.length > 0) setSocialReports(dbSocialReports);
         if (dbApprovals.length > 0) setContentApprovals(dbApprovals);
 
         setDbReady(true);
@@ -676,16 +653,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         }
       }
       if (count > 0) console.log(`[Migration] Client chat messages: ${count}`);
-    }
-
-    // 8. Migrate global chat
-    if (local.globalChat?.length) {
-      for (const msg of local.globalChat) {
-        try {
-          await db.insertGlobalChatMessage(msg.user, msg.role, msg.text);
-        } catch {}
-      }
-      console.log(`[Migration] Global chat: ${local.globalChat.length}`);
     }
 
     // 9. Migrate onboarding items
@@ -922,23 +889,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       db.insertClientChatMessage(clientId, user, text).catch(() => {});
     },
     [pushTimeline, now]
-  );
-
-  const sendGlobalMessage = useCallback(
-    (user: string, role: Role, text: string) => {
-      const timestamp = new Date().toLocaleString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      setGlobalChat((prev) => [
-        ...prev,
-        { id: `gc-${Date.now()}`, user, role, text, timestamp },
-      ]);
-      db.insertGlobalChatMessage(user, role, text).catch(() => {});
-    },
-    []
   );
 
   const addContentCard = useCallback(
@@ -1658,29 +1608,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     [pushNotification]
   );
 
-  const addSocialReport = useCallback(
-    (report: Omit<SocialMonthlyReport, "id" | "createdAt">): SocialMonthlyReport => {
-      const newReport: SocialMonthlyReport = {
-        ...report,
-        id: `sr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        createdAt: new Date().toISOString().slice(0, 10),
-      };
-      setSocialReports((prev) => [newReport, ...prev]);
-      pushNotification("system", "Relatório social criado", `Relatório de ${report.clientName} (${report.month}) — ${report.postsPublished}/${report.postsGoal} posts, taxa ${report.engagementRate}%.`, report.clientId);
-      db.insertSocialReport(report).catch(() => {});
-      return newReport;
-    },
-    [pushNotification]
-  );
-
-  const updateSocialReport = useCallback(
-    (id: string, updates: Partial<SocialMonthlyReport>) => {
-      setSocialReports((prev) => prev.map((r) => (r.id === id ? { ...r, ...updates } : r)));
-      db.updateSocialReportDb(id, updates).catch(() => {});
-    },
-    []
-  );
-
   const approveContent = useCallback(
     (cardId: string, reviewer: string) => {
       const approval: ContentApproval = {
@@ -1841,61 +1768,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   // ---------- Computed (unchanged) ----------
 
-  const monthlyDeliveryReports = useMemo<MonthlyDeliveryReport[]>(() => {
-    const reports: MonthlyDeliveryReport[] = [];
-    const monthSet = new Set<string>();
-    contentCards.forEach((c) => {
-      if (c.dueDate) monthSet.add(c.dueDate.slice(0, 7));
-      if (c.statusChangedAt) monthSet.add(c.statusChangedAt.slice(0, 10).slice(0, 7));
-    });
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    monthSet.add(currentMonth);
-
-    const activeClients = clients.filter((cl) => cl.status !== "onboarding");
-
-    for (const month of Array.from(monthSet).sort()) {
-      for (const client of activeClients) {
-        const clientCards = contentCards.filter(
-          (c) => c.clientId === client.id && c.dueDate?.startsWith(month)
-        );
-        const publishedThisMonth = contentCards.filter(
-          (c) =>
-            c.clientId === client.id &&
-            c.status === "published" &&
-            (c.dueDate?.startsWith(month) || c.statusChangedAt?.startsWith(month))
-        );
-
-        const goal = client.postsGoal ?? 12;
-        const delivered = publishedThisMonth.length;
-        const scheduled = clientCards.filter((c) => c.status === "scheduled").length;
-        const inProd = clientCards.filter((c) =>
-          ["in_production", "approval", "client_approval", "script"].includes(c.status)
-        ).length;
-        const ideas = clientCards.filter((c) => c.status === "ideas").length;
-
-        const formatMap = new Map<string, number>();
-        publishedThisMonth.forEach((c) => {
-          formatMap.set(c.format, (formatMap.get(c.format) ?? 0) + 1);
-        });
-
-        reports.push({
-          id: `mdr-${client.id}-${month}`,
-          clientId: client.id,
-          clientName: client.name,
-          socialMedia: client.assignedSocial,
-          month,
-          postsGoal: goal,
-          postsDelivered: delivered,
-          completionRate: goal > 0 ? Math.round((delivered / goal) * 100) : 0,
-          cardsByStatus: { published: delivered, scheduled, inProduction: inProd, ideas },
-          formats: Array.from(formatMap).map(([format, count]) => ({ format, count })),
-          generatedAt: new Date().toISOString(),
-        });
-      }
-    }
-    return reports;
-  }, [contentCards, clients]);
-
   const socialPerformanceScores = useMemo<SocialPerformanceScore[]>(() => {
     const socialPeople = [...new Set(clients.filter((c) => c.status !== "onboarding").map((c) => c.assignedSocial))];
     const currentMonth = new Date().toISOString().slice(0, 7);
@@ -1952,7 +1824,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         contentCards,
         timeline,
         clientChats,
-        globalChat,
         onboarding,
         moodHistory,
         creativeAssets,
@@ -1968,9 +1839,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         tasks,
         trafficRoutineChecks,
         addTrafficRoutineCheck,
-        socialReports,
-        addSocialReport,
-        updateSocialReport,
         contentApprovals,
         approveContent,
         rejectContent,
@@ -2003,9 +1871,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         deleteDesignRequest,
         addTimelineEntry,
         sendClientMessage,
-        sendGlobalMessage,
         toggleOnboardingItem,
-        monthlyDeliveryReports,
         socialPerformanceScores,
         reminders,
         addReminder,

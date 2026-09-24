@@ -14,7 +14,7 @@ const card = { id: "a", title: "Antigo", clientId: "c1", clientName: "C", social
 
 beforeEach(() => {
   erros.length = 0;
-  useContentStore.setState({ contentCards: [], designRequests: [], contentApprovals: [], socialReports: [], initialized: false, loading: false, loadError: false, versao: undefined });
+  useContentStore.setState({ contentCards: [], designRequests: [], contentApprovals: [], initialized: false, loading: false, loadError: false, versao: undefined });
 });
 
 describe("carga do board", () => {
@@ -24,7 +24,7 @@ describe("carga do board", () => {
     expect(useContentStore.getState().loadError).toBe(true);
     expect(useContentStore.getState().initialized).toBe(false);
 
-    resposta = async () => json({ contentCards: [card], designRequests: [], contentApprovals: [], socialReports: [], versao: "v1" });
+    resposta = async () => json({ contentCards: [card], designRequests: [], contentApprovals: [], versao: "v1" });
     await useContentStore.getState().refresh();
     expect(useContentStore.getState().initialized).toBe(true);
     expect(useContentStore.getState().loadError).toBe(false);

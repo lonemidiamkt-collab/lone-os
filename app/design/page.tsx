@@ -8,7 +8,6 @@ import ContentCardModal from "@/components/ContentCardModal";
 import EmptyState from "@/components/ui/EmptyState";
 import CardArtAttachments from "@/components/kanban/CardArtAttachments";
 import { toast } from "sonner";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { ehDoQuadro, quadrosDisponiveis, contagemPorQuadro, donoDaDemanda, SEM_DONO } from "@/lib/design/dono";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
@@ -21,7 +20,7 @@ import { getPriorityColor, getPriorityLabel, spDateStr } from "@/lib/utils";
 import {
   Palette, Filter, Clock, CheckCircle, Loader, Paperclip, X,
   AlertTriangle, Zap, LayoutList, Columns3, Upload, Download,
-  ImageIcon, Eye, ChevronDown, User, Users, FileText, FileWarning, FolderOpen,
+  ImageIcon, Eye, ChevronDown, User, FileText, FileWarning, FolderOpen,
   ExternalLink, BarChart2, Plus, Calendar, ArrowRight, XCircle, RotateCcw, Search, Sparkles,
   ThumbsUp, ThumbsDown, Instagram,
 } from "lucide-react";
@@ -72,7 +71,8 @@ const DESIGN_COLUMNS = [
   { id: "done",        title: "Concluído",     color: "bg-primary" },
 ];
 
-type TabView = "kanbans" | "requests" | "performance" | "history" | "clientes";
+// "clientes" (Clientes do Quadro) saiu na Leva 5a: a lista de clientes é uma só, em /clients?resp=mine.
+type TabView = "kanbans" | "requests" | "performance" | "history";
 
 function getDeadlineUrgency(dueDate?: string): "overdue" | "today" | "soon" | "ok" | null {
   if (!dueDate) return null;
@@ -439,7 +439,6 @@ function DownloadButton({ url, title }: { url: string; title: string }) {
 
 export default function DesignPage() {
   const clients = useClientsStore((s) => s.clients);
-  const updateClientData = useClientsStore((s) => s.updateClient);
   // Rodrigo (11/09/2026): "todas as demandas sumiram". Não sumiram — o dono da demanda é resolvido
   // pela lista de clientes, e enquanto ela não chega (ou se a carga falhou em silêncio) TODA
   // demanda vira "sem dono" e some do quadro pessoal. O quadro mostrava "Sem itens" como se fosse
@@ -505,7 +504,13 @@ export default function DesignPage() {
 
   // Aba pedida pelo painel lateral ou pela busca ⌘K (só consome o pedido que é desta tela).
   useEffect(() => {
-    if (pendingTab && ["kanbans", "requests", "performance", "history", "clientes"].includes(pendingTab)) {
+    if (pendingTab === "clientes") {
+      // Link antigo da aba "Clientes do Quadro": a carteira mora na lista única de Clientes.
+      setPendingTab("");
+      window.location.assign("/clients?resp=mine");
+      return;
+    }
+    if (pendingTab && ["kanbans", "requests", "performance", "history"].includes(pendingTab)) {
       setTab(pendingTab as TabView);
       setPendingTab("");
     }
@@ -694,7 +699,6 @@ export default function DesignPage() {
   }, [nonDeliveryCard?.id]);
 
   // Self-initiated task + client drawer
-  const [newTaskClient, setNewTaskClient] = useState<Client | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
 
   // Busca no board (título/cliente/formato)
@@ -887,14 +891,6 @@ export default function DesignPage() {
               }`}
             >
               <LayoutList size={13} /> Quadro de Tarefas
-            </button>
-            <button
-              onClick={() => setTab("clientes")}
-              className={`text-xs px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
-                tab === "clientes" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Users size={13} /> Clientes do Quadro
             </button>
             <button
               onClick={() => setTab("performance")}
@@ -1455,15 +1451,6 @@ export default function DesignPage() {
           />
         )}
 
-        {/* ═══ CLIENTES DO QUADRO TAB ═══ */}
-        {tab === "clientes" && (
-          <ClientesView
-            clients={clients.filter((c) => !myClientIds || myClientIds.has(c.id))}
-            myContentCards={myContentCards}
-            myDesignRequests={myDesignRequests}
-            onCreateTask={(c) => setNewTaskClient(c)}
-          />
-        )}
       </div>
 
       {/* ═══ PERFORMANCE TAB ═══ */}
@@ -2242,27 +2229,15 @@ export default function DesignPage() {
         </div>
       )}
 
-      {/* ═══ DRAWER CLIENTE (Meus Clientes) ═══ */}
-      {newTaskClient && !newTaskOpen && (
-        <ClientDrawer
-          client={newTaskClient}
-          contentCards={myContentCards.filter((c) => c.clientId === newTaskClient.id)}
-          designRequests={myDesignRequests.filter((r) => r.clientId === newTaskClient.id)}
-          onClose={() => setNewTaskClient(null)}
-          onCreateTask={() => setNewTaskOpen(true)}
-          updateClientData={updateClientData}
-        />
-      )}
-
       {/* ═══ MODAL NOVA TAREFA ═══ */}
       {newTaskOpen && (
         <NewTaskModal
           clients={clients.filter((c) => !myClientIds || myClientIds.has(c.id))}
-          preselectedClient={newTaskClient}
+          preselectedClient={null}
           requestedBy={currentUser}
           addDesignRequest={addDesignRequest}
           pushNotification={pushNotification}
-          onClose={() => { setNewTaskOpen(false); setNewTaskClient(null); }}
+          onClose={() => setNewTaskOpen(false)}
         />
       )}
     </div>
@@ -2520,411 +2495,6 @@ function RequestsView({
           })}
         </div>
       )}
-    </div>
-  );
-}
-
-// ── Meus Clientes — grid da carteira do designer ──────────────────────
-
-function ClientesView({
-  clients,
-  myContentCards,
-  myDesignRequests,
-  onCreateTask,
-}: {
-  clients: Client[];
-  myContentCards: ContentCard[];
-  myDesignRequests: DesignRequest[];
-  onCreateTask: (client: Client) => void;
-}) {
-  if (clients.length === 0) {
-    return (
-      <EmptyState
-        icon={<Users size={20} />}
-        title="Nenhum cliente na sua carteira ainda"
-        subtitle="Quando clientes forem atribuídos a você como designer, eles aparecem aqui."
-      />
-    );
-  }
-
-  const statusColor = (s: string) => {
-    if (s === "good")       return { dot: "bg-lone-success", label: "On Fire" };
-    if (s === "average")    return { dot: "bg-lone-warning",   label: "Atenção" };
-    if (s === "at_risk")    return { dot: "bg-destructive",     label: "Crítico" };
-    if (s === "onboarding") return { dot: "bg-primary",   label: "Onboarding" };
-    return { dot: "bg-muted", label: s };
-  };
-
-  return (
-    <div className="space-y-4 animate-fade-in">
-      <div>
-        <h2 className="text-sm font-semibold text-foreground">Minha Carteira ({clients.length} clientes)</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">Clique em um cliente para ver briefing e criar tarefa</p>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {clients.map((c) => {
-          const cards = myContentCards.filter((cc) => cc.clientId === c.id);
-          const openRequests = myDesignRequests.filter((r) => r.clientId === c.id && r.status !== "done").length;
-          const lastDelivery = cards
-            .filter((cc) => cc.designerDeliveredAt)
-            .map((cc) => cc.designerDeliveredAt!)
-            .sort((a, b) => b.localeCompare(a))[0];
-          const daysSinceDelivery = lastDelivery
-            ? Math.floor((Date.now() - new Date(lastDelivery).getTime()) / 86400000)
-            : null;
-          const st = statusColor(c.status);
-
-          return (
-            <button
-              key={c.id}
-              onClick={() => onCreateTask(c)}
-              className="card card-interactive text-left hover:border-primary/30 group"
-            >
-              <div className="flex items-start gap-3">
-                {c.docLogo ? (
-                  <img src={c.docLogo} alt="" className="w-11 h-11 rounded-lg border border-border object-contain bg-muted shrink-0" />
-                ) : (
-                  <div className="w-11 h-11 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                    <span className="text-sm font-semibold text-primary">
-                      {(c.nomeFantasia || c.name).charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{c.nomeFantasia || c.name}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">{c.industry || "—"}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="flex items-center gap-1 text-[10px]">
-                      <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-                      <span className="text-muted-foreground">{st.label}</span>
-                    </span>
-                    {openRequests > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border">
-                        {openRequests} pedido{openRequests > 1 ? "s" : ""}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <ArrowRight size={14} className="text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0 mt-1" />
-              </div>
-              <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between text-[10px] text-muted-foreground">
-                <span>{cards.length} cards · {cards.filter((cc) => cc.designerDeliveredAt).length} entregues</span>
-                <span>
-                  {daysSinceDelivery === null ? "sem entrega" :
-                   daysSinceDelivery === 0 ? "entregou hoje" :
-                   daysSinceDelivery === 1 ? "há 1 dia" :
-                   `há ${daysSinceDelivery} dias`}
-                </span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── Client Drawer — perfil + briefing + CTA nova tarefa ──────────────
-
-function ClientDrawer({
-  client,
-  contentCards,
-  designRequests,
-  onClose,
-  onCreateTask,
-  updateClientData,
-}: {
-  client: Client;
-  contentCards: ContentCard[];
-  designRequests: DesignRequest[];
-  onClose: () => void;
-  onCreateTask: () => void;
-  updateClientData: (id: string, data: Partial<Client>) => Promise<void>;
-}) {
-  const openRequests = designRequests.filter((r) => r.status !== "done");
-  const delivered = contentCards.filter((c) => c.designerDeliveredAt).length;
-
-  const [editingBriefing, setEditingBriefing] = useState(false);
-  const [briefingForm, setBriefingForm] = useState({
-    toneOfVoice: client.toneOfVoice || "",
-    fixedBriefing: client.fixedBriefing || "",
-    campaignBriefing: client.campaignBriefing || "",
-  });
-  const [savingBriefing, setSavingBriefing] = useState(false);
-  const [briefingSaved, setBriefingSaved] = useState(false);
-
-  const handleSaveBriefing = async () => {
-    // Só vai o que MUDOU: um tom fora da lista (texto livre antigo) virava undefined e sumia; e
-    // "" (limpar o briefing) vai como "" — undefined some do JSON e o servidor nunca limpava.
-    const mudancas: Partial<Client> = {};
-    const tom = briefingForm.toneOfVoice.trim();
-    if (tom !== (client.toneOfVoice ?? "")) mudancas.toneOfVoice = tom as Client["toneOfVoice"];
-    const fixo = briefingForm.fixedBriefing.trim();
-    if (fixo !== (client.fixedBriefing ?? "")) mudancas.fixedBriefing = fixo;
-    const campanha = briefingForm.campaignBriefing.trim();
-    if (campanha !== (client.campaignBriefing ?? "")) mudancas.campaignBriefing = campanha;
-    if (Object.keys(mudancas).length === 0) { setEditingBriefing(false); return; }
-    setSavingBriefing(true);
-    try {
-      await updateClientData(client.id, mudancas);
-      setEditingBriefing(false);
-      setBriefingSaved(true);
-      setTimeout(() => setBriefingSaved(false), 2000);
-    } catch (err) {
-      avisarFalha("Não consegui salvar o briefing")(err);
-    } finally {
-      setSavingBriefing(false);
-    }
-  };
-
-  const hasBriefing = client.toneOfVoice || client.fixedBriefing || client.campaignBriefing;
-
-  // Baixar a logo crua (server-side, funciona pra qualquer logo) — o designer usa direto na arte.
-  const [logoBusy, setLogoBusy] = useState(false);
-  const [logoErr, setLogoErr] = useState<string | null>(null);
-  const baixarLogo = async () => {
-    setLogoBusy(true); setLogoErr(null);
-    try {
-      const res = await authedFetch(`/api/clients/${client.id}/logo`);
-      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error((d as { error?: string }).error || `HTTP ${res.status}`); }
-      const blob = await res.blob();
-      const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg").replace("svg+xml", "svg");
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `logo-${(client.nomeFantasia || client.name || "cliente").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase()}.${ext}`;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      setLogoErr(e instanceof Error ? e.message : "Falha ao baixar");
-      setTimeout(() => setLogoErr(null), 4000);
-    } finally { setLogoBusy(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end animate-fade-in" onClick={onClose}>
-      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" />
-      <div
-        className="relative bg-card border-l border-border w-full max-w-md h-full overflow-y-auto animate-slide-in-right"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between z-10">
-          <div className="flex items-center gap-3 min-w-0">
-            {client.docLogo ? (
-              <img src={client.docLogo} alt="" className="w-9 h-9 rounded-lg border border-border object-contain bg-muted shrink-0" />
-            ) : (
-              <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-                <span className="text-xs font-semibold text-primary">{(client.nomeFantasia || client.name).charAt(0).toUpperCase()}</span>
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground truncate">{client.nomeFantasia || client.name}</p>
-              <p className="text-[10px] text-muted-foreground truncate">{client.industry || "—"}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0">
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-5">
-          {/* Stats rápidas */}
-          <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-lg bg-muted/40 border border-border p-3 text-center">
-              <p className="text-xl font-semibold text-foreground">{delivered}</p>
-              <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Entregues</p>
-            </div>
-            <div className="rounded-lg bg-muted/40 border border-border p-3 text-center">
-              <p className="text-xl font-semibold text-lone-warning">{openRequests.length}</p>
-              <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Pendentes</p>
-            </div>
-            <div className="rounded-lg bg-muted/40 border border-border p-3 text-center">
-              <p className="text-xl font-semibold text-foreground">{contentCards.length}</p>
-              <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Total</p>
-            </div>
-          </div>
-
-          {/* Baixar logo — pro designer usar direto na arte (sem precisar da aba Clientes/admin) */}
-          <div>
-            <button onClick={baixarLogo} disabled={logoBusy || !client.docLogo}
-              className="w-full flex items-center justify-center gap-2 rounded-lg border border-border bg-muted/40 hover:bg-muted px-3 py-2.5 text-xs font-medium text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-              <Download size={13} />
-              {client.docLogo ? (logoBusy ? "Baixando..." : "Baixar Logo") : "Sem logo cadastrada"}
-            </button>
-            {logoErr && <p className="text-[10px] text-destructive mt-1">{logoErr}</p>}
-            {/* Todas as versões da logo + Figma/Drive, para baixar direto daqui. */}
-            <div className="mt-3 space-y-3">
-              <MarcaDoCliente clientId={client.id} compacto />
-              <CatalogoProdutos clientId={client.id} podeEditar />
-            </div>
-          </div>
-
-          {/* Briefing (editavel por qualquer role) */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <FileText size={11} /> Briefing de Marca
-              </p>
-              {!editingBriefing ? (
-                <div className="flex items-center gap-1.5">
-                  {briefingSaved && <span className="text-[10px] text-lone-success">✓ Salvo</span>}
-                  <button
-                    onClick={() => setEditingBriefing(true)}
-                    className="text-[10px] px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
-                  >
-                    {hasBriefing ? "Editar" : "+ Adicionar"}
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => {
-                      setEditingBriefing(false);
-                      setBriefingForm({
-                        toneOfVoice: client.toneOfVoice || "",
-                        fixedBriefing: client.fixedBriefing || "",
-                        campaignBriefing: client.campaignBriefing || "",
-                      });
-                    }}
-                    className="text-[10px] px-2 py-0.5 rounded-md text-muted-foreground hover:text-foreground"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleSaveBriefing}
-                    disabled={savingBriefing}
-                    className="text-[10px] px-2 py-0.5 rounded-md bg-primary text-primary-foreground hover:bg-primary disabled:opacity-50"
-                  >
-                    {savingBriefing ? "Salvando..." : "Salvar"}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-lg bg-muted/40 border border-border p-4 space-y-3">
-              {editingBriefing ? (
-                <>
-                  <div>
-                    <label className="text-[10px] text-muted-foreground mb-1 block">Tom de voz</label>
-                    <select
-                      value={briefingForm.toneOfVoice}
-                      onChange={(e) => setBriefingForm((p) => ({ ...p, toneOfVoice: e.target.value }))}
-                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50"
-                    >
-                      <option value="">— Não definido —</option>
-                      {briefingForm.toneOfVoice && !["casual", "formal", "funny", "authoritative"].includes(briefingForm.toneOfVoice) && (
-                        <option value={briefingForm.toneOfVoice}>{briefingForm.toneOfVoice} (atual)</option>
-                      )}
-                      <option value="casual">Casual (descontraído)</option>
-                      <option value="formal">Formal (corporativo)</option>
-                      <option value="funny">Divertido (humor)</option>
-                      <option value="authoritative">Autoritário (especialista)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-muted-foreground mb-1 block">Briefing fixo (info permanente da marca)</label>
-                    <MarkdownEditor
-                      value={briefingForm.fixedBriefing}
-                      onChange={(v) => setBriefingForm((p) => ({ ...p, fixedBriefing: v }))}
-                      minHeight={120}
-                      placeholder="Missão, valores, público-alvo, cores, o que NÃO fazer..."
-                      className="bg-background"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-muted-foreground mb-1 block">Briefing da campanha (temporário)</label>
-                    <MarkdownEditor
-                      value={briefingForm.campaignBriefing}
-                      onChange={(v) => setBriefingForm((p) => ({ ...p, campaignBriefing: v }))}
-                      minHeight={100}
-                      placeholder="Campanha atual, promoção, foco do mês..."
-                      className="bg-background"
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  {client.toneOfVoice && (
-                    <div>
-                      <p className="text-[10px] text-muted-foreground mb-0.5">Tom de voz</p>
-                      <p className="text-xs text-foreground">{client.toneOfVoice}</p>
-                    </div>
-                  )}
-                  {client.fixedBriefing && (
-                    <div>
-                      <p className="text-[10px] text-muted-foreground mb-0.5">Briefing fixo</p>
-                      <p className="text-xs text-foreground whitespace-pre-wrap">{client.fixedBriefing}</p>
-                    </div>
-                  )}
-                  {client.campaignBriefing && (
-                    <div>
-                      <p className="text-[10px] text-muted-foreground mb-0.5">Briefing da campanha</p>
-                      <p className="text-xs text-foreground whitespace-pre-wrap">{client.campaignBriefing}</p>
-                    </div>
-                  )}
-                  {!hasBriefing && (
-                    <div className="text-center py-3">
-                      <p className="text-xs text-muted-foreground italic mb-2">Nenhum briefing preenchido ainda.</p>
-                      <button
-                        onClick={() => setEditingBriefing(true)}
-                        className="text-[11px] text-primary hover:underline"
-                      >
-                        + Adicionar briefing agora
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Links úteis */}
-          <div className="space-y-2">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <ExternalLink size={11} /> Assets & Links
-            </p>
-            <div className="space-y-1.5">
-              {client.driveLink && (
-                <a href={client.driveLink} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/40 border border-border text-xs text-foreground hover:border-primary/30 transition-colors">
-                  <FolderOpen size={12} className="text-primary" />
-                  <span className="flex-1 truncate">Pasta do Drive</span>
-                  <ExternalLink size={10} className="text-muted-foreground" />
-                </a>
-              )}
-              {client.instagramUser && (
-                <a href={`https://instagram.com/${client.instagramUser.replace(/^@/, "")}`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/40 border border-border text-xs text-foreground hover:border-primary/30 transition-colors">
-                  <Instagram size={12} className="text-primary shrink-0" />
-                  <span className="flex-1 truncate">@{client.instagramUser.replace(/^@/, "")}</span>
-                  <ExternalLink size={10} className="text-muted-foreground" />
-                </a>
-              )}
-              {!client.driveLink && !client.instagramUser && (
-                <p className="text-xs text-muted-foreground italic">Sem links cadastrados.</p>
-              )}
-            </div>
-          </div>
-
-          {/* CTAs */}
-          <div className="space-y-2 pt-2">
-            <button
-              onClick={onCreateTask}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-sm font-medium transition-colors"
-            >
-              <Plus size={14} /> Criar Tarefa para este Cliente
-            </button>
-            <a
-              href={`/clients/${client.id}`}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-muted text-foreground border border-border hover:border-primary/30 text-sm font-medium transition-colors"
-            >
-              <ExternalLink size={13} /> Abrir Perfil Completo
-            </a>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

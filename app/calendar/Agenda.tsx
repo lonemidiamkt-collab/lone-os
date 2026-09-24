@@ -43,6 +43,7 @@ import { MarkdownEditor } from "@/components/Markdown";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import { toast } from "sonner";
 import { todaySP, spDateStr } from "@/lib/utils";
+import { estaNoAr, rotuloEtapa, VERIFICADO_PELO_INSTAGRAM } from "@/lib/conteudo/no-ar";
 
 /** "YYYY-MM-DD" das partes LOCAIS de um Date (toISOString daria o dia em UTC). */
 function ymdLocal(d: Date): string {
@@ -102,6 +103,8 @@ const TYPE_COLORS: Record<EventType, string> = {
   // outro lado. Cor própria porque perder uma custa diferente de perder um prazo interno.
   meeting: "bg-lone-success",
 };
+
+const TODOS_OS_TIPOS: EventType[] = ["content", "task", "routine", "reminder", "meeting"];
 
 const TYPE_LABELS: Record<EventType, string> = {
   content: "Conteúdo",
@@ -194,8 +197,17 @@ export default function Agenda({ embutido = false }: { embutido?: boolean }) {
       dayPanelRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }, [selectedDay]);
-  const [filterTypes, setFilterTypes] = useState<EventType[]>(["content", "task", "routine", "reminder", "meeting"]);
+  const [filterTypes, setFilterTypes] = useState<EventType[]>(TODOS_OS_TIPOS);
   const [filterClient, setFilterClient] = useState<string>("all");
+  // ── CONTEÚDO (Leva 5a) ─────────────────────────────────────────────
+  // As datas de conteúdo moram AQUI: o calendário pequeno que repetia este (datas do mês no topo do
+  // Social) saiu. "Conteúdo" mostra só os posts planejados — e quem é de quem —, com o que já foi ao
+  // ar marcado (o Instagram fecha o card sozinho). `?tipo=conteudo` abre direto nele.
+  const [filterSocial, setFilterSocial] = useState<string>("all");
+  const soConteudo = filterTypes.length === 1 && filterTypes[0] === "content";
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tipo") === "conteudo") setFilterTypes(["content"]);
+  }, []);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   // Drag & Drop state
@@ -356,9 +368,12 @@ export default function Agenda({ embutido = false }: { embutido?: boolean }) {
 
     contentCards.forEach((card) => {
       if (!card.dueDate) return;
-      const designTag = card.designerDeliveredAt
+      const noAr = estaNoAr(card.status);
+      const designTag = noAr ? ""
+        : card.designerDeliveredAt
         ? (card.socialConfirmedAt ? "arte confirmada" : "arte entregue")
         : card.designRequestId ? "aguardando design" : "";
+      const etapa = noAr && card.publishVerifiedBy === VERIFICADO_PELO_INSTAGRAM ? "no ar (conferido no Instagram)" : rotuloEtapa(card.status);
       events.push({
         id: `c-${card.id}`,
         type: "content",
@@ -366,8 +381,8 @@ export default function Agenda({ embutido = false }: { embutido?: boolean }) {
         clientName: card.clientName,
         date: card.dueDate,
         dueDate: card.dueDate,
-        color: card.designerDeliveredAt ? "bg-lone-info" : card.designRequestId ? "bg-lone-warning" : TYPE_COLORS.content,
-        detail: `${card.format} · ${card.status.replace(/_/g, " ")}${designTag ? ` · ${designTag}` : ""}`,
+        color: noAr ? "bg-lone-success" : card.designerDeliveredAt ? "bg-lone-info" : card.designRequestId ? "bg-lone-warning" : TYPE_COLORS.content,
+        detail: `${card.format ? `${card.format} · ` : ""}${etapa}${designTag ? ` · ${designTag}` : ""}${card.socialMedia ? ` · ${card.socialMedia}` : ""}`,
         raw: card,
       });
     });
@@ -508,9 +523,10 @@ export default function Agenda({ embutido = false }: { embutido?: boolean }) {
     return allEvents.filter((e) => {
       if (!filterTypes.includes(e.type)) return false;
       if (filterClient !== "all" && e.clientName !== filterClient) return false;
+      if (filterSocial !== "all" && e.type === "content" && (e.raw as ContentCard).socialMedia !== filterSocial) return false;
       return true;
     });
-  }, [allEvents, filterTypes, filterClient]);
+  }, [allEvents, filterTypes, filterClient, filterSocial]);
 
   const eventsByDay = useMemo(() => {
     const map: Record<number, CalendarEvent[]> = {};
@@ -592,6 +608,7 @@ export default function Agenda({ embutido = false }: { embutido?: boolean }) {
   };
 
   const uniqueClients = [...new Set(allEvents.map((e) => e.clientName).filter(Boolean))].sort();
+  const sociais = [...new Set(contentCards.map((c) => c.socialMedia).filter(Boolean))].sort();
   const totalThisMonth = Object.values(eventsByDay).flat().length;
   const selectedDayEvents = selectedDay ? (eventsByDay[selectedDay] ?? []) : [];
 
@@ -634,7 +651,10 @@ export default function Agenda({ embutido = false }: { embutido?: boolean }) {
   const [reuniaoAberta, setReuniaoAberta] = useState<ReuniaoResumida | null>(null);
 
   const handleEventClick = (event: CalendarEvent) => {
-    if (event.type === "task") {
+    if (event.type === "content") {
+      // O card abre no board, onde se edita (o Social entende ?card=).
+      window.location.assign(`/social?card=${(event.raw as ContentCard).id}`);
+    } else if (event.type === "task") {
       setSelectedTask(event.raw as Task);
     } else if (event.type === "reminder") {
       toggleReminder((event.raw as Reminder).id);
@@ -695,7 +715,27 @@ export default function Agenda({ embutido = false }: { embutido?: boolean }) {
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Filter size={12} /> Filtros:
         </div>
-        {(["content", "task", "routine", "reminder"] as EventType[]).map((t) => {
+        {/* Atalho: tudo × só conteúdo (as datas de post da agência inteira num lugar só). */}
+        <div className="flex items-center gap-0.5 rounded-lg bg-muted p-0.5" role="group" aria-label="O que mostrar">
+          {([["tudo", "Tudo"], ["conteudo", "Conteúdo"]] as const).map(([k, rotulo]) => {
+            const ativo = k === "conteudo" ? soConteudo : !soConteudo;
+            return (
+              <button key={k} type="button" aria-pressed={ativo}
+                onClick={() => { setFilterTypes(k === "conteudo" ? ["content"] : TODOS_OS_TIPOS); if (k === "tudo") setFilterSocial("all"); }}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${ativo ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                {rotulo}
+              </button>
+            );
+          })}
+        </div>
+        {soConteudo && sociais.length > 0 && (
+          <select value={filterSocial} onChange={(e) => setFilterSocial(e.target.value)} aria-label="Social media"
+            className="bg-card border border-border rounded-lg px-3 py-1.5 text-xs text-foreground">
+            <option value="all">Todos os sociais</option>
+            {sociais.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        )}
+        {!soConteudo && (["content", "task", "routine", "reminder"] as EventType[]).map((t) => {
           const Icon = TYPE_ICONS[t];
           const active = filterTypes.includes(t);
           return (
@@ -937,7 +977,9 @@ export default function Agenda({ embutido = false }: { embutido?: boolean }) {
                               draggable={isDraggable}
                               onDragStart={isDraggable ? (ev) => handleDragStart(ev, e) : undefined}
                               onDragEnd={isDraggable ? handleDragEnd : undefined}
-                              onClick={(ev) => { ev.stopPropagation(); handleEventClick(e); }}
+                              // Post na grade: o clique cai no dia (abre o painel do dia, com o link do
+                              // card e do post). Sair da Agenda num clique miúdo na grade assusta.
+                              onClick={(ev) => { if (e.type === "content") return; ev.stopPropagation(); handleEventClick(e); }}
                               className={`flex items-center gap-1 px-1.5 py-1 rounded-md text-[11px] truncate text-left transition-all ${isDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${
                                 isTaskDeadline
                                   ? "bg-destructive/15 text-destructive font-semibold"
@@ -1013,7 +1055,8 @@ export default function Agenda({ embutido = false }: { embutido?: boolean }) {
                             : isReminder
                             ? (rem?.done ? "bg-lone-success-bg border-lone-success-border" : "bg-primary/5 border-primary/20 hover:border-primary/40")
                             : "bg-muted/50 border-border/50 hover:border-border"
-                        } ${e.type === "task" || isReminder ? "cursor-pointer hover:bg-muted/80" : ""}`}
+                        } ${e.type === "task" || e.type === "content" || isReminder ? "cursor-pointer hover:bg-muted/80" : ""}`}
+                        title={e.type === "content" ? "Abrir o card no board" : undefined}
                       >
                         <div className="flex items-center gap-2 mb-1">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${
@@ -1051,6 +1094,12 @@ export default function Agenda({ embutido = false }: { embutido?: boolean }) {
                       </button>
                       {/* Irmãs do botão, não filhas: botão dentro de botão é HTML inválido e o
                           clique de dentro dispara o de fora. */}
+                      {e.type === "content" && (e.raw as ContentCard).igPermalink && (
+                        <a href={(e.raw as ContentCard).igPermalink} target="_blank" rel="noopener noreferrer"
+                          className="ml-[18px] mt-1 inline-flex items-center gap-1 text-[10px] text-lone-success hover:underline">
+                          <Instagram size={10} aria-hidden /> Ver o post no Instagram
+                        </a>
+                      )}
                       {e.type === "meeting" && (() => {
                         const idReu = e.id.replace(/^reu-/, "");
                         // Só depois da hora: oferecer "marcou como realizada" numa reunião que

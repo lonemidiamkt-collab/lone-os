@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExternalLink, Check, X, Bookmark, TrendingUp, Loader2 } from "lucide-react";
+import { ExternalLink, Check, X, Bookmark, TrendingUp, Loader2, CalendarDays } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
+import { todaySP } from "@/lib/utils";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useRole } from "@/lib/context/RoleContext";
-import { cardDaPauta } from "@/components/planejamento/pauta-card";
+import { cardDaPauta, dataSugerida } from "@/components/planejamento/pauta-card";
 import { MOTIVOS_LISTA, type MotivoDescarte } from "@/lib/radar/decisao";
 import { toast } from "sonner";
 
@@ -39,8 +40,18 @@ const NIVEL_LABEL: Record<string, string> = {
   video: "miniatura analisada",
 };
 
+const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+/** "2026-10-01" → "qua, 01/10". */
+function dataCurta(ymd: string): string {
+  const [a, m, d] = ymd.split("-").map(Number);
+  return `${DIAS[new Date(Date.UTC(a, m - 1, d)).getUTCDay()]}, ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
+}
+
 export default function RadarOportunidades() {
   const [pautas, setPautas] = useState<Pauta[] | null>(null);
+  // Datas que cada cliente já tem no board (do servidor) + as que esta sessão acabou de ocupar:
+  // duas pautas do mesmo cliente usadas em seguida não caem no mesmo dia.
+  const [ocupadas, setOcupadas] = useState<Record<string, string[]>>({});
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [descartando, setDescartando] = useState<string | null>(null);
@@ -49,31 +60,42 @@ export default function RadarOportunidades() {
 
   const carregar = useCallback(async () => {
     setErro(null);
-    const res = await chamar<{ pautas?: Pauta[] }>("/api/radar/pautas?status=nova");
+    const res = await chamar<{ pautas?: Pauta[]; ocupadas?: Record<string, string[]> }>("/api/radar/pautas?status=nova");
     // Falha não pode virar "nada novo": a seção sumia e ninguém sabia que o Radar estava fora.
     if (!res.ok) { setErro(res.erro); setPautas(null); return; }
     setPautas(res.data?.pautas ?? []);
+    setOcupadas(res.data?.ocupadas ?? {});
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  const sugestao = useCallback(
+    (p: Pauta) => dataSugerida(todaySP(), ocupadas[p.client_id] ?? []),
+    [ocupadas],
+  );
 
   const decidir = useCallback(async (pauta: Pauta, decisao: string, motivo?: MotivoDescarte) => {
     const id = pauta.id;
     setOcupado(id);
     try {
-      // "Vou usar" vira card em Ideias já com a pauta no briefing. O create deduplica o mesmo
-      // cliente+título por 2 min, então repetir o clique depois de uma falha não gera dois cards.
+      // "Usar esta pauta" vira card em Ideias já preenchido: cliente, título, pauta no briefing,
+      // formato e a data sugerida — ninguém redigita nada. A chave de idempotência da pauta faz o
+      // create devolver o MESMO card se o clique se repetir (ou no retry depois de uma falha).
       let cardId: string | null = null;
+      let data: string | null = null;
       if (decisao === "usada") {
         const social = clients.find((c) => c.id === pauta.client_id)?.assignedSocial ?? null;
-        const card = await chamar<{ id?: string }>("/api/content-cards/create", cardDaPauta(pauta, social, currentUser));
+        data = sugestao(pauta);
+        const card = await chamar<{ id?: string }>("/api/content-cards/create", cardDaPauta(pauta, social, currentUser, data));
         if (!card.ok || !card.data?.id) { toast.error(`Não consegui criar o card: ${card.erro ?? "sem id"}`); return; }
         cardId = card.data.id;
       }
-      const res = await chamar("/api/radar/pautas", { id, decisao, motivo });
+      const res = await chamar("/api/radar/pautas", { id, decisao, motivo, cardId: cardId ?? undefined });
       if (!res.ok) { toast.error(res.erro ?? "Não consegui registrar"); return; }
-      if (cardId) {
-        toast.success("Card criado em Ideias com a pauta no briefing.", {
+      if (cardId && data) {
+        const dia = data;
+        setOcupadas((o) => ({ ...o, [pauta.client_id]: [...(o[pauta.client_id] ?? []), dia] }));
+        toast.success(`Card criado em Ideias para ${dataCurta(dia)}, com a pauta no briefing.`, {
           action: { label: "Abrir", onClick: () => { window.location.href = `/social?card=${cardId}`; } },
         });
       } else {
@@ -82,7 +104,7 @@ export default function RadarOportunidades() {
       setDescartando(null);
       setPautas((p) => (p ?? []).filter((x) => x.id !== id));
     } finally { setOcupado(null); }
-  }, [clients, currentUser]);
+  }, [clients, currentUser, sugestao]);
 
   // Agrupa por cliente: o social media trabalha cliente a cliente, não ideia a ideia.
   const porCliente = useMemo(() => {
@@ -214,13 +236,14 @@ export default function RadarOportunidades() {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => decidir(p, "usada")}
                         disabled={ocupado === p.id}
+                        title="Cria o card em Ideias já com cliente, título, briefing, formato e data"
                         className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-lone-success text-background hover:opacity-90 disabled:opacity-50"
                       >
-                        <Check size={14} /> Vou usar
+                        {ocupado === p.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Usar esta pauta
                       </button>
                       <button
                         onClick={() => setDescartando(p.id)}
@@ -233,10 +256,14 @@ export default function RadarOportunidades() {
                         onClick={() => decidir(p, "guardada")}
                         disabled={ocupado === p.id}
                         title="guardar para depois"
+                        aria-label="Guardar para depois"
                         className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-muted-foreground hover:text-foreground disabled:opacity-50"
                       >
                         <Bookmark size={14} />
                       </button>
+                      <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground" title="Próximo dia de postagem (seg/qua/sex) sem card deste cliente">
+                        <CalendarDays size={12} aria-hidden /> {dataCurta(sugestao(p))}
+                      </span>
                     </div>
                   )}
                 </article>
