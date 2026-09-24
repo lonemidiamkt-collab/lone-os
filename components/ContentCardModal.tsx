@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   Upload, Calendar, FileText, User, Tag,
   Save, ImageIcon, Hash, AlignLeft,
-  Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Palette, Archive, AtSign,
+  Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Archive, AtSign,
 } from "lucide-react";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
@@ -16,7 +16,11 @@ import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import type { ContentCard, CardAttachment } from "@/lib/types";
 import CardArtAttachments, { MAX_ARTES } from "@/components/kanban/CardArtAttachments";
-import { STATUS_COR } from "@/components/kanban/status-cores";
+import EtapaDesign from "@/components/conteudo/EtapaDesign";
+import EntregarArteModal from "@/components/conteudo/EntregarArteModal";
+import MotivoModal from "@/components/conteudo/MotivoModal";
+import { useProducao, type Pendencia } from "@/components/conteudo/useProducao";
+import { ETAPAS, ROTULO_BLOQUEADO, corDoStatus, estaBloqueado, etapaDoStatus, infoDoStatus, statusNaEtapa, type Etapa } from "@/lib/conteudo/etapas";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
 import { toast } from "sonner";
@@ -33,17 +37,6 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { MarkdownEditor, MarkdownView, htmlToMarkdown } from "@/components/Markdown";
 
-
-const STATUS_OPTIONS: { value: ContentCard["status"]; label: string; color: string }[] = [
-  { value: "ideas", label: "Ideias", color: STATUS_COR.ideas },
-  { value: "script", label: "Roteiro", color: STATUS_COR.script },
-  { value: "in_production", label: "Em Produção", color: STATUS_COR.in_production },
-  { value: "blocked", label: "Bloqueado", color: STATUS_COR.blocked },
-  { value: "approval", label: "Aprovação Social Media", color: STATUS_COR.approval },
-  { value: "client_approval", label: "Aprovação Cliente", color: STATUS_COR.client_approval },
-  { value: "scheduled", label: "Agendado", color: STATUS_COR.scheduled },
-  { value: "published", label: "Publicado", color: STATUS_COR.published },
-];
 
 // Campo apagado vai como null: `x || undefined` sumia com a chave e o valor antigo ficava no banco.
 const ouNulo = (v: string) => (v.trim() ? v : null);
@@ -80,7 +73,8 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
   const addCardComment = useContentStore((s) => s.addCardComment);
   const approveContent = useContentStore((s) => s.approveContent);
   const rejectContent = useContentStore((s) => s.rejectContent);
-  const addDesignRequest = useContentStore((s) => s.addDesignRequest);
+  const { mover } = useProducao();
+  const [pendencia, setPendencia] = useState<Pendencia>(null);
   const pushNotification = useNotificationsStore((s) => s.push);
   const { role, currentUser } = useRole();
   const team = useTeamMembers();
@@ -99,7 +93,9 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
   const [caption, setCaption] = useState(card.caption ?? "");
   const [hashtags, setHashtags] = useState(card.hashtags ?? "");
   const [dueDate, setDueDate] = useState(card.dueDate ?? "");
-  const [status, setStatus] = useState(card.status);
+  // A etapa é a do card vivo (o store): mudar etapa grava na hora, pela regra da produção.
+  const status = card.status;
+  const [movendo, setMovendo] = useState(false);
   const [attachments, setAttachments] = useState<CardAttachment[] | null>(null); // null = carregando
   const [erroAnexos, setErroAnexos] = useState<string | null>(null);
   const [tentativaAnexos, setTentativaAnexos] = useState(0);
@@ -108,7 +104,6 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
   const [commentText, setCommentText] = useState("");
   const [editingBriefing, setEditingBriefing] = useState(false);
   const [archiving, setArchiving] = useState(false);
-  const [sendingDesign, setSendingDesign] = useState(false); // anti-duplo-clique no Solicitar Design
   const [genLegenda, setGenLegenda] = useState(false);       // gerando legenda por IA
   const [revisando, setRevisando] = useState(false);         // revisando a arte por IA
   const [revisao, setRevisao] = useState<{ ok: boolean; problemas: string[]; resumo: string } | null>(null);
@@ -251,16 +246,12 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
     // (briefing, legenda etc.). Salva o que foi editado e, se faltar a data, apenas AVISA: sem ela o
     // card fica invisível pro acompanhamento de pauta do agente CS. (Pedido do Roberto: não travar.)
     if (salvando) return;
-    const now = new Date().toISOString();
     const updates = {
       observations: ouNulo(observations),
       briefing: ouNulo(briefing),
       caption: ouNulo(caption),
       hashtags: ouNulo(hashtags),
       dueDate: dueDate || null,
-      ...(status !== card.status
-        ? { status, statusChangedAt: now, columnEnteredAt: { ...(card.columnEnteredAt ?? {}), [status]: now } }
-        : {}),
     } as unknown as Partial<ContentCard>;
     setSalvando(true);
     try {
@@ -323,7 +314,15 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
     }
   };
 
-  const currentStatus = STATUS_OPTIONS.find((s) => s.value === status);
+  const etapaAtual = infoDoStatus(status);
+  const moverPara = async (destino: Etapa) => {
+    if (movendo) return;
+    setMovendo(true);
+    try {
+      const p = await mover(card, destino);
+      if (p) setPendencia(p);
+    } finally { setMovendo(false); }
+  };
 
   // Tem edição não salva? (os campos que só persistem no "Salvar alterações".) Se sim, confirmar
   // antes de fechar — senão fechar/ESC/clique-fora descartava legenda/briefing digitados em silêncio.
@@ -333,8 +332,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
     title !== (card.title ?? "") ||
     caption !== (card.caption ?? "") ||
     hashtags !== (card.hashtags ?? "") ||
-    dueDate !== (card.dueDate ?? "") ||
-    status !== card.status;
+    dueDate !== (card.dueDate ?? "");
 
   const requestClose = () => {
     if (isDirty && !window.confirm("Você tem alterações não salvas neste card. Descartar e fechar?")) return;
@@ -347,8 +345,8 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
         <DialogHeader className="flex-row items-start px-6 py-5 border-b border-border shrink-0 space-y-0">
           <div className="flex-1 min-w-0 pr-4">
             <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className={`w-2 h-2 rounded-full ${currentStatus?.color}`} />
-              <span className="text-xs text-muted-foreground font-medium">{currentStatus?.label}</span>
+              <span className={`w-2 h-2 rounded-full ${corDoStatus(status)}`} />
+              <span className="text-xs text-muted-foreground font-medium">{etapaAtual.rotulo}{estaBloqueado(status) ? ` · ${ROTULO_BLOQUEADO}` : ""}</span>
               <span className="text-muted-foreground">·</span>
               <span className="text-xs text-muted-foreground">{card.format}</span>
               <span className="text-muted-foreground">·</span>
@@ -450,38 +448,34 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
               </div>
             </div>
 
-            {/* Status selector */}
+            {/* Etapa — as seis do quadro de produção. Grava na hora, pela mesma regra do quadro:
+                entrar em "Com o designer" pede a arte, voltar pra lá pede alteração, sair exige a entrega. */}
             <div>
-              <Label className="block mb-2">Status</Label>
+              <Label className="block mb-2">Etapa</Label>
               <div className="flex flex-wrap gap-1.5">
-                {STATUS_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => {
-                      if (opt.value === status) return;
-                      const prev = status;
-                      setStatus(opt.value);
-                      // Status salva automaticamente ao clicar — dispensa "Salvar alterações" (pedido
-                      // do social). Se a gravação falhar, reverte o pill (o store desfaz e avisa).
-                      const now = new Date().toISOString();
-                      updateContentCard(card.id, {
-                        status: opt.value,
-                        statusChangedAt: now,
-                        columnEnteredAt: { ...(card.columnEnteredAt ?? {}), [opt.value]: now },
-                      }).catch(() => setStatus(prev));
-                    }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                      status === opt.value
-                        ? "bg-primary/20 text-primary border border-primary/30"
-                        : "bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${opt.color}`} />
-                    {opt.label}
-                  </button>
-                ))}
+                {ETAPAS.map((opt) => {
+                  const ativa = etapaDoStatus(status) === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      disabled={movendo}
+                      aria-pressed={ativa}
+                      onClick={() => { if (!ativa) void moverPara(opt.id); }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-60 ${
+                        ativa ? "bg-primary/20 text-primary border border-primary/30" : "bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${opt.cor}`} />
+                      {opt.rotulo}
+                    </button>
+                  );
+                })}
               </div>
             </div>
+
+            {/* A arte do card: pedido, designer, prazo, entregas, alterações — e as ações. */}
+            <EtapaDesign card={card} briefingIa={designBrief} />
 
             {/* Posting date — OBRIGATÓRIA (o agente CS acompanha a pauta por ela) */}
             <div>
@@ -710,12 +704,12 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
         </div>
 
         {/* Approval Actions — visible when card is in approval or client_approval */}
-        {(card.status === "approval" || card.status === "client_approval") && (
+        {statusNaEtapa(card.status, "revisao", "com_cliente") && (
           <div className="px-6 py-4 border-t border-border space-y-3">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-semibold text-foreground">Ação de Aprovação</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-medium">
-                {card.status === "approval" ? "Aprovação Social Media" : "Aprovação Cliente"}
+                {etapaAtual.rotulo}
               </span>
             </div>
 
@@ -891,76 +885,17 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
         )}
 
         <DialogFooter className="px-6 py-4 border-t border-border">
-          {/* Solicitar Design — only for social/traffic/admin, NOT for designer */}
-          {role !== "designer" && !card.designRequestId && !card.designerDeliveredAt && (
-            <div className="mr-auto flex items-center gap-2">
+          {/* "Pedir arte" mora na seção Arte (Leva 5b). Aqui fica só o briefing por IA, que vai junto no pedido. */}
+          {role !== "designer" && !card.designRequestId && !card.designerDeliveredAt && statusNaEtapa(card.status, "pauta") && (
             <Button
               variant="outline"
               disabled={genBrief}
-              className="flex items-center gap-2 text-primary border-primary/30 hover:bg-primary/10"
+              className="mr-auto flex items-center gap-2 text-primary border-primary/30 hover:bg-primary/10"
               title="A Lone monta o briefing da arte (objetivo, texto na arte, elementos visuais, o que não pode) pro designer executar sem perguntar nada"
               onClick={gerarBriefingDesignIA}
             >
               {genBrief ? "Gerando…" : "Briefing pro designer (IA)"}
             </Button>
-            <Button
-              variant="outline"
-              disabled={sendingDesign}
-              className="flex items-center gap-2 text-chart-4 border-chart-4/30 hover:bg-chart-4/10"
-              onClick={() => {
-                trilha("solicitar-design:clique", { id: card.id, data: dueDate || null, enviando: sendingDesign });
-                if (sendingDesign) return;          // anti-duplo-clique: evita demanda duplicada
-                // Não manda pro designer sem data de postagem — toda demanda precisa de pauta datada.
-                if (!dueDate) {
-                  trilha("solicitar-design:pulou", { id: card.id, motivo: "sem-data" });
-                  pushNotification("system", "Falta a data de postagem", `Defina quando "${card.title}" vai ao ar antes de mandar pro designer.`, card.clientId);
-                  toast.error("Falta a data de postagem — preencha ali em cima antes de solicitar o design.");
-                  return;
-                }
-                setSendingDesign(true);
-                addDesignRequest({
-                  title: `Arte: ${card.title}`,
-                  clientId: card.clientId,
-                  clientName: card.clientName,
-                  requestedBy: currentUser,
-                  priority: card.priority || "medium",
-                  status: "queued",
-                  format: card.format || "Post Feed",
-                  // Briefing gerado pela Lone (revisado no textarea) tem prioridade; senão, o do card.
-                  briefing: (designBrief && designBrief.trim()) || card.briefing || card.observations || `Criar arte para: ${card.title}`,
-                  contentCardId: card.id, // vincula a demanda ao card já na criação (link à prova de falha)
-                  deadline: dueDate,      // data de postagem do card = prazo da arte pro designer ver
-                })
-                  .then((req) => {
-                    trilha("solicitar-design:ok", { id: card.id, dr: req.id });
-                    updateContentCard(card.id, { designRequestId: req.id }).catch(() => {});
-                    pushNotification("content", "Design solicitado", `Pedido de arte para "${card.title}" enviado ao designer.`, card.clientId, card.id);
-                    toast.success(`Design solicitado — "${card.title}" está no quadro do designer.`);
-                  })
-                  .catch((err: unknown) => {
-                    const m = err instanceof Error ? err.message : "";
-                    trilha("solicitar-design:erro", { id: card.id, msg: m });
-                    pushNotification("system", "Falha ao solicitar design", `Não deu pra enviar "${card.title}" pro designer. Tente de novo.`, card.clientId);
-                    toast.error(`Não consegui solicitar o design${m ? ` (${m})` : ""}. Nada foi criado — tenta de novo.`);
-                  })
-                  .finally(() => setSendingDesign(false));
-              }}
-            >
-              <Palette size={14} />
-              {sendingDesign ? "Enviando..." : "Solicitar Design"}
-            </Button>
-            </div>
-          )}
-          {/* Designer sees "Enviar Arte" instead */}
-          {role === "designer" && !card.designerDeliveredAt && (
-            <span className="mr-auto text-xs text-primary flex items-center gap-1.5">
-              <Upload size={12} /> Use o botão "Enviar Arte" no kanban
-            </span>
-          )}
-          {role !== "designer" && card.designRequestId && !card.designerDeliveredAt && (
-            <span className="mr-auto text-xs text-lone-warning flex items-center gap-1.5">
-              <Palette size={12} /> Aguardando design...
-            </span>
           )}
           {card.clientApprovedAt && role !== "designer" && (
             <span className="mr-auto flex items-center gap-1.5 text-sm font-semibold text-lone-success px-2.5 py-1 rounded-lg bg-lone-success-bg border border-lone-success-border">
@@ -972,21 +907,16 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
               variant="outline"
               className="mr-auto flex items-center gap-2 text-lone-success border-lone-success-border hover:bg-lone-success-bg"
               onClick={async () => {
-                // Confirmar a arte já AVANÇA o card pra Aprovação (Social Media) se ainda estiver em
-                // produção — antes só marcava confirmado e o card ficava parado na mesma coluna.
-                const advance = ["ideas", "script", "in_production", "blocked"].includes(status);
+                // Confirmar = "conferi a arte". A entrega já leva o card pra Revisão interna; card
+                // antigo, entregue e ainda antes dela, é levado junto.
                 const now = new Date().toISOString();
                 try {
-                  await updateContentCard(card.id, {
-                    socialConfirmedAt: now,
-                    socialConfirmedBy: currentUser,
-                    ...(advance ? { status: "approval" as const, statusChangedAt: now, columnEnteredAt: { ...(card.columnEnteredAt ?? {}), approval: now } } : {}),
-                  });
+                  await updateContentCard(card.id, { socialConfirmedAt: now, socialConfirmedBy: currentUser });
                 } catch {
                   return;
                 }
-                if (advance) setStatus("approval");
-                toast.success(advance ? "Arte confirmada — card movido para Aprovação Social Media." : "Arte confirmada.");
+                if (statusNaEtapa(card.status, "pauta", "com_designer")) await moverPara("revisao");
+                else toast.success("Arte confirmada.");
               }}
             >
               <CheckCircle size={14} />
@@ -1022,6 +952,14 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
             {salvando ? "Salvando…" : saved ? "Salvo!" : "Salvar alterações"}
           </Button>
         </DialogFooter>
+        {pendencia?.tipo === "entregar" && <EntregarArteModal card={pendencia.card} onClose={() => setPendencia(null)} />}
+        {pendencia?.tipo === "alteracao" && (
+          <MotivoModal tipo="alteracao" tituloCard={pendencia.card.title} onClose={() => setPendencia(null)}
+            onConfirmar={async (motivo) => {
+              try { await useContentStore.getState().transicaoDesign(pendencia.card.id, { tipo: "pedir_alteracao", motivo }); toast.success("Voltou pro designer com o pedido de alteração."); return true; }
+              catch (err) { toast.error(err instanceof Error ? err.message : "Não consegui pedir a alteração."); return false; }
+            }} />
+        )}
       </DialogContent>
     </Dialog>
   );

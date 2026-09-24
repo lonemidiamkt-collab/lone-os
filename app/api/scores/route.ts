@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { ETAPAS_FINAIS, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { NextRequest, NextResponse } from "next/server";
 import { requireCronOrUser } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -188,7 +189,7 @@ export async function GET(req: NextRequest) {
   // ── ATRASO: de quem é ──────────────────────────────────────────────────
   const hoje = new Date().toISOString().slice(0, 10);
   const paraAtraso: CardParaAtraso[] = cards
-    .filter((k) => k.status !== "published" && k.status !== "scheduled")
+    .filter((k) => !statusNaEtapa(k.status as string, ...ETAPAS_FINAIS))
     .map((k) => ({
       id: k.id as string,
       status: k.status as string,

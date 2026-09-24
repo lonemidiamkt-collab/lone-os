@@ -13,11 +13,11 @@
 //     perto;
 //   · um post fecha no máximo UM card (e um card recebe no máximo um post).
 //
-// Módulo PURO: sem banco, sem React. Tudo o que depende do nome das etapas do board fica nas
-// funções pequenas logo abaixo (estaNoAr, prontoParaIrAoAr) — a Leva 5b troca as etapas e só
-// precisa remapear aqui.
+// Módulo PURO: sem banco, sem React. As etapas vêm de lib/conteudo/etapas.ts (Leva 5b) — aqui só
+// as duas perguntas que o "No ar" faz a elas (estaNoAr, prontoParaIrAoAr).
 
 import { spDateStr } from "@/lib/utils";
+import { estaBloqueado, rotuloEmFrase, statusNaEtapa } from "@/lib/conteudo/etapas";
 
 // ─── Formatos ──────────────────────────────────────────────────────────────
 
@@ -49,11 +49,11 @@ export function formatoDoCard(format: string | null | undefined): FormatoPost {
   return "outro"; // BTS, Destaque…
 }
 
-// ─── Etapas (remapear aqui na Leva 5b) ──────────────────────────────────────
+// ─── Etapas ─────────────────────────────────────────────────────────────────
 
-/** O card já está "No ar"? Hoje isso é o status `published`. */
+/** O card já está "No ar"? */
 export function estaNoAr(status: string | null | undefined): boolean {
-  return status === "published";
+  return statusNaEtapa(status, "no_ar");
 }
 
 export interface EstadoDoCard {
@@ -62,13 +62,9 @@ export interface EstadoDoCard {
   clientApprovedAt?: string | null;
 }
 
-/** Nome da etapa para a tela (a Leva 5b troca os nomes aqui, num lugar só). */
-const ROTULO_ETAPA: Record<string, string> = {
-  ideas: "ideia", script: "roteiro", in_production: "em produção", blocked: "bloqueado",
-  approval: "revisão interna", client_approval: "com o cliente", scheduled: "agendado", published: "no ar",
-};
+/** Nome da etapa no meio de uma frase ("com o designer"). O nome mora em lib/conteudo/etapas.ts. */
 export function rotuloEtapa(status: string | null | undefined): string {
-  return ROTULO_ETAPA[status ?? ""] ?? (status ?? "").replace(/_/g, " ");
+  return rotuloEmFrase(status);
 }
 
 /**
@@ -76,13 +72,13 @@ export function rotuloEtapa(status: string | null | undefined): string {
  * sem arte não fecha: um post no mesmo dia pode ser outra coisa, e fechar card que nem tinha arte
  * seria inventar entrega.
  *
- * Hoje: agendado, com o cliente, ou com arte entregue / aprovada pelo cliente em qualquer etapa.
- * (Leva 5b: "Agendado" e "Com o cliente" entram; "Revisão interna" só com arte entregue.)
+ * Agendado e Com o cliente, sim; nas outras etapas (Revisão interna, Com o designer), só com a arte
+ * entregue ou aprovada pelo cliente. Devolvido pelo designer (bloqueado), nunca.
  */
 export function prontoParaIrAoAr(c: EstadoDoCard): boolean {
   if (estaNoAr(c.status)) return false;
-  if (c.status === "blocked") return false;
-  if (c.status === "scheduled" || c.status === "client_approval") return true;
+  if (estaBloqueado(c.status)) return false;
+  if (statusNaEtapa(c.status, "agendado", "com_cliente")) return true;
   return !!c.clientApprovedAt || !!c.designerDeliveredAt;
 }
 

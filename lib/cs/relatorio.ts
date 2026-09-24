@@ -3,6 +3,8 @@
 // Lone (calorosa, 1 emoji por linha no máx). Sem I/O — a rota busca os dados e chama isto.
 // Backstage/suggest-only: o cliente NUNCA vê. É um resumo pro time, não cobrança.
 
+import { infoEtapa } from "@/lib/conteudo/etapas";
+
 export interface EntregaItem {
   /** Designer responsável (clients.assigned_designer); null se o cliente não tem designer fixo. */
   designer: string | null;
@@ -64,8 +66,8 @@ export function buildDeliveryReport(inp: RelatorioInput): string {
     }
   }
 
-  if (publicados > 0) linhas.push("", `📢 *Publicados:* ${publicados} no ar`);
-  if (emProducao > 0) linhas.push(`⏳ *Em produção agora:* ${emProducao}`);
+  if (publicados > 0) linhas.push("", `📢 *${infoEtapa("no_ar").rotulo}:* ${publicados} post${publicados > 1 ? "s" : ""}`);
+  if (emProducao > 0) linhas.push(`⏳ *${infoEtapa("com_designer").rotulo} agora:* ${emProducao}`);
 
   linhas.push("", entregas.length > 0 ? "Mandaram bem, time! Bora pra próxima 🚀" : "Bora movimentar o board essa semana! 💪");
   return linhas.join("\n");

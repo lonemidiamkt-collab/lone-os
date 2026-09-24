@@ -6,9 +6,8 @@
 
 import type { ContentCard } from "@/lib/types";
 import { todaySP } from "@/lib/utils";
+import { ETAPAS_FINAIS, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { Bot, Clock } from "lucide-react";
-
-const ABERTOS = new Set(["ideas", "script", "in_production", "blocked", "approval", "client_approval"]);
 
 function veioDoAgente(c: ContentCard): boolean {
   return (c.requestedByTraffic || "").includes("Agente CS");
@@ -24,7 +23,7 @@ export default function CsAgentInbox({
   titulo?: string;
 }) {
   const doAgente = cards
-    .filter((c) => veioDoAgente(c) && ABERTOS.has(c.status))
+    .filter((c) => veioDoAgente(c) && !statusNaEtapa(c.status, ...ETAPAS_FINAIS))
     .sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
 
   if (doAgente.length === 0) return null;

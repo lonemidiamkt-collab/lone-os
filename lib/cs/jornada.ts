@@ -1,6 +1,7 @@
 // lib/cs/jornada.ts — a ficha de RELACIONAMENTO do CS + o risco CONSOLIDADO (junta os 5 detectores
 // que hoje rodam soltos num veredito só). SEM financeiro. Alimenta o painel /jornada (8 perguntas).
 
+import { ETAPAS_FINAIS, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
 
@@ -70,7 +71,7 @@ export async function montarJornada(): Promise<FichaJornada[]> {
   const atrasoMap = new Map<string, number>();
   for (const c of cardsAtras ?? []) {
     const st = c.status as string;
-    if (st === "published" || st === "scheduled") continue;
+    if (statusNaEtapa(st, ...ETAPAS_FINAIS)) continue;
     const k = c.client_id as string;
     atrasoMap.set(k, (atrasoMap.get(k) ?? 0) + 1);
   }

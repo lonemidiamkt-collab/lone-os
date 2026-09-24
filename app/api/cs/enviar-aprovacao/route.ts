@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+import { estaBloqueado, infoEtapa, statusDaEtapa, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
@@ -129,17 +130,17 @@ export async function POST(req: NextRequest) {
   // com o CLIENTE pra aprovar. Isso tira o card do limbo "in_production" (que virava falso atraso) e
   // reflete a realidade sem o social ter que atualizar o status na mão. Só avança pra frente.
   const st = card.status as string;
-  if (enviadas > 0 && ["ideas", "script", "in_production", "approval"].includes(st)) {
+  if (enviadas > 0 && statusNaEtapa(st, "pauta", "com_designer", "revisao") && !estaBloqueado(st)) {
     const nowIso = new Date().toISOString();
     await supabaseAdmin.from("content_cards").update({
-      status: "client_approval",
+      status: statusDaEtapa("com_cliente"),
       social_confirmed_at: (card.social_confirmed_at as string) || nowIso,
       social_confirmed_by: nomeQuem,
       status_changed_at: nowIso,
     }).eq("id", cardId).then(() => {}, () => {});
     await supabaseAdmin.from("card_comments").insert({
       card_id: cardId, author: "🤖 CS", role: "system",
-      text: "➡️ Card movido pra *Aprovação Cliente* automaticamente (artes enviadas pro cliente).",
+      text: `➡️ Card movido pra *${infoEtapa("com_cliente").rotulo}* automaticamente (artes enviadas pro cliente).`,
     }).then(() => {}, () => {});
   }
 

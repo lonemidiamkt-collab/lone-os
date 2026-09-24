@@ -4,30 +4,29 @@ import { toast } from "sonner";
 import { trilha } from "@/lib/obs/trilha";
 import Header from "@/components/Header";
 import EmptyState from "@/components/ui/EmptyState";
-import KanbanBoard from "@/components/KanbanBoard";
+import QuadroProducao from "@/components/conteudo/QuadroProducao";
 import ContentCardModal from "@/components/ContentCardModal";
 import CsAgentInbox from "@/components/cs/CsAgentInbox";
 import DailyClosePanel from "@/components/social/DailyClosePanel";
 import ResultadosTab from "@/components/social/ResultadosTab";
 import ArchivedDemandsModal from "@/components/ArchivedDemandsModal";
-import SignedImage from "@/components/shared/SignedImage";
-import DriveButton from "@/components/DriveButton";
 import MateriaisResumo from "@/components/clients/MateriaisResumo";
 import { MarkdownEditor } from "@/components/Markdown";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
-import { STATUS_COR } from "@/components/kanban/status-cores";
+import { ETAPAS, ETAPAS_FINAIS, infoEtapa, statusDaEtapa, statusNaEtapa, type Etapa } from "@/lib/conteudo/etapas";
+import { lerVista, type Vista } from "@/lib/conteudo/quadro";
 import { slotsSegQuaSex, proximoSlot, chaveDaLinha } from "@/components/kanban/lote";
 import type { ContentCard, Client, Priority } from "@/lib/types";
-import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS, todaySP } from "@/lib/utils";
+import { todaySP } from "@/lib/utils";
 import {
   AlertTriangle, Calendar, Instagram, ImageIcon,
   UserPlus, X,
-  Clock, Target, Zap, BarChart2,
+  Zap, BarChart2,
   Check, Plus, ChevronDown,
   Key, Eye, EyeOff, Save,
-  Download, CheckCircle, FileWarning, ShieldCheck, AlertCircle, Layers, Trash2, Copy, Archive,
-  Palette, Search, Lock, UsersRound, Music, FolderOpen, FileText,
+  Download, CheckCircle, ShieldCheck, AlertCircle, Layers, Trash2, Copy, Archive,
+  Palette, Lock, UsersRound, Music, FolderOpen, FileText,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
@@ -39,7 +38,6 @@ import { useNav } from "@/lib/context/NavContext";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
@@ -47,63 +45,6 @@ import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
-import { useNotificationsStore } from "@/stores/useNotificationsStore";
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function getDeadlineUrgency(dueDate?: string): "overdue" | "today" | "tomorrow" | "soon" | "ok" | "none" {
-  if (!dueDate) return "none";
-  // dueDate é "YYYY-MM-DD" — new Date() disso lê UTC 00:00 (= dia anterior no BRT), fazendo o card
-  // que vence HOJE aparecer como "vencido" o dia todo. Parse como data LOCAL corrige.
-  const [y, m, d] = dueDate.slice(0, 10).split("-").map(Number);
-  if (!y || !m || !d) return "none";
-  const due = new Date(y, m - 1, d);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diff = Math.floor((due.getTime() - today.getTime()) / 86400000);
-  if (diff < 0) return "overdue";
-  if (diff === 0) return "today";
-  if (diff === 1) return "tomorrow";
-  if (diff <= 3) return "soon";
-  return "ok";
-}
-
-function getSlaBadge(status: string, columnEnteredAt?: Record<string, string>, statusChangedAt?: string): { label: string; level: "warning" | "critical" } | null {
-  // Prefer per-column timestamp; fall back to legacy statusChangedAt
-  const enteredAt = columnEnteredAt?.[status] ?? statusChangedAt;
-  if (!enteredAt) return null;
-  const hours = (Date.now() - new Date(enteredAt).getTime()) / 3600000;
-  if (hours >= 48) return { label: `${Math.floor(hours / 24)}d parado`, level: "critical" };
-  if (hours >= 24) return { label: `${Math.floor(hours)}h parado`, level: "warning" };
-  return null;
-}
-
-const SLA_STYLES = {
-  warning: "text-lone-warning bg-lone-warning-bg border-lone-warning-border",
-  critical: "text-destructive bg-destructive/10 border-destructive/20",
-};
-
-const DEADLINE_BADGE: Record<string, { label: string; color: string }> = {
-  overdue:  { label: "Vencido",  color: "bg-destructive/10 text-destructive border-destructive/20" },
-  today:    { label: "Hoje",     color: "bg-lone-warning-bg text-lone-warning border-lone-warning-border" },
-  tomorrow: { label: "Amanhã",   color: "bg-muted text-muted-foreground border-border" },
-  soon:     { label: "Em breve", color: "bg-primary/15 text-primary border-primary/20" },
-};
-
-// ── Config ────────────────────────────────────────────────────────────────────
-
-const CONTENT_COLUMNS = [
-  { id: "ideas",          title: "Ideias",             color: STATUS_COR.ideas },
-  { id: "script",         title: "Roteiro",            color: STATUS_COR.script },
-  { id: "in_production",  title: "Em Produção",        color: STATUS_COR.in_production },
-  { id: "blocked",        title: "Bloqueado (Design)", color: STATUS_COR.blocked },
-  { id: "approval",       title: "Aprovação Social Media",  color: STATUS_COR.approval },
-  { id: "client_approval",title: "Aprovação Cliente",  color: STATUS_COR.client_approval },
-  { id: "scheduled",      title: "Agendado",           color: STATUS_COR.scheduled },
-  { id: "published",      title: "Publicado",          color: STATUS_COR.published },
-];
-
-const STATUS_DOT = STATUS_COR;
 
 // ── Confetti ──────────────────────────────────────────────────────────────────
 
@@ -289,7 +230,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
       clientId,
       clientName: selectedClient?.name ?? "",
       socialMedia: role === "social" ? currentUser : (selectedClient?.assignedSocial ?? currentUser),
-      status: "ideas",
+      status: statusDaEtapa("pauta"),
       priority,
       format,
       dueDate,
@@ -541,7 +482,7 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
         clientId,
         clientName: selectedClient.name,
         socialMedia: role === "social" ? currentUser : (selectedClient.assignedSocial ?? currentUser),
-        status: "ideas",
+        status: statusDaEtapa("pauta"),
         priority,
         format: row.format,
         dueDate: row.dueDate,
@@ -693,13 +634,14 @@ function QuickTaskBar({ clients }: QuickTaskBarProps) {
   const [title, setTitle] = useState("");
   const [clientId, setClientId] = useState("");
   const [format, setFormat] = useState("Post");
-  const [column, setColumn] = useState<ContentCard["status"]>("ideas");
+  const [column, setColumn] = useState<Etapa>("pauta");
   const [priority, setPriority] = useState<Priority>("medium");
   const [dueDate, setDueDate] = useState("");
   const [dueTime, setDueTime] = useState("");
   const [success, setSuccess] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const addContentCard = useContentStore((s) => s.addContentCard);
+  const transicaoDesign = useContentStore((s) => s.transicaoDesign);
   const { currentUser, role } = useRole();
 
   const [criando, setCriando] = useState(false);
@@ -710,17 +652,25 @@ function QuickTaskBar({ clients }: QuickTaskBarProps) {
     const client = clients.find((c) => c.id === clientId);
     setCriando(true);
     try {
-      await addContentCard({
+      // "Com o designer" não é um status solto: o card nasce na Pauta e o pedido de arte abre junto
+      // (a mesma transição do quadro). As outras etapas nascem direto.
+      const pedeArte = column === "com_designer";
+      const criado = await addContentCard({
         title: title.trim(),
         clientId,
         clientName: client?.name ?? "",
         socialMedia: role === "social" ? currentUser : (client?.assignedSocial ?? currentUser),
-        status: column,
+        status: pedeArte ? statusDaEtapa("pauta") : statusDaEtapa(column),
         priority,
         format,
         dueDate,
         dueTime,
       }, { criadoPor: currentUser });
+      if (pedeArte && criado?.id) {
+        await transicaoDesign(criado.id, { tipo: "pedir_arte" }).catch((err: unknown) => {
+          toast.error(`O card foi criado, mas não foi pro designer${err instanceof Error ? `: ${err.message}` : ""}. Use "Pedir arte" no card.`);
+        });
+      }
     } catch (err) {
       // "Criado!" só depois do servidor confirmar; em falha os campos ficam preenchidos.
       toast.error(`Não consegui criar o card${err instanceof Error && err.message ? `: ${err.message}` : ""}.`);
@@ -732,7 +682,7 @@ function QuickTaskBar({ clients }: QuickTaskBarProps) {
     setClientId("");
     setFormat("Post");
     setPriority("medium");
-    setColumn("ideas");
+    setColumn("pauta");
     setDueDate("");
     setDueTime("");
     setSuccess(true);
@@ -797,11 +747,12 @@ function QuickTaskBar({ clients }: QuickTaskBarProps) {
       </select>
       <select
         value={column}
-        onChange={(e) => setColumn(e.target.value as ContentCard["status"])}
+        onChange={(e) => setColumn(e.target.value as Etapa)}
+        aria-label="Etapa em que o card nasce"
         className="bg-muted border border-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none cursor-pointer"
       >
-        {CONTENT_COLUMNS.map((col) => (
-          <option key={col.id} value={col.id}>{col.title}</option>
+        {ETAPAS.map((col) => (
+          <option key={col.id} value={col.id}>{col.rotulo}</option>
         ))}
       </select>
       <button
@@ -1058,499 +1009,12 @@ function AccessTab({ clients, clientAccess, onSave, isAdmin }: AccessTabProps) {
   );
 }
 
-// ── Card Status Selector (ClickUp-style) ──────────────────────────────────────
-// Chip colorido no card; ao escolher outro status, move o card de coluna sozinho
-// (reusa o mesmo onMoveCard do drag-and-drop). Portal do Radix escapa do
-// overflow-hidden do card.
-function CardStatusSelector({
-  status,
-  onChange,
-  disabled,
-}: {
-  status: ContentCard["status"];
-  onChange: (to: ContentCard["status"]) => void;
-  disabled?: boolean;
-}) {
-  const current = CONTENT_COLUMNS.find((c) => c.id === status) ?? CONTENT_COLUMNS[0];
-
-  if (disabled) {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-semibold bg-muted text-muted-foreground border border-border max-w-full">
-        <span className={`w-2 h-2 rounded-full shrink-0 ${current.color}`} />
-        <span className="truncate">{current.title}</span>
-      </span>
-    );
-  }
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-semibold bg-muted text-foreground border border-border hover:border-primary/40 transition-colors max-w-full outline-none"
-          title="Mudar status — move o card de coluna"
-        >
-          <span className={`w-2 h-2 rounded-full shrink-0 ${current.color}`} />
-          <span className="truncate">{current.title}</span>
-          <ChevronDown size={10} className="text-muted-foreground shrink-0" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-48">
-        {CONTENT_COLUMNS.map((col) => (
-          <DropdownMenuItem
-            key={col.id}
-            onSelect={() => { if (col.id !== status) onChange(col.id as ContentCard["status"]); }}
-            className="gap-2 text-xs cursor-pointer"
-          >
-            <span className={`w-2 h-2 rounded-full shrink-0 ${col.color}`} />
-            <span className="flex-1">{col.title}</span>
-            {col.id === status && <Check size={12} className="text-primary shrink-0" />}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-// ── Kanban By Client ──────────────────────────────────────────────────────────
-
-interface KanbanByClientProps {
-  clients: Client[];
-  allClients: Client[];
-  contentCards: ContentCard[];
-  designRequests: import("@/lib/types").DesignRequest[];
-  onCardClick: (card: ContentCard) => void;
-  onConfirmArt: (card: ContentCard) => void;
-  onNonDelivery: (card: ContentCard) => void;
-  onMoveCard: (cardId: string, toStatus: string) => void;
-  onDeleteCard?: (card: ContentCard) => void;
-  onSendToDesigner: (card: ContentCard) => void;
-  /** Abre "novo conteúdo" com o cliente JÁ escolhido (o "+" do cabeçalho da coluna). */
-  onNewCard?: (client: Client) => void;
-  currentUser: string;
-  role: string;
-  /** Primeira carga falhou: mostra erro em vez de "nenhum conteúdo". */
-  loadError?: boolean;
-}
-
 function ErroDeCarga() {
   return (
     <div className="text-center py-12 px-4 rounded-xl border border-destructive/30 bg-destructive/10" role="alert">
       <AlertTriangle size={24} className="mx-auto mb-3 text-destructive" />
       <p className="text-sm font-medium text-destructive">Não consegui carregar os cards — tentando de novo</p>
       <p className="text-xs text-muted-foreground mt-1">O quadro recarrega sozinho assim que a conexão voltar.</p>
-    </div>
-  );
-}
-
-function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, onDeleteCard, onSendToDesigner, onNewCard, currentUser, role, loadError }: KanbanByClientProps) {
-  const [activeClientId, setActiveClientId] = useState(clients[0]?.id ?? "");
-  const [viewMode, setViewMode] = useState<"single" | "unified">("single"); // cliente único vs visão unificada (todos os clientes em colunas)
-  const isReadOnly = role === "designer"; // Designer só visualiza; seletor vira etiqueta estática
-
-  const activeClient = allClients.find((c) => c.id === activeClientId);
-  const clientCards = contentCards.filter((c) => c.clientId === activeClientId);
-
-  const kanbanCols = CONTENT_COLUMNS.map((col) => ({
-    ...col,
-    items: clientCards.filter((c) => c.status === col.id),
-  }));
-
-  if (loadError) return <ErroDeCarga />;
-
-  return (
-    <div className="space-y-4">
-      {/* Toggle de visão: cliente único vs unificada (todos os clientes em colunas) */}
-      <div className="flex items-center gap-1 bg-card border border-border rounded-lg p-1 w-fit">
-        <button
-          onClick={() => setViewMode("single")}
-          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-            viewMode === "single" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Cliente único
-        </button>
-        <button
-          onClick={() => setViewMode("unified")}
-          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-            viewMode === "unified" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Visão unificada
-        </button>
-      </div>
-
-      {viewMode === "single" && (
-      <>
-      {/* Client tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {clients.map((client) => {
-          const count = contentCards.filter((c) => c.clientId === client.id && c.status !== "published").length;
-          const isActive = client.id === activeClientId;
-          const overdueCount = contentCards.filter((c) => c.clientId === client.id && c.dueDate && getDeadlineUrgency(c.dueDate) === "overdue" && c.status !== "published" && c.status !== "scheduled").length;
-          return (
-            <button
-              key={client.id}
-              onClick={() => setActiveClientId(client.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all shrink-0 ${
-                isActive
-                  ? "bg-primary/10 border-primary/30 text-primary"
-                  : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-border"
-              }`}
-            >
-              <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-semibold shrink-0 ${
-                isActive ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
-              }`}>
-                {client.name.split(" ").map(w => w[0]).join("").slice(0, 2)}
-              </div>
-              <div className="text-left">
-                <p className="text-xs font-medium leading-tight">{client.name}</p>
-                <p className="text-[10px] text-muted-foreground">{count} ativos</p>
-              </div>
-              {overdueCount > 0 && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive font-medium">{overdueCount}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Drive button for active client */}
-      {activeClient && (
-        <DriveButton driveLink={activeClient.driveLink} clientName={activeClient.name} size="md" />
-      )}
-
-      {/* Client fixed briefing banner */}
-      {activeClient?.fixedBriefing && (
-        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-            <Target size={14} className="text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] text-primary uppercase tracking-wider font-semibold mb-1">Briefing Fixo — {activeClient.name}</p>
-            <p className="text-xs text-muted-foreground leading-relaxed">{activeClient.fixedBriefing}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Column summary counters */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {CONTENT_COLUMNS.map((col) => {
-          const count = clientCards.filter((c) => c.status === col.id).length;
-          return (
-            <div key={col.id} className="flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border rounded-lg shrink-0">
-              <span className={`w-2 h-2 rounded-full ${col.color}`} />
-              <span className="text-[10px] text-muted-foreground">{col.title}</span>
-              <span className="text-xs font-semibold text-foreground">{count}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Kanban board for this client */}
-      {clientCards.length > 0 ? (
-        <KanbanBoard<ContentCard>
-          columns={kanbanCols}
-          onMove={isReadOnly ? undefined : (cardId, _from, toStatus) => onMoveCard(cardId, toStatus)}
-          onEdit={(card) => onCardClick(card)}
-          onDelete={onDeleteCard && !isReadOnly ? (cardId) => {
-            const card = contentCards.find((c) => c.id === cardId);
-            if (card) onDeleteCard(card);
-          } : undefined}
-          renderCard={(card) => {
-            const sla = getSlaBadge(card.status, card.columnEnteredAt, card.statusChangedAt);
-            return (
-              <div
-                className={`bg-card border rounded-lg overflow-hidden hover:border-primary/40 transition-colors cursor-pointer group ${
-                  sla?.level === "critical" ? "border-destructive/30" : "border-border"
-                }`}
-                onClick={() => onCardClick(card)}
-              >
-                {card.imageUrl ? (
-                  <div className="aspect-video w-full overflow-hidden bg-muted relative">
-                    <SignedImage src={card.imageUrl!} alt={card.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                    {(card.cardAttachments?.length ?? 0) > 1 && (
-                      <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-overlay text-overlay-foreground">
-                        <ImageIcon size={10} /> {card.cardAttachments!.length}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div className="aspect-video w-full flex items-center justify-center bg-muted text-muted-foreground">
-                    <ImageIcon size={20} />
-                  </div>
-                )}
-                <div className="p-3">
-                  <div className="mb-2" onClick={(e) => e.stopPropagation()}>
-                    <CardStatusSelector
-                      status={card.status}
-                      disabled={isReadOnly}
-                      onChange={(toStatus) => onMoveCard(card.id, toStatus)}
-                    />
-                  </div>
-                  {card.requestedByTraffic && (
-                    <div className="flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md border mb-2 text-primary bg-primary/10 border-primary/20">
-                      <Zap size={10} />
-                      Solicitação Tráfego · {card.requestedByTraffic}
-                    </div>
-                  )}
-                  {sla && (
-                    <div className={`flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md border mb-2 ${SLA_STYLES[sla.level]}`}>
-                      <Clock size={10} />
-                      {sla.label}
-                    </div>
-                  )}
-                  <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <p className="font-medium text-foreground text-xs leading-tight">{card.title}</p>
-                    <span className={`badge border text-xs shrink-0 ${getPriorityColor(card.priority)}`}>
-                      {getPriorityLabel(card.priority)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{card.format}</span>
-                    {card.platform && (
-                      <span className="text-xs text-muted-foreground">
-                        {card.platform === "instagram" ? "IG" : card.platform === "tiktok" ? "TT" : card.platform === "linkedin" ? "LI" : card.platform === "youtube" ? "YT" : "FB"}
-                      </span>
-                    )}
-                  </div>
-                  {/* Date + time */}
-                  {card.dueDate && (() => {
-                    const urgency = getDeadlineUrgency(card.dueDate);
-                    const badge = DEADLINE_BADGE[urgency];
-                    return (
-                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/60">
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Calendar size={10} />
-                          {card.dueDate}
-                          {card.dueTime && <span className="text-muted-foreground ml-1">{card.dueTime}</span>}
-                        </span>
-                        {badge && (
-                          <span className={`text-xs px-1.5 py-0.5 rounded-full border font-medium ${badge.color}`}>
-                            {badge.label}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
-                  {/* Art actions */}
-                  <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border/60 flex-wrap">
-                    {!card.designerDeliveredAt && card.status !== "published" && card.status !== "scheduled" && (
-                      card.designRequestId ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-chart-4/15 text-[var(--chart-4)] flex items-center gap-0.5">
-                          <Palette size={9} /> A fazer · na fila
-                        </span>
-                      ) : !isReadOnly && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onSendToDesigner(card); }}
-                          title="Marca como 'A fazer' e envia automaticamente pro designer"
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-chart-4/15 text-[var(--chart-4)] hover:bg-chart-4/25 transition-colors flex items-center gap-0.5"
-                        >
-                          <Palette size={9} /> A fazer
-                        </button>
-                      )
-                    )}
-                    {card.imageUrl && (
-                      <a
-                        href={card.imageUrl}
-                        download
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary hover:bg-primary/25 transition-colors flex items-center gap-0.5"
-                      >
-                        <Download size={9} /> Baixar Arte
-                      </a>
-                    )}
-                    {card.designerDeliveredAt && !card.socialConfirmedAt && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onConfirmArt(card); }}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary hover:bg-primary/25 transition-colors flex items-center gap-0.5"
-                      >
-                        <CheckCircle size={9} /> Confirmar Arte
-                      </button>
-                    )}
-                    {card.socialConfirmedAt && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-lone-success-bg text-lone-success border border-lone-success-border flex items-center gap-0.5 font-medium">
-                        <CheckCircle size={9} /> Arte confirmada
-                      </span>
-                    )}
-                    {card.clientApprovedAt && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-lone-success-bg text-lone-success border border-lone-success-border flex items-center gap-0.5 font-semibold">
-                        <CheckCircle size={9} /> Cliente aprovou
-                      </span>
-                    )}
-                    {card.nonDeliveryReason ? (
-                      <span className="text-[10px] text-destructive flex items-center gap-0.5" title={card.nonDeliveryReason}>
-                        <FileWarning size={9} /> N/Entregue
-                      </span>
-                    ) : (card.dueDate && getDeadlineUrgency(card.dueDate) === "overdue" && card.status !== "published" && card.status !== "scheduled") && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onNonDelivery(card); }}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/15 text-destructive hover:bg-destructive/25 transition-colors flex items-center gap-0.5"
-                      >
-                        <FileWarning size={9} /> Reportar
-                      </button>
-                    )}
-                  </div>
-                  {/* Timesheet indicator — manager/admin only */}
-                  {(role === "admin" || role === "manager") && (() => {
-                    const timeMs = getLiveTimeSpentMs(card.workStartedAt, card.totalTimeSpentMs);
-                    if (timeMs <= 0) return null;
-                    const isOvertime = timeMs >= OVERTIME_THRESHOLD_MS;
-                    return (
-                      <div className={`flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/40 text-[10px] ${isOvertime ? "text-lone-warning" : "text-muted-foreground"}`}>
-                        {isOvertime ? <AlertTriangle size={10} aria-hidden="true" /> : <Clock size={10} aria-hidden="true" />}
-                        <span className={isOvertime ? "font-semibold" : ""}>{formatTimeSpent(timeMs)}</span>
-                        {isOvertime && <span className="text-[9px] ml-auto font-medium">OVER-TIME</span>}
-                      </div>
-                    );
-                  })()}
-                </div>
-                <div className={`h-0.5 w-full ${STATUS_DOT[card.status]} ${(() => {
-                  const t = getLiveTimeSpentMs(card.workStartedAt, card.totalTimeSpentMs);
-                  return t >= OVERTIME_THRESHOLD_MS ? "!bg-lone-warning-bg" : "";
-                })()}`} />
-              </div>
-            );
-          }}
-        />
-      ) : (
-        <div className="text-center py-12 text-muted-foreground">
-          <ImageIcon size={32} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">Nenhum conteúdo para {activeClient?.name ?? "este cliente"}.</p>
-          <p className="text-xs mt-1">Use a barra de criação rápida acima para adicionar.</p>
-        </div>
-      )}
-      </>
-      )}
-
-      {/* ── VISÃO UNIFICADA: cada cliente é uma coluna (estilo Trello) ── */}
-      {viewMode === "unified" && (
-        <div className="flex gap-3 overflow-x-auto pb-3">
-          {clients.length === 0 && (
-            <p className="text-sm text-muted-foreground py-8">Nenhum cliente na carteira.</p>
-          )}
-          {clients.map((client) => {
-            // ARTE NOVA VEM PRIMEIRO (pedido do Roberto): o social abria o board e a arte que
-            // acabou de chegar podia estar no fim da coluna, misturada com card antigo. O que
-            // exige ação agora fica no topo; o resto segue a ordem do fluxo.
-            const ehNova = (c: typeof contentCards[number]) => !!c.designerDeliveredAt && !c.socialConfirmedAt;
-            const cards = [...contentCards.filter((c) => c.clientId === client.id)].sort((a, b) => {
-              if (ehNova(a) !== ehNova(b)) return ehNova(a) ? -1 : 1;
-              // Entre as novas, a que chegou primeiro vem antes — não deixa a mais antiga esperando.
-              if (ehNova(a) && ehNova(b)) return (a.designerDeliveredAt ?? "").localeCompare(b.designerDeliveredAt ?? "");
-              return CONTENT_COLUMNS.findIndex((s) => s.id === a.status) -
-                     CONTENT_COLUMNS.findIndex((s) => s.id === b.status);
-            });
-            const activeCount = cards.filter((c) => c.status !== "published").length;
-            // ARTE NOVA = o designer entregou e o social ainda não confirmou. Era o buraco: a
-            // miniatura aparecia igual à de uma arte antiga e ninguém sabia o que tinha chegado.
-            const novas = cards.filter((c) => c.designerDeliveredAt && !c.socialConfirmedAt).length;
-            return (
-              <div key={client.id} className={`w-72 shrink-0 flex flex-col bg-muted/20 border rounded-xl ${novas > 0 ? "border-chart-4/50" : "border-border"}`}>
-                <div className="flex items-center gap-2 p-3 border-b border-border rounded-t-xl bg-muted/40">
-                  <div className="w-7 h-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
-                    {client.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-foreground truncate">{client.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{activeCount} ativos · {cards.length} total</p>
-                  </div>
-                  {novas > 0 && (
-                    <span
-                      title={`${novas} arte(s) que o designer entregou e você ainda não conferiu`}
-                      className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-chart-4/20 text-[var(--chart-4)]"
-                    >
-                      <Palette size={10} /> {novas} nova{novas > 1 ? "s" : ""}
-                    </span>
-                  )}
-                  {/* PEDIDO DO SOCIAL: criar conteúdo daqui, com o cliente já escolhido. Antes era
-                      abrir "Novo conteúdo" no topo e caçar o cliente numa lista de 40 — na visão
-                      unificada a pessoa JÁ está olhando pra coluna dele. */}
-                  {!isReadOnly && onNewCard && (
-                    <button
-                      onClick={() => onNewCard(client)}
-                      title={`Novo conteúdo para ${client.name}`}
-                      aria-label={`Novo conteúdo para ${client.name}`}
-                      className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-primary/15 hover:text-primary transition-colors"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  )}
-                </div>
-                <div className="p-2 space-y-2 overflow-y-auto" style={{ maxHeight: "68vh" }}>
-                  {cards.length === 0 && (
-                    <p className="text-[10px] text-muted-foreground/50 text-center py-6">Sem produções</p>
-                  )}
-                  {cards.map((card) => {
-                    // Arte que chegou e ninguém conferiu ainda. É o que o social não conseguia ver.
-                    const arteNova = !!card.designerDeliveredAt && !card.socialConfirmedAt;
-                    return (
-                    <div
-                      key={card.id}
-                      onClick={() => onCardClick(card)}
-                      className={`bg-card border rounded-lg overflow-hidden transition-colors cursor-pointer ${
-                        arteNova ? "border-[var(--chart-4)] ring-1 ring-chart-4/40" : "border-border hover:border-primary/40"
-                      }`}
-                    >
-                      {card.imageUrl && (
-                        <div className="aspect-square w-full overflow-hidden bg-muted relative">
-                          <SignedImage src={card.imageUrl!} alt={card.title} className="w-full h-full object-cover" />
-                          {arteNova && (
-                            <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-chart-4 text-background shadow">
-                              <Palette size={10} /> ARTE NOVA
-                            </span>
-                          )}
-                          {(card.cardAttachments?.length ?? 0) > 1 && (
-                            <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-overlay text-overlay-foreground">
-                              <ImageIcon size={10} /> {card.cardAttachments!.length}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      <div className="p-2">
-                        <div className="mb-1.5" onClick={(e) => e.stopPropagation()}>
-                          <CardStatusSelector status={card.status} disabled={isReadOnly} onChange={(toStatus) => onMoveCard(card.id, toStatus)} />
-                        </div>
-                        <p className="text-[11px] font-medium text-foreground leading-tight">{card.title}</p>
-                        {!card.designerDeliveredAt && card.status !== "published" && card.status !== "scheduled" && (
-                          <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
-                            {card.designRequestId ? (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-chart-4/15 text-[var(--chart-4)] inline-flex items-center gap-0.5">
-                                <Palette size={9} /> A fazer · na fila
-                              </span>
-                            ) : !isReadOnly && (
-                              <button
-                                onClick={() => onSendToDesigner(card)}
-                                title="Marca como 'A fazer' e envia automaticamente pro designer"
-                                className="text-[10px] px-1.5 py-0.5 rounded bg-chart-4/15 text-[var(--chart-4)] hover:bg-chart-4/25 transition-colors inline-flex items-center gap-0.5"
-                              >
-                                <Palette size={9} /> A fazer
-                              </button>
-                            )}
-                          </div>
-                        )}
-                        {/* Quem entregou e quando — o social precisa saber de quem cobrar/agradecer. */}
-                        {arteNova && (
-                          <p className="mt-1 text-[10px] text-[var(--chart-4)] font-medium">
-                            Entregue{card.designerDeliveredBy ? ` por ${card.designerDeliveredBy}` : ""} — confira e siga
-                          </p>
-                        )}
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="text-[10px] text-muted-foreground">{card.format}</span>
-                          {card.dueDate && <span className="text-[10px] text-muted-foreground">{card.dueDate}</span>}
-                        </div>
-                      </div>
-                    </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -1575,7 +1039,9 @@ export default function SocialPage() {
   const [cardToDelete, setCardToDelete] = useState<ContentCard | null>(null);
   const [nonDeliveryReason, setNonDeliveryReason] = useState("");
   const [showAddMember, setShowAddMember] = useState(false);
-  const [boardSearch, setBoardSearch] = useState("");
+  // Quadro de produção (Leva 5b): a vista e o cliente em foco (vindo de ?client=).
+  const [vista, setVista] = useState<Vista>("meus");
+  const [clienteDoLink, setClienteDoLink] = useState<string | null>(null);
   const [onboardingCompleteClient, setOnboardingCompleteClient] = useState<Client | null>(null);
   const [newCardDate, setNewCardDate] = useState<string | null>(null);
   // Cliente já escolhido quando o "novo conteúdo" vem do "+" da coluna dele (visão unificada).
@@ -1594,7 +1060,6 @@ export default function SocialPage() {
   const subClients = useClientsStore((s) => s.subscribeRealtime);
 
   const contentCards = useContentStore((s) => s.contentCards);
-  const designRequests = useContentStore((s) => s.designRequests);
   const contentApprovals = useContentStore((s) => s.contentApprovals);
   const contentLoadError = useContentStore((s) => s.loadError);
   const updateContentCard = useContentStore((s) => s.updateContentCard);
@@ -1603,8 +1068,6 @@ export default function SocialPage() {
   const rejectContent = useContentStore((s) => s.rejectContent);
   const initContent = useContentStore((s) => s.init);
   const refreshContent = useContentStore((s) => s.refresh);
-  const addDesignRequest = useContentStore((s) => s.addDesignRequest);
-  const sendingDesignRef = useRef<Set<string>>(new Set()); // cards com demanda em voo (anti-duplicata)
   // Card que o ?card= já tentou abrir. O efeito depende de contentCards e roda de novo a cada poll;
   // sem essa trava, a busca no servidor dispararia repetidamente pro mesmo id.
   const cardBuscadoRef = useRef<string | null>(null);
@@ -1617,7 +1080,6 @@ export default function SocialPage() {
   const initOps = useOperationalStore((s) => s.init);
   const subOps = useOperationalStore((s) => s.subscribeRealtime);
 
-  const pushNotification = useNotificationsStore((s) => s.push);
 
   // ── Store init on mount ────────────────────────────────────────────────────
   const isAdmin = role === "admin" || role === "manager";
@@ -1658,6 +1120,9 @@ export default function SocialPage() {
 
   useEffect(() => {
     if (!pendingTab) return;
+    // Vista do quadro pedida pelo nome (⌘K, link antigo): cai no quadro de produção nessa vista.
+    const v = pendingTab === "kanban" ? null : lerVista(pendingTab);
+    if (v) { setVista(v); setActiveTab("kanban"); setPendingTab(""); return; }
     const alvo = ABAS_ANTIGAS[pendingTab] ?? pendingTab;
     // Só consome (e apaga) o pedido que é DESTA tela: apagar o de outra página fazia a busca ⌘K
     // abrir a tela certa na aba errada.
@@ -1741,15 +1206,19 @@ export default function SocialPage() {
         })();
       }
     }
-    // Atalho ?client=<id> (vindo da ficha do cliente): filtra o board por esse cliente (seta a busca).
+    // Atalho ?client=<id> (vindo da ficha do cliente e do Início): o quadro abre filtrado nesse cliente.
     const clientId = searchParams.get("client");
     if (clientId) {
       const cl = clients.find((c) => c.id === clientId);
       if (cl) {
-        setBoardSearch(cl.name);
+        setClienteDoLink(cl.id);
+        setActiveTab("kanban");
         router.replace(pathname, { scroll: false });
       }
     }
+    // ?vista=meus|cliente|designer (e os nomes antigos: kanban, unificada…).
+    const v = lerVista(searchParams.get("vista"));
+    if (v) { setVista(v); setActiveTab("kanban"); router.replace(pathname, { scroll: false }); }
   }, [searchParams, router, pathname, contentCards, clients]);
 
   // Auth: use global session (no secondary login needed)
@@ -1758,7 +1227,8 @@ export default function SocialPage() {
   // precise de ajuda o outro possa ajudar." O social ficava trancado no próprio quadro — não dava
   // nem pra ver onde o colega estava afogado. Agora escolhe; o padrão continua sendo o dele.
   const canSelectWorkspace = isAdmin || isDesigner || role === "social";
-  const isReadOnly = isDesigner; // Designer can view but not move cards
+  // O designer vê o quadro do social; o que ele pode mover a regra da produção decide (só a arte).
+  const isReadOnly = isDesigner;
 
   const team = useTeamMembers();
   const socialMemberNames = team.social.map((m) => m.name);
@@ -1768,14 +1238,9 @@ export default function SocialPage() {
 
   const filteredClients = clients.filter((c) => activeWorkspace === "Todos" || c.assignedSocial === activeWorkspace);
 
-  const boardQuery = boardSearch.trim().toLowerCase();
   const filteredCards = contentCards.filter((c) => {
     if (c.archivedAt) return false;
     if (activeWorkspace !== "Todos" && c.socialMedia !== activeWorkspace) return false;
-    if (boardQuery) {
-      const hay = `${c.title ?? ""} ${c.clientName ?? ""} ${c.format ?? ""}`.toLowerCase();
-      if (!hay.includes(boardQuery)) return false;
-    }
     return true;
   });
 
@@ -1798,7 +1263,7 @@ export default function SocialPage() {
 
   return (
     <div className="flex flex-col flex-1 overflow-auto">
-      <Header title="Social Media" subtitle="Board de produção, aprovação e resultados de conteúdo" />
+      <Header title="Social Media" subtitle="Produção, aprovação e resultados de conteúdo" />
 
       {/* Confetti overlay */}
       {onboardingCompleteClient && <Confetti />}
@@ -1932,7 +1397,7 @@ export default function SocialPage() {
                     // (coluna inexistente) → o card não saía da "Verificação de Publicação". Removido.
                     publishVerifiedAt: now,
                     publishVerifiedBy: currentUser,
-                    status: "published",
+                    status: statusDaEtapa("no_ar"),
                     statusChangedAt: now,
                     columnEnteredAt: {
                       ...(verifyingCard.columnEnteredAt ?? {}),
@@ -1999,11 +1464,6 @@ export default function SocialPage() {
                 </select>
                 <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               </div>
-              {isDesigner && activeWorkspace !== "Todos" && (
-                <span className="text-[10px] text-muted-foreground border border-border px-2 py-1 rounded">
-                  Modo leitura
-                </span>
-              )}
               {role === "social" && activeWorkspace !== currentUser && (
                 <span className="text-[11px] text-lone-warning bg-lone-warning-bg border border-lone-warning-border px-2.5 py-1 rounded">
                   {activeWorkspace === "Todos"
@@ -2020,26 +1480,6 @@ export default function SocialPage() {
             </div>
           )}
 
-          {/* Busca no board: filtra por título, cliente ou formato do card */}
-          <div className="relative shrink-0">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <input
-              value={boardSearch}
-              onChange={(e) => setBoardSearch(e.target.value)}
-              placeholder="Buscar card..."
-              className="h-9 w-44 rounded-lg border border-border bg-card pl-8 pr-7 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/40 sm:w-52"
-            />
-            {boardSearch && (
-              <button
-                onClick={() => setBoardSearch("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                aria-label="Limpar busca"
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
-
           {/* CTA: criar novo conteúdo (escondido pra designer em modo leitura) */}
           {!isReadOnly && (
             <button
@@ -2052,12 +1492,12 @@ export default function SocialPage() {
         </div>
 
         {/* Tabs */}
-        {/* Designer context banner */}
+        {/* Designer no quadro do social: vê tudo, mexe só na arte (a regra da produção decide). */}
         {isDesigner && activeWorkspace !== "Todos" && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border text-xs text-muted-foreground mb-2">
             <Eye size={12} className="text-muted-foreground shrink-0" />
-            Visualizando fluxo de trabalho de <span className="text-foreground font-medium">{activeWorkspace}</span>
-            <span className="text-muted-foreground ml-auto">Somente leitura</span>
+            Quadro de <span className="text-foreground font-medium">{activeWorkspace}</span>
+            <span className="text-muted-foreground ml-auto">Você move só a arte — o resto é do social</span>
           </div>
         )}
 
@@ -2066,13 +1506,13 @@ export default function SocialPage() {
         <div className={`flex gap-1 border-b border-border overflow-x-auto ${secondaryOpen ? "lg:hidden" : ""}`}>
           {(["kanban", "aprovacao", "resultados", "onboarding", "acessos"] as const).map((tab) => {
             const LABELS: Record<typeof tab, string> = {
-              kanban: "Board de Produção", aprovacao: "Inbox de Aprovação",
+              kanban: "Produção", aprovacao: "Inbox de Aprovação",
               resultados: "Resultados",
               onboarding: "Onboarding", acessos: "Acessos & Senhas",
             };
             // Live badge counts per tab
-            const pendingKanban = filteredCards.filter((c) => !["scheduled","published"].includes(c.status)).length;
-            const approvalCount = filteredCards.filter((c) => c.status === "client_approval").length; // alinhado com a fila da aba
+            const pendingKanban = filteredCards.filter((c) => !statusNaEtapa(c.status, ...ETAPAS_FINAIS)).length;
+            const approvalCount = filteredCards.filter((c) => statusNaEtapa(c.status, "com_cliente")).length; // alinhado com a fila da aba
             const badgeMap: Partial<Record<typeof tab, number>> = {
               kanban:     pendingKanban,
               onboarding: onboardingClients.length,
@@ -2108,7 +1548,7 @@ export default function SocialPage() {
           <div className="animate-fade-in">
             {/* ── POST VERIFICATION PANEL ── */}
             {(() => {
-              const scheduledCards = filteredCards.filter((c) => c.status === "scheduled" && !c.publishVerifiedAt);
+              const scheduledCards = filteredCards.filter((c) => statusNaEtapa(c.status, "agendado") && !c.publishVerifiedAt);
               if (scheduledCards.length === 0) return null;
               return (
                 <div className="mb-4 rounded-xl border border-lone-warning-border bg-lone-warning-bg p-4 animate-fade-in">
@@ -2119,7 +1559,7 @@ export default function SocialPage() {
                       {scheduledCards.length} pendente{scheduledCards.length > 1 ? "s" : ""}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground mb-3">Posts agendados que precisam de confirmação de que foram ao ar corretamente.</p>
+                  <p className="text-xs text-muted-foreground mb-3">Cards em {infoEtapa("agendado").rotulo} que precisam da confirmação de que foram ao ar corretamente.</p>
                   <div className="space-y-2">
                     {scheduledCards.map((card) => {
                       return (
@@ -2179,98 +1619,21 @@ export default function SocialPage() {
 
             <CsAgentInbox cards={filteredCards} onOpen={setSelectedCard} />
 
-            <KanbanErrorBoundary context="Kanban Social Media">
-            <KanbanByClient
-              clients={filteredClients}
-              allClients={clients}
-              contentCards={filteredCards}
-              designRequests={designRequests}
-              onCardClick={setSelectedCard}
-              onNewCard={(client) => { setNewCardClient(client); setNewCardDate(todaySP()); }}
-              onConfirmArt={(card) => {
-                // Confirmar a arte já avança pra Aprovação (Social Media) se ainda estava em produção.
-                const advance = ["ideas", "script", "in_production", "blocked"].includes(card.status);
-                const now = new Date().toISOString();
-                updateContentCard(card.id, {
-                  socialConfirmedAt: now,
-                  socialConfirmedBy: currentUser,
-                  ...(advance ? { status: "approval" as const, statusChangedAt: now, columnEnteredAt: { ...(card.columnEnteredAt ?? {}), approval: now } } : {}),
-                })
-                  .then(() => toast.success(advance ? "Arte confirmada — movida para Aprovação Social Media." : "Arte confirmada."))
-                  .catch(() => {}); // o store já avisou e desfez
-              }}
-              onNonDelivery={setNonDeliveryCard}
-              onMoveCard={(cardId, toStatus) => {
-                // Designer read-only: cannot move cards
-                if (isReadOnly) {
-                  pushNotification("system", "Modo leitura", "Você está visualizando o quadro como Designer. Apenas Social Media pode mover cards.");
-                  return;
-                }
-                const card = contentCards.find((c) => c.id === cardId);
-                if (!card) return;
-                // Block scheduling/publishing without art confirmation
-                if ((toStatus === "scheduled" || toStatus === "published") && card.designRequestId && !card.socialConfirmedAt) {
-                  pushNotification("sla", "Arte não confirmada", `O card "${card.title}" precisa ter a arte confirmada antes de ser ${toStatus === "scheduled" ? "agendado" : "publicado"}.`, card.clientId);
-                  return;
-                }
-                const now = new Date().toISOString();
-                // Movimento livre: ignora state-machine pra fluidez do time
-                updateContentCard(cardId, {
-                  status: toStatus as ContentCard["status"],
-                  statusChangedAt: now,
-                  columnEnteredAt: {
-                    ...(card.columnEnteredAt ?? {}),
-                    [toStatus]: now,
-                  },
-                }, { bypassWorkflow: true }).catch(() => {}); // o store já avisou e desfez
-              }}
-              onDeleteCard={isReadOnly ? undefined : (card) => setCardToDelete(card)}
-              onSendToDesigner={(card) => {
-                // TRAVA: sem data de postagem, não vai pro designer. A data é o prazo que o designer
-                // e o CS usam pra cobrar no momento certo. Abre o card pro social preencher.
-                trilha("a-fazer:clique", { id: card.id, temDr: !!card.designRequestId, entregue: !!card.designerDeliveredAt, data: card.dueDate ?? null });
-                if (!card.dueDate) {
-                  pushNotification("system", "Falta a data de postagem", `Defina a data de postagem no card "${card.title}" antes de enviar pro designer — é o prazo que o designer e o CS usam.`, card.clientId);
-                  toast.error(`"${card.title}" não foi pro designer: falta a data de postagem. Abri o card pra você preencher.`);
-                  setSelectedCard(card);
-                  return;
-                }
-                // Etiqueta "A fazer": envia a ideia automaticamente pro designer (cria a demanda).
-                // Guard de in-flight (ref) evita demanda DUPLICADA em duplo-clique — designRequestId
-                // só fica setado depois do round-trip. Notifica conforme o resultado real.
-                // Antes: `return` mudo — a pessoa marcava "A fazer", nada acontecia e não sabia por quê.
-                if (sendingDesignRef.current.has(card.id)) { trilha("a-fazer:pulou", { id: card.id, motivo: "em-voo" }); return; }
-                if (card.designRequestId) { trilha("a-fazer:pulou", { id: card.id, motivo: "ja-tem-demanda", dr: card.designRequestId }); toast.info(`"${card.title}" já está com o designer — a demanda existe; abre o card pra ver o status.`); return; }
-                if (card.designerDeliveredAt) { trilha("a-fazer:pulou", { id: card.id, motivo: "ja-entregue" }); toast.info(`"${card.title}" já tem arte entregue pelo designer. Pra pedir alteração, use "Solicitar alteração" no card.`); return; }
-                sendingDesignRef.current.add(card.id);
-                addDesignRequest({
-                  title: `Arte: ${card.title}`,
-                  clientId: card.clientId,
-                  clientName: card.clientName,
-                  requestedBy: currentUser,
-                  priority: card.priority || "medium",
-                  status: "queued",
-                  format: card.format || "Post Feed",
-                  briefing: card.briefing || card.observations || `Criar arte para: ${card.title}`,
-                  contentCardId: card.id,
-                  deadline: card.dueDate, // data de postagem = prazo da arte (designer precisa ver)
-                })
-                  .then((req) => {
-                    trilha("a-fazer:ok", { id: card.id, dr: req.id });
-                    updateContentCard(card.id, { designRequestId: req.id }).catch(() => {});
-                    pushNotification("content", "A fazer → Designer", `"${card.title}" (${card.clientName}) foi marcado como A fazer e enviado pro designer.`, card.clientId, card.id);
-                  })
-                  .catch((err: unknown) => {
-                    trilha("a-fazer:erro", { id: card.id, msg: err instanceof Error ? err.message : String(err) });
-                    pushNotification("system", "Falha ao enviar pro designer", `Não deu pra enviar "${card.title}". Tente de novo.`, card.clientId);
-                    toast.error(`Não consegui enviar "${card.title}" pro designer${err instanceof Error && err.message ? ` (${err.message})` : ""}. Tenta de novo.`);
-                  })
-                  .finally(() => { sendingDesignRef.current.delete(card.id); });
-              }}
-              currentUser={currentUser}
-              role={role}
-              loadError={contentLoadError}
-            />
+            <KanbanErrorBoundary context="Quadro de produção (Social)">
+              <QuadroProducao
+                pessoa={activeWorkspace}
+                modo="social"
+                vista={vista}
+                onVista={setVista}
+                onAbrirCard={setSelectedCard}
+                clientes={filteredClients}
+                clienteInicial={clienteDoLink}
+                onNovoCard={(clientId) => {
+                  const cl = clients.find((c) => c.id === clientId) ?? null;
+                  setNewCardClient(cl);
+                  setNewCardDate(todaySP());
+                }}
+              />
             </KanbanErrorBoundary>
           </div>
         )}
@@ -2403,7 +1766,7 @@ function ApprovalQueueTab({
   const [rejectReason, setRejectReason] = useState("");
 
   // Approval queue
-  const approvalCards = cards.filter((c) => c.status === "client_approval");
+  const approvalCards = cards.filter((c) => statusNaEtapa(c.status, "com_cliente"));
   const getApproval = (cardId: string) => contentApprovals.find((a) => a.cardId === cardId);
 
   return (
@@ -2473,7 +1836,7 @@ function ApprovalQueueTab({
       )}
 
       {approvalCards.length === 0 && (
-        <EmptyState icon={<Check size={20} />} title="Nada aguardando o cliente" subtitle="Cards em Aprovação Cliente aparecem aqui pra aprovar ou recusar." />
+        <EmptyState icon={<Check size={20} />} title="Nada aguardando o cliente" subtitle={`Cards em ${infoEtapa("com_cliente").rotulo} aparecem aqui pra aprovar ou recusar.`} />
       )}
     </div>
   );

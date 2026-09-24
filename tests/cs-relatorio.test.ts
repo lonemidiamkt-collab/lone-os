@@ -25,8 +25,8 @@ describe("buildDeliveryReport", () => {
     expect(msg).toContain("Rodrigo — 3 entregues (2 no prazo, 1 atrasada ⏰)");
     expect(msg).toContain("Ana — 1 entregue (1 no prazo ✅)");
     expect(msg).toContain("*Total:* 4 entregues · 3/4 no prazo");
-    expect(msg).toContain("📢 *Publicados:* 3 no ar");
-    expect(msg).toContain("⏳ *Em produção agora:* 2");
+    expect(msg).toContain("📢 *No ar:* 3 posts");
+    expect(msg).toContain("⏳ *Com o designer agora:* 2");
   });
 
   it("Rodrigo aparece antes de Ana (ordena por quem mais entregou)", () => {
@@ -40,7 +40,7 @@ describe("buildDeliveryReport", () => {
   it("designer null vira 'Sem designer'; oculta publicados/produção quando 0", () => {
     const msg = buildDeliveryReport({ periodoLabel: "x", entregas: [{ designer: null, onTime: false }], emProducao: 0, publicados: 0 });
     expect(msg).toContain("Sem designer — 1 entregue");
-    expect(msg).not.toContain("Publicados");
-    expect(msg).not.toContain("Em produção");
+    expect(msg).not.toContain("No ar");
+    expect(msg).not.toContain("Com o designer");
   });
 });

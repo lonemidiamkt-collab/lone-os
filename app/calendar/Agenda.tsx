@@ -44,6 +44,7 @@ import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import { toast } from "sonner";
 import { todaySP, spDateStr } from "@/lib/utils";
 import { estaNoAr, rotuloEtapa, VERIFICADO_PELO_INSTAGRAM } from "@/lib/conteudo/no-ar";
+import { statusDaEtapa } from "@/lib/conteudo/etapas";
 
 /** "YYYY-MM-DD" das partes LOCAIS de um Date (toISOString daria o dia em UTC). */
 function ymdLocal(d: Date): string {
@@ -1483,7 +1484,7 @@ function QuickCreateModal({
         clientId,
         clientName: selectedClient?.name || "",
         socialMedia: socialAssignee || selectedClient?.assignedSocial || currentUser,
-        status: "ideas",
+        status: statusDaEtapa("pauta"),
         priority,
         format,
         dueDate: endDate,

@@ -9,6 +9,7 @@
 //  - designer: % de entregas no prazo
 //  - social/traffic: saúde média da carteira (reflete como as contas dele estão indo)
 
+import { statusNaEtapa } from "@/lib/conteudo/etapas";
 import { useMemo } from "react";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { calcHealthScore } from "@/lib/utils";
@@ -89,7 +90,7 @@ export function useCollaboratorScores(teamMembers: TeamMember[]): CollabScore[] 
       }
 
       if (role === "social") {
-        const posts = contentCards.filter((c) => c.socialMedia === name && c.status === "published" && inMonth(c.statusChangedAt));
+        const posts = contentCards.filter((c) => c.socialMedia === name && statusNaEtapa(c.status, "no_ar") && inMonth(c.statusChangedAt));
         const myClients = clients.filter((c) => c.assignedSocial === name);
         const avgHealth = myClients.length ? Math.round(myClients.reduce((s, c) => s + calcHealthScore(c), 0) / myClients.length) : null;
         return {

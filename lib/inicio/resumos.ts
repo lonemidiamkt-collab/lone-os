@@ -7,6 +7,7 @@ import { emSetupInicial, onboardingDesatualizado } from "@/lib/clients/operacao"
 import { temTrafego } from "@/lib/clients/servico";
 import { donoDaDemanda } from "@/lib/design/dono";
 import { spDateStr } from "@/lib/utils";
+import { ETAPAS_DE_APROVACAO, ETAPAS_FINAIS, statusNaEtapa, type Etapa } from "@/lib/conteudo/etapas";
 import type {
   ItemInterno, PedidoArte, Resumo, ResumoCarteira, ResumoComercial, ResumoDesigner, ResumoSocial, ResumoTrafego, Viewer,
 } from "./tipos";
@@ -17,7 +18,7 @@ const NIVEIS: NivelSaude[] = ["saudavel", "atencao", "risco", "sem_dado"];
 
 /** Publicado no mês corrente de SP (mesma regra do dashboard antigo: verificação, senão mudança de status). */
 export function publicadoNoMes(k: CardRow, hoje: string): boolean {
-  if (k.status !== "published") return false;
+  if (!statusNaEtapa(k.status, "no_ar")) return false;
   const quando = k.publish_verified_at ?? k.status_changed_at;
   return !!quando && spDateStr(quando).slice(0, 7) === hoje.slice(0, 7);
 }
@@ -36,7 +37,7 @@ export function resumoCarteira(d: Dados, ctx: Contexto): ResumoCarteira {
   }
   const emSetup = ctx.vivos.filter((c) => emSetupInicial(comoClient(c)));
   const cards = d.cards.filter((k) => k.client_id && ids.has(k.client_id));
-  const conta = (...s: string[]) => cards.filter((k) => s.includes(k.status ?? "")).length;
+  const conta = (...e: Etapa[]) => cards.filter((k) => statusNaEtapa(k.status, ...e)).length;
   const pedidos = d.pedidosArte.filter((p) => p.status !== "done" && p.client_id && ids.has(p.client_id));
   return {
     clientes: ctx.vivos.length,
@@ -47,11 +48,11 @@ export function resumoCarteira(d: Dados, ctx: Contexto): ResumoCarteira {
       desatualizados: ctx.vivos.filter((c) => onboardingDesatualizado(comoClient(c))).length,
     },
     conteudo: {
-      ideias: conta("ideas"),
-      roteiro: conta("script"),
-      producao: conta("in_production"),
-      aprovacao: conta("approval", "client_approval"),
-      agendados: conta("scheduled"),
+      pauta: conta("pauta"),
+      comDesigner: conta("com_designer"),
+      revisao: conta("revisao"),
+      comCliente: conta("com_cliente"),
+      agendados: conta("agendado"),
       publicadosMes: cards.filter((k) => publicadoNoMes(k, ctx.hoje)).length,
     },
     design: {
@@ -68,14 +69,14 @@ const donoDoCard = (k: CardRow, ctx: Contexto) =>
 export function resumoSocial(d: Dados, ctx: Contexto, v: Viewer): ResumoSocial {
   const ativos = new Set(ctx.ativos.map((c) => c.id));
   const meus = d.cards.filter((k) => k.client_id && ativos.has(k.client_id) && mesmaPessoa(donoDoCard(k, ctx), v.nome));
-  const aberto = (k: CardRow) => !["published", "scheduled", "ideas"].includes(k.status ?? "");
+  const aberto = (k: CardRow) => !statusNaEtapa(k.status, "pauta", ...ETAPAS_FINAIS);
   const horas = (k: CardRow) => {
     const desde = k.column_entered_at?.[k.status ?? ""] ?? k.status_changed_at;
     return desde ? (ctx.agoraMs - new Date(desde).getTime()) / 3_600_000 : 0;
   };
-  const deHoje = meus.filter((k) => k.due_date?.slice(0, 10) === ctx.hoje && k.status !== "published");
+  const deHoje = meus.filter((k) => k.due_date?.slice(0, 10) === ctx.hoje && !statusNaEtapa(k.status, "no_ar"));
   return {
-    aprovar: meus.filter((k) => ["approval", "client_approval"].includes(k.status ?? "") && !k.client_approved_at).length,
+    aprovar: meus.filter((k) => statusNaEtapa(k.status, ...ETAPAS_DE_APROVACAO) && !k.client_approved_at).length,
     hoje: deHoje.length,
     postarHoje: deHoje
       .slice(0, 6)

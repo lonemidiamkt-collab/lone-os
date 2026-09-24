@@ -5,6 +5,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { donoDaDemanda } from "@/lib/design/dono";
+import { ETAPAS_COMPROMETIDAS, ETAPAS_DE_APROVACAO, ETAPAS_FINAIS, infoEtapa, statusDasEtapas, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
 import { clientesSemPostNaSemana, semanaAlvo } from "@/lib/cs/lacunas";
 import { proximasDatas, formatDataCurta } from "@/lib/cs/datas";
@@ -96,17 +97,17 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
     }));
 
   const cards = (cardsRes.data ?? []).filter((k) => !cardDeTeste(k.client_id as string));
-  const emProducao = cards.filter((k) => k.status === "in_production").length;
-  const aguardandoAprovacao = cards.filter((k) => ["approval", "client_approval"].includes(k.status as string)).length;
+  const emProducao = cards.filter((k) => statusNaEtapa(k.status as string, "com_designer")).length;
+  const aguardandoAprovacao = cards.filter((k) => statusNaEtapa(k.status as string, ...ETAPAS_DE_APROVACAO)).length;
   const novosHoje = cards.filter((k) => (k.created_at as string) >= meiaNoiteSP).length;
-  // Só conta como atraso o trabalho COMPROMETIDO (roteiro/produção/aprovação). Card em "ideas" é
-  // backlog — prazo ali é aspiracional, não vira alarme; "scheduled"/"published" já saíram.
-  const COMPROMETIDO = ["script", "in_production", "approval", "client_approval"];
+  // Só conta como atraso o trabalho COMPROMETIDO (lib/conteudo/etapas.ts): a Pauta é backlog — prazo
+  // ali é aspiracional, não vira alarme; Agendado e No ar já saíram.
+  const COMPROMETIDO: string[] = statusDasEtapas(...ETAPAS_COMPROMETIDAS);
   // Gargalo do pipeline: onde a peça está TRAVADA — no designer (arte não produzida) ou no social
   // (arte já entregue, falta confirmar/postar). designer_delivered_at é a fonte de verdade (o status
   // nem sempre acompanha). Fora do "ideas"/"published"/"scheduled".
   const aguardandoDesigner = cards.filter((k) => COMPROMETIDO.includes(k.status as string) && !k.designer_delivered_at).length;
-  const prontas = cards.filter((k) => k.designer_delivered_at && !k.social_confirmed_at && !["published", "scheduled", "ideas"].includes(k.status as string));
+  const prontas = cards.filter((k) => k.designer_delivered_at && !k.social_confirmed_at && !statusNaEtapa(k.status as string, "pauta", ...ETAPAS_FINAIS));
   const entreguesAguardandoSocial = prontas.length;
   const prontasPraPostar = prontas
     .map((k) => ({
@@ -179,7 +180,7 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
     const dono = donoDaDemanda({ clientId: d.client_id as string, assignedDesigner: d.assigned_designer as string | null }, clientesDesigner) ?? "sem designer";
     const b = bucket(dono);
     if (d.status === "in_progress") b.emProducao++; else b.fila++;
-    if (b.itens.length < 6) b.itens.push(`${nomeCliente.get(d.client_id as string) ?? "Cliente"}: ${String(d.title ?? "").slice(0, 40)} (${d.status === "in_progress" ? "em produção" : "na fila"})`);
+    if (b.itens.length < 6) b.itens.push(`${nomeCliente.get(d.client_id as string) ?? "Cliente"}: ${String(d.title ?? "").slice(0, 40)} (${d.status === "in_progress" ? "fazendo" : "na fila"})`);
   }
   // Alteração pendente = rejeição mais recente que a última entrega do card.
   const ultimaRejeicao = new Map<string, string>();
@@ -204,10 +205,10 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
   const linhas = [
     `Demandas pendentes esperando ok/não: ${pendentes.length} no total` +
       (pendentes.length ? ` (algumas: ${pendentes.slice(0, 8).map((p) => `${p.cliente} (${p.tipo}, há ${p.dias}d)`).join("; ")})` : ""),
-    `Em produção: ${emProducao} · Aguardando aprovação: ${aguardandoAprovacao} · Novos cards hoje: ${novosHoje}`,
+    `${infoEtapa("com_designer").rotulo}: ${emProducao} · ${infoEtapa("revisao").rotulo} ou ${infoEtapa("com_cliente").rotulo.toLowerCase()}: ${aguardandoAprovacao} · Novos cards hoje: ${novosHoje}`,
     `Pipeline de produção: ${aguardandoDesigner} aguardando o DESIGNER entregar a arte; ${entreguesAguardandoSocial} já entregues pelo designer, aguardando o SOCIAL confirmar/postar. (resp = social/gestor da conta, NÃO é o designer)`,
     porDesigner.length
-      ? `DESIGNERS — o que cada um tem na mão AGORA (use isto quando um designer perguntar o que tem pra ele): ${porDesigner.map((d) => `${d.designer}: ${d.fila} na fila, ${d.emProducao} em produção, ${d.alteracoes} alteração(ões)${d.itens.length ? ` [${d.itens.join("; ")}]` : ""}`).join(" · ")}`
+      ? `DESIGNERS — o que cada um tem na mão AGORA (use isto quando um designer perguntar o que tem pra ele): ${porDesigner.map((d) => `${d.designer}: ${d.fila} na fila, ${d.emProducao} fazendo, ${d.alteracoes} alteração(ões)${d.itens.length ? ` [${d.itens.join("; ")}]` : ""}`).join(" · ")}`
       : "DESIGNERS: nenhuma demanda aberta para nenhum designer.",
     prontasPraPostar.length
       ? `Artes PRONTAS (designer entregou, falta o social postar): ${prontasPraPostar.map((p) => `${p.cliente} - ${p.titulo} (${p.dias}d parada${p.responsavel ? `, resp: ${p.responsavel}` : ""})`).slice(0, 10).join("; ")}`

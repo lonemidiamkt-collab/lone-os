@@ -10,6 +10,7 @@
 // atraso, enche o grupo, ensina o time a ignorar — e faz o painel parecer travado quando a
 // operação está no prazo.
 
+import { ETAPAS_DE_APROVACAO, ETAPAS_FINAIS, estaBloqueado, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { businessHoursSince } from "./vigilancia";
 
 // A vigilância cobra só social e designer — tráfego tem o próprio diagnóstico diário.
@@ -28,7 +29,7 @@ export interface CardRow {
 }
 
 const TH_SOCIAL_VER = 1;       // designer entregou e o social ainda não revisou
-const TH_MANDAR_DESIGNER = 1;  // card criado sem design_request ("A fazer" não marcado)
+const TH_MANDAR_DESIGNER = 1;  // card criado sem pedido de arte ("Pedir arte" não clicado)
 
 /** Quando o card entrou no estágio atual (p/ medir "parado há X"). */
 function enteredAt(c: CardRow): string | null {
@@ -72,7 +73,7 @@ export function diasAteOPost(c: CardRow, hoje: string): number | null {
  * janela do post — nunca como motivo isolado.
  */
 export function avaliarPipeline(c: CardRow, hoje: string): { vigilancia: number; area: Area; motivo: string } | null {
-  if (c.status === "published" || c.status === "scheduled") return null; // fluxo completo
+  if (statusNaEtapa(c.status, ...ETAPAS_FINAIS)) return null; // fluxo completo
 
   const faltam = diasAteOPost(c, hoje);
 
@@ -80,7 +81,7 @@ export function avaliarPipeline(c: CardRow, hoje: string): { vigilancia: number;
   // designer. Mas o CARD precisa andar no board — entregue e a coluna ainda atrás de Aprovação →
   // cobra o social pra revisar E MOVER. (Agendar pós-aprovação do cliente = vig 5.)
   if (c.designer_delivered_at || c.design_request_status === "done") {
-    if (c.status === "approval" || c.status === "client_approval") return null; // board em dia
+    if (statusNaEtapa(c.status, ...ETAPAS_DE_APROVACAO)) return null; // board em dia
     const hEntrega = businessHoursSince(c.designer_delivered_at ?? enteredAt(c));
     return hEntrega >= TH_SOCIAL_VER
       ? { vigilancia: 4, area: "social", motivo: "arte entregue e o card parado no board — revisar e mover" }
@@ -94,7 +95,7 @@ export function avaliarPipeline(c: CardRow, hoje: string): { vigilancia: number;
   if (faltam === null) {
     const hSemData = businessHoursSince(enteredAt(c));
     return !c.design_request_id && hSemData >= TH_MANDAR_DESIGNER
-      ? { vigilancia: 2, area: "social", motivo: 'sem data de post e ainda não foi pro designer (faltou marcar "A fazer")' }
+      ? { vigilancia: 2, area: "social", motivo: 'sem data de post e ainda não foi pro designer (faltou "Pedir arte")' }
       : null;
   }
 
@@ -112,11 +113,11 @@ export function avaliarPipeline(c: CardRow, hoje: string): { vigilancia: number;
   // poeira acumulada.
   const nivel = faltam === 1 ? 2 : faltam === 0 ? 3 : 4;
 
-  if (c.status === "blocked")
+  if (estaBloqueado(c.status))
     return { vigilancia: nivel, area: "social", motivo: `card travado${c.blocked_reason ? `: ${c.blocked_reason}` : ""} e o post é ${quando}` };
 
   if (!c.design_request_id)
-    return { vigilancia: nivel, area: "social", motivo: `post ${quando} e o card ainda não foi pro designer (faltou marcar "A fazer")` };
+    return { vigilancia: nivel, area: "social", motivo: `post ${quando} e o card ainda não foi pro designer (faltou "Pedir arte")` };
 
   if (c.design_request_status === "in_progress")
     return { vigilancia: nivel, area: "designer", motivo: faltam < 0

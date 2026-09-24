@@ -12,6 +12,7 @@
 // isso (migration 082). Cliente sem Instagram vinculado cai no board — que é fraco, mas é o
 // que existe, e a resposta diz de qual fonte veio pra ninguém confundir uma coisa com a outra.
 
+import { statusDasEtapas } from "@/lib/conteudo/etapas";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 export type FontePost = "instagram" | "board" | "sem-fonte";
@@ -141,7 +142,7 @@ export async function postsDoMes(clientId: string, mes = mesAtualBRT()): Promise
       // por isso a fonte vem marcada — quem exibe deve dizer de onde veio.
       const { data: cards } = await supabaseAdmin
         .from("content_cards").select("status_changed_at")
-        .eq("client_id", clientId).eq("status", "published").is("archived_at", null)
+        .eq("client_id", clientId).in("status", statusDasEtapas("no_ar")).is("archived_at", null)
         .gte("status_changed_at", `${inicio}T00:00:00-03:00`).lte("status_changed_at", `${fim}T23:59:59-03:00`);
       if (cards?.length) {
         datas = cards.map((c) => new Date(c.status_changed_at as string).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }));
@@ -180,7 +181,7 @@ export async function ultimoPostDe(clientId: string): Promise<string | null> {
     }
     const { data: card } = await supabaseAdmin
       .from("content_cards").select("status_changed_at")
-      .eq("client_id", clientId).eq("status", "published").is("archived_at", null)
+      .eq("client_id", clientId).in("status", statusDasEtapas("no_ar")).is("archived_at", null)
       .order("status_changed_at", { ascending: false }).limit(1).maybeSingle();
     if (card?.status_changed_at) {
       return new Date(card.status_changed_at as string).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });

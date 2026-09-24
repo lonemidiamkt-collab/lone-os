@@ -8,6 +8,8 @@ import type { ReactNode } from "react";
 import { ChevronRight, Clock } from "lucide-react";
 import Skeleton from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
+import { infoEtapa } from "@/lib/conteudo/etapas";
+import { ROTULO_ESTADO_DESIGN } from "@/lib/conteudo/producao";
 import type {
   PedidoArte, ResumoCarteira, ResumoComercial, ResumoDesigner, ResumoSocial, ResumoTrafego,
 } from "@/lib/inicio/tipos";
@@ -68,11 +70,11 @@ export function Carteira({ c }: { c: ResumoCarteira }) {
     { n: semDado, rotulo: "Sem dado", barra: "bg-muted-foreground" },
   ];
   const pipeline = [
-    { n: c.conteudo.ideias, rotulo: "Ideias" },
-    { n: c.conteudo.roteiro, rotulo: "Roteiro" },
-    { n: c.conteudo.producao, rotulo: "Produção" },
-    { n: c.conteudo.aprovacao, rotulo: "Aprovação" },
-    { n: c.conteudo.agendados, rotulo: "Agendados" },
+    { n: c.conteudo.pauta, rotulo: infoEtapa("pauta").rotulo },
+    { n: c.conteudo.comDesigner, rotulo: infoEtapa("com_designer").rotulo },
+    { n: c.conteudo.revisao, rotulo: infoEtapa("revisao").rotulo },
+    { n: c.conteudo.comCliente, rotulo: infoEtapa("com_cliente").rotulo },
+    { n: c.conteudo.agendados, rotulo: infoEtapa("agendado").rotulo },
   ];
   return (
     <div className="space-y-4">
@@ -112,8 +114,8 @@ export function Carteira({ c }: { c: ResumoCarteira }) {
           ))}
         </div>
         <p className="mt-3 border-t border-border pt-3 text-lone-caption text-muted-foreground">
-          Design: <span className="tabular-nums text-foreground">{c.design.fila}</span> na fila ·{" "}
-          <span className="tabular-nums text-foreground">{c.design.producao}</span> em produção
+          {infoEtapa("com_designer").rotulo}: <span className="tabular-nums text-foreground">{c.design.fila}</span> na fila ·{" "}
+          <span className="tabular-nums text-foreground">{c.design.producao}</span> fazendo
         </p>
       </Bloco>
     </div>
@@ -168,7 +170,7 @@ export function FilaDesigner({ d }: { d: ResumoDesigner }) {
         <Numero valor={d.hoje} rotulo="vencem hoje" tom="aviso" />
         <Numero valor={d.alteracoes} rotulo="alterações pedidas" tom="aviso" />
         <Numero valor={d.fila} rotulo="na fila" />
-        <Numero valor={d.producao} rotulo="em produção" />
+        <Numero valor={d.producao} rotulo="fazendo" />
       </div>
       {d.pedidos.length > 0 ? (
         <ul className="mt-4 space-y-1 border-t border-border pt-3">
@@ -179,7 +181,7 @@ export function FilaDesigner({ d }: { d: ResumoDesigner }) {
                 <span className="min-w-0">
                   <span className="block truncate text-lone-body text-foreground">{p.titulo}</span>
                   <span className="block truncate text-lone-caption text-muted-foreground">
-                    {p.cliente} · {p.status === "in_progress" ? "em produção" : "na fila"}
+                    {p.cliente} · {(p.status === "in_progress" ? ROTULO_ESTADO_DESIGN.em_andamento : ROTULO_ESTADO_DESIGN.na_fila).toLowerCase()}
                   </span>
                 </span>
                 <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]", s.classe)}>

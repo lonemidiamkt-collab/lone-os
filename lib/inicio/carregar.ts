@@ -20,7 +20,7 @@ import { DADOS_VAZIOS, DIA_MS } from "./dados";
 import { DIAS_EVENTO } from "./regras";
 
 const COLS_CLIENTE = "id, name, nome_fantasia, logo, doc_logo, status, active, churned_at, draft_status, paused_at, paused_until, created_at, assigned_social, assigned_traffic, assigned_designer, service_type, current_health_level, current_health_score, last_client_msg_at, agente_ativo, meta_ad_account_id, public_report_enabled, instagram_user, last_post_date";
-const COLS_CARD = "id, client_id, title, status, due_date, social_media, designer_delivered_at, social_confirmed_at, client_approved_at, status_changed_at, column_entered_at, publish_verified_at";
+const COLS_CARD = "id, client_id, title, status, due_date, social_media, designer_delivered_at, social_confirmed_at, client_approved_at, status_changed_at, column_entered_at, publish_verified_at, alteracao_pendente_em";
 
 type Resultado<T> = { data: T[] | null; error: { message: string } | null };
 

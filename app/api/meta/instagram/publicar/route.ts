@@ -13,6 +13,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+import { statusDaEtapa } from "@/lib/conteudo/etapas";
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -132,7 +133,7 @@ export async function POST(req: NextRequest) {
 
   // Registra o que foi ao ar. Post publicado que o sistema não sabe que existe vira relatório errado.
   await supabaseAdmin.from("content_cards")
-    .update({ status: "published", status_changed_at: new Date().toISOString() })
+    .update({ status: statusDaEtapa("no_ar"), status_changed_at: new Date().toISOString() })
     .eq("id", cardId);
 
   return NextResponse.json({

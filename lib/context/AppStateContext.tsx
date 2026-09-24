@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloCompleto } from "@/lib/conteudo/etapas";
 import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from "react";
 import type {
   Client,
@@ -1001,11 +1002,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             pushNotification("system", "Verificação obrigatória", `"${card.title}" precisa de verificação de publicação antes de ser marcado como publicado. Use o painel de verificação.`, card.clientId);
           }
           // Success toast for status change
-          const CARD_STATUS_LABELS: Record<string, string> = {
-            script: "Roteiro", in_production: "Produção", approval: "Aprovação",
-            scheduled: "Agendado", published: "Publicado", revision: "Revisão",
-          };
-          const newLabel = CARD_STATUS_LABELS[updates.status!] ?? updates.status;
+          const newLabel = rotuloCompleto(updates.status);
           pushNotification("content", "Card movido", `"${card.title}" → ${newLabel}`, card.clientId);
 
           setClients((cls) =>
@@ -1056,26 +1053,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           if (updates.status === "client_approval") {
             pushNotification("content", "Aprovação do cliente", `"${card.title}" de ${card.clientName} enviado para aprovação do cliente.`, card.clientId);
           }
-          if (updates.status === "in_production" && card.status === "script") {
-            pushNotification("content", "Card em produção", `"${card.title}" de ${card.clientName} entrou em produção. Designer: verificar fila.`, card.clientId);
-            // Auto-create design request if card doesn't have one yet
-            if (!card.designRequestId) {
-              addDesignRequest({
-                title: card.title,
-                clientId: card.clientId,
-                clientName: card.clientName,
-                requestedBy: card.socialMedia || "Social Media",
-                priority: card.priority,
-                status: "queued",
-                format: card.format || "Post",
-                briefing: card.briefing || card.caption || `Arte para "${card.title}"`,
-                contentCardId: card.id,
-              });
-              // designRequestId is set on the card by addDesignRequest's DB callback
-              // (after insertDesignRequest resolves the real UUID). Do NOT set it here
-              // with the temp ID — design_request_id is UUID type and rejects non-UUID strings.
-            }
-          }
+          // Leva 5b: entrar em "Com o designer" abre o pedido de arte NO SERVIDOR (a troca de etapa
+          // passa pela transição de design em /api/content-cards/update). O pedido que era criado
+          // aqui à mão virou duplicata em potencial e saiu.
         }
         if (card && updates.imageUrl && updates.designerDeliveredBy) {
           const isReplacement = !!card.designerDeliveredAt;

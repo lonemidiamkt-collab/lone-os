@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { anotar } from "@/lib/obs/correlacao";
 import { estiloVisualDoCliente, linhaEstilo } from "@/lib/traffic/estilo-visual";
 import { montarDemanda, prazoPadrao, variavelDe } from "./replicar";
+import { pedirArteSemCard } from "@/lib/conteudo/producao-server";
 
 export interface VariacaoPedida { nome: string; muda: string; mantem: string; testa: string }
 export type ResultadoReplicacao =
@@ -47,14 +48,17 @@ export async function executarReplicacao(p: { adId: string; variacao: VariacaoPe
     variacao, formato, prazo, roteiro, elementos: (hip?.elementos as { tipo: string; descricao: string }[]) ?? [], estiloVisual: linhaEstilo(estilo), pedidoPor: p.pedidoPor,
   });
 
-  // O quadro roteia pela carteira do cliente; gravar o designer na demanda deixa explícito e rastreável.
-  const designer = (cli?.assigned_designer as string) || null;
-  const { data: dr, error } = await supabaseAdmin.from("design_requests").insert({
-    title: d.titulo, client_id: clientId, client_name: cliente, requested_by: p.pedidoPor,
-    priority: "high", status: "queued", format: formato, briefing: d.briefing, attachments: d.attachments, deadline: prazo,
-    origem: "ia_replicacao", parent_ad_id: adId, variavel, assigned_designer: designer,
-  }).select("id").single();
-  if (error) return { ok: false, status: 500, erro: error.message };
+  // Leva 5b: o pedido de arte é uma etapa do card — a variação nasce como card "Com o designer"
+  // (sem data de postagem: é criativo de anúncio, não post), pelo mesmo caminho de todo pedido.
+  // O dono segue a carteira do cliente (e, sem ela, a regra de lib/design/atribuicao.ts).
+  const pedido = await pedirArteSemCard({
+    clientId, clientName: cliente, titulo: d.titulo, briefing: d.briefing, formato, prioridade: "high",
+    prazo, quem: p.pedidoPor, doTrafego: true, attachments: d.attachments,
+    origem: "ia_replicacao", parentAdId: adId, variavel,
+  });
+  if (!pedido.ok) return { ok: false, status: pedido.status, erro: pedido.erro };
+  const dr = { id: pedido.pedidoId };
+  const designer = pedido.designer?.designer ?? ((cli?.assigned_designer as string) || null);
 
   await supabaseAdmin.from("creative_lineage").insert({
     client_id: clientId, parent_ad_id: adId, parent_hash: (cri?.hash as string) ?? null, child_design_request_id: dr.id,

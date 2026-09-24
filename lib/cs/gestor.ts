@@ -4,10 +4,11 @@
 
 import type { ContentCard } from "@/lib/types";
 import { type OperationalKpis, stageLabel } from "@/lib/kpis/operational";
+import { ETAPAS_COMPROMETIDAS, statusDasEtapas } from "@/lib/conteudo/etapas";
 
-// Etapas COMPROMETIDAS onde tempo parado = problema. "ideas" fica de fora de propósito: é backlog,
-// não trabalho comprometido (mesma régua do atraso/encalhado — ideia parada não é atraso do social).
-const ATIVOS = new Set(["script", "in_production", "approval", "client_approval"]);
+// Etapas COMPROMETIDAS onde tempo parado = problema (lib/conteudo/etapas.ts). A Pauta fica de fora de
+// propósito: é backlog (mesma régua do atraso/encalhado — ideia parada não é atraso do social).
+const ATIVOS = new Set<string>(statusDasEtapas(...ETAPAS_COMPROMETIDAS));
 
 export interface CardParado { titulo: string; social: string; etapa: string; horasUteis: number; }
 

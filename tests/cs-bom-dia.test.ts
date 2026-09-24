@@ -30,7 +30,7 @@ describe("buildBomDiaDigest", () => {
     const m = buildBomDiaDigest(snap, dia);
     expect(m).toContain("*2* esperando seu ok/não");
     expect(m).toContain("Contele");
-    expect(m).toContain("*5* em produção");
+    expect(m).toContain("*5* com o designer · *2* em revisão interna ou com o cliente"); // etapas de lib/conteudo/etapas.ts
     // A mensagem separa "vencido por culpa do designer" de "arte pronta, falta o social postar" —
     // o teste ficou preso na redação antiga ("prazo vencido") e vermelho sem ninguém notar.
     expect(m).toContain("vencida(s) mas com ARTE JÁ PRONTA");

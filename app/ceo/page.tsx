@@ -1,6 +1,7 @@
 "use client";
 
 import Header from "@/components/Header";
+import { ETAPAS, ETAPAS_COMPROMETIDAS, ETAPAS_FINAIS, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { OperationalKpisPanel } from "@/components/ceo/OperationalKpisPanel";
@@ -95,7 +96,7 @@ export default function CEOPage() {
       if (profile.role === "social") {
         const memberCards = contentCards.filter((c) => c.socialMedia === profile.name);
         totalCards = memberCards.length;
-        published = memberCards.filter((c) => c.status === "published").length;
+        published = memberCards.filter((c) => statusNaEtapa(c.status, "no_ar")).length;
       }
 
       if (profile.role === "designer") {
@@ -467,7 +468,7 @@ export default function CEOPage() {
               {/* ── COCKPIT: resumo do dia (dinheiro + sinais críticos, tudo num lugar) ── */}
               {(() => {
                 const stuckCount = contentCards.filter((c) => {
-                  if (["scheduled", "published"].includes(c.status)) return false;
+                  if (statusNaEtapa(c.status, ...ETAPAS_FINAIS)) return false;
                   const enteredAt = c.columnEnteredAt?.[c.status] ?? c.statusChangedAt;
                   if (!enteredAt) return false;
                   return (Date.now() - new Date(enteredAt).getTime()) / 86400000 >= 3;
@@ -575,25 +576,20 @@ export default function CEOPage() {
 
                 {/* Pipeline funnel */}
                 {(() => {
-                  const pipeline = [
-                    { key: "ideas", label: "Ideias", count: contentCards.filter((c) => c.status === "ideas").length },
-                    { key: "script", label: "Roteiro", count: contentCards.filter((c) => c.status === "script").length },
-                    { key: "in_production", label: "Produção", count: contentCards.filter((c) => c.status === "in_production").length },
-                    { key: "approval", label: "Aprovação", count: contentCards.filter((c) => c.status === "approval").length },
-                    { key: "client_approval", label: "Aprov. Cliente", count: contentCards.filter((c) => c.status === "client_approval").length },
-                    { key: "scheduled", label: "Agendado", count: contentCards.filter((c) => c.status === "scheduled").length },
-                    { key: "published", label: "Publicado", count: contentCards.filter((c) => c.status === "published").length },
-                  ];
+                  // As seis etapas do quadro de produção (lib/conteudo/etapas.ts).
+                  const pipeline = ETAPAS.map((e) => ({
+                    key: e.id, label: e.rotulo, count: contentCards.filter((c) => statusNaEtapa(c.status, e.id)).length,
+                  }));
                   const maxCount = Math.max(...pipeline.map((p) => p.count), 1);
-                  const bottleneck = pipeline.filter((p) => p.key !== "published" && p.key !== "scheduled").sort((a, b) => b.count - a.count)[0];
+                  const bottleneck = pipeline.filter((p) => !(ETAPAS_FINAIS as readonly string[]).includes(p.key)).sort((a, b) => b.count - a.count)[0];
 
                   const designPending = designRequests.filter((r) => r.status !== "done").length;
                   const designDone = designRequests.filter((r) => r.status === "done").length;
-                  const cardsWithoutArt = contentCards.filter((c) => !c.imageUrl && ["in_production", "approval", "client_approval"].includes(c.status)).length;
+                  const cardsWithoutArt = contentCards.filter((c) => !c.imageUrl && statusNaEtapa(c.status, ...ETAPAS_COMPROMETIDAS)).length;
 
                   // SLA: cards stuck > 3 days
                   const stuckCards = contentCards.filter((c) => {
-                    if (c.status === "published" || c.status === "scheduled") return false;
+                    if (statusNaEtapa(c.status, ...ETAPAS_FINAIS)) return false;
                     const enteredAt = c.columnEnteredAt?.[c.status] ?? c.statusChangedAt;
                     if (!enteredAt) return false;
                     const daysInColumn = (Date.now() - new Date(enteredAt).getTime()) / 86400000;
@@ -603,8 +599,8 @@ export default function CEOPage() {
                   // Workload per person
                   const workload = [...new Set(contentCards.map((c) => c.socialMedia))].map((person) => {
                     const cards = contentCards.filter((c) => c.socialMedia === person);
-                    const active = cards.filter((c) => c.status !== "published").length;
-                    const published = cards.filter((c) => c.status === "published").length;
+                    const active = cards.filter((c) => !statusNaEtapa(c.status, "no_ar")).length;
+                    const published = cards.filter((c) => statusNaEtapa(c.status, "no_ar")).length;
                     return { person, active, published, total: cards.length };
                   }).sort((a, b) => b.active - a.active);
 
@@ -619,7 +615,7 @@ export default function CEOPage() {
                             <div className="flex-1 h-5 bg-muted rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full transition-all ${
-                                  stage.key === bottleneck?.key ? "bg-destructive" : stage.key === "published" ? "bg-primary" : "bg-primary"
+                                  stage.key === bottleneck?.key ? "bg-destructive" : "bg-primary"
                                 }`}
                                 style={{ width: `${(stage.count / maxCount) * 100}%` }}
                               />
@@ -691,8 +687,8 @@ export default function CEOPage() {
                         const monthStr = new Date().toLocaleString("pt-BR", { month: "long", timeZone: "America/Sao_Paulo" });
                         // Só o mês corrente (SP). Calendário por dia saiu: pintava de vermelho todo dia
                         // sem card "publicado" no board, e o board não registra a maioria dos posts reais.
-                        const publishedCards = contentCards.filter((c) => c.status === "published" && noMesSP(c.publishVerifiedAt ?? c.statusChangedAt));
-                        const scheduledCards = contentCards.filter((c) => c.status === "scheduled");
+                        const publishedCards = contentCards.filter((c) => statusNaEtapa(c.status, "no_ar") && noMesSP(c.publishVerifiedAt ?? c.statusChangedAt));
+                        const scheduledCards = contentCards.filter((c) => statusNaEtapa(c.status, "agendado"));
                         const scheduledNoMes = scheduledCards.filter((c) => noMesSP(c.dueDate));
                         const unverifiedScheduled = scheduledCards.filter((c) => !c.publishVerifiedAt);
                         const verifiedCount = publishedCards.filter((c) => c.publishVerifiedAt).length;
@@ -813,7 +809,7 @@ export default function CEOPage() {
                 </div>
                 <div className="bg-card border border-border rounded-xl p-4 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Posts Publicados</p>
-                  <p className="text-2xl font-bold text-primary mt-1">{contentCards.filter((c) => c.status === "published" && noMesSP(c.publishVerifiedAt ?? c.statusChangedAt)).length}</p>
+                  <p className="text-2xl font-bold text-primary mt-1">{contentCards.filter((c) => statusNaEtapa(c.status, "no_ar") && noMesSP(c.publishVerifiedAt ?? c.statusChangedAt)).length}</p>
                   <p className="text-xs text-muted-foreground">este mês</p>
                 </div>
                 <div className="bg-card border border-border rounded-xl p-4 text-center">
@@ -1302,7 +1298,7 @@ export default function CEOPage() {
                   <div className="space-y-4">
                     {members.map((name) => {
                       const memberTasks = tasks.filter((t) => t.assignedTo === name && t.status !== "done");
-                      const memberCards = contentCards.filter((c) => c.socialMedia === name && c.status !== "published");
+                      const memberCards = contentCards.filter((c) => c.socialMedia === name && !statusNaEtapa(c.status, "no_ar"));
                       const memberDesign = designRequests.filter((r) => clients.some((c) => c.assignedDesigner === name && c.id === r.clientId) && r.status !== "done");
                       const totalActive = memberTasks.length + memberCards.length + memberDesign.length;
                       const utilPct = Math.round((totalActive / CAPACITY_PER_WEEK) * 100);

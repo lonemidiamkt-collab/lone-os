@@ -7,6 +7,8 @@
 // diferentes vira cobrança da pessoa errada. Aqui a separação é entre o relógio que a Lone
 // controla e o que ela não controla.
 
+import { statusNaEtapa } from "@/lib/conteudo/etapas";
+
 export type Culpa = "lone" | "cliente" | "compartilhado" | "indefinido";
 
 export type EstadoCard =
@@ -17,7 +19,7 @@ export type EstadoCard =
   | "em_aprovacao";        // 🟣 em revisão interna
 
 export const ROTULO_ESTADO: Record<EstadoCard, string> = {
-  producao_lone: "Em produção (Lone)",
+  producao_lone: "Em produção (Lone)", // estado da culpa, não etapa do quadro
   atrasado_lone: "Atrasado (Lone)",
   aguardando_cliente: "Aguardando cliente",
   aguardando_material: "Aguardando material",
@@ -53,10 +55,10 @@ export function classificar(c: CardParaAtraso): EstadoCard {
     return "aguardando_material";
   }
   // Entregue e esperando o cliente decidir: não é atraso nosso.
-  if (c.designerEntregou && !c.clienteAprovouEm && c.status === "client_approval") {
+  if (c.designerEntregou && !c.clienteAprovouEm && statusNaEtapa(c.status, "com_cliente")) {
     return "aguardando_cliente";
   }
-  if (c.designerEntregou && c.status === "approval") return "em_aprovacao";
+  if (c.designerEntregou && statusNaEtapa(c.status, "revisao")) return "em_aprovacao";
   // Ainda conosco: atrasado só se o dia do post já passou.
   if (c.diasAtePost !== null && c.diasAtePost < 0) return "atrasado_lone";
   return "producao_lone";

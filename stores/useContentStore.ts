@@ -7,6 +7,15 @@ import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
 import { trilha } from "@/lib/obs/trilha";
 import { avisoDeAtribuicao, type MotivoEscolha } from "@/lib/design/atribuicao";
+import type { AcaoDesign } from "@/lib/conteudo/producao";
+import { statusDaEtapa } from "@/lib/conteudo/etapas";
+
+/** O que as rotas da etapa de design devolvem: o card e o pedido como ficaram no banco. */
+export interface EstadoDoServidor {
+  card?: ContentCard | null;
+  pedido?: DesignRequest | null;
+  pedidoRemovido?: string | null;
+}
 
 interface ContentState {
   contentCards: ContentCard[];
@@ -32,6 +41,15 @@ interface ContentState {
   addDesignRequest: (req: Omit<DesignRequest, "id"> & { contentCardId?: string }) => Promise<DesignRequest>;
   updateDesignRequest: (id: string, updates: Partial<DesignRequest>) => Promise<void>;
   deleteDesignRequest: (id: string) => Promise<void>;
+
+  /**
+   * A etapa de design do card (Leva 5b): pedir arte, iniciar, pedir alteração, devolver, cancelar.
+   * Uma rota só (/api/conteudo/design); o store aplica o card e o pedido que o servidor devolveu.
+   * Lança com a frase do servidor quando recusa.
+   */
+  transicaoDesign: (cardId: string, acao: AcaoDesign, extras?: { briefing?: string | null }) => Promise<EstadoDoServidor>;
+  /** Aplica no store o estado que uma rota devolveu (card e pedido já gravados). */
+  aplicarDoServidor: (estado: EstadoDoServidor) => void;
 
 
   addCardComment: (cardId: string, author: string, role: Role, text: string) => void;
@@ -264,13 +282,13 @@ export const useContentStore = create<ContentState>()(
         set((s) => ({
           contentApprovals: [...s.contentApprovals.filter((a) => a.cardId !== cardId), approval],
           contentCards: s.contentCards.map((c) =>
-            c.id === cardId ? { ...c, status: "scheduled" as const, statusChangedAt: new Date().toISOString() } : c
+            c.id === cardId ? { ...c, status: statusDaEtapa("agendado"), statusChangedAt: new Date().toISOString() } : c
           ),
         }), false, "content/approve");
         // O save NÃO pode falhar em silêncio: antes era .catch(() => {}), então uma falha no
         // servidor deixava a UI mostrando "aprovado" sem ter gravado nada. Agora desfaz o
         // update otimista e avisa o social via notificação.
-        authedFetch("/api/content-cards/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cardId, status: "scheduled", contentApproval: { status: "approved", reviewedBy: reviewer, reviewedAt: new Date().toISOString() } }) })
+        authedFetch("/api/content-cards/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cardId, status: statusDaEtapa("agendado"), contentApproval: { status: "approved", reviewedBy: reviewer, reviewedAt: new Date().toISOString() } }) })
           .then((res) => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             if (card) {
@@ -294,49 +312,83 @@ export const useContentStore = create<ContentState>()(
         const card = get().contentCards.find((c) => c.id === cardId);
         const prevCard = card;
         const prevApprovals = get().contentApprovals;
+        const agora = new Date().toISOString();
         const approval: ContentApproval = {
           id: `ca-${Date.now()}`,
           cardId,
           status: "rejected",
           reviewedBy: reviewer,
-          reviewedAt: new Date().toISOString(),
+          reviewedAt: agora,
           reason,
         };
         set((s) => ({
           contentApprovals: [...s.contentApprovals.filter((a) => a.cardId !== cardId), approval],
           contentCards: s.contentCards.map((c) =>
-            c.id === cardId ? { ...c, status: "in_production" as const, statusChangedAt: new Date().toISOString() } : c
+            c.id === cardId ? { ...c, status: statusDaEtapa("com_designer"), statusChangedAt: agora, alteracaoPendenteEm: agora, alteracaoMotivo: reason, designerDeliveredAt: undefined, socialConfirmedAt: undefined } : c
           ),
         }), false, "content/reject");
-        // Mesma lógica do approveContent: não falhar em silêncio — desfaz e avisa.
-        authedFetch("/api/content-cards/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cardId, status: "in_production", contentApproval: { status: "rejected", reviewedBy: reviewer, reviewedAt: new Date().toISOString(), reason } }) })
-          .then((res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            // Reabre a SOLICITAÇÃO de design → o designer vê que precisa refazer. Sem isso, a
-            // demanda ficava "Concluído" no board dele e o pedido de alteração passava batido.
-            const drId = card?.designRequestId;
-            if (drId) {
-              set((s) => ({ designRequests: s.designRequests.map((r) => r.id === drId ? { ...r, status: "in_progress" as const } : r) }), false, "content/reject/reopen-dr");
-              authedFetch("/api/design-requests/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: drId, status: "in_progress" }) }).catch(() => {});
-            }
+        // Leva 5b: reprovar = PEDIR ALTERAÇÃO — uma transição só no servidor (card volta pro designer,
+        // entrega anterior deixa de valer, pedido reaberto, reprovação e retrabalho gravados). Antes
+        // eram dois fetches daqui: o card e, se desse certo, a demanda — e o segundo falhava calado.
+        get().transicaoDesign(cardId, { tipo: "pedir_alteracao", motivo: reason })
+          .then(() => {
             if (card) {
               import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
                 // COM O CARD: o designer clica na reprova e cai NA ARTE que precisa refazer.
-                // Sem isso ele caía no cadastro do cliente e tinha que garimpar o card no board —
-                // parte do "as alterações não estão chegando" que o time reportou.
                 useNotificationsStore.getState().push("content", "Conteúdo reprovado", `"${card.title}" de ${card.clientName} foi reprovado: ${reason}`, card.clientId, card.id);
               });
             }
           })
-          .catch(() => {
+          .catch((err: unknown) => {
             set((s) => ({
               contentApprovals: prevApprovals,
               contentCards: prevCard ? s.contentCards.map((c) => c.id === cardId ? prevCard : c) : s.contentCards,
             }), false, "content/reject/rollback");
             import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
-              useNotificationsStore.getState().push("system", "Falha ao reprovar a arte", `Não deu pra salvar a reprovação${card ? ` de "${card.title}"` : ""}. Verifique a conexão e tente de novo.`, card?.clientId);
+              useNotificationsStore.getState().push("system", "Falha ao reprovar a arte", `Não deu pra salvar a reprovação${card ? ` de "${card.title}"` : ""}: ${err instanceof Error ? err.message : "erro"}. Tente de novo.`, card?.clientId);
             });
           });
+      },
+
+      transicaoDesign: async (cardId, acao, extras) => {
+        marcarMutacao();
+        const r = await chamar<EstadoDoServidor>("/api/conteudo/design", { cardId, acao, ...(extras?.briefing ? { briefing: extras.briefing } : {}) });
+        if (!r.ok || !r.data) {
+          trilha("design:transicao:erro", { cardId, acao: acao.tipo, status: r.status });
+          // Recusa por concorrência: recarrega pra pessoa ver o estado de verdade.
+          if (r.status === 409) void get().refresh();
+          throw new Error(r.erro ?? "Não consegui mexer na arte.");
+        }
+        trilha("design:transicao:ok", { cardId, acao: acao.tipo });
+        get().aplicarDoServidor(r.data);
+        return r.data;
+      },
+
+      aplicarDoServidor: (estado) => {
+        marcarMutacao();
+        set((s) => {
+          let contentCards = s.contentCards;
+          let designRequests = s.designRequests;
+          const card = estado.card;
+          if (card) {
+            if (card.archivedAt) contentCards = contentCards.filter((c) => c.id !== card.id);
+            else if (contentCards.some((c) => c.id === card.id)) {
+              // Preserva o que o servidor não manda nesta rota (comentários, anexos carregados).
+              // A capa (imageUrl) do store vem dos anexos, calculada na carga — a rota manda só a coluna.
+              contentCards = contentCards.map((c) => c.id === card.id
+                ? { ...c, ...card, comments: c.comments, cardAttachments: c.cardAttachments, imageUrl: card.imageUrl || c.imageUrl }
+                : c);
+            } else contentCards = [...contentCards, card];
+          }
+          if (estado.pedidoRemovido) designRequests = designRequests.filter((r) => r.id !== estado.pedidoRemovido);
+          const pedido = estado.pedido;
+          if (pedido) {
+            designRequests = designRequests.some((r) => r.id === pedido.id)
+              ? designRequests.map((r) => r.id === pedido.id ? { ...r, ...pedido } : r)
+              : [pedido, ...designRequests];
+          }
+          return { contentCards, designRequests };
+        }, false, "content/servidor");
       },
 
       addDesignRequest: async (req) => {
@@ -352,8 +404,8 @@ export const useContentStore = create<ContentState>()(
         try {
           const r = await authedFetch("/api/design-requests/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) });
           if (!r.ok) { trilha("demanda:criar:erro", { titulo: req.title, status: r.status }); throw new Error(`HTTP ${r.status}`); }
-          const { id, semDesigner, dedupe, designer, atribuicao } = await r.json() as
-            { id: string; semDesigner?: boolean; dedupe?: boolean; designer?: string | null; atribuicao?: MotivoEscolha | null };
+          const { id, semDesigner, dedupe, designer, atribuicao, card, pedido } = await r.json() as
+            { id: string; semDesigner?: boolean; dedupe?: boolean; designer?: string | null; atribuicao?: MotivoEscolha | null; card?: ContentCard | null; pedido?: DesignRequest | null };
           trilha("demanda:criar:ok", { titulo: req.title, id, card: req.contentCardId ?? null, dedupe: !!dedupe, semDesigner: !!semDesigner, designer: designer ?? null, atribuicao: atribuicao ?? null });
           // O servidor escolhe o dono quando o cliente não tem designer na ficha. Quem criou precisa
           // saber pra qual quadro foi — antes essa frase era um pedido de "arrume na ficha" que
@@ -363,11 +415,16 @@ export const useContentStore = create<ContentState>()(
           } else if (designer && atribuicao && atribuicao !== "carteira") {
             toast.info(avisoDeAtribuicao({ designer, motivo: atribuicao }, req.clientName), { duration: 7000 });
           }
-          const confirmed = { ...optimistic, id, assignedDesigner: designer ?? undefined } as DesignRequest;
+          const confirmed = (pedido ?? { ...optimistic, id, assignedDesigner: designer ?? undefined }) as DesignRequest;
           marcarMutacao();
           set((s) => ({
-            designRequests: s.designRequests.map((r) => r.id === tempId ? confirmed : r),
+            // O pedido repetido (clique duplo) já pode estar na lista: não duplica.
+            designRequests: s.designRequests.some((x) => x.id === confirmed.id)
+              ? s.designRequests.filter((x) => x.id !== tempId).map((x) => x.id === confirmed.id ? confirmed : x)
+              : s.designRequests.map((x) => x.id === tempId ? confirmed : x),
           }), false, "content/design/add/confirmed");
+          // O card do pedido (o que já existia, agora "Com o designer"; ou o que nasceu com o pedido).
+          if (card) get().aplicarDoServidor({ card });
           return confirmed;
         } catch (err) {
           set((s) => ({ designRequests: s.designRequests.filter((r) => r.id !== tempId) }), false, "content/design/add/rollback");
@@ -387,7 +444,10 @@ export const useContentStore = create<ContentState>()(
         }), false, "content/design/update/optimistic");
         try {
           const res = await authedFetch("/api/design-requests/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...updates }) });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const corpo = await res.json().catch(() => ({})) as { error?: string } & EstadoDoServidor;
+          if (!res.ok) throw new Error(corpo.error || `HTTP ${res.status}`);
+          // Mudança de status do pedido é transição do card: o servidor devolve os dois como ficaram.
+          if (corpo.card || corpo.pedido) get().aplicarDoServidor(corpo);
         } catch (err) {
           if (prev) set((s) => ({ designRequests: s.designRequests.map((r) => r.id === id ? prev : r) }), false, "content/design/update/rollback");
           throw err;

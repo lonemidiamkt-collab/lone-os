@@ -2,19 +2,25 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { getServerUser } from "@/lib/supabase/auth-server";
-import { designerDaDemanda } from "@/lib/design/atribuir-server";
+import { snakeToContentCard, snakeToDesignRequest } from "@/lib/supabase/queries";
+import { executarTransicao, pedirArteSemCard, nomeDoMembro } from "@/lib/conteudo/producao-server";
 
 /**
- * POST /api/design-requests/create
+ * POST /api/design-requests/create — "Pedir arte".
  *
- * Cria uma design_request via service_role (bypassa RLS).
- * Aceita LocalSession — não exige Supabase auth real.
+ * Leva 5b: o pedido de arte é uma ETAPA do card, não um registro solto. Duas entradas, um dono
+ * (lib/conteudo/producao-server.ts):
+ *   · com `contentCardId` → transição "pedir_arte" no card (card vai pra "Com o designer"; o pedido
+ *     nasce na fila, ou o aberto é devolvido — o clique repetido não abre outro);
+ *   · sem card (criativo do tráfego, ficha do cliente, tarefa do próprio designer) → nasce o card
+ *     junto, em "Com o designer", sem data de postagem.
+ * Devolve { id, cardId, card, pedido, designer, atribuicao, semDesigner, dedupe? }.
  */
 export async function POST(req: NextRequest) {
-  const user = await getServerUser(req);
-  if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
+  const gate = await requireRole(req, [...GESTAO, "social", "designer", "traffic"]);
+  if (gate instanceof NextResponse) return gate;
 
   const body = await req.json().catch(() => null);
   if (!body || !body.clientId || !body.title) {
@@ -22,85 +28,57 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // IDEMPOTÊNCIA (16/09): 27 demandas duplicadas em 30 dias, sempre a mesma pessoa, o mesmo card,
-    // 1–50 s de diferença — o clique sem resposta visível vira segundo clique. A trava de estado
-    // no botão não segura duplo clique (o valor no closure ainda é o antigo). Aqui é a última
-    // linha: mesmo card com demanda aberta, ou mesmo cliente+título+pessoa nos últimos 2 min,
-    // devolve a existente com 200 e `dedupe: true`.
-    const titulo = String(body.title).trim();
-    const desde = new Date(Date.now() - 2 * 60_000).toISOString();
-    let repetida = body.contentCardId
-      ? supabaseAdmin.from("design_requests").select("id").eq("content_card_id", body.contentCardId).neq("status", "done").order("created_at", { ascending: false }).limit(1).maybeSingle()
-      : supabaseAdmin.from("design_requests").select("id").eq("client_id", body.clientId).eq("title", titulo).eq("requested_by", body.requestedBy ?? user.email).gte("created_at", desde).order("created_at", { ascending: false }).limit(1).maybeSingle();
-    const { data: existente } = await repetida;
-    if (existente?.id) return NextResponse.json({ id: existente.id, dedupe: true });
+    const quem = String(body.requestedBy || (await nomeDoMembro(gate.user.email)) || gate.user.email || "equipe");
 
-    // QUEM VAI RECEBER — resolvido ANTES do insert, pra gravar junto (uma escrita só).
-    // Rodrigo (23/09): cliente sem designer na ficha some do quadro dele; eram 26 demandas
-    // invisíveis, 23 do Edumar. Cliente de tráfego não entra na carteira do designer (decisão do
-    // Roberto), então o dono é resolvido aqui, na demanda. Ver lib/design/atribuicao.ts.
-    const escolha = await designerDaDemanda(String(body.clientId));
+    if (body.contentCardId) {
+      const r = await executarTransicao(String(body.contentCardId), { tipo: "pedir_arte" }, { quem, briefing: body.briefing ?? null });
+      if (!r.ok) return NextResponse.json({ error: r.erro }, { status: r.status });
+      const pedidoId = (r.pedido?.id as string) ?? null;
+      if (!pedidoId) return NextResponse.json({ error: "O pedido de arte não foi aberto." }, { status: 500 });
+      return NextResponse.json(await resposta(pedidoId, String(body.contentCardId), {
+        designer: r.designer?.designer ?? (r.pedido?.assigned_designer as string) ?? null,
+        atribuicao: r.designer?.motivo ?? null,
+        semDesigner: r.designer === null,
+        dedupe: r.semEfeito,
+      }));
+    }
 
-    const { data, error } = await supabaseAdmin.from("design_requests").insert({
-      title: titulo,
-      client_id: body.clientId,
-      assigned_designer: escolha?.designer ?? null,
-      client_name: body.clientName ?? "",
-      requested_by: body.requestedBy ?? user.email,
-      priority: body.priority ?? "medium",
-      status: body.status ?? "queued",
-      format: body.format ?? null,
+    const r = await pedirArteSemCard({
+      clientId: String(body.clientId),
+      clientName: body.clientName ?? null,
+      titulo: String(body.title),
       briefing: body.briefing ?? null,
-      attachments: body.attachments ?? [],
-      content_card_id: body.contentCardId ?? null,
-      deadline: body.deadline ?? null,
-    }).select("id").single();
-
-    if (error) {
-      console.error("[design-requests/create]", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Grava o link reverso (content_cards.design_request_id) no servidor, atômico com a
-    // criação. Antes isso era um 2º fetch do cliente que, se falhasse, deixava a demanda
-    // ÓRFÃ (sem vínculo nos 2 sentidos) — a entrega do designer não voltava pro card.
-    if (body.contentCardId) {
-      const { error: linkErr } = await supabaseAdmin
-        .from("content_cards")
-        .update({ design_request_id: data.id })
-        .eq("id", body.contentCardId);
-      if (linkErr) console.error("[design-requests/create] link reverso falhou:", linkErr.message);
-    }
-
-    // BRIEFING DA ARTE, SEM BOTÃO. O pedido segue na hora; o briefing enriquecido (regras visuais
-    // do cliente + motivos das reprovações anteriores) entra segundos depois, antes de o designer
-    // abrir. Era um botão dentro do card e foi usado em 9% dos 510 cards — enquanto 27% das artes
-    // voltavam por "não seguiu o padrão do cliente".
-    // Não bloqueia e não sobrescreve nada: escreve num campo próprio, ao lado do que o social pediu.
-    if (body.contentCardId) {
-      void import("@/lib/cs/briefing-design-card")
-        .then(({ briefingDesignDoCard }) => briefingDesignDoCard(body.contentCardId as string))
-        .then(async (texto) => {
-          if (!texto) return;
-          const { error } = await supabaseAdmin.from("design_requests")
-            .update({ briefing_ia: texto }).eq("id", data.id);
-          if (error) console.error("[design-requests/create] briefing IA não salvou:", error.message);
-          else console.log(`[design-requests/create] briefing da arte gerado (${data.id})`);
-        })
-        .catch((e) => console.error("[design-requests/create] briefing IA falhou (ignorado):", e));
-    }
-
-    return NextResponse.json({
-      id: data.id,
-      designer: escolha?.designer ?? null,
-      // `semDesigner` agora só é verdade quando NÃO EXISTE designer no time — o caso do cliente sem
-      // designer na ficha deixou de ser um aviso pra quem cria e virou uma atribuição de verdade.
-      semDesigner: !escolha,
-      atribuicao: escolha?.motivo ?? null,
+      formato: body.format ?? null,
+      prioridade: body.priority ?? null,
+      prazo: body.deadline ?? null,
+      quem,
+      doTrafego: gate.papel === "traffic",
+      attachments: Array.isArray(body.attachments) ? body.attachments : [],
     });
+    if (!r.ok) return NextResponse.json({ error: r.erro }, { status: r.status });
+    return NextResponse.json(await resposta(r.pedidoId, r.cardId, {
+      designer: r.designer?.designer ?? null,
+      atribuicao: r.designer?.motivo ?? null,
+      semDesigner: !r.dedupe && !r.designer,
+      dedupe: !!r.dedupe,
+    }));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
     console.error("[design-requests/create] unhandled:", err);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+async function resposta(pedidoId: string, cardId: string, extra: { designer: string | null; atribuicao: string | null; semDesigner: boolean; dedupe: boolean }) {
+  const [{ data: card }, { data: pedido }] = await Promise.all([
+    supabaseAdmin.from("content_cards").select("*").eq("id", cardId).maybeSingle(),
+    supabaseAdmin.from("design_requests").select("*").eq("id", pedidoId).maybeSingle(),
+  ]);
+  return {
+    id: pedidoId,
+    cardId,
+    card: card ? snakeToContentCard(card) : null,
+    pedido: pedido ? snakeToDesignRequest(pedido) : null,
+    ...extra,
+  };
 }

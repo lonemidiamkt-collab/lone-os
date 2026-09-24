@@ -87,6 +87,8 @@ import { loadBriefingForClient, loadRoteiroPrefs, loadBriefingCombinado } from "
 import { ehComandoAusencia, parseAusencia } from "@/lib/cs/ausencia";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 import { criarCardDemanda, criarCardsPauta } from "@/lib/cs/card";
+import { ETAPAS_DE_APROVACAO, infoEtapa, rotuloCompleto, statusDaEtapa, statusDasEtapas, statusNaEtapa } from "@/lib/conteudo/etapas";
+import { executarTransicao } from "@/lib/conteudo/producao-server";
 import { parsePautaItens, gerarPautaSemanal, datasProximaSemana, formatPauta } from "@/lib/cs/pauta";
 import { proximasDatas, formatDataCurta, tagsDoNicho, dataEncaixa } from "@/lib/cs/datas";
 import type { CsDemandType } from "@/lib/cs/taxonomy";
@@ -331,10 +333,6 @@ function ehPerguntaStatus(text: string): boolean {
   return /\b(status|andamento|cad[êe]|foi feit[ao]|j[áa] foi|j[áa] fez|j[áa] saiu|j[áa] criou|j[áa] criaram|como (t[áa]|est[áa])|sabe (me )?dizer|ficou pront[oa]|t[áa] pront[oa]|entregue|entregaram|entregou)\b/.test(t);
 }
 
-const STATUS_CARD_LABEL: Record<string, string> = {
-  ideas: "Ideias (fila)", script: "Roteiro", in_production: "Produção", blocked: "Travado",
-  approval: "Aprovação Social Media", client_approval: "Aprovação do cliente", scheduled: "Agendado", published: "Publicado",
-};
 
 // Comando de MOVER um card ("Lone, marca a arte do X como pronta / manda pro social / põe em
 // produção / agenda"). Retorna o status-alvo + se marca a ENTREGA do designer. null = não é mover.
@@ -345,11 +343,11 @@ function ehComandoMoverCard(text: string): { status: string; delivered: boolean 
   const verbo = /\b(marca|marque|move|mover|manda|mande|passa|passe|p[õo]e|poe|coloca|coloque|bota|finaliza|conclui)\b/.test(t);
   const alvo = /\b(card|arte|post|criativo|pe[çc]a|demanda)\b/.test(t);
   if (!verbo || !alvo) return null;
-  if (/\bpront[oa]|entregue|finaliz|termin|feit[oa]|conclu[ií]/.test(t)) return { status: "approval", delivered: true };
-  if (/\bprodu[çc][ãa]o|produzir|produzindo/.test(t)) return { status: "in_production", delivered: false };
-  if (/\bsocial|aprova[çc][ãa]o|revis/.test(t)) return { status: "approval", delivered: false };
-  if (/\bagend/.test(t)) return { status: "scheduled", delivered: false };
-  if (/\bpublic|postad|postou|postar/.test(t)) return { status: "published", delivered: false };
+  if (/\bpront[oa]|entregue|finaliz|termin|feit[oa]|conclu[ií]/.test(t)) return { status: statusDaEtapa("revisao"), delivered: true };
+  if (/\bprodu[çc][ãa]o|produzir|produzindo|designer/.test(t)) return { status: statusDaEtapa("com_designer"), delivered: false };
+  if (/\bsocial|aprova[çc][ãa]o|revis/.test(t)) return { status: statusDaEtapa("revisao"), delivered: false };
+  if (/\bagend/.test(t)) return { status: statusDaEtapa("agendado"), delivered: false };
+  if (/\bpublic|postad|postou|postar|no ar\b/.test(t)) return { status: statusDaEtapa("no_ar"), delivered: false };
   return null;
 }
 
@@ -529,20 +527,20 @@ async function autoAvancarPorArteNoGrupo(groupJid: string, autorNome?: string | 
       .eq("client_id", cli.id as string)
       .not("designer_delivered_at", "is", null)
       .gte("designer_delivered_at", há4dias) // só entrega RECENTE — não avança card velho por foto solta
-      .in("status", ["in_production", "approval"])
+      .in("status", statusDasEtapas("com_designer", "revisao"))
       .is("archived_at", null);
     if (!cards || cards.length !== 1) return; // 0 ou vários → não arrisca marcar o errado
     const card = cards[0];
     const nowIso = new Date().toISOString();
     await supabaseAdmin.from("content_cards").update({
-      status: "client_approval",
+      status: statusDaEtapa("com_cliente"),
       social_confirmed_at: nowIso,
       social_confirmed_by: autorNome || "CS",
       status_changed_at: nowIso,
     }).eq("id", card.id as string);
     await supabaseAdmin.from("card_comments").insert({
       card_id: card.id as string, author: "🤖 CS", role: "system",
-      text: `➡️ Vi a arte no grupo do cliente → movi *${card.title as string}* pra *Aprovação Cliente* automaticamente. Se não era essa, é só voltar o status.`,
+      text: `➡️ Vi a arte no grupo do cliente → movi *${card.title as string}* pra *${infoEtapa("com_cliente").rotulo}* automaticamente. Se não era essa, é só voltar o status.`,
     }).then(() => {}, () => {});
     console.log(`[CS/inbound] auto-avancei card por arte no grupo do cliente: "${card.title}"`);
   } catch (e) {
@@ -1856,10 +1854,10 @@ async function processarInbound(req: NextRequest) {
     const pend = demArr.filter((x) => x.status === "pendente").length;
     const conf = demArr.filter((x) => x.status === "confirmada").length;
     const cardArr = cards.data ?? [];
-    const emProd = cardArr.filter((k) => k.status === "in_production").length;
+    const emProd = cardArr.filter((k) => statusNaEtapa(k.status as string, "com_designer")).length;
     const entregues7 = cardArr.filter((k) => k.designer_delivered_at && (k.designer_delivered_at as string) >= d7).length;
-    const aguardando = cardArr.filter((k) => ["approval", "client_approval"].includes(k.status as string)).length;
-    const publicados = cardArr.filter((k) => k.status === "published").length;
+    const aguardando = cardArr.filter((k) => statusNaEtapa(k.status as string, ...ETAPAS_DE_APROVACAO)).length;
+    const publicados = cardArr.filter((k) => statusNaEtapa(k.status as string, "no_ar")).length;
     const lastMsg = cliRow.data?.last_client_msg_at as string | undefined;
     const diasQuieto = lastMsg ? Math.floor((Date.now() - new Date(lastMsg).getTime()) / 86400000) : null;
     const temBriefing = !!(cliRow.data?.fixed_briefing as string)?.trim();
@@ -1886,8 +1884,8 @@ async function processarInbound(req: NextRequest) {
       `👤 Social: ${social}${temBriefing ? " · briefing ✅" : " · *sem briefing* ⚠️"}`,
       ``,
       `*Últimos 30 dias:* ${demArr.length} demanda${demArr.length !== 1 ? "s" : ""}${pend ? ` · ${pend} pendente${pend > 1 ? "s" : ""}` : ""}${conf ? ` · ${conf} confirmada${conf > 1 ? "s" : ""}` : ""}`,
-      `*Produção agora:* ${emProd} em produção · ${aguardando} aguardando aprovação`,
-      `*Entregas (7d):* ${entregues7} · *Publicados:* ${publicados}`,
+      `*Produção agora:* ${emProd} com o designer · ${aguardando} em revisão ou com o cliente`,
+      `*Entregas (7d):* ${entregues7} · *No ar:* ${publicados}`,
       igLinha,
       diasQuieto == null ? `*Atividade:* sem registro de mensagem do cliente ainda` : `*Última fala do cliente:* há ${diasQuieto} dia${diasQuieto !== 1 ? "s" : ""}${diasQuieto >= 7 ? " ⚠️ (esfriando)" : ""}`,
       (regras.count ?? 0) > 0 ? `*Regras aprendidas:* ${regras.count}` : "",
@@ -1939,7 +1937,7 @@ async function processarInbound(req: NextRequest) {
           ? "APROVADA pelo cliente 🎉 (falta agendar)"
           : cardSt.designer_delivered_at
           ? "com a arte ENTREGUE pelo designer — aguardando revisão/agendamento"
-          : `na coluna *${STATUS_CARD_LABEL[cardSt.status as string] ?? cardSt.status}*`;
+          : `na etapa *${rotuloCompleto(cardSt.status as string)}*`;
         const prazo = cardSt.due_date ? ` · prazo ${new Date(`${cardSt.due_date}T12:00:00`).toLocaleDateString("pt-BR")}` : "";
         respostaSt = `Criei sim! O card *${cardSt.title}* da *${alvoSt.nome}* tá ${etapa}${dem.responsavel ? ` — responsável: ${dem.responsavel}` : ""}${prazo}.`;
       } else {
@@ -2075,7 +2073,7 @@ async function processarInbound(req: NextRequest) {
     }
     const { data: cardsM } = await supabaseAdmin.from("content_cards")
       .select("id, title, status, designer_delivered_at")
-      .eq("client_id", alvoM.id).is("archived_at", null).neq("status", "published")
+      .eq("client_id", alvoM.id).is("archived_at", null).neq("status", statusDaEtapa("no_ar"))
       .order("updated_at", { ascending: false }).limit(6);
     if (!cardsM || cardsM.length === 0) {
       await csSendGroupText(msg.groupJid, `Não achei card ativo da *${alvoM.nome}* pra mover 🤔 (pode já estar publicado/arquivado).`);
@@ -2086,10 +2084,26 @@ async function processarInbound(req: NextRequest) {
       const tt = normNome((k.title as string) || "");
       return twM.filter((w) => tt.includes(w)).length >= 2;
     }) ?? cardsM[0];
-    const upd: Record<string, unknown> = { status: cmdMover.status };
-    if (cmdMover.delivered) upd.designer_delivered_at = new Date().toISOString();
-    await supabaseAdmin.from("content_cards").update(upd).eq("id", cardM.id as string);
-    const label = STATUS_CARD_LABEL[cmdMover.status] ?? cmdMover.status;
+    // A arte e o pedido de design andam pela transição de design (lib/conteudo/producao-server.ts):
+    // "pronta" = entrega (fecha o pedido e leva o card pra revisão); "pro designer" = pedir arte.
+    // O resto é troca simples de etapa.
+    const quemM = msg.authorName || "CS";
+    let erroM: string | null = null;
+    if (cmdMover.delivered) {
+      const r = await executarTransicao(cardM.id as string, { tipo: "entregue", quem: null }, { quem: quemM });
+      if (!r.ok) erroM = r.erro;
+    } else if (cmdMover.status === statusDaEtapa("com_designer")) {
+      const r = await executarTransicao(cardM.id as string, { tipo: "pedir_arte" }, { quem: quemM });
+      if (!r.ok) erroM = r.erro;
+    } else {
+      const agoraM = new Date().toISOString();
+      await supabaseAdmin.from("content_cards").update({ status: cmdMover.status, status_changed_at: agoraM }).eq("id", cardM.id as string);
+    }
+    if (erroM) {
+      await csSendGroupText(msg.groupJid, `Não consegui mover *${cardM.title}*: ${erroM}`);
+      return NextResponse.json({ ok: true, mover_card: "recusado", erro: erroM });
+    }
+    const label = rotuloCompleto(cmdMover.status);
     await csSendGroupText(msg.groupJid, `✅ Movi *${cardM.title}* da *${alvoM.nome}* pra *${label}*${cmdMover.delivered ? " (arte marcada como entregue)" : ""}.\nSe não era esse card, me fala que eu volto. 👍`);
     console.log(`[CS/inbound] mover card ${cardM.id} → ${cmdMover.status} (${alvoM.nome})`);
     return NextResponse.json({ ok: true, mover_card: "ok", cliente: alvoM.nome, card: cardM.title as string, status: cmdMover.status });
@@ -2713,7 +2727,7 @@ async function processarInbound(req: NextRequest) {
         .eq("client_id", c.id as string)
         .is("client_approved_at", null)
         .not("designer_delivered_at", "is", null)
-        .neq("status", "published")
+        .neq("status", statusDaEtapa("no_ar"))
         .order("designer_delivered_at", { ascending: false })
         .limit(1).maybeSingle();
 
@@ -2741,7 +2755,7 @@ async function processarInbound(req: NextRequest) {
           .eq("client_id", c.id as string)
           .is("client_approved_at", null)
           .is("designer_delivered_at", null)
-          .in("status", ["approval", "client_approval", "in_production"])
+          .in("status", statusDasEtapas("com_designer", "revisao", "com_cliente"))
           .is("archived_at", null)
           .gte("created_at", desde21d)
           .order("created_at", { ascending: false })
@@ -2756,21 +2770,22 @@ async function processarInbound(req: NextRequest) {
           const nowIso = new Date().toISOString();
           const designer = (c.assigned_designer as string) || null;
           const { data: marcado } = await supabaseAdmin.from("content_cards")
-            .update({
-              client_approved_at: nowIso, status: "scheduled", status_changed_at: nowIso,
-              designer_delivered_at: nowIso, designer_delivered_by: designer,
-            })
+            .update({ client_approved_at: nowIso, status: statusDaEtapa("agendado"), status_changed_at: nowIso })
             .eq("id", cardInferido.id).is("client_approved_at", null).select("id");
           if (marcado && marcado.length > 0) {
             aprovacaoDetectada = cardInferido.id;
+            // A entrega inferida passa pela transição de design: grava a entrega E fecha o pedido de
+            // arte (antes só o card mudava e o pedido ficava aberto na fila do designer).
+            const ent = await executarTransicao(cardInferido.id, { tipo: "entregue", quem: designer }, { quem: "CS (aprovação no grupo)" });
+            if (!ent.ok) console.error(`[CS/inbound] entrega inferida do card ${cardInferido.id}: ${ent.erro}`);
             // O comentário deixa a INFERÊNCIA explícita. Um registro que parece medido mas foi
             // deduzido precisa dizer isso, senão vira dado falso com cara de dado bom.
             await supabaseAdmin.from("card_comments").insert({
               card_id: cardInferido.id, author: "🤖 CS", role: "system",
-              text: `🎉 Cliente aprovou no grupo. A entrega não estava marcada no sistema — como ele só aprova o que viu, registrei a entrega${designer ? ` (${designer})` : ""} e movi pra *Agendado*. Se não era essa arte, é só voltar o status.`,
+              text: `🎉 Cliente aprovou no grupo. A entrega não estava marcada no sistema — como ele só aprova o que viu, registrei a entrega${designer ? ` (${designer})` : ""} e movi pra *${infoEtapa("agendado").rotulo}*. Se não era essa arte, é só voltar o status.`,
             }).then(() => {}, () => {});
             const jid = internalGroupJid();
-            if (jid) await csSendGroupText(jid, `🎉 O cliente *${clienteNome}* aprovou a arte *${cardInferido.title}*! A entrega não estava marcada — registrei e movi pra *Agendado*. 🚀`);
+            if (jid) await csSendGroupText(jid, `🎉 O cliente *${clienteNome}* aprovou a arte *${cardInferido.title}*! A entrega não estava marcada — registrei e movi pra *${infoEtapa("agendado").rotulo}*. 🚀`);
             console.log(`[CS/inbound] aprovação inferiu entrega do card ${cardInferido.id}`);
           }
         }
@@ -2783,17 +2798,17 @@ async function processarInbound(req: NextRequest) {
           // Aprovou → marca client_approved_at E AVANÇA pra Agendado (pedido do Roberto): sai da fila
           // de produção/aprovação e vira "pronto pra publicar". Atômico (.is null) contra corrida/retry.
           const { data: marcado } = await supabaseAdmin.from("content_cards")
-            .update({ client_approved_at: nowIso, status: "scheduled", status_changed_at: nowIso })
+            .update({ client_approved_at: nowIso, status: statusDaEtapa("agendado"), status_changed_at: nowIso })
             .eq("id", cardAprov.id).is("client_approved_at", null).select("id");
           if (marcado && marcado.length > 0) {
             aprovacaoDetectada = cardAprov.id as string;
             await supabaseAdmin.from("card_comments").insert({
               card_id: cardAprov.id as string, author: "🤖 CS", role: "system",
-              text: `🎉 Cliente aprovou no grupo → movi pra *Agendado*. Pode publicar! (Se não era essa arte, é só voltar o status.)`,
+              text: `🎉 Cliente aprovou no grupo → movi pra *${infoEtapa("agendado").rotulo}*. Pode publicar! (Se não era essa arte, é só voltar o status.)`,
             }).then(() => {}, () => {});
             const jid = internalGroupJid();
-            if (jid) await csSendGroupText(jid, `🎉 O cliente *${clienteNome}* aprovou a arte *${cardAprov.title}*! Já movi pra *Agendado* — é só publicar. 🚀`);
-            console.log(`[CS/inbound] cliente aprovou card ${cardAprov.id} → Agendado`);
+            if (jid) await csSendGroupText(jid, `🎉 O cliente *${clienteNome}* aprovou a arte *${cardAprov.title}*! Já movi pra *${infoEtapa("agendado").rotulo}* — é só publicar. 🚀`);
+            console.log(`[CS/inbound] cliente aprovou card ${cardAprov.id} → ${infoEtapa("agendado").rotulo}`);
           }
         }
       }

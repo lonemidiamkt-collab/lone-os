@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { ETAPAS_FINAIS, infoEtapa, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCron } from "@/lib/api/cron-guard";
@@ -22,8 +23,8 @@ import {
 // Vigia o pipeline de cada post (seg/sex firmes; quarta leve), nas etapas que o Roberto definiu:
 //   pauta pro dia → social mandou pro designer ("A fazer") → designer fez → (ou travada) →
 //   social viu e agendou no Meta (= moveu o card pra coluna "Agendado").
-// Mapeamento p/ os status reais do board: ideas/script=Fila · in_production=Produção ·
-// blocked=Travado · approval/client_approval=Aprovação(entregue) · scheduled=Agendado · published=ok.
+// Etapas do quadro (lib/conteudo/etapas.ts): Pauta · Com o designer (bloqueado = devolvido) ·
+// Revisão interna · Com o cliente · Agendado · No ar.
 
 // Roberto aprovou ligar (26/jun) — mas SÓ posta cobrança de card REAL, criado ontem/hoje e com
 // responsável (os cards antigos são lixo acumulado). "Sem pauta" e card antigo seguem só dry-run.
@@ -99,11 +100,11 @@ const FRASES: Record<string, [string[], string[], string[]]> = {
     ],
     [`{p}, o {c} segue travado faz uns dias. Tem algum impedimento? Me fala que a gente resolve junto.`],
   ],
-  // vig 4 — social: arte entregue, precisa revisar e ENTREGAR AO CLIENTE (mover pra Aprovação)
+  // vig 4 — social: arte entregue, precisa revisar e ENTREGAR AO CLIENTE (mover pra Com o cliente)
   revisar: [
     [
-      `Oi {p}! o designer entregou a arte do {c}! Revisa e já manda pro cliente aprovar (move pra *Aprovação*). 👀`,
-      `Oi {p}! saiu a arte do {c} 🎨 confere e envia pro cliente aprovar — move o card pra *Aprovação*.`,
+      `Oi {p}! o designer entregou a arte do {c}! Revisa e já manda pro cliente aprovar (move pra *${infoEtapa("com_cliente").rotulo}*). 👀`,
+      `Oi {p}! saiu a arte do {c} 🎨 confere e envia pro cliente aprovar — move o card pra *${infoEtapa("com_cliente").rotulo}*.`,
       `{p}, a arte do {c} está pronta! Consegue revisar e mandar pro cliente aprovar?`,
     ],
     [
@@ -195,7 +196,7 @@ export async function POST(req: NextRequest) {
   const cardById = new Map(cards.map((k) => [k.id, k]));
 
   // Status REAL da demanda (queued/in_progress/done) — sinal mais confiável que o status do card,
-  // que o time não atualiza no board (card entregue fica em "Ideias").
+  // que o time não atualiza no board (card entregue fica na Pauta).
   const drIds = [...new Set(cards.map((k) => k.design_request_id).filter((x): x is string => !!x))];
   if (drIds.length) {
     const { data: drs } = await supabaseAdmin.from("design_requests").select("id, status").in("id", drIds);
@@ -256,7 +257,7 @@ export async function POST(req: NextRequest) {
     .gte("client_approved_at", d7)
     .is("archived_at", null);
   for (const k of aprovadosData ?? []) {
-    if (k.status === "scheduled" || k.status === "published") continue;
+    if (statusNaEtapa(k.status, ...ETAPAS_FINAIS)) continue;
     if (!clientById.has(k.client_id as string)) continue; // inativo / agente pausado
     if (businessHoursSince(k.client_approved_at as string) < TH_AGENDAR) continue;
     cobrancas.push({

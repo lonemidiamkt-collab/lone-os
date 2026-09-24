@@ -9,7 +9,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { chamar } from "@/lib/api/chamar";
-import { ehDoQuadro } from "@/lib/design/dono";
+import { ETAPAS_DE_APROVACAO, corDoStatus, rotuloCompleto, statusNaEtapa } from "@/lib/conteudo/etapas";
+import { ROTULO_ESTADO_DESIGN, designerDeve } from "@/lib/conteudo/producao";
+import { montarItens, type ItemQuadro } from "@/lib/conteudo/quadro";
 import { useClientsStore } from "@/stores/useClientsStore";
 import EmptyState from "@/components/ui/EmptyState";
 import { useContentStore } from "@/stores/useContentStore";
@@ -18,7 +20,7 @@ import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, todaySP, spDateStr } from "@/lib/utils";
 import Link from "next/link";
-import type { Task, ContentCard, DesignRequest } from "@/lib/types";
+import type { Task, ContentCard } from "@/lib/types";
 import SignedImage from "@/components/shared/SignedImage";
 
 type FilterType = "all" | "tasks" | "content" | "design" | "approvals" | "meetings";
@@ -97,18 +99,19 @@ export default function Hoje() {
   const myCards = useMemo(() =>
     contentCards
       // exclui os em aprovação (já contam em "Aprovações") — evita contar/renderizar 2x
-      .filter((c) => c.status !== "published" && !["approval", "client_approval"].includes(c.status) && (isAdmin || c.socialMedia === currentUser))
+      .filter((c) => !statusNaEtapa(c.status, "no_ar", ...ETAPAS_DE_APROVACAO) && (isAdmin || c.socialMedia === currentUser))
       .sort(pSort),
     [contentCards, currentUser, isAdmin]
   );
 
-  // Design requests: Admin = all, Designer = as do quadro dele (mesma regra do /design), Others = pedidas por mim
-  const myDesignReqs = useMemo(() =>
-    designRequests.filter((r) => r.status !== "done" && (
-      isAdmin
-      || (role === "designer" ? ehDoQuadro(r, clients, currentUser) : r.requestedBy === currentUser)
-    )),
-    [designRequests, clients, currentUser, role, isAdmin]
+  // Arte com o designer (Leva 5b: o pedido de arte é etapa do card). Gestão vê todas; o designer, a
+  // fila dele (mesma regra de dono do quadro); os outros, as artes dos cards deles ou que pediram.
+  const myDesignReqs = useMemo<ItemQuadro[]>(() =>
+    montarItens(contentCards, designRequests, clients.map((c) => ({ id: c.id, assignedDesigner: c.assignedDesigner })))
+      .filter((it) => it.etapa === "com_designer" && (designerDeve(it.estado) || it.estado === "bloqueado"))
+      .filter((it) => isAdmin
+        || (role === "designer" ? it.designer === currentUser : (it.card.socialMedia === currentUser || it.pedido?.requestedBy === currentUser))),
+    [contentCards, designRequests, clients, currentUser, role, isAdmin]
   );
   // Sem a carteira, a regra de dono não sabe o que é do designer — não pode afirmar "tudo em dia".
   const designerSemCarteira = role === "designer" && !clientesCarregados;
@@ -116,7 +119,7 @@ export default function Hoje() {
   // Approvals: Admin/Manager = all, Staff = my cards only
   const pendingApprovals = useMemo(() =>
     contentCards.filter((c) =>
-      (c.status === "approval" || c.status === "client_approval") &&
+      statusNaEtapa(c.status, ...ETAPAS_DE_APROVACAO) &&
       (isAdmin || c.socialMedia === currentUser)
     ),
     [contentCards, isAdmin, currentUser]
@@ -287,26 +290,23 @@ export default function Hoje() {
             <div className="card">
               <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
                 <Palette size={14} className="text-primary" />
-                Solicitações de Design ({myDesignReqs.length})
+                Arte com o designer ({myDesignReqs.length})
               </h3>
               <div className="space-y-2">
-                {myDesignReqs.map((req) => (
-                  <div key={req.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-primary/20 transition-all">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${
-                      req.status === "queued" ? "bg-muted-foreground" : req.status === "in_progress" ? "bg-primary" : "bg-lone-success"
-                    }`} />
+                {myDesignReqs.map((it) => (
+                  <Link key={it.card.id} href={`${role === "designer" ? "/design" : "/social"}?card=${it.card.id}`}
+                    className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-primary/20 transition-all">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${it.estado === "alteracao" || it.estado === "bloqueado" ? "bg-destructive" : "bg-chart-4"}`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">{req.title}</p>
-                      <p className="text-[10px] text-muted-foreground">{req.clientName} · {req.format}</p>
+                      <p className="text-xs font-medium text-foreground truncate">{it.card.title}</p>
+                      <p className="text-[10px] text-muted-foreground">{it.card.clientName}{it.card.format ? ` · ${it.card.format}` : ""}{it.designer && role !== "designer" ? ` · ${it.designer}` : ""}</p>
                     </div>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
-                      req.status === "queued" ? "text-muted-foreground bg-muted border-border" :
-                      req.status === "in_progress" ? "text-primary bg-primary/10 border-primary/20" :
-                      "text-lone-success bg-lone-success-bg border-lone-success-border"
+                      it.estado === "alteracao" || it.estado === "bloqueado" ? "text-destructive bg-destructive/10 border-destructive/20" : "text-chart-4 bg-chart-4/10 border-chart-4/20"
                     }`}>
-                      {req.status === "queued" ? "Na fila" : req.status === "in_progress" ? "Em progresso" : "Concluído"}
+                      {ROTULO_ESTADO_DESIGN[it.estado]}
                     </span>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>
@@ -317,7 +317,7 @@ export default function Hoje() {
             <div className="card">
               <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
                 <Eye size={14} className="text-lone-warning" />
-                Aguardando Aprovação ({pendingApprovals.length})
+                Em revisão ou com o cliente ({pendingApprovals.length})
               </h3>
               <div className="space-y-2">
                 {pendingApprovals.map((card) => (
@@ -445,11 +445,6 @@ function TaskRow({ task }: { task: Task }) {
 }
 
 function CardRow({ card, isApproval }: { card: ContentCard; isApproval?: boolean }) {
-  const STATUS_LABELS: Record<string, string> = {
-    ideas: "Ideia", script: "Roteiro", in_production: "Produção",
-    approval: "Aprovação Social Media", client_approval: "Aprov. Cliente",
-    scheduled: "Agendado", published: "Publicado",
-  };
 
   return (
     <Link href={`/social?card=${card.id}`} className={`card-interactive flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${
@@ -482,7 +477,8 @@ function CardRow({ card, isApproval }: { card: ContentCard; isApproval?: boolean
         isApproval ? "text-lone-warning bg-lone-warning-bg border-lone-warning-border" :
         "text-muted-foreground bg-muted border-border"
       }`}>
-        {STATUS_LABELS[card.status] ?? card.status}
+        <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle ${corDoStatus(card.status)}`} aria-hidden="true" />
+        {rotuloCompleto(card.status)}
       </span>
       <ChevronRight size={12} className="text-muted-foreground shrink-0" />
     </Link>

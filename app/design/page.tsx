@@ -1,467 +1,66 @@
 "use client";
 
+// /design — a tela do Designer. Leva 5b: os "Kanbans Social Media" (quatro colunas com nomes
+// próprios) e o "Quadro de Tarefas" (a fila de pedidos de arte, com outras três) viraram UM quadro,
+// o mesmo do Social (components/conteudo/QuadroProducao.tsx), com as seis etapas de
+// lib/conteudo/etapas.ts. O designer abre no "Meus" (a fila de arte dele); "Por designer" é o antigo
+// Quadro de Tarefas, agora com os cards; o pedido de arte e a entrega moram no card.
+
 import Header from "@/components/Header";
 import SignedImage from "@/components/shared/SignedImage";
-import KanbanBoard from "@/components/KanbanBoard";
 import CsAgentInbox from "@/components/cs/CsAgentInbox";
 import ContentCardModal from "@/components/ContentCardModal";
-import EmptyState from "@/components/ui/EmptyState";
-import CardArtAttachments from "@/components/kanban/CardArtAttachments";
-import { toast } from "sonner";
-import { ehDoQuadro, quadrosDisponiveis, contagemPorQuadro, donoDaDemanda, SEM_DONO } from "@/lib/design/dono";
+import QuadroProducao from "@/components/conteudo/QuadroProducao";
+import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
+import MonthObservancesAlert from "@/components/MonthObservancesAlert";
+import { MarkdownEditor } from "@/components/Markdown";
+import { quadrosDisponiveis, contagemPorQuadro, SEM_DONO } from "@/lib/design/dono";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
-import { marcarMutacao } from "@/stores/useContentStore";
 import { trilha } from "@/lib/obs/trilha";
-import { entregarArte, novoOperationId } from "@/lib/ops/entregar-arte";
 import { chamar } from "@/lib/api/chamar";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
-import { getPriorityColor, getPriorityLabel, spDateStr } from "@/lib/utils";
+import { spDateStr, todaySP } from "@/lib/utils";
 import {
-  Palette, Filter, Clock, CheckCircle, Loader, Paperclip, X,
-  AlertTriangle, Zap, LayoutList, Columns3, Upload, Download,
-  ImageIcon, Eye, ChevronDown, User, FileText, FileWarning, FolderOpen,
-  ExternalLink, BarChart2, Plus, Calendar, ArrowRight, XCircle, RotateCcw, Search, Sparkles,
-  ThumbsUp, ThumbsDown, Instagram,
+  Clock, CheckCircle, Loader, X, AlertTriangle, ImageIcon, ChevronDown, Plus, Calendar, RotateCcw, Palette,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
-import type { Client, ContentCard, DesignRequest, CardAttachment } from "@/lib/types";
-import MonthObservancesAlert from "@/components/MonthObservancesAlert";
-import { MarkdownView, MarkdownEditor, markdownPlainText } from "@/components/Markdown";
-import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
-import DeleteConfirmModal from "@/components/DeleteConfirmModal";
-import MarcaDoCliente from "@/components/clients/MarcaDoCliente";
-import CatalogoProdutos from "@/components/clients/CatalogoProdutos";
+import type { Client, ContentCard, DesignRequest } from "@/lib/types";
+import { infoDoStatus, statusNaEtapa } from "@/lib/conteudo/etapas";
+import { designerDeve } from "@/lib/conteudo/producao";
+import { lerVista, montarItens, passaNoFiltro, compararItens, type Vista } from "@/lib/conteudo/quadro";
+import { diasEntre, somarDias } from "@/lib/conteudo/no-ar";
 
-// ── Designer-focused columns (simplified from 7 → 4) ─────────────────────────
-// Maps: ideas/script → "queue", in_production → "doing", blocked → "blocked", rest → "delivered"
+// Abas: "producao" é o quadro; "kanbans" e "requests" são os nomes antigos (links, ⌘K, favoritos)
+// e caem nele, na vista certa. "clientes" saiu na Leva 5a (a lista de clientes é uma só).
+type TabView = "producao" | "performance" | "history";
 
-const DESIGNER_COLUMNS = [
-  { id: "queue",     title: "Fila / Pra Fazer",           color: "bg-muted",   statuses: ["ideas", "script"] },
-  { id: "doing",     title: "Em Produção",                color: "bg-primary",    statuses: ["in_production"] },
-  { id: "blocked",   title: "Bloqueado / Devolvido",      color: "bg-destructive",    statuses: ["blocked"] },
-  { id: "delivered", title: "Aprovação",                  color: "bg-primary",  statuses: ["approval", "client_approval", "scheduled", "published"] },
-];
-
-// Status mapping: designer column → actual content card status
-const DESIGNER_COL_TO_STATUS: Record<string, string> = {
-  queue: "ideas",
-  doing: "in_production",
-  blocked: "blocked",
-  delivered: "approval",
-};
-
-const BLOCK_REASONS = [
-  "Falta de dados / briefing incompleto",
-  "Texto/copy muito longo ou inadequado",
-  "Referência visual ruim ou ausente",
-  "Aguardando aprovação prévia",
-  "Assets do cliente não recebidos",
-  "Formato/dimensão indefinido",
-];
-
-// ── Design request columns ───────────────────────────────────────────────────
-
-const DESIGN_COLUMNS = [
-  { id: "queued",      title: "Na Fila",       color: "bg-muted" },
-  { id: "in_progress", title: "Em Produção",   color: "bg-primary" },
-  { id: "done",        title: "Concluído",     color: "bg-primary" },
-];
-
-// "clientes" (Clientes do Quadro) saiu na Leva 5a: a lista de clientes é uma só, em /clients?resp=mine.
-type TabView = "kanbans" | "requests" | "performance" | "history";
-
-function getDeadlineUrgency(dueDate?: string): "overdue" | "today" | "soon" | "ok" | null {
-  if (!dueDate) return null;
-  // "YYYY-MM-DD" via new Date() = UTC 00:00 (dia anterior no BRT) → card que vence HOJE virava
-  // "vencido" o dia todo. Parse LOCAL + compara com hoje local.
-  const [y, m, d] = dueDate.slice(0, 10).split("-").map(Number);
-  if (!y || !m || !d) return null;
-  const due = new Date(y, m - 1, d).getTime();
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const diff = Math.floor((due - today.getTime()) / 86400000);
-  if (diff < 0) return "overdue";
-  if (diff === 0) return "today";
-  if (diff <= 3) return "soon";
-  return "ok";
+function ddmm(ymd: string): string {
+  return ymd.slice(0, 10).split("-").reverse().slice(0, 2).join("/");
 }
 
-const URGENCY_BADGE: Record<string, { label: string; cls: string }> = {
-  overdue: { label: "Vencido", cls: "text-destructive bg-destructive/10 border-destructive/20" },
-  today:   { label: "Hoje",   cls: "text-primary bg-primary/10 border-primary/15" },
-  soon:    { label: "Em breve", cls: "text-primary bg-primary/10 border-primary/20" },
-  ok:      { label: "",       cls: "text-muted-foreground" },
-};
-
 // A arte ENTREGUE pelo designer. `imageUrl` sozinho não serve: é também onde cai a imagem de
-// referência que o social anexa, e o quadro mostrava "Arte ✓" num card que ninguém tinha feito.
+// referência que o social anexa.
 function arteEntregue(c: ContentCard): string | null {
   const entrega = c.cardAttachments?.find((a) => a.tipo === "entrega");
   if (entrega) return entrega.url;
   return c.designerDeliveredAt && c.imageUrl ? c.imageUrl : null;
 }
-const temArteEntregue = (c: ContentCard) =>
-  !!c.designerDeliveredAt || !!c.cardAttachments?.some((a) => a.tipo === "entrega");
-
-/** Toast de falha para promessas do store (que desfazem o otimista e relançam). */
-const avisarFalha = (acao: string) => (err: unknown) => {
-  const det = err instanceof Error && err.message ? ` (${err.message})` : "";
-  toast.error(`${acao}${det}. Tenta de novo?`);
-};
-
-// ── Upload Modal (Link Drive) ────────────────────────────────────────────────
-
-function UploadArtModal({
-  card,
-  onClose,
-}: {
-  card: ContentCard;
-  onClose: () => void;
-}) {
-  const clients = useClientsStore((s) => s.clients);
-  const designRequests = useContentStore((s) => s.designRequests);
-  const updateContentCard = useContentStore((s) => s.updateContentCard);
-  const updateDesignRequest = useContentStore((s) => s.updateDesignRequest);
-  const pushNotification = useNotificationsStore((s) => s.push);
-  const { currentUser } = useRole();
-  const [artLink, setArtLink] = useState(
-    card.imageUrl && card.imageUrl.includes("drive.google.com") ? card.imageUrl : ""
-  );
-  const [attachments, setAttachments] = useState<CardAttachment[] | null>(null); // null = carregando
-  const [erroAnexos, setErroAnexos] = useState<string | null>(null);
-  const [tentativaAnexos, setTentativaAnexos] = useState(0);
-  const [initialRefs, setInitialRefs] = useState<CardAttachment[]>([]); // artes já no card ao abrir = referência do social
-  const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
-  // Um id por clique em "Entregar": repetição (rede caiu, clique duplo) reaproveita o mesmo id → mesma entrega.
-  const operationIdRef = useRef<string | null>(null);
-  const [error, setError] = useState("");
-
-  const clientDriveLink = clients.find((c) => c.id === card.clientId)?.driveLink;
-  const isImageUrl = (url: string) => /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url);
-
-  // Carrega as artes já anexadas ao card ao abrir o modal
-  useEffect(() => {
-    let alive = true;
-    setErroAnexos(null);
-    chamar<{ attachments?: CardAttachment[] }>(`/api/cards/${card.id}/attachments`).then((r) => {
-      if (!alive) return;
-      // Falha NÃO é "sem arte": mostrar a grade vazia fazia o designer reenviar o que já estava lá.
-      if (!r.ok) { setErroAnexos(r.erro); return; }
-      const list = r.data?.attachments ?? [];
-      setAttachments(list);
-      // Só na 1ª carga: o que já está no card antes de eu entregar = referência do social.
-      setInitialRefs((prev) => (prev.length ? prev : list.filter((a) => a.id !== "legacy" && a.tipo !== "entrega")));
-    });
-    return () => { alive = false; };
-  }, [card.id, tentativaAnexos]);
-
-  // Mantém a capa do card no board atualizada conforme o designer anexa/remove artes
-  const handleAttachmentsChange = (next: CardAttachment[]) => {
-    setAttachments(next);
-    const real = next.filter((a) => a.id !== "legacy");
-    // A capa só troca para uma ENTREGA: referência do social no topo da lista não é arte pronta.
-    const cover = real.find((a) => a.tipo === "entrega")?.url;
-    marcarMutacao();
-    useContentStore.setState((s) => ({
-      contentCards: s.contentCards.map((c) =>
-        c.id === card.id ? { ...c, cardAttachments: real, imageUrl: next.length === 0 ? undefined : (cover ?? c.imageUrl) } : c,
-      ),
-    }));
-    // Removeu tudo (inclusive a capa legada) → persiste a limpeza do image_url legado.
-    if (next.length === 0 && card.imageUrl) {
-      updateContentCard(card.id, { imageUrl: "" }).catch(() => {}); // o store já avisa a falha
-    }
-  };
-
-  // Entrega da arte. As artes (multi) são enviadas direto pela grid (card_attachments);
-  // o link do Drive continua como alternativa legada (1 arte via URL externa).
-  const handleDeliver = async () => {
-    setError("");
-    const link = artLink.trim();
-    const real = (attachments ?? []).filter((a) => a.id !== "legacy");
-    trilha("entregar:clique", { card: card.id, artes: real.length, link: !!link, dr: card.designRequestId ?? null });
-
-    // Precisa de pelo menos uma arte anexada OU um link do Drive
-    if (real.length === 0 && !link) {
-      setError("Anexe pelo menos uma arte OU cole um link da arte.");
-      return;
-    }
-    if (real.length === 0 && link) {
-      try {
-        const url = new URL(link);
-        if (!url.protocol.startsWith("http")) { setError("URL inválida — deve começar com https://"); return; }
-      } catch {
-        setError("URL inválida — verifique o formato."); return;
-      }
-    }
-
-    setSaving(true);
-    try {
-      // OPERAÇÃO ÚNICA (Fase 1, 18/09): anexos → entrega, versão, card, demanda e audit numa transação
-      // no banco. O mesmo operationId em qualquer repetição (duplo clique, rede) = a mesma entrega.
-      if (!operationIdRef.current) operationIdRef.current = novoOperationId();
-      const r = await entregarArte({
-        cardId: card.id, designRequestId: card.designRequestId ?? null,
-        attachmentIds: real.map((a) => a.id), urlsExternas: real.length === 0 && link ? [link] : [],
-        operationId: operationIdRef.current,
-      });
-      if (!r.ok || !r.data?.card) throw new Error(r.erro ?? r.data?.error ?? "não entregou");
-      const estado = r.data;
-      operationIdRef.current = null;
-      const deliveredUrls = estado.delivery.urls;
-      // Estado final vem do servidor: o store reflete exatamente o que foi gravado.
-      marcarMutacao();
-      useContentStore.setState((s) => ({
-        contentCards: s.contentCards.map((c) => c.id === card.id ? { ...c, designerDeliveredAt: estado.card.designer_delivered_at ?? undefined, designerDeliveredBy: estado.card.designer_delivered_by ?? undefined, imageUrl: estado.card.image_url ?? c.imageUrl } : c),
-        designRequests: estado.demanda ? s.designRequests.map((d) => d.id === estado.demanda!.id ? { ...d, status: estado.demanda!.status as DesignRequest["status"], attachments: estado.demanda!.attachments } : d) : s.designRequests,
-      }));
-      trilha("entregar:ok", { card: card.id, artes: deliveredUrls.length });
-      pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmação.`, card.clientId, card.id);
-      // REVISÃO AUTOMÁTICA na entrega (IA de visão): confere TODAS as artes contra o briefing —
-      // preço/texto/localização/regras. Sempre roda (não só quem tem regra) — foi o gap que deixou
-      // o preço errado do Imperio passar. Se achar problema, avisa no grupo de Artes + comenta no card.
-      // Best-effort (não bloqueia a entrega).
-      void chamar("/api/cs/revisar-entrega", { cardId: card.id });
-      import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
-      setSaved(true);
-      setTimeout(() => { setSaved(false); onClose(); }, 800);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro desconhecido";
-      trilha("entregar:erro", { card: card.id, msg });
-      console.error("[UploadArt] deliver failed:", err);
-      setError(`Não foi possível entregar: ${msg}`);
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 animate-fade-in" onClick={(e) => e.stopPropagation()}>
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <div>
-            <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
-              <Upload size={14} className="text-primary" /> Entregar Arte
-            </h3>
-            <p className="text-xs text-primary mt-0.5">{card.title} — {card.clientName}</p>
-          </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="p-5 space-y-4">
-          {/* Client Drive quick access */}
-          {clientDriveLink && (
-            <a
-              href={clientDriveLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-primary/[0.04] border border-primary/20 hover:border-primary/40 transition-all"
-            >
-              <FolderOpen size={14} className="text-primary" />
-              <div className="flex-1">
-                <p className="text-xs text-foreground font-medium">Pasta do cliente no Drive</p>
-                <p className="text-[9px] text-muted-foreground">Abrir para fazer upload da arte</p>
-              </div>
-              <ExternalLink size={12} className="text-primary" />
-            </a>
-          )}
-
-          {/* Artes (multi-arte) — upload direto, colar (Ctrl+V) ou arrastar */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Artes do card (até 10 · PNG, JPG, WebP, GIF · 10MB)</label>
-            {erroAnexos ? (
-              <div className="flex items-center justify-between gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
-                <span>Não consegui carregar as artes do card: {erroAnexos}</span>
-                <button type="button" onClick={() => setTentativaAnexos((n) => n + 1)} className="shrink-0 underline">Tentar de novo</button>
-              </div>
-            ) : attachments === null ? (
-              <div className="flex items-center justify-center py-6 text-muted-foreground">
-                <Upload size={16} className="animate-pulse" />
-              </div>
-            ) : (
-              <CardArtAttachments
-                cardId={card.id}
-                existingAttachments={attachments.filter((a) => a.id !== "legacy")}
-                legacyImageUrl={card.imageUrl}
-                onAttachmentsChange={handleAttachmentsChange}
-                tipo="entrega"
-              />
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-[9px] text-muted-foreground uppercase tracking-wider">ou</span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
-
-          {/* Art link input — fallback */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Link da Arte (Google Drive)</label>
-            <input
-              value={artLink}
-              onChange={(e) => { setArtLink(e.target.value); setError(""); }}
-              placeholder="https://drive.google.com/file/d/..."
-              className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 outline-none transition-all"
-              autoFocus
-            />
-            {error && <p className="text-[10px] text-destructive">{error}</p>}
-          </div>
-
-          {/* Preview */}
-          {artLink && artLink.includes("http") && (
-            isImageUrl(artLink) ? (
-              <div className="rounded-xl overflow-hidden border border-border bg-card">
-                <SignedImage src={artLink} alt="Preview da arte" className="w-full max-h-48 object-contain" />
-              </div>
-            ) : (
-              <a
-                href={artLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-xs text-primary hover:underline"
-              >
-                <ExternalLink size={11} /> Verificar arquivo antes de enviar
-              </a>
-            )
-          )}
-
-          {/* Card info */}
-          <div className="bg-card border border-border rounded-xl p-3 space-y-1.5 text-xs">
-            <div className="flex items-center gap-2">
-              <User size={11} className="text-muted-foreground" />
-              <span className="text-muted-foreground">Social:</span>
-              <span className="text-foreground">{card.socialMedia}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <FileText size={11} className="text-muted-foreground" />
-              <span className="text-muted-foreground">Formato:</span>
-              <span className="text-foreground">{card.format}</span>
-            </div>
-            {card.dueDate && (
-              <div className="flex items-center gap-2">
-                <Clock size={11} className="text-muted-foreground" />
-                <span className="text-muted-foreground">Data de entrega:</span>
-                <span className="text-foreground font-medium">{card.dueDate.slice(0, 10).split("-").reverse().join("/")}</span>
-              </div>
-            )}
-            {card.briefing && (
-              <div className="pt-1.5 border-t border-border mt-1.5">
-                <p className="text-muted-foreground leading-relaxed line-clamp-3">{markdownPlainText(card.briefing)}</p>
-              </div>
-            )}
-            {initialRefs.length > 0 && (
-              <div className="pt-1.5 border-t border-border mt-1.5 space-y-1.5">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Referência do social ({initialRefs.length})</p>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {initialRefs.map((ref, i) => (
-                    <a key={ref.id} href={ref.url} target="_blank" rel="noopener noreferrer"
-                       className="block rounded-lg overflow-hidden border border-border hover:border-primary/40 transition-colors" title="Abrir referência">
-                      <SignedImage src={ref.url} alt={`Referência ${i + 1}`} className="w-full h-16 object-cover bg-muted" />
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="p-5 border-t border-border flex gap-2">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-card/5 transition-all">Cancelar</button>
-          <button
-            type="button"
-            onClick={handleDeliver}
-            disabled={saved || saving || ((attachments ?? []).filter((a) => a.id !== "legacy").length === 0 && !artLink.trim())}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all disabled:opacity-30 disabled:shadow-none"
-          >
-            {saved ? (
-              <><CheckCircle size={14} /> Entregue!</>
-            ) : saving ? (
-              <><Upload size={14} className="animate-pulse" /> Salvando...</>
-            ) : (
-              <><Upload size={14} /> Entregar Arte</>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Download Button with feedback ────────────────────────────────────────────
-
-function DownloadButton({ url, title }: { url: string; title: string }) {
-  const [state, setState] = useState<"idle" | "loading" | "done">("idle");
-
-  const handleDownload = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setState("loading");
-
-    // Convert Google Drive view link to direct download
-    let downloadUrl = url;
-    if (url.includes("drive.google.com/file/d/")) {
-      const fileId = url.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
-      if (fileId) downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-    }
-
-    // Open in new tab (safest cross-browser approach for Drive files)
-    window.open(downloadUrl, "_blank");
-
-    setState("done");
-    setTimeout(() => setState("idle"), 2000);
-  };
-
-  return (
-    <button
-      onClick={handleDownload}
-      className="text-[11px] px-3 py-1.5 rounded-lg bg-card/[0.06] text-muted-foreground font-medium hover:text-foreground hover:bg-card/[0.1] transition-all flex items-center gap-1.5 border border-border"
-    >
-      {state === "loading" ? (
-        <Loader size={11} className="animate-spin" />
-      ) : state === "done" ? (
-        <CheckCircle size={11} className="text-lone-success" />
-      ) : (
-        <Download size={11} />
-      )}
-      {state === "done" ? "Aberto!" : "Baixar"}
-    </button>
-  );
-}
-
-// ── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DesignPage() {
   const clients = useClientsStore((s) => s.clients);
-  // Rodrigo (11/09/2026): "todas as demandas sumiram". Não sumiram — o dono da demanda é resolvido
-  // pela lista de clientes, e enquanto ela não chega (ou se a carga falhou em silêncio) TODA
-  // demanda vira "sem dono" e some do quadro pessoal. O quadro mostrava "Sem itens" como se fosse
-  // verdade. Enquanto a carteira não carregou, o quadro não pode afirmar que está vazio.
+  // Rodrigo (11/09/2026): "todas as demandas sumiram". O dono da arte é resolvido pela lista de
+  // clientes; enquanto ela não chega, o quadro não pode afirmar que está vazio.
   const clientesCarregados = useClientsStore((s) => s.initialized);
   const clientesCarregando = useClientsStore((s) => s.loading);
   const initClients = useClientsStore((s) => s.init);
   const subClients = useClientsStore((s) => s.subscribeRealtime);
 
   const contentCards = useContentStore((s) => s.contentCards);
-  const contentApprovals = useContentStore((s) => s.contentApprovals);
-  // Alteração PENDENTE de um card: última avaliação = "rejected" E ainda não reentregue depois dela.
-  const alteracaoPendente = (c: ContentCard) => {
-    const rej = contentApprovals.find((a) => a.cardId === c.id && a.status === "rejected");
-    if (!rej) return null;
-    if (c.designerDeliveredAt && (rej.reviewedAt ?? "") <= c.designerDeliveredAt) return null; // já refez
-    return rej;
-  };
   const designRequests = useContentStore((s) => s.designRequests);
-  const updateContentCard = useContentStore((s) => s.updateContentCard);
-  const updateDesignRequest = useContentStore((s) => s.updateDesignRequest);
-  const deleteContentCard = useContentStore((s) => s.deleteContentCard);
-  const deleteDesignRequest = useContentStore((s) => s.deleteDesignRequest);
   const addDesignRequest = useContentStore((s) => s.addDesignRequest);
   const initContent = useContentStore((s) => s.init);
   const subContent = useContentStore((s) => s.subscribeRealtime);
@@ -479,9 +78,8 @@ export default function DesignPage() {
     return () => { u1(); u2(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Polling leve — realtime OFF no servidor (RAM). Sem isso, o designer fica congelado no
-  // snapshot do load: uma alteração/reprovação pedida DEPOIS pelo social nunca aparecia
-  // (contentApprovals não atualizava). Refetch a cada 45s com a aba visível + ao voltar o foco.
+  // Polling leve — realtime OFF no servidor (RAM). Sem isso, o designer fica congelado no snapshot do
+  // load: uma alteração pedida DEPOIS pelo social nunca aparecia.
   useEffect(() => {
     const tick = () => { if (document.visibilityState === "visible") refreshContent(); };
     const interval = setInterval(tick, 45000);
@@ -489,29 +87,36 @@ export default function DesignPage() {
     window.addEventListener("focus", tick);
     return () => { clearInterval(interval); document.removeEventListener("visibilitychange", tick); window.removeEventListener("focus", tick); };
   }, [refreshContent]);
-  // ── QUADRO ATIVO (10/09/2026). Roberto: "o designer Rhodrigo está vendo as coisas do designer
-  // Gabriel". Cada designer abre no PRÓPRIO quadro; o seletor existe pra quando um precisa ajudar o
-  // outro — esconder o quadro do colega quebraria justamente o pedido dele.
+
+  // ── QUADRO ATIVO (10/09/2026). Cada designer abre no PRÓPRIO quadro; o seletor existe pra quando
+  // um precisa ajudar o outro — esconder o quadro do colega quebraria justamente esse pedido.
   const [quadro, setQuadroRaw] = useState<string | null>(null); // null = ainda não decidiu
   const setQuadro = (valor: string) => {
     setQuadroRaw(valor);
-    // Preferência: falhar só significa abrir no quadro padrão da próxima vez.
     void chamar("/api/preferences", { key: "design_workspace", value: valor });
   };
-  const [tab, setTab] = useState<TabView>("kanbans");
-  const [kanbanGroupBy, setKanbanGroupBy] = useState<"person" | "client">("person"); // agrupar por pessoa ou por cliente (visão unificada)
+  const [tab, setTab] = useState<TabView>("producao");
+  const [vista, setVista] = useState<Vista>("meus");
   const { pendingTab, setPendingTab, setCurrentTab, secondaryOpen } = useNav();
 
   // Aba pedida pelo painel lateral ou pela busca ⌘K (só consome o pedido que é desta tela).
   useEffect(() => {
+    if (!pendingTab) return;
     if (pendingTab === "clientes") {
-      // Link antigo da aba "Clientes do Quadro": a carteira mora na lista única de Clientes.
       setPendingTab("");
       window.location.assign("/clients?resp=mine");
       return;
     }
-    if (pendingTab && ["kanbans", "requests", "performance", "history"].includes(pendingTab)) {
-      setTab(pendingTab as TabView);
+    if (pendingTab === "performance" || pendingTab === "history") {
+      setTab(pendingTab);
+      setPendingTab("");
+      return;
+    }
+    // kanbans → Meus; requests (Quadro de Tarefas) → Por designer; producao → como estava.
+    const v = pendingTab === "producao" ? null : lerVista(pendingTab);
+    if (pendingTab === "producao" || v) {
+      setTab("producao");
+      if (v) setVista(v);
       setPendingTab("");
     }
   }, [pendingTab, setPendingTab]);
@@ -520,203 +125,32 @@ export default function DesignPage() {
     setCurrentTab(tab);
   }, [tab, setCurrentTab]);
 
-  const [uploadCard, setUploadCard] = useState<ContentCard | null>(null);
   const [detailCard, setDetailCard] = useState<ContentCard | null>(null);
-  const [cardToDelete, setCardToDelete] = useState<ContentCard | null>(null);
-  const [reqToDelete, setReqToDelete] = useState<DesignRequest | null>(null);
-  const [briefingReq, setBriefingReq] = useState<DesignRequest | null>(null);
-  const [gerandoIa, setGerandoIa] = useState(false);
-  const [geracaoIa, setGeracaoIa] = useState<{ id: string; urls: string[] } | null>(null);
-  const [motivoIa, setMotivoIa] = useState<string | null>(null); // null = campo fechado
-  async function feedbackIa(feedback: "serviu" | "nao_serviu", motivo = "") {
-    if (!geracaoIa?.id) return;
-    const r = await chamar(`/api/ia/geracoes/${geracaoIa.id}/feedback`, { feedback, motivo });
-    if (r.ok) { toast.success(feedback === "serviu" ? "Anotado: serviu." : "Anotado: não serviu — vai calibrar as instruções."); setGeracaoIa(null); setMotivoIa(null); } else toast.error(`Não consegui anotar: ${r.erro}`);
-  }
-  // Upload de arte direto do modal de briefing
-  const briefingUploadInputRef = useRef<HTMLInputElement>(null);
-  const [briefingUploading, setBriefingUploading] = useState(false);
-  const [briefingUploadError, setBriefingUploadError] = useState<string | null>(null);
-  const [briefingUploadOk, setBriefingUploadOk] = useState(false);
-  // Caixinha de comentário do designer na demanda (pedir ajuste no briefing etc.)
-  const [designerNoteText, setDesignerNoteText] = useState("");
-  const [savingNote, setSavingNote] = useState(false);
-  const [noteSaved, setNoteSaved] = useState(false);
-
-  useEffect(() => {
-    setBriefingUploading(false);
-    setBriefingUploadError(null);
-    setBriefingUploadOk(false);
-    if (briefingUploadInputRef.current) briefingUploadInputRef.current.value = "";
-    setDesignerNoteText(briefingReq?.designerNote ?? "");
-    setNoteSaved(false);
-  }, [briefingReq?.id, briefingReq?.designerNote]);
-
-  async function saveDesignerNote() {
-    if (!briefingReq) return;
-    const note = designerNoteText.trim();
-    setSavingNote(true);
-    try {
-      await updateDesignRequest(briefingReq.id, { designerNote: note });
-      setBriefingReq({ ...briefingReq, designerNote: note });
-      setNoteSaved(true);
-      setTimeout(() => setNoteSaved(false), 2000);
-      if (note) {
-        pushNotification("content", "Designer comentou na demanda",
-          `"${briefingReq.title}" (${briefingReq.clientName}) — ${currentUser}: ${note.slice(0, 80)}`, briefingReq.clientId, briefingReq.contentCardId ?? undefined);
-      }
-    } catch (err) {
-      avisarFalha("Não consegui salvar o comentário")(err);
-    } finally { setSavingNote(false); }
-  }
-
-  async function handleBriefingArtUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !briefingReq) return;
-    setBriefingUploadError(null);
-    setBriefingUploadOk(false);
-
-    if (file.size === 0) { setBriefingUploadError("Arquivo vazio."); return; }
-    if (file.size > 25 * 1024 * 1024) {
-      setBriefingUploadError(`Arquivo muito grande (${(file.size / 1024 / 1024).toFixed(1)}MB). Máximo: 25MB`);
-      return;
-    }
-    const allowed = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "application/pdf", "video/mp4", "video/webm"];
-    if (!allowed.includes(file.type)) {
-      setBriefingUploadError(`Tipo não suportado (${file.type}).`);
-      return;
-    }
-
-    const isDelivery = role === "designer";
-    // Entrega do designer sobe como ANEXO do card vinculado (card_attachments), não como upload
-    // avulso — assim o social vê TODAS as artes (carrossel), não só a última. Sem card vinculado,
-    // ou arquivo não-imagem (PDF/vídeo, que card_attachments não guarda) → cai no upload avulso.
-    const linkedCard = isDelivery
-      ? ((briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null) ??
-         contentCards.find((c) => c.designRequestId === briefingReq.id) ?? null)
-      : null;
-    const cardMimes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"];
-    const asCardAttachment = Boolean(linkedCard) && cardMimes.includes(file.type);
-
-    setBriefingUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("cardId", asCardAttachment ? linkedCard!.id : briefingReq.id);
-      // ENTREGA: é a arte final do designer, a única que a publicação automática pode mandar
-      // pro Instagram. Referência do social é marcada como "referencia" na criação da demanda.
-      formData.append("tipo", "entrega");
-      const res = await chamar<{ url?: string; attachments?: CardAttachment[] }>("/api/upload-art", formData);
-      if (!res.ok || !res.data) {
-        setBriefingUploadError(res.erro ?? "Falha no upload");
-        console.error("[briefingReq upload]", { status: res.status, erro: res.erro });
-        return;
-      }
-      const data = res.data;
-      // Modo card devolve { attachments: [row...] }; modo avulso devolve { url }.
-      const created = (Array.isArray(data.attachments) ? data.attachments : []) as CardAttachment[];
-      const artUrl = (data.url as string) ?? created[created.length - 1]?.url;
-      if (!artUrl) {
-        setBriefingUploadError("Resposta inesperada do upload — tente de novo.");
-        console.error("[briefingReq upload] resposta sem url", data);
-        return;
-      }
-      const nextAttachments = [...(briefingReq.attachments ?? []), artUrl];
-
-      if (isDelivery) {
-        // OPERAÇÃO ÚNICA (Fase 1, 18/09): era o "segundo caminho" de entrega — gravava demanda e card
-        // em chamadas separadas, na ordem inversa do modal Entregar Arte, e sem a revisão por IA.
-        // Agora chama a mesma operação; o estado final vem do servidor.
-        const r = linkedCard ? await entregarArte({
-          cardId: linkedCard.id,
-          designRequestId: briefingReq.id,
-          attachmentIds: created.map((a) => a.id),
-          urlsExternas: created.length === 0 ? [artUrl] : [],
-          operationId: novoOperationId(),
-        }) : null;
-        if (!linkedCard || !r) {
-          // Demanda sem card (tarefa própria do designer): a operação exige card, então grava o
-          // arquivo e o "concluído" num update só — o servidor recusa concluir sem anexo.
-          try {
-            await updateDesignRequest(briefingReq.id, { attachments: nextAttachments, status: "done" });
-          } catch (err) {
-            const m = err instanceof Error ? err.message : "erro";
-            setBriefingUploadError(`O arquivo subiu, mas a demanda não foi marcada como entregue (${m}). Tente de novo.`);
-            return;
-          }
-          setBriefingReq({ ...briefingReq, attachments: nextAttachments, status: "done" });
-        } else if (!r.ok || !r.data?.card) {
-          setBriefingUploadError(r.erro ?? r.data?.error ?? "A arte subiu, mas a entrega não foi registrada. Tente de novo.");
-          trilha("entregar:erro", { card: linkedCard.id, msg: r.erro ?? r.data?.error ?? "?", via: "briefing" });
-          return;
-        } else {
-          const estado = r.data;
-          marcarMutacao();
-          useContentStore.setState((s) => ({
-            contentCards: s.contentCards.map((c) => c.id === linkedCard.id
-              ? { ...c, cardAttachments: [...(c.cardAttachments ?? []), ...created], imageUrl: estado.card.image_url ?? c.imageUrl ?? created[0]?.url, designerDeliveredAt: estado.card.designer_delivered_at ?? undefined, designerDeliveredBy: estado.card.designer_delivered_by ?? undefined }
-              : c),
-            designRequests: s.designRequests.map((d) => d.id === briefingReq.id ? { ...d, status: estado.demanda?.status as DesignRequest["status"] ?? "done", attachments: estado.demanda?.attachments ?? nextAttachments } : d),
-          }));
-          setBriefingReq({ ...briefingReq, attachments: estado.demanda?.attachments ?? nextAttachments, status: (estado.demanda?.status as DesignRequest["status"]) ?? "done" });
-          trilha("entregar:ok", { card: linkedCard.id, artes: estado.delivery.urls.length, via: "briefing" });
-          void chamar("/api/cs/revisar-entrega", { cardId: linkedCard.id });
-        }
-        pushNotification("content", "Arte entregue pelo Designer", `"${briefingReq.title}" (${briefingReq.clientName}) — arte pronta para confirmação.`, briefingReq.clientId, linkedCard?.id);
-        import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
-      } else {
-        // Social media / outros adicionam referência — anexa e notifica designer
-        try {
-          await updateDesignRequest(briefingReq.id, { attachments: nextAttachments });
-        } catch (err) {
-          const m = err instanceof Error ? err.message : "erro";
-          setBriefingUploadError(`A imagem subiu, mas não vinculou ao pedido (${m}). Tente de novo.`);
-          return;
-        }
-        setBriefingReq({ ...briefingReq, attachments: nextAttachments });
-        pushNotification("content", "Referência enviada", `"${briefingReq.title}" (${briefingReq.clientName}) — ${currentUser} enviou uma imagem de referência.`, briefingReq.clientId, linkedCard?.id);
-      }
-
-      setBriefingUploadOk(true);
-      setTimeout(() => setBriefingUploadOk(false), 4000);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro de conexão";
-      console.error("[briefingReq upload exception]", err);
-      setBriefingUploadError(`Erro: ${msg}`);
-    } finally {
-      setBriefingUploading(false);
-      if (briefingUploadInputRef.current) briefingUploadInputRef.current.value = "";
-    }
-  }
-  const [nonDeliveryCard, setNonDeliveryCard] = useState<ContentCard | null>(null);
-  const [nonDeliveryReason, setNonDeliveryReason] = useState("");
-  const [nonDeliveryCustomReason, setNonDeliveryCustomReason] = useState("");
-  const [blockingCard, setBlockingCard] = useState<ContentCard | null>(null);
-  const [blockReason, setBlockReason] = useState("");
-
-  useEffect(() => {
-    setNonDeliveryCustomReason("");
-  }, [nonDeliveryCard?.id]);
-
-  // Self-initiated task + client drawer
   const [newTaskOpen, setNewTaskOpen] = useState(false);
 
-  // Busca no board (título/cliente/formato)
-  const [boardSearch, setBoardSearch] = useState("");
-  const boardQuery = boardSearch.trim().toLowerCase();
-  const matchesBoardQuery = (title?: string, clientName?: string, format?: string) => {
-    if (!boardQuery) return true;
-    return `${title ?? ""} ${clientName ?? ""} ${format ?? ""}`.toLowerCase().includes(boardQuery);
-  };
+  // ?card=<id> (Meu Trabalho, avisos) abre o card; ?vista= escolhe a vista do quadro.
+  const cardDoLinkRef = useRef<string | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const v = lerVista(q.get("vista"));
+    if (v) { setTab("producao"); setVista(v); }
+    cardDoLinkRef.current = q.get("card");
+  }, []);
+  useEffect(() => {
+    const id = cardDoLinkRef.current;
+    if (!id || !contentCards.length) return;
+    const card = contentCards.find((c) => c.id === id);
+    cardDoLinkRef.current = null;
+    if (card) setDetailCard(card);
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [contentCards]);
 
   // ── Quadros que existem hoje, tirados do dado (ver lib/design/dono.ts).
   const quadros = useMemo(() => quadrosDisponiveis(designRequests, clients), [designRequests, clients]);
   const contagens = useMemo(() => contagemPorQuadro(designRequests, clients), [designRequests, clients]);
 
-  // Preferência salva; na falta dela, o designer cai no próprio quadro e o admin na visão geral.
+  // Preferência salva; na falta dela, o designer cai no próprio quadro e a gestão na visão geral.
   useEffect(() => {
-    // Só depois da hidratação: antes dela o contexto devolve o perfil padrão (admin), e o designer
-    // cairia na visão geral em vez do próprio quadro.
     if (quadro !== null || !hydrated) return;
     let vivo = true;
     chamar<{ design_workspace?: unknown }>("/api/preferences?keys=design_workspace").then((r) => {
@@ -728,19 +162,17 @@ export default function DesignPage() {
   }, [quadro, role, currentUser, hydrated]);
 
   const quadroAtivo = quadro ?? (role === "designer" ? currentUser : "Todos");
-  // O valor ativo TEM que existir entre as opções. Um <select> com value que não casa mostra
-  // visualmente a primeira opção — a pessoa lê "Rodrigo" e está vendo outro quadro. Já aconteceu
-  // aqui com o seletor de cliente. Designer sem nenhum cliente ainda entra na lista por isso.
+  // O valor ativo TEM que existir entre as opções: um <select> com value que não casa mostra a
+  // primeira opção — a pessoa lê um nome e está vendo outro quadro.
   const opcoesQuadro = useMemo(
     () => (quadroAtivo !== "Todos" && !quadros.includes(quadroAtivo) ? [quadroAtivo, ...quadros] : quadros),
     [quadros, quadroAtivo],
   );
-  // Olhando o quadro de outra pessoa: a interface avisa, mas NÃO trava — é pra ajudar.
   const quadroDeOutro = role === "designer" && quadroAtivo !== currentUser;
 
-  // Cards do quadro ativo. O card segue a carteira do cliente (não existe atribuição por card).
+  // Clientes da carteira do quadro ativo (para o alerta de datas e a Nova Tarefa).
   const myClientIds = useMemo(() => {
-    if (quadroAtivo === "Todos") return null; // null = tudo
+    if (quadroAtivo === "Todos") return null;
     return new Set(
       clients.filter((c) => {
         const dono = (c.assignedDesigner ?? "").trim();
@@ -749,98 +181,47 @@ export default function DesignPage() {
     );
   }, [clients, quadroAtivo]);
 
-  const myContentCards = useMemo(() => {
-    let list = myClientIds ? contentCards.filter((c) => myClientIds.has(c.clientId)) : contentCards;
-    if (boardQuery) list = list.filter((c) => matchesBoardQuery(c.title, c.clientName, c.format));
-    return list;
-  }, [contentCards, myClientIds, boardQuery]);
-
-  // As DEMANDAS não eram filtradas — o comentário antigo dizia "o designer da agência atende todos
-  // os clientes", verdade enquanto havia um só. Era isso que punha as 184 do Gabriel na tela do
-  // Rodrigo junto com as 490 dele.
-  const myDesignRequests = useMemo(
-    () => designRequests.filter((d) => ehDoQuadro(d, clients, quadroAtivo)),
-    [designRequests, clients, quadroAtivo],
-  );
-
-  // Get social media people from content cards
-  const socialPeople = useMemo(() => {
-    return [...new Set(myContentCards.map((c) => c.socialMedia))].sort();
-  }, [myContentCards]);
-
-  // Group cards per social media person
+  // Os cards do quadro ativo, já com a etapa de design resolvida (mesma conta do quadro).
+  const itens = useMemo(() => {
+    const todos = montarItens(contentCards, designRequests, clients.map((c) => ({ id: c.id, assignedDesigner: c.assignedDesigner })));
+    return todos.filter((it) => passaNoFiltro(it, { pessoa: quadroAtivo, modo: "designer" }));
+  }, [contentCards, designRequests, clients, quadroAtivo]);
+  const myContentCards = useMemo(() => itens.map((it) => it.card), [itens]);
+  const socialPeople = useMemo(() => [...new Set(myContentCards.map((c) => c.socialMedia).filter(Boolean))].sort(), [myContentCards]);
   const cardsBySocial = useMemo(() => {
     const map: Record<string, ContentCard[]> = {};
-    socialPeople.forEach((p) => {
-      map[p] = myContentCards.filter((c) => c.socialMedia === p);
-    });
+    for (const p of socialPeople) map[p] = myContentCards.filter((c) => c.socialMedia === p);
     return map;
   }, [myContentCards, socialPeople]);
 
-  // Agrupamento por cliente (visão unificada — clientes como colunas, estilo Trello)
-  const cardsByClient = useMemo(() => {
-    const map: Record<string, ContentCard[]> = {};
-    myContentCards.forEach((c) => { (map[c.clientId] ??= []).push(c); });
-    return map;
-  }, [myContentCards]);
-  const clientsWithCards = useMemo(() => {
-    return clients
-      .filter((cl) => (cardsByClient[cl.id]?.length ?? 0) > 0)
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [clients, cardsByClient]);
-
-  // Stats
-  const needsArt = myContentCards.filter((c) =>
-    !temArteEntregue(c) && ["in_production", "approval", "client_approval"].includes(c.status)
-  ).length;
-  const totalInProduction = myContentCards.filter((c) => c.status === "in_production").length;
-  const totalDone = myDesignRequests.filter((r) => r.status === "done").length;
-  // URGENTE PRO DESIGNER = arte que ELE ainda deve. Medido em 10/09/2026: dos 66 que este contador
-  // mostrava, 61 já tinham `designerDeliveredAt` — estavam parados em aprovação do social ou do
-  // cliente. O quadro cobrava o designer por trabalho que ele já tinha feito, todo dia, e um número
-  // que não é dele vira número que ele aprende a ignorar. O que espera outra pessoa é `aguardando`.
-  const urgentCards = myContentCards.filter((c) => {
-    if (c.status === "published" || c.status === "scheduled") return false;
-    if (c.designerDeliveredAt && !alteracaoPendente(c)) return false;
-    const u = getDeadlineUrgency(c.dueDate);
-    return u === "overdue" || u === "today";
-  }).length;
-  // Entregue e vencido, esperando aprovação de outra pessoa. Não é cobrança do designer, é visão.
-  const aguardandoTerceiro = myContentCards.filter((c) => {
-    if (c.status === "published" || c.status === "scheduled") return false;
-    if (!c.designerDeliveredAt || alteracaoPendente(c)) return false;
-    const u = getDeadlineUrgency(c.dueDate);
-    return u === "overdue" || u === "today";
-  }).length;
-  // Alterações pendentes: card reprovado pelo social e ainda não refeito. Contador persistente
-  // (o toast some em segundos; assim o designer bate o olho e sabe que tem, sem depender da tela).
-  const alteracoesPendentes = myContentCards.filter((c) => alteracaoPendente(c)).length;
-
-  // "Concluído" só existe com arte. Com card: abre o Entregar Arte (operação única, transacional).
-  // Sem card (tarefa própria): o arquivo final sobe pelo botão do briefing, que conclui junto.
-  const concluirDemanda = (req: DesignRequest) => {
-    const card = (req.contentCardId ? contentCards.find((c) => c.id === req.contentCardId) : undefined)
-      ?? contentCards.find((c) => c.designRequestId === req.id);
-    if (card) { setBriefingReq(null); setUploadCard(card); return; }
-    toast.info("Anexe o arquivo final em \"Enviar Arte\" — é isso que conclui a demanda.");
-    setBriefingReq(req);
-  };
-  const ehGestao = role === "admin" || role === "manager";
+  // ── Números do topo (a mesma leitura do quadro) ──
+  const hoje = todaySP();
+  const devendo = itens.filter((it) => it.etapa === "com_designer" && designerDeve(it.estado));
+  const needsArt = devendo.length;
+  const totalFazendo = itens.filter((it) => it.estado === "em_andamento").length;
+  // Entregues nos últimos 30 dias, pela data da entrega no card (o updated_at do pedido muda por
+  // outros motivos — renomear o card, ligar o pedido — e não é a hora da entrega).
+  const desde30 = somarDias(hoje, -30);
+  const totalDone = itens.filter((it) => it.card.designerDeliveredAt && spDateStr(it.card.designerDeliveredAt) >= desde30).length;
+  // URGENTE PRO DESIGNER = arte que ELE ainda deve, com o prazo vencido ou hoje (10/09/2026: 61 dos 66
+  // que o contador antigo mostrava já estavam entregues — número que não é dele vira número ignorado).
+  const urgentCards = devendo.filter((it) => it.prazoArte && diasEntre(hoje, it.prazoArte) <= 0).length;
+  const aguardandoTerceiro = itens.filter((it) =>
+    it.estado === "entregue" && statusNaEtapa(it.card.status, "revisao", "com_cliente") && it.card.dueDate && diasEntre(hoje, it.card.dueDate) <= 0).length;
+  const alteracoesPendentes = itens.filter((it) => it.estado === "alteracao").length;
+  const proximos = [...devendo].filter((it) => it.prazoArte).sort(compararItens).slice(0, 6);
 
   return (
     <div className="flex flex-col flex-1 overflow-auto">
-      <Header title="Designer" subtitle="Produção de artes — kanbans por social media" />
+      <Header title="Designer" subtitle="Fila de artes — o quadro de produção do lado de quem faz a arte" />
 
       <div className="p-6 space-y-6 animate-fade-in">
-        {/* Uma linha só: o bloco do mês inteiro (com feriado de cidade que não é de ninguém) era o
-            que mais pesava no topo. Regional só entra se for da cidade de um cliente do quadro. */}
         <MonthObservancesAlert
           proximosDias={21}
           cidades={clients.filter((c) => !myClientIds || myClientIds.has(c.id)).map((c) => c.enderecoCidade ?? "").filter(Boolean)}
         />
 
-        {/* Seletor de quadro. Cada designer abre no seu; trocar serve pra ajudar o outro, e por
-            isso o quadro do colega abre EDITÁVEL — só sinalizado. */}
+        {/* Seletor de quadro. Cada designer abre no seu; trocar serve pra ajudar o outro. */}
         {opcoesQuadro.length > 1 && (
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-xs text-muted-foreground uppercase tracking-wider">Quadro de:</span>
@@ -848,6 +229,7 @@ export default function DesignPage() {
               <select
                 value={quadroAtivo}
                 onChange={(e) => setQuadro(e.target.value)}
+                aria-label="Quadro de qual designer"
                 className="bg-card border border-border rounded-lg px-4 py-2 text-sm text-foreground outline-none focus:border-primary appearance-none cursor-pointer pr-8"
               >
                 <option value="Todos">Visão geral (todos os designers)</option>
@@ -872,557 +254,30 @@ export default function DesignPage() {
           </div>
         )}
 
-        {/* Abas: uma navegação por tela. Com o painel lateral aberto (computador), as abas moram lá
-            com os mesmos nomes; no celular, ou com o painel fechado, aparecem aqui. */}
+        {/* Abas: com o painel lateral aberto (computador) elas moram lá; no celular, aparecem aqui. */}
         <div className={`flex items-center gap-3 flex-wrap ${secondaryOpen ? "lg:hidden" : ""}`}>
-          <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-            <button
-              onClick={() => setTab("kanbans")}
-              className={`text-xs px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
-                tab === "kanbans" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Columns3 size={13} /> Kanbans Social Media
-            </button>
-            <button
-              onClick={() => setTab("requests")}
-              className={`text-xs px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
-                tab === "requests" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <LayoutList size={13} /> Quadro de Tarefas
-            </button>
-            <button
-              onClick={() => setTab("performance")}
-              className={`text-xs px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
-                tab === "performance" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <BarChart2 size={13} /> Performance
-            </button>
-            <button
-              onClick={() => setTab("history")}
-              className={`text-xs px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
-                tab === "history" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Clock size={13} /> Histórico
-            </button>
+          <div role="tablist" aria-label="Abas do Designer" className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+            {([["producao", "Produção"], ["performance", "Performance"], ["history", "Histórico"]] as const).map(([id, rotulo]) => (
+              <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+                className={`text-xs px-3 py-1.5 rounded-md transition-colors ${tab === id ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                {rotulo}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Stats */}
+        {/* Números */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="card flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${needsArt > 0 ? "bg-primary/15" : "bg-card"}`}>
-              <ImageIcon size={18} className={needsArt > 0 ? "text-primary" : "text-muted-foreground"} />
-            </div>
-            <div>
-              <p className={`text-2xl font-semibold ${needsArt > 0 ? "text-primary" : "text-foreground"}`}>{needsArt}</p>
-              <p className="text-xs text-muted-foreground">Precisam de arte</p>
-            </div>
-          </div>
-          <div className="card flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center">
-              <Loader size={18} className="text-primary" />
-            </div>
-            <div>
-              <p className="text-2xl font-semibold text-foreground">{totalInProduction}</p>
-              <p className="text-xs text-muted-foreground">Em produção</p>
-            </div>
-          </div>
-          <div className="card flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center">
-              <CheckCircle size={18} className="text-primary" />
-            </div>
-            <div>
-              <p className="text-2xl font-semibold text-foreground">{totalDone}</p>
-              <p className="text-xs text-muted-foreground">Designs concluídos</p>
-            </div>
-          </div>
-          <div className="card flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${urgentCards > 0 ? "bg-destructive/15" : "bg-card"}`}>
-              <AlertTriangle size={18} className={urgentCards > 0 ? "text-destructive" : "text-muted-foreground"} />
-            </div>
-            <div>
-              <p className={`text-2xl font-semibold ${urgentCards > 0 ? "text-destructive" : "text-foreground"}`}>{urgentCards}</p>
-              <p className="text-xs text-muted-foreground">Urgentes</p>
-              {aguardandoTerceiro > 0 && (
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  +{aguardandoTerceiro} entregue{aguardandoTerceiro > 1 ? "s" : ""}, aguardando aprovação
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="card flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${alteracoesPendentes > 0 ? "bg-destructive/15" : "bg-card"}`}>
-              <RotateCcw size={18} className={alteracoesPendentes > 0 ? "text-destructive" : "text-muted-foreground"} />
-            </div>
-            <div>
-              <p className={`text-2xl font-semibold ${alteracoesPendentes > 0 ? "text-destructive" : "text-foreground"}`}>{alteracoesPendentes}</p>
-              <p className="text-xs text-muted-foreground">Alterações</p>
-            </div>
-          </div>
+          <Numero icone={<ImageIcon size={18} />} valor={needsArt} rotulo="Com você (arte a fazer)" destaque={needsArt > 0} />
+          <Numero icone={<Palette size={18} />} valor={totalFazendo} rotulo="Fazendo agora" />
+          <Numero icone={<CheckCircle size={18} />} valor={totalDone} rotulo="Entregues (30 dias)" />
+          <Numero icone={<AlertTriangle size={18} />} valor={urgentCards} rotulo="Prazo vencido ou hoje" alerta={urgentCards > 0}
+            extra={aguardandoTerceiro > 0 ? `+${aguardandoTerceiro} entregue${aguardandoTerceiro > 1 ? "s" : ""}, esperando aprovação` : undefined} />
+          <Numero icone={<RotateCcw size={18} />} valor={alteracoesPendentes} rotulo="Alterações" alerta={alteracoesPendentes > 0} />
         </div>
 
-        {/* ═══ KANBANS TAB ═══ */}
-        {tab === "kanbans" && (
-          <div className="space-y-8">
-            {/* Action bar: designer pode criar tarefa propria */}
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">Gerencie as artes em produção e crie tarefas próprias.</p>
-              <button
-                onClick={() => setNewTaskOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-xs font-medium transition-colors"
-              >
-                <Plus size={12} /> Nova Tarefa
-              </button>
-            </div>
-
-            {/* Toggle de agrupamento: por pessoa (social) vs por cliente (unificada) */}
-            <div className="flex items-center gap-1 bg-card border border-border rounded-lg p-1 w-fit">
-              <button
-                onClick={() => setKanbanGroupBy("person")}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  kanbanGroupBy === "person" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Por pessoa
-              </button>
-              <button
-                onClick={() => setKanbanGroupBy("client")}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  kanbanGroupBy === "client" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Por cliente (unificada)
-              </button>
-
-              {/* Busca no board (título/cliente/formato) */}
-              <div className="relative ml-1">
-                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                <input
-                  value={boardSearch}
-                  onChange={(e) => setBoardSearch(e.target.value)}
-                  placeholder="Buscar arte..."
-                  className="h-8 w-40 rounded-md border border-border bg-background pl-7 pr-6 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/40"
-                />
-                {boardSearch && (
-                  <button
-                    onClick={() => setBoardSearch("")}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    aria-label="Limpar busca"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <CsAgentInbox cards={myContentCards} onOpen={setDetailCard} titulo="CS Agente — pra produzir" />
-
-            {/* Pending deadlines strip */}
-            {(() => {
-              const upcoming = myContentCards
-                .filter((c) => c.dueDate && c.status !== "published" && c.status !== "scheduled" && !c.designerDeliveredAt)
-                .sort((a, b) => {
-                  const cmp = (a.dueDate ?? "").localeCompare(b.dueDate ?? "");
-                  if (cmp !== 0) return cmp;
-                  return (a.dueTime ?? "23:59").localeCompare(b.dueTime ?? "23:59");
-                })
-                .slice(0, 6);
-              if (upcoming.length === 0) return null;
-              return (
-                <div className="bg-card border border-border rounded-xl p-4">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-3 flex items-center gap-1.5">
-                    <Clock size={11} /> Próximas Pendências — Artes sem Entrega
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {upcoming.map((card) => {
-                      const urg = getDeadlineUrgency(card.dueDate);
-                      const isOverdue = urg === "overdue";
-                      const isToday = urg === "today";
-                      return (
-                        <div
-                          key={card.id}
-                          className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors cursor-pointer hover:border-primary/30 ${
-                            isOverdue ? "bg-destructive/5 border-destructive/20" : isToday ? "bg-primary/5 border-primary/15" : "bg-muted/50 border-border"
-                          }`}
-                          onClick={() => setUploadCard(card)}
-                        >
-                          <div className={`w-2 h-2 rounded-full shrink-0 ${isOverdue ? "bg-destructive" : isToday ? "bg-lone-warning" : "bg-muted-foreground"}`} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs text-foreground font-medium truncate">{card.title}</p>
-                            <p className="text-[10px] text-muted-foreground">{card.clientName} · {card.socialMedia}</p>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <p className={`text-[10px] font-medium ${isOverdue ? "text-destructive" : isToday ? "text-primary" : "text-muted-foreground"}`}>
-                              {card.dueDate}
-                            </p>
-                            {card.dueTime && (
-                              <p className="text-[10px] text-foreground font-semibold">{card.dueTime}</p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {kanbanGroupBy === "person" && (
-            <>
-            {socialPeople.map((person) => {
-              const cards = cardsBySocial[person] ?? [];
-              const personNeedsArt = cards.filter((c) =>
-                !temArteEntregue(c) && ["in_production", "approval", "client_approval"].includes(c.status)
-              ).length;
-
-              return (
-                <div key={person} className="space-y-3">
-                  {/* Person header */}
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                      <User size={14} className="text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground">{person}</h3>
-                      <p className="text-xs text-muted-foreground">
-                        {cards.length} cards
-                        {personNeedsArt > 0 && (
-                          <span className="text-primary ml-2">
-                            · {personNeedsArt} precisam de arte
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Kanban for this person — sorted by deadline */}
-                  <KanbanErrorBoundary context={`Kanban Designer · ${person}`}>
-                  <KanbanBoard
-                    columns={DESIGNER_COLUMNS.map((col) => ({
-                      id: col.id,
-                      title: col.title,
-                      color: col.color,
-                      items: cards
-                        .filter((c) => col.statuses.includes(c.status))
-                        .sort((a, b) => {
-                          // at_risk clients first, then by deadline
-                          const aClient = clients.find((cl) => cl.id === a.clientId);
-                          const bClient = clients.find((cl) => cl.id === b.clientId);
-                          const aRisk = aClient?.status === "at_risk" ? 0 : 1;
-                          const bRisk = bClient?.status === "at_risk" ? 0 : 1;
-                          if (aRisk !== bRisk) return aRisk - bRisk;
-                          // Then by budget (high first)
-                          const aBudget = aClient?.monthlyBudget ?? 0;
-                          const bBudget = bClient?.monthlyBudget ?? 0;
-                          if (aBudget !== bBudget) return bBudget - aBudget;
-                          // Then by deadline
-                          if (!a.dueDate && !b.dueDate) return 0;
-                          if (!a.dueDate) return 1;
-                          if (!b.dueDate) return -1;
-                          return a.dueDate.localeCompare(b.dueDate);
-                        })
-                        .map((c) => ({
-                          id: c.id,
-                          title: c.title,
-                          clientName: c.clientName,
-                          format: c.format,
-                          priority: c.priority,
-                          dueDate: c.dueDate,
-                          dueTime: c.dueTime,
-                          imageUrl: arteEntregue(c) ?? undefined,
-                          briefing: c.briefing,
-                          requestedByTraffic: c.requestedByTraffic,
-                          _card: c,
-                        })),
-                    }))}
-                    renderCard={(item) => {
-                      const urgency = getDeadlineUrgency(item.dueDate);
-                      const badge = urgency && urgency !== "ok" ? URGENCY_BADGE[urgency] : null;
-                      const hasArt = temArteEntregue(item._card as ContentCard);
-                      const client = clients.find((c) => c.id === (item._card as ContentCard).clientId);
-                      const isAtRisk = client?.status === "at_risk";
-                      const budgetTier = (client?.monthlyBudget ?? 0) >= 8000 ? "high" : (client?.monthlyBudget ?? 0) >= 4000 ? "med" : "low";
-
-                      const fullCard = item._card as ContentCard;
-                      return (
-                        <div
-                          onClick={() => setDetailCard(fullCard)}
-                          className={`bg-card border rounded-lg p-3 space-y-2 transition-colors cursor-pointer ${
-                          isAtRisk
-                            ? "border-destructive/30 bg-destructive/[0.03]"
-                            : fullCard.status === "blocked"
-                            ? "border-destructive/40 bg-destructive/[0.05]"
-                            : !hasArt && ["in_production", "approval", "client_approval"].includes(fullCard.status)
-                              ? "border-lone-warning-border bg-primary/5"
-                              : "border-border hover:border-primary/30"
-                        }`}>
-                          {/* Client risk + budget indicator */}
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {isAtRisk && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-destructive/15 text-destructive border border-destructive/20 font-semibold">RISCO</span>
-                            )}
-                            {budgetTier === "high" && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-semibold">$$$$</span>
-                            )}
-                            {item.requestedByTraffic && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-medium flex items-center gap-0.5">
-                                <Zap size={8} /> TRÁFEGO
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Blocked reason banner */}
-                          {fullCard.status === "blocked" && fullCard.blockedReason && (
-                            <div className="px-2 py-1.5 rounded-md bg-destructive/10 border border-destructive/20 text-[10px] text-destructive font-medium">
-                              Bloqueado: {fullCard.blockedReason}
-                            </div>
-                          )}
-
-                          {/* Art thumbnail */}
-                          {item.imageUrl && (
-                            <div className="w-full h-20 rounded-md overflow-hidden bg-muted">
-                              <SignedImage src={item.imageUrl!} alt="" className="w-full h-full object-cover" />
-                            </div>
-                          )}
-
-                          <p className="text-sm font-medium text-foreground leading-tight">{item.title}</p>
-
-                          <div className="flex items-center gap-2 text-xs">
-                            <span className="text-primary">{item.clientName}</span>
-                            <span className="text-muted-foreground">{item.format}</span>
-                          </div>
-
-                          {/* Date + Time + Urgency */}
-                          {item.dueDate && (
-                            <div className="flex items-center gap-1.5 text-[10px]">
-                              <Clock size={9} className="text-muted-foreground" />
-                              <span className="text-muted-foreground">{item.dueDate}</span>
-                              {item.dueTime && <span className="text-foreground font-medium">{item.dueTime}</span>}
-                              {badge && (
-                                <span className={`px-1.5 py-0.5 rounded border ml-auto ${badge.cls}`}>
-                                  {badge.label}
-                                </span>
-                              )}
-                            </div>
-                          )}
-
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={`badge border text-[10px] ${getPriorityColor(item.priority)}`}>
-                              {getPriorityLabel(item.priority)}
-                            </span>
-                            {hasArt ? (
-                              <span className="text-[10px] text-lone-success flex items-center gap-0.5">
-                                <CheckCircle size={9} /> Arte
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                                <ImageIcon size={9} /> Sem arte
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Drive quick access */}
-                          {client?.driveLink && (
-                            <a
-                              href={client.driveLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-card/[0.04] border border-border text-[10px] text-muted-foreground hover:text-primary hover:border-primary/30 transition-all w-full"
-                            >
-                              <FolderOpen size={10} className="shrink-0" />
-                              <span className="truncate">Abrir Drive — {item.clientName}</span>
-                            </a>
-                          )}
-
-                          {/* Handoff status */}
-                          {(() => {
-                            const revisao = alteracaoPendente(fullCard);
-                            return (
-                              <>
-                                {/* Alteração solicitada pelo social → o designer PRECISA refazer.
-                                    Substitui o "Entregue" (que enganava: parecia que já tinha ido). */}
-                                {revisao && (
-                                  <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[10px] text-destructive">
-                                    <div className="flex items-center gap-1 font-semibold"><RotateCcw size={10} /> Alteração solicitada</div>
-                                    {revisao.reason && <div className="mt-0.5 leading-snug text-destructive/90">{revisao.reason}</div>}
-                                  </div>
-                                )}
-                                {fullCard.designerDeliveredAt && !revisao && (
-                                  <div className="flex items-center gap-1 text-[10px]">
-                                    <CheckCircle size={9} className="text-primary" />
-                                    <span className="text-primary">Entregue</span>
-                                    {fullCard.socialConfirmedAt ? (
-                                      <span className="text-primary ml-1">· Confirmado</span>
-                                    ) : (
-                                      <span className="text-primary ml-1">· Aguardando social</span>
-                                    )}
-                                  </div>
-                                )}
-                                {fullCard.nonDeliveryReason && (
-                                  <div className="flex items-center gap-1 text-[10px] text-destructive" title={fullCard.nonDeliveryReason}>
-                                    <FileWarning size={9} /> N/Entregue: {fullCard.nonDeliveryReason.slice(0, 30)}...
-                                  </div>
-                                )}
-                              </>
-                            );
-                          })()}
-
-                          {/* Actions */}
-                          <div className="flex items-center gap-1.5 pt-2 border-t border-border flex-wrap">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setUploadCard(fullCard); }}
-                              className="text-[11px] px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/80 transition-all flex items-center gap-1.5"
-                            >
-                              <Upload size={11} />
-                              {hasArt ? "Trocar Arte" : "Enviar Arte"}
-                            </button>
-                            {item.imageUrl && (
-                              <DownloadButton url={item.imageUrl} title={item.title} />
-                            )}
-                            {(() => {
-                              const fc = item._card as ContentCard;
-                              const isOverdue = item.dueDate && getDeadlineUrgency(item.dueDate) === "overdue";
-                              if (fc.nonDeliveryReason || fc.status === "published" || fc.status === "scheduled") return null;
-                              if (!isOverdue) return null;
-                              return (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setNonDeliveryCard(fc); }}
-                                  className="text-[10px] px-2 py-1 rounded-md bg-destructive/15 text-destructive hover:bg-destructive/25 transition-colors flex items-center gap-1"
-                                >
-                                  <FileWarning size={10} /> Reportar
-                                </button>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      );
-                    }}
-                    onMove={(itemId, _from, to) => {
-                      const card = contentCards.find((c) => c.id === itemId);
-                      if (!card) return;
-
-                      // If moving to "blocked" column, open block reason modal
-                      if (to === "blocked") {
-                        setBlockingCard(card);
-                        return;
-                      }
-
-                      // Agendado/publicado já saiu da mão do designer: arrastar pra Fila virava "ideias"
-                      // e o post publicado voltava pra produção.
-                      if (card.status === "scheduled" || card.status === "published") {
-                        toast.error("Este card já está agendado/publicado — o status dele muda no quadro do social.");
-                        return;
-                      }
-                      // Aprovação = arte entregue. Sem entrega registrada, o arraste abre o Entregar Arte
-                      // (a operação única) em vez de só trocar a etiqueta.
-                      if (to === "delivered" && (!card.designerDeliveredAt || alteracaoPendente(card))) {
-                        toast.info("Anexe a arte para mandar para aprovação.");
-                        setUploadCard(card);
-                        return;
-                      }
-
-                      // Map designer column to actual status
-                      const newStatus = DESIGNER_COL_TO_STATUS[to] ?? to;
-                      const now = new Date().toISOString();
-                      // Designer/admin podem mover livremente — bypassWorkflow ignora
-                      // o state-machine VALID_TRANSITIONS pra evitar bloqueios desnecessários
-                      updateContentCard(itemId, {
-                        status: newStatus as ContentCard["status"],
-                        statusChangedAt: now,
-                        columnEnteredAt: {
-                          ...(card.columnEnteredAt ?? {}),
-                          [newStatus]: now,
-                        },
-                        // Clear block fields if unblocking
-                        // null limpa no banco; undefined some do JSON e o motivo antigo ficava.
-                        ...(card.status === "blocked" ? { blockedReason: null, blockedBy: null, blockedAt: null } as unknown as Partial<ContentCard> : {}),
-                      }, { bypassWorkflow: true }).catch(() => {}); // o store já avisa a falha
-                    }}
-                    onEdit={(item) => {
-                      const fullCard = (item as { _card?: ContentCard })._card ?? contentCards.find((c) => c.id === item.id);
-                      if (fullCard) setDetailCard(fullCard);
-                    }}
-                    // Apagar (arquivar) card é da gestão e do social; o servidor recusa o designer.
-                    onDelete={role !== "designer" ? (itemId) => {
-                      const fullCard = contentCards.find((c) => c.id === itemId);
-                      if (fullCard) setCardToDelete(fullCard);
-                    } : undefined}
-                  />
-                  </KanbanErrorBoundary>
-                </div>
-              );
-            })}
-            </>
-            )}
-
-            {/* ── VISÃO UNIFICADA: cada cliente é uma coluna (estilo Trello) ── */}
-            {kanbanGroupBy === "client" && (
-              <div className="flex gap-3 overflow-x-auto pb-3">
-                {clientsWithCards.length === 0 && (
-                  <p className="text-sm text-muted-foreground py-8">Nenhuma produção nos clientes.</p>
-                )}
-                {clientsWithCards.map((client) => {
-                  const cards = [...(cardsByClient[client.id] ?? [])].sort(
-                    (a, b) =>
-                      DESIGNER_COLUMNS.findIndex((dc) => dc.statuses.includes(a.status)) -
-                      DESIGNER_COLUMNS.findIndex((dc) => dc.statuses.includes(b.status)),
-                  );
-                  const needArt = cards.filter((c) => !temArteEntregue(c) && ["in_production", "approval", "client_approval"].includes(c.status)).length;
-                  return (
-                    <div key={client.id} className="w-64 shrink-0 flex flex-col bg-muted/20 border border-border rounded-xl">
-                      <div className="flex items-center gap-2 p-3 border-b border-border rounded-t-xl bg-muted/40">
-                        <div className="w-7 h-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
-                          {client.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-foreground truncate">{client.name}</p>
-                          <p className="text-[10px] text-muted-foreground">{cards.length} cards{needArt > 0 ? ` · ${needArt} sem arte` : ""}</p>
-                        </div>
-                      </div>
-                      <div className="p-2 space-y-2 overflow-y-auto" style={{ maxHeight: "68vh" }}>
-                        {cards.map((card) => {
-                          const col = DESIGNER_COLUMNS.find((dc) => dc.statuses.includes(card.status)) ?? DESIGNER_COLUMNS[0];
-                          return (
-                            <div
-                              key={card.id}
-                              onClick={() => setDetailCard(card)}
-                              className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/40 transition-colors cursor-pointer"
-                            >
-                              {arteEntregue(card) && (
-                                <div className="aspect-video w-full overflow-hidden bg-muted">
-                                  <SignedImage src={arteEntregue(card)!} alt={card.title} className="w-full h-full object-cover" />
-                                </div>
-                              )}
-                              <div className="p-2">
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-muted text-foreground border border-border mb-1.5">
-                                  <span className={`w-2 h-2 rounded-full ${col.color}`} />
-                                  {col.title}
-                                </span>
-                                <p className="text-[11px] font-medium text-foreground leading-tight">{card.title}</p>
-                                <div className="flex items-center justify-between mt-1">
-                                  <span className="text-[10px] text-muted-foreground">{card.format}</span>
-                                  {card.dueDate && <span className="text-[10px] text-muted-foreground">{card.dueDate}</span>}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ═══ REQUESTS TAB ═══ */}
-        {tab === "requests" && !clientesCarregados && quadroAtivo !== "Todos" && (
+        {/* ═══ PRODUÇÃO ═══ */}
+        {tab === "producao" && !clientesCarregados && quadroAtivo !== "Todos" && (
           <div className="card text-center py-14 animate-fade-in">
             {clientesCarregando ? (
               <>
@@ -1431,26 +286,67 @@ export default function DesignPage() {
               </>
             ) : (
               <>
-                <p className="text-sm text-lone-danger">Não consegui carregar a lista de clientes — sem ela não dá pra saber quais demandas são suas.</p>
+                <p className="text-sm text-lone-danger">Não consegui carregar a lista de clientes — sem ela não dá pra saber quais artes são suas.</p>
                 <button onClick={() => useClientsStore.getState().init()} className="btn-ghost text-xs mt-3">Tentar de novo</button>
               </>
             )}
           </div>
         )}
-        {tab === "requests" && (clientesCarregados || quadroAtivo === "Todos") && (
-          <RequestsView
-            designRequests={myDesignRequests}
-            contentCards={myContentCards}
-            updateDesignRequest={updateDesignRequest}
-            updateContentCard={updateContentCard}
-            onBriefing={setBriefingReq}
-            onConcluir={concluirDemanda}
-            onDeleteRequest={ehGestao ? setReqToDelete : undefined}
-            currentUser={currentUser}
-            alteracaoPendente={alteracaoPendente}
-          />
-        )}
+        {tab === "producao" && (clientesCarregados || quadroAtivo === "Todos") && (
+          <div className="space-y-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">O pedido de arte é uma etapa do card: pegue, entregue e responda alterações no próprio card.</p>
+              <button
+                onClick={() => setNewTaskOpen(true)}
+                className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity shrink-0"
+              >
+                <Plus size={12} /> Nova tarefa
+              </button>
+            </div>
 
+            <CsAgentInbox cards={myContentCards} onOpen={setDetailCard} titulo="CS Agente — pra produzir" />
+
+            {/* Próximos prazos de arte — o que o designer ainda deve, do prazo mais perto. */}
+            {proximos.length > 0 && (
+              <div className="bg-card border border-border rounded-xl p-4">
+                <p className="text-lone-eyebrow uppercase text-muted-foreground mb-3 flex items-center gap-1.5">
+                  <Clock size={11} aria-hidden="true" /> Próximos prazos de arte
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {proximos.map((it) => {
+                    const d = diasEntre(hoje, it.prazoArte!);
+                    return (
+                      <button key={it.card.id} onClick={() => setDetailCard(it.card)}
+                        className={`text-left flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors hover:border-primary/30 ${
+                          d < 0 ? "bg-destructive/5 border-destructive/20" : d === 0 ? "bg-primary/5 border-primary/15" : "bg-muted/50 border-border"
+                        }`}>
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${d < 0 ? "bg-destructive" : d === 0 ? "bg-lone-warning" : "bg-muted-foreground"}`} aria-hidden="true" />
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-xs text-foreground font-medium truncate">{it.card.title}</span>
+                          <span className="block text-[10px] text-muted-foreground truncate">{it.card.clientName}{it.card.socialMedia ? ` · ${it.card.socialMedia}` : ""}</span>
+                        </span>
+                        <span className={`text-[11px] font-medium shrink-0 ${d < 0 ? "text-destructive" : d === 0 ? "text-primary" : "text-muted-foreground"}`}>
+                          {d < 0 ? `venceu ${ddmm(it.prazoArte!)}` : d === 0 ? "hoje" : ddmm(it.prazoArte!)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <KanbanErrorBoundary context="Quadro de produção (Designer)">
+              <QuadroProducao
+                pessoa={quadroAtivo}
+                modo="designer"
+                vista={vista}
+                onVista={setVista}
+                onAbrirCard={setDetailCard}
+                clientes={clients}
+              />
+            </KanbanErrorBoundary>
+          </div>
+        )}
       </div>
 
       {/* ═══ PERFORMANCE TAB ═══ */}
@@ -1480,7 +376,7 @@ export default function DesignPage() {
             <div className="card">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Pendentes</p>
               <p className="text-2xl font-semibold text-lone-warning">{needsArt}</p>
-              <p className="text-xs text-muted-foreground">aguardando arte</p>
+              <p className="text-xs text-muted-foreground">arte a fazer</p>
             </div>
           </div>
 
@@ -1491,7 +387,7 @@ export default function DesignPage() {
               {socialPeople.map((person) => {
                 const personCards = cardsBySocial[person] ?? [];
                 const delivered = personCards.filter((c) => c.designerDeliveredAt).length;
-                const total = personCards.filter((c) => !["ideas", "script"].includes(c.status)).length;
+                const total = personCards.filter((c) => !statusNaEtapa(c.status, "pauta")).length;
                 const pct = total > 0 ? Math.round((delivered / total) * 100) : 0;
                 return (
                   <div key={person}>
@@ -1549,7 +445,7 @@ export default function DesignPage() {
           <p className="text-xs text-muted-foreground">Cards entregues e aprovados — histórico completo de produção.</p>
           <div className="space-y-2">
             {myContentCards
-              .filter((c) => c.designerDeliveredAt || c.status === "published" || c.status === "scheduled")
+              .filter((c) => c.designerDeliveredAt || statusNaEtapa(c.status, "agendado", "no_ar"))
               .sort((a, b) => (b.designerDeliveredAt ?? b.statusChangedAt ?? "").localeCompare(a.designerDeliveredAt ?? a.statusChangedAt ?? ""))
               .map((card) => {
                 const client = clients.find((cl) => cl.id === card.clientId);
@@ -1582,11 +478,9 @@ export default function DesignPage() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
-                        card.status === "published" ? "text-primary bg-primary/10 border-primary/20" :
-                        card.status === "scheduled" ? "text-muted-foreground bg-muted border-border" :
-                        "text-muted-foreground bg-muted border-border"
+                        statusNaEtapa(card.status, "no_ar") ? "text-primary bg-primary/10 border-primary/20" : "text-muted-foreground bg-muted border-border"
                       }`}>
-                        {card.status === "published" ? "Publicado" : card.status === "scheduled" ? "Agendado" : "Entregue"}
+                        {statusNaEtapa(card.status, "agendado", "no_ar") ? infoDoStatus(card.status).rotulo : "Entregue"}
                       </span>
                       {card.designerDeliveredAt && (
                         <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
@@ -1599,7 +493,7 @@ export default function DesignPage() {
                   </div>
                 );
               })}
-            {myContentCards.filter((c) => c.designerDeliveredAt || c.status === "published" || c.status === "scheduled").length === 0 && (
+            {myContentCards.filter((c) => c.designerDeliveredAt || statusNaEtapa(c.status, "agendado", "no_ar")).length === 0 && (
               <div className="text-center py-12">
                 <Clock size={24} className="text-muted-foreground mx-auto mb-3" />
                 <p className="text-xs text-muted-foreground">Nenhuma entrega no histórico ainda.</p>
@@ -1609,627 +503,11 @@ export default function DesignPage() {
         </div>
       )}
 
-      {/* Upload Art Modal */}
-      {uploadCard && (
-        <UploadArtModal card={uploadCard} onClose={() => setUploadCard(null)} />
-      )}
 
-      {/* Card Detail Modal (reuse ContentCardModal from social) */}
-      {detailCard && (
-        <ContentCardModal card={detailCard} onClose={() => setDetailCard(null)} />
-      )}
+      {/* O card aberto: briefing, arte (pedido, entrega, alterações) e comentários — o mesmo do Social. */}
+      {detailCard && <ContentCardModal card={detailCard} onClose={() => setDetailCard(null)} />}
 
-      {/* Delete confirmation — content card */}
-      {cardToDelete && (
-        <DeleteConfirmModal
-          title="Apagar este card de conteúdo?"
-          message="O card sai do quadro e vai para Arquivadas — dá para recuperar de lá."
-          itemLabel={`${cardToDelete.title} — ${cardToDelete.clientName}`}
-          confirmLabel="Apagar card"
-          onConfirm={() => deleteContentCard(cardToDelete.id)}
-          onClose={() => setCardToDelete(null)}
-        />
-      )}
-
-      {/* Delete confirmation — design request */}
-      {reqToDelete && (
-        <DeleteConfirmModal
-          title="Apagar esta demanda?"
-          message="A solicitação de design será removida da fila. Cards de conteúdo já vinculados não serão afetados."
-          itemLabel={`${reqToDelete.title} — ${reqToDelete.clientName}`}
-          confirmLabel="Apagar demanda"
-          onConfirm={() => deleteDesignRequest(reqToDelete.id)}
-          onClose={() => setReqToDelete(null)}
-        />
-      )}
-
-      {/* Non-delivery report modal */}
-      {/* Block Reason Modal — Designer's Panic Button */}
-      {blockingCard && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={() => { setBlockingCard(null); setBlockReason(""); }}>
-          <div className="bg-card border border-destructive/20 rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5 border-b border-border">
-              <h3 className="font-semibold text-destructive text-sm flex items-center gap-2">
-                <AlertTriangle size={15} /> Devolver Card — Motivo do Bloqueio
-              </h3>
-              <p className="text-xs text-muted-foreground mt-1">{blockingCard.title} — {blockingCard.clientName}</p>
-            </div>
-            <div className="p-5 space-y-2">
-              {BLOCK_REASONS.map((reason) => (
-                <button
-                  key={reason}
-                  onClick={() => setBlockReason(reason)}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg text-xs transition-all ${
-                    blockReason === reason
-                      ? "bg-destructive/10 text-destructive border border-destructive/30"
-                      : "bg-card/[0.02] text-muted-foreground border border-transparent hover:bg-card/[0.04]"
-                  }`}
-                >
-                  {reason}
-                </button>
-              ))}
-            </div>
-            <div className="p-5 border-t border-border flex gap-2">
-              <button onClick={() => { setBlockingCard(null); setBlockReason(""); }} className="btn-ghost flex-1 text-sm">Cancelar</button>
-              <button
-                onClick={() => {
-                  if (!blockReason) return;
-                  const now = new Date().toISOString();
-                  updateContentCard(blockingCard.id, {
-                    status: "blocked",
-                    blockedReason: blockReason,
-                    blockedBy: currentUser,
-                    blockedAt: now,
-                    statusChangedAt: now,
-                    columnEnteredAt: {
-                      ...(blockingCard.columnEnteredAt ?? {}),
-                      blocked: now,
-                    },
-                  }).catch(() => {}); // o store já avisa a falha
-                  // Notify Social Media
-                  pushNotification(
-                    "sla",
-                    "Arte Devolvida pelo Designer",
-                    `"${blockingCard.title}" (${blockingCard.clientName}) — Motivo: ${blockReason}. Ajuste necessário.`,
-                    blockingCard.clientId
-                  );
-                  // Audio ping
-                  import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
-                  setBlockingCard(null);
-                  setBlockReason("");
-                }}
-                disabled={!blockReason}
-                className="flex-1 px-4 py-2 rounded-xl bg-destructive/15 text-destructive text-sm font-medium border border-destructive/30 hover:bg-destructive/25 transition-all disabled:opacity-30"
-              >
-                Devolver Card
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {nonDeliveryCard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); setNonDeliveryCustomReason(""); }}>
-          <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5 border-b border-border">
-              <h3 className="font-semibold text-foreground text-sm">Reportar Não Entrega</h3>
-              <p className="text-xs text-primary mt-0.5">{nonDeliveryCard.title} — {nonDeliveryCard.clientName}</p>
-            </div>
-            <div className="p-5 space-y-3">
-              <p className="text-xs text-muted-foreground">Selecione o motivo:</p>
-              <div className="space-y-1.5">
-                {[
-                  "Briefing incompleto",
-                  "Aguardando assets do cliente",
-                  "Fila sobrecarregada",
-                  "Refação pendente (aguardando feedback)",
-                  "Problema técnico",
-                  "Outro",
-                ].map((reason) => (
-                  <button
-                    key={reason}
-                    onClick={() => setNonDeliveryReason(reason)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all ${
-                      nonDeliveryReason === reason
-                        ? "bg-primary/10 text-primary border border-primary/30"
-                        : "bg-muted/50 text-muted-foreground border border-transparent hover:bg-muted"
-                    }`}
-                  >
-                    {reason}
-                  </button>
-                ))}
-              </div>
-              {nonDeliveryReason === "Outro" && (
-                <input
-                  value={nonDeliveryCustomReason}
-                  onChange={(e) => setNonDeliveryCustomReason(e.target.value)}
-                  placeholder="Descreva o motivo..."
-                  autoFocus
-                  className="w-full bg-muted rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary"
-                />
-              )}
-            </div>
-            <div className="p-5 border-t border-border flex gap-2">
-              <button onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); setNonDeliveryCustomReason(""); }} className="btn-ghost flex-1 text-sm">Cancelar</button>
-              <button
-                onClick={() => {
-                  const finalReason = nonDeliveryReason === "Outro" ? nonDeliveryCustomReason.trim() : nonDeliveryReason.trim();
-                  if (!finalReason) return;
-                  updateContentCard(nonDeliveryCard.id, {
-                    nonDeliveryReason: finalReason,
-                    nonDeliveryReportedBy: currentUser,
-                    nonDeliveryReportedAt: new Date().toISOString(),
-                  }).catch(() => {}); // o store já avisa a falha
-                  setNonDeliveryCard(null);
-                  setNonDeliveryReason("");
-                  setNonDeliveryCustomReason("");
-                }}
-                disabled={!nonDeliveryReason || (nonDeliveryReason === "Outro" && !nonDeliveryCustomReason.trim())}
-                className="btn-primary flex-1 text-sm disabled:opacity-50"
-              >
-                Reportar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Briefing Modal — with designer actions */}
-      {briefingReq && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={() => setBriefingReq(null)}>
-          <div className="bg-card border border-border rounded-2xl w-full max-w-lg mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between p-5 border-b border-border">
-              <div>
-                <h3 className="font-semibold text-foreground">{briefingReq.title}</h3>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs text-primary">{briefingReq.clientName}</span>
-                  <span className="text-muted-foreground/50">·</span>
-                  <span className="text-xs text-muted-foreground">{briefingReq.format}</span>
-                  <span className="text-muted-foreground/50">·</span>
-                  <span className={`badge border text-xs ${getPriorityColor(briefingReq.priority)}`}>
-                    {getPriorityLabel(briefingReq.priority)}
-                  </span>
-                </div>
-              </div>
-              <button onClick={() => setBriefingReq(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-              {/* Alteração solicitada pelo social — no topo, pra o designer bater o olho e refazer. */}
-              {(() => {
-                const refCard = briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null;
-                const revisao = refCard ? alteracaoPendente(refCard) : null;
-                if (!revisao) return null;
-                return (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-destructive"><RotateCcw size={13} /> Alteração solicitada pelo social</div>
-                    {revisao.reason && <p className="mt-1 text-sm leading-relaxed text-destructive/90">{revisao.reason}</p>}
-                    {revisao.reviewedBy && <p className="mt-1 text-[10px] text-destructive/70">por {revisao.reviewedBy}</p>}
-                  </div>
-                );
-              })()}
-              {/* Briefing Health Score */}
-              {(() => {
-                const client = clients.find((c) => c.id === briefingReq.clientId);
-                // Fallback: demandas criadas antes do fix não têm deadline; usa a data de postagem do card.
-                const refCard = briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null;
-                const prazo = briefingReq.deadline || refCard?.dueDate;
-                const checks = [
-                  { label: "Briefing preenchido", ok: !!(briefingReq.briefing && briefingReq.briefing.length > 10) },
-                  { label: "Formato definido", ok: !!briefingReq.format },
-                  { label: "Prazo definido", ok: !!prazo },
-                  { label: "Guidelines do cliente", ok: !!client?.fixedBriefing },
-                ];
-                const score = Math.round((checks.filter((c) => c.ok).length / checks.length) * 100);
-                return (
-                  <div className={`p-3 rounded-lg border ${score >= 75 ? "bg-lone-success-bg border-lone-success-border" : score >= 50 ? "bg-lone-warning-bg border-lone-warning-border" : "bg-destructive/10 border-destructive/20"}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Saúde do Briefing</p>
-                      <span className={`text-xs font-semibold ${score >= 75 ? "text-lone-success" : score >= 50 ? "text-lone-warning" : "text-destructive"}`}>{score}%</span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {checks.map((c) => (
-                        <span key={c.label} className={`text-[9px] px-2 py-0.5 rounded-full border ${c.ok ? "text-lone-success bg-lone-success-bg border-lone-success-border" : "text-destructive bg-destructive/10 border-destructive/20"}`}>
-                          {c.ok ? "✓" : "✗"} {c.label}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div>
-                <p className="text-xs text-muted-foreground font-medium mb-1.5">Briefing Completo</p>
-                {(() => {
-                  // Briefing VIVO do card (o que o social editou) — a design_request guarda uma cópia
-                  // que ficava velha. Prefere o card ligado; cai na cópia se não achar.
-                  const rc = briefingReq.contentCardId
-                    ? contentCards.find((c) => c.id === briefingReq.contentCardId)
-                    : contentCards.find((c) => c.designRequestId === briefingReq.id);
-                  const brief = rc?.briefing || briefingReq.briefing;
-                  return brief ? (
-                    <div className="space-y-3">
-                      {/* PADRÃO DO CLIENTE, ANTES DO PEDIDO. 27% das artes voltavam por "não seguiu
-                          o padrão" — e o que evita isso (regras visuais + o que já foi reprovado)
-                          ficava escondido atrás de um botão usado em 9% dos cards. Agora vem junto,
-                          e vem primeiro: é o que se lê antes de abrir o editor. */}
-                      {briefingReq.briefingIa && (
-                        <div className="rounded-lg border border-primary/30 bg-primary/[0.04] p-4">
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-primary mb-2">
-                            <Sparkles size={13} /> Padrão deste cliente — leia antes de começar
-                          </div>
-                          <MarkdownView source={briefingReq.briefingIa} />
-                        </div>
-                      )}
-                      <div className="bg-muted border border-border rounded-lg p-4">
-                        <MarkdownView source={brief} />
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground leading-relaxed bg-muted border border-border rounded-lg p-4">Sem briefing detalhado.</p>
-                  );
-                })()}
-              </div>
-
-              {/* Status do card — o DESIGNER também move a etiqueta (ex.: ao terminar a arte →
-                  "Aprovação Social Media"), igual o social faz no board dele. Pedido do Rodrigo. */}
-              {(() => {
-                const rc = briefingReq.contentCardId
-                  ? contentCards.find((c) => c.id === briefingReq.contentCardId)
-                  : contentCards.find((c) => c.designRequestId === briefingReq.id);
-                if (!rc) return null;
-                const STATUS: { v: ContentCard["status"]; l: string }[] = [
-                  { v: "ideas", l: "Ideias" }, { v: "script", l: "Roteiro" }, { v: "in_production", l: "Em Produção" },
-                  { v: "approval", l: "Aprovação Social Media" }, { v: "client_approval", l: "Aprovação Cliente" },
-                  { v: "scheduled", l: "Agendado" }, { v: "published", l: "Publicado" },
-                ];
-                return (
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Status do card</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {STATUS.map((s) => (
-                        <button
-                          key={s.v}
-                          onClick={() => {
-                            if (rc.status === s.v) return;
-                            // Etiqueta de aprovação em diante = arte entregue: sem entrega, abre o Entregar Arte.
-                            const posEntrega = ["approval", "client_approval", "scheduled", "published"].includes(s.v);
-                            if (posEntrega && (!rc.designerDeliveredAt || alteracaoPendente(rc))) {
-                              toast.info("Anexe a arte antes de mandar para aprovação.");
-                              setUploadCard(rc);
-                              return;
-                            }
-                            updateContentCard(rc.id, { status: s.v, statusChangedAt: new Date().toISOString() }).catch(() => {}); // o store já avisa a falha
-                          }}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                            rc.status === s.v ? "bg-primary/20 text-primary border border-primary/30" : "bg-muted text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          {s.l}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Arte de REFERÊNCIA — anexos que o social pôs no card. Antes não apareciam aqui
-                  (a solicitação só mostrava as entregas), então o designer não via a referência. */}
-              {(() => {
-                const refCard = briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null;
-                const entregues = new Set(briefingReq.attachments ?? []); // não repetir o que já é entrega
-                const todos = refCard?.cardAttachments?.length
-                  ? refCard.cardAttachments.map((a) => a.url)
-                  : (refCard?.imageUrl ? [refCard.imageUrl] : []);
-                const refs = todos.filter((url) => !entregues.has(url));
-                if (refs.length === 0) return null;
-                return (
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Arte de referência ({refs.length})</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {refs.map((url, i) => {
-                        const isImg = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url);
-                        return (
-                          <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                            className="group relative block rounded-lg overflow-hidden border border-border hover:border-primary/40 transition-colors">
-                            {isImg ? (
-                              <SignedImage src={url} alt={`Referência ${i + 1}`} className="w-full h-32 object-cover bg-muted" />
-                            ) : (
-                              <div className="flex h-32 items-center justify-center gap-1.5 bg-muted text-xs text-primary">
-                                <ExternalLink size={12} /> Abrir referência {i + 1}
-                              </div>
-                            )}
-                            <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-overlay py-1 text-[10px] text-overlay-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Eye size={11} /> abrir
-                            </span>
-                          </a>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Client brand guidelines */}
-              {(() => {
-                const client = clients.find((c) => c.id === briefingReq.clientId);
-                return (
-                  <>
-                    {client?.fixedBriefing && (
-                      <div>
-                        <p className="text-xs text-primary/70 font-medium mb-1.5 uppercase tracking-wider">Guidelines do Cliente</p>
-                        <div className="bg-primary/[0.03] border border-primary/[0.08] rounded-lg p-3">
-                          <MarkdownView source={client.fixedBriefing} />
-                        </div>
-                      </div>
-                    )}
-                    {client?.driveLink && (
-                      <a href={client.driveLink} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card/[0.03] border border-border hover:border-primary/30 transition-all text-xs text-muted-foreground hover:text-primary">
-                        <FolderOpen size={13} /> Abrir pasta Drive do cliente →
-                      </a>
-                    )}
-                  </>
-                );
-              })()}
-              {(() => {
-                // Prazo = deadline da demanda OU, se nula (demanda antiga), a data de postagem do card vinculado.
-                const refCard = briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null;
-                const prazo = briefingReq.deadline || refCard?.dueDate;
-                if (!prazo) return null;
-                return (
-                  <div className="flex items-center gap-2">
-                    <Clock size={13} className="text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">Data de entrega: <span className="text-foreground font-medium">{prazo.slice(0, 10).split("-").reverse().join("/")}</span></span>
-                  </div>
-                );
-              })()}
-              <div className="flex items-center gap-2">
-                <Palette size={13} className="text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Pedido por: <span className="text-foreground font-medium">{briefingReq.requestedBy}</span></span>
-              </div>
-              {briefingReq.createdAt && (
-                <div className="flex items-center gap-2">
-                  <Clock size={13} className="text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Data da demanda: <span className="text-foreground font-medium">{new Date(briefingReq.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span></span>
-                </div>
-              )}
-              {/* Status badge */}
-              <div className="flex items-center gap-2">
-                <span className={`badge border text-xs ${
-                  briefingReq.status === "done" ? "text-primary bg-primary/10 border-primary/20" :
-                  briefingReq.status === "in_progress" ? "text-primary bg-primary/10 border-primary/20" :
-                  "text-muted-foreground bg-card border-border"
-                }`}>
-                  {briefingReq.status === "queued" ? "Na Fila" : briefingReq.status === "in_progress" ? "Em Produção" : "Concluído"}
-                </span>
-              </div>
-
-              {/* Caixinha de comentário do designer — pedir ajuste no briefing / avisar o social */}
-              <div className="space-y-1.5 pt-1">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Comentário do designer</p>
-                <textarea
-                  value={designerNoteText}
-                  onChange={(e) => setDesignerNoteText(e.target.value)}
-                  placeholder="Precisa de algo? Ex.: 'faltou o preço no briefing' — o social é avisado."
-                  rows={2}
-                  className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/60 transition-colors resize-none"
-                />
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={saveDesignerNote}
-                    disabled={savingNote || designerNoteText.trim() === (briefingReq.designerNote ?? "").trim()}
-                    className="btn-primary text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {savingNote ? "Salvando..." : "Salvar comentário"}
-                  </button>
-                  {noteSaved && <span className="text-[10px] text-primary">Salvo ✓ — social avisado</span>}
-                </div>
-              </div>
-
-              {/* Anexos já enviados */}
-              {briefingReq.attachments && briefingReq.attachments.length > 0 && (
-                <div className="space-y-1.5">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Artes anexadas ({briefingReq.attachments.length})</p>
-                  <div className="space-y-2">
-                    {briefingReq.attachments.map((url, i) => {
-                      const isImg = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url);
-                      return (
-                        <div key={i} className="space-y-1">
-                          {isImg && (
-                            <a href={url} target="_blank" rel="noopener noreferrer" className="block w-full rounded-lg overflow-hidden border border-border hover:border-primary/30 transition-colors">
-                              <SignedImage src={url} alt={`Anexo ${i + 1}`} className="w-full max-h-48 object-contain bg-muted" />
-                            </a>
-                          )}
-                          <div className="flex items-center gap-1.5">
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/[0.05] border border-primary/20 hover:border-primary/40 transition-all text-xs text-primary min-w-0"
-                            >
-                              <ExternalLink size={11} className="shrink-0" />
-                              <span className="truncate">{isImg ? `Imagem ${i + 1}` : `Anexo #${i + 1}`}</span>
-                            </a>
-                            <a
-                              href={url}
-                              download
-                              className="p-2 rounded-lg border border-border hover:border-lone-success-border hover:text-lone-success text-muted-foreground transition-colors"
-                              title="Baixar arquivo"
-                            >
-                              <Download size={11} />
-                            </a>
-                            {(role === "designer" || role === "admin" || role === "manager") && (
-                              <button
-                                onClick={() => {
-                                  const antes = briefingReq;
-                                  const next = briefingReq.attachments!.filter((_, idx) => idx !== i);
-                                  const nextStatus = next.length === 0 ? "in_progress" : briefingReq.status;
-                                  setBriefingReq({ ...briefingReq, attachments: next, status: nextStatus });
-                                  updateDesignRequest(briefingReq.id, { attachments: next, status: nextStatus }).catch((err) => {
-                                    setBriefingReq(antes);
-                                    avisarFalha("Não consegui remover o anexo")(err);
-                                  });
-                                }}
-                                className="p-2 rounded-lg border border-border hover:border-destructive/30 hover:text-destructive text-muted-foreground transition-colors"
-                                title="Remover anexo"
-                              >
-                                <X size={11} />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Upload de arte direto do modal */}
-              <div className="space-y-2 pt-2 border-t border-border">
-                <input
-                  ref={briefingUploadInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,video/mp4,video/webm"
-                  className="hidden"
-                  onChange={handleBriefingArtUpload}
-                  disabled={briefingUploading}
-                />
-                <button
-                  type="button"
-                  onClick={() => briefingUploadInputRef.current?.click()}
-                  disabled={briefingUploading}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary hover:bg-primary text-primary-foreground text-sm font-medium transition-all disabled:opacity-50"
-                >
-                  {briefingUploading ? (
-                    <><Upload size={14} className="animate-pulse" /> Carregando...</>
-                  ) : role === "designer" ? (
-                    <><Upload size={14} /> Enviar Arte para Aprovação</>
-                  ) : (
-                    <><Upload size={14} /> Adicionar Referência</>
-                  )}
-                </button>
-                {briefingUploadOk && (
-                  <div className="flex items-center gap-1.5 text-[11px] text-lone-success bg-lone-success-bg border border-lone-success-border rounded-md px-3 py-2">
-                    <CheckCircle size={12} /> {role === "designer" ? "Arte enviada — demanda marcada como concluída." : "Referência adicionada ao pedido."}
-                  </div>
-                )}
-                {briefingUploadError && (
-                  <div className="flex items-start gap-1.5 text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3 py-2">
-                    <XCircle size={12} className="shrink-0 mt-0.5" />
-                    <span className="leading-relaxed">{briefingUploadError}</span>
-                  </div>
-                )}
-                <p className="text-[10px] text-muted-foreground text-center">PNG, JPEG, WebP, GIF, PDF, MP4 — até 25MB</p>
-              </div>
-            </div>
-            <div className="p-5 border-t border-border flex gap-2">
-              {briefingReq.status === "queued" && (
-                <button
-                  onClick={() => {
-                    const antes = briefingReq;
-                    setBriefingReq({ ...briefingReq, status: "in_progress" });
-                    updateDesignRequest(briefingReq.id, { status: "in_progress" }).catch((err) => {
-                      setBriefingReq(antes);
-                      avisarFalha("Não consegui iniciar a demanda")(err);
-                    });
-                  }}
-                  className="btn-primary flex-1 text-sm flex items-center justify-center gap-1.5"
-                >
-                  <Zap size={13} /> Aceitar e Iniciar
-                </button>
-              )}
-              {briefingReq.status === "in_progress" && (
-                <button
-                  onClick={() => concluirDemanda(briefingReq)}
-                  className="bg-primary hover:bg-primary/80 text-primary-foreground px-3 py-2 rounded-lg font-medium text-sm transition-colors flex-1 flex items-center justify-center gap-1.5"
-                >
-                  <CheckCircle size={13} /> Entregar e concluir
-                </button>
-              )}
-              <button onClick={() => setBriefingReq(null)} className="btn-ghost flex-1 text-sm">Fechar</button>
-            </div>
-            {/* Assumir/devolver. É o que torna o "um ajuda o outro" visível: sem isso a ajuda
-                acontece e ninguém sabe de quem é a demanda no dia seguinte. */}
-            {role === "designer" && (() => {
-              const dono = donoDaDemanda(briefingReq, clients);
-              const meu = dono === currentUser;
-              const assumida = !!(briefingReq.assignedDesigner ?? "").trim();
-              return (
-                <div className="px-5 pb-5 -mt-1 flex items-center justify-between gap-3">
-                  <span className="text-[11px] text-muted-foreground">
-                    {dono ? `Demanda de ${dono}${assumida ? " (assumida)" : ""}` : "Cliente sem designer no cadastro"}
-                    {(
-                      // Proposta de arte por IA em QUALQUER demanda, com a identidade do cliente (logo, artes
-                      // recentes, estilo lido, textos exatos). Vira referência anexada; o designer finaliza.
-                      <button
-                        disabled={gerandoIa}
-                        onClick={async () => {
-                          setGerandoIa(true);
-                          try {
-                            const r = await chamar<{ urls: string[]; geracaoId: string; entradas?: unknown }>(`/api/design-requests/${briefingReq.id}/variacoes-ia`, undefined, { method: "POST" });
-                            const d = r.data;
-                            if (!r.ok || !d) { toast.error(r.erro ?? "Não consegui gerar."); return; }
-                            setBriefingReq({ ...briefingReq, attachments: [...(briefingReq.attachments ?? []), ...(d.urls as string[])] });
-                            setGeracaoIa({ id: d.geracaoId as string, urls: d.urls as string[] });
-                            const e = d.entradas as { logo?: boolean; estilos?: number; textos?: string[] } | undefined;
-                            toast.success(`${(d.urls as string[]).length} proposta(s) anexada(s) — com ${e?.logo ? "logo" : "SEM logo"}, ${e?.estilos ?? 0} artes de estilo, ${e?.textos?.length ?? 0} textos exatos.`);
-                          } finally { setGerandoIa(false); }
-                        }}
-                        className="ml-2 rounded-md border border-primary/30 px-2 py-0.5 text-[10px] text-primary hover:bg-primary/10 disabled:opacity-50"
-                        title="Gera propostas com a logo, as artes recentes, o estilo lido e os textos exatos do cliente. Vira referência, não entrega."
-                      >
-                        {gerandoIa ? "Gerando (≈30 s)…" : briefingReq.parentAdId ? "Gerar variações (IA)" : "Proposta de arte (IA)"}
-                      </button>
-                    )}
-                    {geracaoIa && (
-                      <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                        Serviu?
-                        <button onClick={() => void feedbackIa("serviu")} className="rounded border border-border px-1.5 hover:bg-lone-success-bg" title="A proposta ajudou" aria-label="A proposta ajudou"><ThumbsUp size={10} /></button>
-                        <button onClick={() => setMotivoIa("")} className="rounded border border-border px-1.5 hover:bg-destructive/10" title="Não ajudou — diga o porquê" aria-label="Não ajudou"><ThumbsDown size={10} /></button>
-                      </span>
-                    )}
-                    {geracaoIa && motivoIa !== null && (
-                      <span className="mt-1.5 flex items-center gap-1.5">
-                        <input
-                          autoFocus
-                          value={motivoIa}
-                          onChange={(e) => setMotivoIa(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter") void feedbackIa("nao_serviu", motivoIa); if (e.key === "Escape") setMotivoIa(null); }}
-                          placeholder="O que saiu errado? (logo, cores, texto inventado…)"
-                          className="flex-1 min-w-0 rounded-md border border-border bg-background px-2 py-1 text-[11px] text-foreground outline-none focus:border-primary/50"
-                        />
-                        <button onClick={() => void feedbackIa("nao_serviu", motivoIa)} className="rounded-md border border-border px-2 py-1 text-[10px] text-foreground hover:bg-muted">Enviar</button>
-                      </span>
-                    )}
-                  </span>
-                  <button
-                    onClick={async () => {
-                      const novo = meu && assumida ? "" : currentUser;
-                      try {
-                        // updateDesignRequest RELANÇA em erro (o store faz rollback e joga pra cima).
-                        // Sem catch, a promessa morria sem ninguém saber e a tela mostrava o estado
-                        // antigo sem explicar por quê.
-                        await updateDesignRequest(briefingReq.id, { assignedDesigner: novo });
-                        setBriefingReq({ ...briefingReq, assignedDesigner: novo || undefined });
-                        toast.success(novo ? `Demanda assumida por ${currentUser}.` : "Demanda devolvida à carteira do cliente.");
-                      } catch {
-                        toast.error("Não consegui salvar. Tenta de novo?");
-                      }
-                    }}
-                    className="btn-ghost text-xs px-3 py-1.5"
-                  >
-                    {meu && assumida ? "Devolver à carteira" : "Assumir esta demanda"}
-                  </button>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-      )}
-
-      {/* ═══ MODAL NOVA TAREFA ═══ */}
+      {/* ═══ NOVA TAREFA ═══ */}
       {newTaskOpen && (
         <NewTaskModal
           clients={clients.filter((c) => !myClientIds || myClientIds.has(c.id))}
@@ -2244,257 +522,19 @@ export default function DesignPage() {
   );
 }
 
-// ── Requests sub-view (old design requests list + kanban) ────────────────────
-
-function RequestsView({
-  designRequests,
-  contentCards,
-  updateDesignRequest,
-  updateContentCard,
-  onBriefing,
-  onConcluir,
-  onDeleteRequest,
-  currentUser,
-  alteracaoPendente,
-}: {
-  designRequests: DesignRequest[];
-  contentCards: ContentCard[];
-  updateDesignRequest: (id: string, updates: Partial<DesignRequest>) => Promise<void>;
-  updateContentCard: (id: string, updates: Partial<ContentCard>, options?: { bypassWorkflow?: boolean }) => Promise<void>;
-  onBriefing: (req: DesignRequest) => void;
-  onConcluir: (req: DesignRequest) => void;
-  onDeleteRequest?: (req: DesignRequest) => void;
-  currentUser?: string;
-  alteracaoPendente: (c: ContentCard) => { reason?: string | null; reviewedBy?: string | null } | null;
+function Numero({ icone, valor, rotulo, destaque, alerta, extra }: {
+  icone: React.ReactNode; valor: number; rotulo: string; destaque?: boolean; alerta?: boolean; extra?: string;
 }) {
-  const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
-  const [statusFilter, setStatusFilter] = useState<"all" | "queued" | "in_progress" | "done">("all");
-  const [priorityFilter, setPriorityFilter] = useState<"all" | "critical" | "high" | "medium" | "low">("all");
-  const [clientFilter, setClientFilter] = useState("all");
-
-  const uniqueClients = [...new Set(designRequests.map((r) => r.clientName))].sort();
-
-  const filtered = designRequests.filter((r) => {
-    if (statusFilter !== "all" && r.status !== statusFilter) return false;
-    if (priorityFilter !== "all" && r.priority !== priorityFilter) return false;
-    if (clientFilter !== "all" && r.clientName !== clientFilter) return false;
-    return true;
-  });
-
-  const getLinkedCard = (req: DesignRequest) =>
-    contentCards.find((c) => c.designRequestId === req.id);
-
-  // Alteração pedida pelo social no card vinculado a esta demanda (não é status do design_request).
-  const alteracaoDoReq = (req: DesignRequest) => {
-    const c = getLinkedCard(req);
-    return c ? alteracaoPendente(c) : null;
-  };
-
+  const cor = alerta ? "text-destructive" : destaque ? "text-primary" : "text-foreground";
+  const fundo = alerta ? "bg-destructive/15 text-destructive" : destaque ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground";
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Filter size={14} className="text-muted-foreground" />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-            className="bg-card border border-border text-sm text-muted-foreground rounded-lg px-3 py-1.5 outline-none focus:border-primary"
-          >
-            <option value="all">Status: Todos</option>
-            <option value="queued">Na Fila</option>
-            <option value="in_progress">Em Produção</option>
-            <option value="done">Concluído</option>
-          </select>
-          <select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value as typeof priorityFilter)}
-            className="bg-card border border-border text-sm text-muted-foreground rounded-lg px-3 py-1.5 outline-none focus:border-primary"
-          >
-            <option value="all">Prioridade: Todas</option>
-            <option value="critical">Critica</option>
-            <option value="high">Alta</option>
-            <option value="medium">Media</option>
-            <option value="low">Baixa</option>
-          </select>
-          <select
-            value={clientFilter}
-            onChange={(e) => setClientFilter(e.target.value)}
-            className="bg-card border border-border text-sm text-muted-foreground rounded-lg px-3 py-1.5 outline-none focus:border-primary"
-          >
-            <option value="all">Cliente: Todos</option>
-            {uniqueClients.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5 ml-auto">
-          <button onClick={() => setViewMode("kanban")}
-            className={`text-xs px-2.5 py-1.5 rounded-md transition-colors flex items-center gap-1 ${viewMode === "kanban" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-          ><Columns3 size={13} /> Kanban</button>
-          <button onClick={() => setViewMode("list")}
-            className={`text-xs px-2.5 py-1.5 rounded-md transition-colors flex items-center gap-1 ${viewMode === "list" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-          ><LayoutList size={13} /> Lista</button>
-        </div>
-
-        <span className="text-xs text-muted-foreground">{filtered.length} resultado(s)</span>
+    <div className="card flex items-center gap-4">
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${fundo}`} aria-hidden="true">{icone}</div>
+      <div className="min-w-0">
+        <p className={`text-2xl font-semibold tabular-nums ${cor}`}>{valor}</p>
+        <p className="text-xs text-muted-foreground">{rotulo}</p>
+        {extra && <p className="text-[10px] text-muted-foreground mt-0.5">{extra}</p>}
       </div>
-
-      {viewMode === "kanban" && (
-        <KanbanErrorBoundary context="Kanban Design Requests">
-        <KanbanBoard
-          columns={(() => {
-            const toItem = (r: DesignRequest) => ({
-              id: r.id,
-              title: r.title,
-              clientName: r.clientName,
-              format: r.format,
-              priority: r.priority,
-              deadline: r.deadline,
-              requestedBy: r.requestedBy,
-              briefing: r.briefing,
-              _req: r,
-              _alteracao: alteracaoDoReq(r),
-            });
-            return [
-              // Coluna VIRTUAL: cards com alteração pedida pelo social. Não é status real do
-              // design_request (ele volta pra in_progress ao reprovar) — some sozinha quando o
-              // designer reentrega (alteracaoPendente zera). Fica em 1º pra saltar aos olhos.
-              {
-                id: "alteracoes",
-                title: "Alterações",
-                color: "bg-destructive",
-                items: filtered.filter((r) => alteracaoDoReq(r)).map(toItem),
-              },
-              ...DESIGN_COLUMNS.map((col) => ({
-                ...col,
-                items: filtered.filter((r) => r.status === col.id && !alteracaoDoReq(r)).map(toItem),
-              })),
-            ];
-          })()}
-          renderCard={(item) => (
-            <div
-              onClick={() => onBriefing(item._req as DesignRequest)}
-              className={`bg-card border rounded-lg p-3 space-y-2 hover:border-primary/30 transition-colors cursor-pointer ${item._alteracao ? "border-destructive/40" : "border-border"}`}>
-              {item._alteracao && (
-                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[10px] text-destructive">
-                  <div className="flex items-center gap-1 font-semibold"><RotateCcw size={10} /> Alteração solicitada</div>
-                  {item._alteracao.reason && <div className="mt-0.5 leading-snug text-destructive/90 line-clamp-2">{item._alteracao.reason}</div>}
-                </div>
-              )}
-              <p className="text-sm font-medium text-foreground">{item.title}</p>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-primary">{item.clientName}</span>
-                <span className="text-muted-foreground">{item.format}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className={`badge border text-xs ${getPriorityColor(item.priority)}`}>{getPriorityLabel(item.priority)}</span>
-                {item.deadline && <span className="text-[10px] text-muted-foreground">{item.deadline}</span>}
-              </div>
-              <div className="flex items-center gap-1.5 pt-1.5 border-t border-border">
-                {currentUser && item.requestedBy === currentUser ? (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 font-medium flex-1 inline-flex items-center justify-center gap-0.5">
-                    <Zap size={8} aria-hidden="true" /> Auto-iniciada
-                  </span>
-                ) : (
-                  <p className="text-[10px] text-muted-foreground flex-1">por {item.requestedBy}</p>
-                )}
-                <button
-                  onClick={(e) => { e.stopPropagation(); onBriefing(item._req as DesignRequest); }}
-                  className="text-[10px] px-2 py-1 rounded-md bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                >
-                  <Paperclip size={10} /> Briefing
-                </button>
-              </div>
-            </div>
-          )}
-          onMove={(itemId, from, to) => {
-            if (to === "alteracoes") return; // não pode virar destino (coluna virtual)
-            const req = designRequests.find((r) => r.id === itemId);
-            if (!req) return;
-            // Sair de Alterações ou ir pra Concluído = entregar arte. Antes o arraste gravava
-            // designerDeliveredAt sem arte nenhuma; agora abre a entrega de verdade.
-            if (from === "alteracoes" || to === "done") {
-              onConcluir(req);
-              return;
-            }
-            updateDesignRequest(itemId, { status: to as DesignRequest["status"] })
-              .catch(avisarFalha("Não consegui mover a demanda"));
-          }}
-          onEdit={(item) => {
-            const fullReq = (item as { _req?: DesignRequest })._req ?? designRequests.find((r) => r.id === item.id);
-            if (fullReq) onBriefing(fullReq);
-          }}
-          onDelete={onDeleteRequest ? (itemId) => {
-            const req = designRequests.find((r) => r.id === itemId);
-            if (req) onDeleteRequest(req);
-          } : undefined}
-        />
-        </KanbanErrorBoundary>
-      )}
-
-      {viewMode === "list" && (
-        <div className="space-y-2">
-          {filtered.length === 0 && (
-            <div className="card text-center py-10 text-muted-foreground">Nenhuma solicitação encontrada.</div>
-          )}
-          {filtered.map((req) => {
-            const linked = getLinkedCard(req);
-            return (
-              <div key={req.id} onClick={() => onBriefing(req)} className="card border border-border hover:border-primary/30 transition-colors cursor-pointer">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h4 className="font-semibold text-foreground text-sm">{req.title}</h4>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-xs text-primary">{req.clientName}</span>
-                      <span className="text-muted-foreground/50">·</span>
-                      <span className="text-xs text-muted-foreground">{req.format}</span>
-                      <span className="text-muted-foreground/50">·</span>
-                      {currentUser && req.requestedBy === currentUser ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 font-medium inline-flex items-center gap-0.5"><Zap size={8} aria-hidden="true" /> Auto-iniciada</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">por {req.requestedBy}</span>
-                      )}
-                    </div>
-                    {req.briefing && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{markdownPlainText(req.briefing)}</p>}
-                    {linked && (
-                      <span className="text-[10px] text-muted-foreground bg-card border border-border px-2 py-0.5 rounded-full mt-1.5 inline-block">
-                        Card: {linked.title}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={`badge border text-xs ${getPriorityColor(req.priority)}`}>{getPriorityLabel(req.priority)}</span>
-                    <span className={`badge border text-xs ${
-                      req.status === "done" ? "text-primary bg-primary/10 border-primary/20" :
-                      req.status === "in_progress" ? "text-primary bg-primary/10 border-primary/20" :
-                      "text-muted-foreground bg-card border-border"
-                    }`}>
-                      {req.status === "queued" ? "Na Fila" : req.status === "in_progress" ? "Em Produção" : "Concluído"}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border">
-                  {req.status === "queued" && (
-                    <button onClick={(e) => { e.stopPropagation(); updateDesignRequest(req.id, { status: "in_progress" }).catch(avisarFalha("Não consegui iniciar a demanda")); }} className="btn-primary text-xs py-1.5">
-                      Iniciar Produção
-                    </button>
-                  )}
-                  {req.status === "in_progress" && (
-                    <button onClick={(e) => { e.stopPropagation(); onConcluir(req); }} className="bg-primary hover:bg-primary/80 text-primary-foreground px-3 py-1.5 rounded-lg font-medium text-xs transition-colors">
-                      Entregar e concluir
-                    </button>
-                  )}
-                  {req.status === "done" && (
-                    <span className="text-xs text-primary flex items-center gap-1"><CheckCircle size={12} /> Concluído</span>
-                  )}
-                  <button onClick={(e) => { e.stopPropagation(); onBriefing(req); }} className="btn-ghost text-xs flex items-center gap-1">
-                    <Paperclip size={12} /> Briefing
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -2582,23 +622,27 @@ function NewTaskModal({
       }
     }
 
-    // Sobe as referências DEPOIS de criar (o upload precisa do id da demanda). Se falhar, a
-    // demanda continua criada — perdê-la por causa de um anexo seria pior — e o aviso aparece.
+    // Sobe as referências DEPOIS de criar (o upload precisa do id). Leva 5b: a tarefa nasce com card,
+    // e a referência vai pro CARD (card_attachments, tipo referência) — é onde o "Entregar arte"
+    // mostra a referência. Sem card (servidor antigo), cai no pedido como antes. Se falhar, a tarefa
+    // continua criada — perdê-la por causa de um anexo seria pior — e o aviso aparece.
     if (criada?.id && refs.length) {
+      const alvo = criada.contentCardId ?? criada.id;
       for (const f of refs) {
         if (enviadasRef.current.has(f)) continue;
         const fd = new FormData();
         // Referência do pedido, não entrega — mesma regra do board social.
-        fd.append("file", f); fd.append("cardId", criada.id); fd.append("tipo", "referencia");
-        const r = await chamar<{ url?: string }>("/api/upload-art", fd);
-        if (r.ok && r.data?.url) enviadasRef.current.set(f, r.data.url);
+        fd.append("file", f); fd.append("cardId", alvo); fd.append("tipo", "referencia");
+        const r = await chamar<{ url?: string; attachments?: { url: string }[] }>("/api/upload-art", fd);
+        const url = r.data?.url ?? r.data?.attachments?.[r.data.attachments.length - 1]?.url;
+        if (r.ok && url) enviadasRef.current.set(f, url);
         else {
-          const m = `Demanda criada, mas a referência "${f.name}" não subiu (${r.erro ?? "sem url"}). Clique de novo para tentar só ela.`;
+          const m = `Tarefa criada, mas a referência "${f.name}" não subiu (${r.erro ?? "sem url"}). Clique de novo para tentar só ela.`;
           erroRefRef.current = m; setErroRef(m);
         }
       }
       const urls = refs.map((f) => enviadasRef.current.get(f)).filter((u): u is string => !!u);
-      if (urls.length && !erroRefRef.current) {
+      if (urls.length && !erroRefRef.current && !criada.contentCardId) {
         const r = await chamar("/api/design-requests/update", { id: criada.id, attachments: [...(criada.attachments ?? []), ...urls] });
         if (!r.ok) {
           const m = `A demanda foi criada, mas as referências não vincularam (${r.erro}). Clique de novo para tentar.`;
@@ -2613,7 +657,7 @@ function NewTaskModal({
     pushNotification(
       "content",
       "Tarefa auto-iniciada criada",
-      `"${title.trim()}" — ${client.nomeFantasia || client.name}. Veja no Quadro de Tarefas.`,
+      `"${title.trim()}" — ${client.nomeFantasia || client.name}. O card já está em "Com o designer" no quadro de produção.`,
       client.id,
     );
     setTimeout(() => {

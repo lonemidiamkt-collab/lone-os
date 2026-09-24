@@ -1,5 +1,6 @@
 "use client";
 
+import { infoEtapa } from "@/lib/conteudo/etapas";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExternalLink, Check, X, Bookmark, TrendingUp, Loader2, CalendarDays } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
@@ -78,7 +79,7 @@ export default function RadarOportunidades() {
     const id = pauta.id;
     setOcupado(id);
     try {
-      // "Usar esta pauta" vira card em Ideias já preenchido: cliente, título, pauta no briefing,
+      // "Usar esta pauta" vira card na Pauta (etapa) já preenchido: cliente, título, pauta no briefing,
       // formato e a data sugerida — ninguém redigita nada. A chave de idempotência da pauta faz o
       // create devolver o MESMO card se o clique se repetir (ou no retry depois de uma falha).
       let cardId: string | null = null;
@@ -95,7 +96,7 @@ export default function RadarOportunidades() {
       if (cardId && data) {
         const dia = data;
         setOcupadas((o) => ({ ...o, [pauta.client_id]: [...(o[pauta.client_id] ?? []), dia] }));
-        toast.success(`Card criado em Ideias para ${dataCurta(dia)}, com a pauta no briefing.`, {
+        toast.success(`Card criado na ${infoEtapa("pauta").rotulo} para ${dataCurta(dia)}, com a pauta no briefing.`, {
           action: { label: "Abrir", onClick: () => { window.location.href = `/social?card=${cardId}`; } },
         });
       } else {
@@ -240,7 +241,7 @@ export default function RadarOportunidades() {
                       <button
                         onClick={() => decidir(p, "usada")}
                         disabled={ocupado === p.id}
-                        title="Cria o card em Ideias já com cliente, título, briefing, formato e data"
+                        title="Cria o card na Pauta já com cliente, título, briefing, formato e data"
                         className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-lone-success text-background hover:opacity-90 disabled:opacity-50"
                       >
                         {ocupado === p.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Usar esta pauta

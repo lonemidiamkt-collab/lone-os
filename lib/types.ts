@@ -283,6 +283,10 @@ export interface ContentCard {
   // 20260924190000 ou quando alguém fechou à mão.
   igMediaId?: string;
   igPermalink?: string;
+  // Etapa de design (Leva 5b): alteração pedida e ainda não reentregue. Grava "pedir alteração"
+  // (social, cliente no portal ou no WhatsApp); a entrega zera.
+  alteracaoPendenteEm?: string;
+  alteracaoMotivo?: string;
   // Timesheet Invisível
   workStartedAt?: string;          // ISO — when work started (in_production)
   totalTimeSpentMs?: number;       // accumulated milliseconds of active work

@@ -5,6 +5,7 @@
 // jeito (status + publish_verified_at = hora do post), só não guarda o link — e o "mesmo instante"
 // de publish_verified_at continua segurando o post para ele (ver reservarPostsDeQuemJaEstaNoAr).
 
+import { statusDaEtapa, statusDasEtapas } from "@/lib/conteudo/etapas";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { todaySP } from "@/lib/utils";
 import {
@@ -68,7 +69,7 @@ export async function carregarCards(de: string, ate: string, postIds: string[], 
     paginar<LinhaComColunas>((i, f) => supabaseAdmin.from("content_cards").select(cols)
       .is("due_date", null).gte("scheduled_at", deTs).lte("scheduled_at", ateTs).order("id").range(i, f) as unknown as PromiseLike<Pagina<LinhaComColunas>>),
     paginar<LinhaComColunas>((i, f) => supabaseAdmin.from("content_cards").select(cols)
-      .is("due_date", null).is("scheduled_at", null).eq("status", "published")
+      .is("due_date", null).is("scheduled_at", null).in("status", statusDasEtapas("no_ar"))
       .gte("publish_verified_at", deTs).lte("publish_verified_at", ateTs).order("id").range(i, f) as unknown as PromiseLike<Pagina<LinhaComColunas>>),
   ]);
   const erro = consultas.find((c) => c.erro)?.erro ?? null;
@@ -134,16 +135,16 @@ export async function noArPeloInstagram(opts: { ensaio: boolean; dias?: number; 
     for (const f of plano) {
       const card = porId.get(f.cardId);
       const linha: Record<string, unknown> = {
-        status: "published",
+        status: statusDaEtapa("no_ar"),
         status_changed_at: agora,
-        column_entered_at: { ...(card?.column_entered_at ?? {}), published: agora },
+        column_entered_at: { ...(card?.column_entered_at ?? {}), [statusDaEtapa("no_ar")]: agora },
         publish_verified_at: f.postedAt,
         publish_verified_by: VERIFICADO_PELO_INSTAGRAM,
       };
       if (comIg) { linha.ig_media_id = f.mediaId; linha.ig_permalink = f.permalink; }
       // Só fecha se ainda está aberto e ativo: alguém pode ter mexido desde a leitura.
       const { data, error } = await supabaseAdmin.from("content_cards").update(linha)
-        .eq("id", f.cardId).neq("status", "published").is("archived_at", null).select("id");
+        .eq("id", f.cardId).not("status", "in", `(${statusDasEtapas("no_ar").join(",")})`).is("archived_at", null).select("id");
       if (error) { base.falhas.push({ cardId: f.cardId, motivo: error.message }); continue; }
       if (data?.length) base.fechados++;
     }

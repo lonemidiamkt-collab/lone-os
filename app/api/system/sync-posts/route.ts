@@ -24,6 +24,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+import { statusDasEtapas } from "@/lib/conteudo/etapas";
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
     supabaseAdmin.from("client_ig_posts").select("client_id").in("client_id", ids).gte("posted_at", inicioMes),
     supabaseAdmin.from("client_ig_posts").select("client_id, posted_at").in("client_id", ids).order("posted_at", { ascending: false }),
     supabaseAdmin.from("content_cards").select("client_id, status_changed_at")
-      .in("client_id", ids).eq("status", "published").is("archived_at", null)
+      .in("client_id", ids).in("status", statusDasEtapas("no_ar")).is("archived_at", null)
       .order("status_changed_at", { ascending: false }),
   ]);
 

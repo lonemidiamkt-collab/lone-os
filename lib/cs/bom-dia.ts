@@ -2,6 +2,7 @@
 // time começar sabendo o que fazer. Determinístico (sem IA → zero custo, roda todo dia útil).
 // Voz da Lone via template. Fonte de dados: montarSnapshotCS().
 
+import { infoEtapa } from "@/lib/conteudo/etapas";
 import type { SnapshotCS } from "@/lib/cs/snapshot";
 import { linhaDataBomDia } from "@/lib/cs/datas";
 import { coletarItens, agruparPorDono, textoPorDono } from "@/lib/cs/cobranca-nominal";
@@ -24,7 +25,7 @@ export function buildBomDiaDigest(snap: SnapshotCS, now: Date, time: string[] = 
     l.push(`📋 *${snap.pendentes.length}* esperando seu ok/não — ${nomes}${snap.pendentes.length > 5 ? "…" : ""}`);
   }
   if (snap.emProducao || snap.aguardandoAprovacao) {
-    l.push(`🎨 *${snap.emProducao}* em produção · *${snap.aguardandoAprovacao}* aguardando aprovação`);
+    l.push(`🎨 *${snap.emProducao}* ${infoEtapa("com_designer").rotulo.toLowerCase()} · *${snap.aguardandoAprovacao}* em ${infoEtapa("revisao").rotulo.toLowerCase()} ou ${infoEtapa("com_cliente").rotulo.toLowerCase()}`);
   }
   if (snap.prontasPraPostar.length) {
     // O designer já entregou — o gargalo é o social confirmar/postar.

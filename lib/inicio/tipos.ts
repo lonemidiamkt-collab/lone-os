@@ -76,7 +76,8 @@ export interface ResumoCarteira {
   clientes: number;
   saude: { saudavel: number; atencao: number; risco: number; semDado: number };
   onboarding: { emSetup: number; nomes: string[]; desatualizados: number };
-  conteudo: { ideias: number; roteiro: number; producao: number; aprovacao: number; agendados: number; publicadosMes: number };
+  /** Cards por etapa do quadro de produção (lib/conteudo/etapas.ts) + publicados no mês. */
+  conteudo: { pauta: number; comDesigner: number; revisao: number; comCliente: number; agendados: number; publicadosMes: number };
   design: { fila: number; producao: number };
 }
 

@@ -3,6 +3,7 @@
 // Leva 5a: "Usar esta pauta" cria o card já com cliente, título, briefing, formato e DATA SUGERIDA
 // (o próximo dia de postagem livre do cliente), e a pauta fica ligada ao card.
 
+import { statusDaEtapa } from "@/lib/conteudo/etapas";
 import { proximoSlot } from "@/components/kanban/lote";
 
 export interface PautaParaCard {
@@ -61,7 +62,7 @@ export function cardDaPauta(p: PautaParaCard & { id?: string }, socialMedia: str
     clientName: p.cliente_nome,
     title: p.ideia.slice(0, 120),
     format: formatoDoCard(p.formato),
-    status: "ideas",
+    status: statusDaEtapa("pauta"),
     priority: "medium",
     briefing: briefingDaPauta(p),
     socialMedia: socialMedia || null,

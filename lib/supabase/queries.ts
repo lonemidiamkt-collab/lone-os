@@ -405,6 +405,12 @@ export function snakeToContentCard(row: Record<string, unknown>): ContentCard {
     publishVerifiedBy: (row.publish_verified_by as string) ?? undefined,
     igMediaId: (row.ig_media_id as string) ?? undefined,
     igPermalink: (row.ig_permalink as string) ?? undefined,
+    alteracaoPendenteEm: (row.alteracao_pendente_em as string) ?? undefined,
+    alteracaoMotivo: (row.alteracao_motivo as string) ?? undefined,
+    blockedReason: (row.blocked_reason as string) ?? undefined,
+    blockedBy: (row.blocked_by as string) ?? undefined,
+    blockedAt: (row.blocked_at as string) ?? undefined,
+    scheduledAt: (row.scheduled_at as string) ?? undefined,
     requestedByTraffic: (row.requested_by_traffic as string) ?? undefined,
     trafficSuggestion: (row.traffic_suggestion as string) ?? undefined,
   };
@@ -459,7 +465,7 @@ export async function fetchContentCards(filter?: { socialMedia?: string; archive
     for (let i = 0; i < cardIds.length; i += 60) {
       const lote = await db
         .from("card_attachments")
-        .select("id, card_id, url, path, position, created_at")
+        .select("id, card_id, url, path, position, created_at, tipo")
         .in("card_id", cardIds.slice(i, i + 60))
         .order("position", { ascending: true });
       if (lote.error) { attErr = lote.error; atts = null; break; }
@@ -480,7 +486,8 @@ export async function fetchContentCards(filter?: { socialMedia?: string; archive
           card.cardAttachments = list;
           // Capa = 1ª arte (position 0). Mantém todos os leitores de imageUrl
           // funcionando mesmo após a migração silenciosa zerar image_url.
-          if (!card.imageUrl) card.imageUrl = list[0].url;
+          // A arte ENTREGUE vence a referência do social quando as duas existem.
+          if (!card.imageUrl) card.imageUrl = (list.find((a) => a.tipo === "entrega") ?? list[0]).url;
         }
       }
     }

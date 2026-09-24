@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { statusDasEtapas } from "@/lib/conteudo/etapas";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCron } from "@/lib/api/cron-guard";
@@ -63,15 +64,15 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Em produção agora (snapshot).
+  // Com o designer agora (snapshot).
   const { count: emProducao } = await supabaseAdmin
     .from("content_cards").select("id", { count: "exact", head: true })
-    .eq("status", "in_production").is("archived_at", null).is("designer_delivered_at", null);
+    .in("status", statusDasEtapas("com_designer")).is("archived_at", null).is("designer_delivered_at", null);
 
-  // Publicados na semana (best-effort: status published + status_changed_at na semana).
+  // No ar na semana (best-effort: etapa No ar + status_changed_at na semana).
   const { data: pubData } = await supabaseAdmin
     .from("content_cards").select("status_changed_at")
-    .eq("status", "published").is("archived_at", null)
+    .in("status", statusDasEtapas("no_ar")).is("archived_at", null)
     .not("status_changed_at", "is", null)
     .gte("status_changed_at", desde);
   const publicados = (pubData ?? []).filter((p) => {

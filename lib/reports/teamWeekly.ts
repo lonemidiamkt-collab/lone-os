@@ -8,6 +8,7 @@
 // mostra dois sinais reais: (a) a rotina que o Julio registrou por cliente e (b) a variação de
 // VERBA (spend) da semana vs a anterior — o melhor proxy de "onde ele mexeu".
 
+import { infoEtapa, statusDasEtapas, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { spNow, ymd, addDays, spDateKeyOf } from "@/lib/cs/vigilancia";
 
@@ -82,7 +83,7 @@ export async function buildTeamWeeklyData(): Promise<TeamWeeklyData> {
       desMap.set(nome, g);
     }
     // Publicação (social confirmou OU status virou published na semana)
-    const pubKey = (k.status === "published") ? (k.status_changed_at as string) : null;
+    const pubKey = statusNaEtapa(k.status as string, "no_ar") ? (k.status_changed_at as string) : null;
     if (naSemana(k.social_confirmed_at as string) || naSemana(pubKey)) {
       publicados++;
       if (k.social_media) socialOf((k.social_media as string).trim()).publicados++;
@@ -111,10 +112,10 @@ export async function buildTeamWeeklyData(): Promise<TeamWeeklyData> {
     if (d.status === "done") g.entregues++;
   }
 
-  // ── Em produção agora (snapshot) ──
+  // ── Com o designer agora (snapshot) ──
   const { count: emProducao } = await supabaseAdmin
     .from("content_cards").select("id", { count: "exact", head: true })
-    .eq("status", "in_production").is("archived_at", null).is("designer_delivered_at", null);
+    .in("status", statusDasEtapas("com_designer")).is("archived_at", null).is("designer_delivered_at", null);
 
   // ── Tráfego / Julio: rotina registrada na semana ──
   const { data: checks } = await supabaseAdmin
@@ -277,7 +278,7 @@ export function buildTeamWeeklyHtml(d: TeamWeeklyData): string {
       ${kpi("Artes entregues", String(d.totalEntregues))}
       ${kpi("Publicados", String(d.publicados))}
       ${kpi("Demandas criadas", String(d.demandasCriadas))}
-      ${kpi("Em produção", String(d.emProducao))}
+      ${kpi(infoEtapa("com_designer").rotulo, String(d.emProducao))}
     </div>
 
     ${sectionTitle("🎨 Designers — entregas de arte")}

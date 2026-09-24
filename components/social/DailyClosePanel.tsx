@@ -1,5 +1,6 @@
 "use client";
 
+import { ETAPAS_FINAIS, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { useMemo, useState } from "react";
 import { CheckCircle2, Clock, ChevronDown, ChevronRight, CalendarCheck } from "lucide-react";
 import type { ContentCard } from "@/lib/types";
@@ -27,7 +28,7 @@ const hojeLocal = (): string => {
 };
 
 const artePronta = (c: ContentCard): boolean =>
-  Boolean(c.designerDeliveredAt) || Boolean(c.imageUrl) || c.status === "scheduled" || c.status === "published";
+  Boolean(c.designerDeliveredAt) || Boolean(c.imageUrl) || statusNaEtapa(c.status, ...ETAPAS_FINAIS);
 
 interface ClienteDia {
   clientId: string;

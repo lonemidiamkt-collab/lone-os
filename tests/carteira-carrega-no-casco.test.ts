@@ -48,7 +48,8 @@ describe("o quadro do designer não afirma 'sem itens' antes de saber", () => {
   it("espera a carteira carregar antes de filtrar por dono", () => {
     // Rodrigo (11/09): "todas as demandas sumiram". O dono é resolvido pela lista de clientes;
     // lista vazia = toda demanda sem dono = quadro pessoal vazio, com cara de verdade.
-    expect(DESIGN).toMatch(/tab === "requests" && !clientesCarregados && quadroAtivo !== "Todos"/);
+    // Leva 5b: o "Quadro de Tarefas" (aba requests) virou o quadro de produção (aba producao).
+    expect(DESIGN).toMatch(/tab === "producao" && !clientesCarregados && quadroAtivo !== "Todos"/);
     expect(DESIGN).toMatch(/Carregando sua carteira para montar o quadro/);
     expect(DESIGN).toMatch(/Não consegui carregar a lista de clientes/);
   });

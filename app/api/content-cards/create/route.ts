@@ -4,6 +4,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { statusDaEtapa, statusNaEtapa } from "@/lib/conteudo/etapas";
+import { executarTransicao } from "@/lib/conteudo/producao-server";
 
 // Idempotência por chave do cliente (criação em lote): cada linha manda a sua. Por título não dá —
 // três "Dica da semana" no mesmo lote viravam um card só. Memória do processo basta (1 container).
@@ -32,6 +34,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const titulo = String(body.title).trim();
+    const pedeArte = typeof body.status === "string" && statusNaEtapa(body.status, "com_designer");
+    const statusInicial = pedeArte || typeof body.status !== "string" ? statusDaEtapa("pauta") : body.status;
     const chave = typeof body.idempotencyKey === "string" && body.idempotencyKey ? `${user.id}|${body.idempotencyKey}` : null;
     if (chave) {
       const visto = porChave.get(chave);
@@ -49,7 +53,8 @@ export async function POST(req: NextRequest) {
       client_id: body.clientId,
       client_name: body.clientName ?? "",
       social_media: body.socialMedia ?? null,
-      status: body.status ?? "ideas",
+      // "Com o designer" não nasce solto: o card nasce na Pauta e o pedido de arte abre junto (abaixo).
+      status: statusInicial,
       priority: body.priority ?? "medium",
       format: body.format ?? null,
       platform: body.platform ?? null,
@@ -59,7 +64,7 @@ export async function POST(req: NextRequest) {
       caption: body.caption ?? null,
       requested_by_traffic: body.requestedByTraffic ?? null,
       status_changed_at: new Date().toISOString(),
-      column_entered_at: { [body.status ?? "ideas"]: new Date().toISOString() },
+      column_entered_at: { [statusInicial]: new Date().toISOString() },
     }).select("id").single();
 
     if (error) {
@@ -68,6 +73,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (chave) lembrar(chave, data.id as string);
+
+    // Pediu o card já "Com o designer": a transição de design abre o pedido (lib/conteudo/producao-server.ts).
+    if (pedeArte) {
+      const quem = typeof body.createdBy === "string" && body.createdBy ? body.createdBy : (user.email ?? "equipe");
+      const r = await executarTransicao(data.id as string, { tipo: "pedir_arte" }, { quem });
+      if (!r.ok) console.error("[content-cards/create] card criado, pedido de arte não abriu:", r.erro);
+    }
 
     // ALERTA direcionado ao social responsável pelo card (bell + toast + notificação do SO).
     // Quem criou o próprio card não é avisado dele — o nome vem do corpo ou da sessão.

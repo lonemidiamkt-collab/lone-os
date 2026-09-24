@@ -2,13 +2,14 @@
 // (usado pelo cron creative-estilo e pelo botão "Reler das artes" na ficha).
 
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { statusDasEtapas } from "@/lib/conteudo/etapas";
 import { analisarEstiloVisual } from "@/lib/traffic/estilo-visual";
 import { escolherArtes, decidirReleitura, type ArteCandidata, type Motivo } from "@/lib/traffic/estilo-automatico";
 
 export interface ResultadoLeitura { clientId: string; cliente: string; lido: boolean; motivo: Motivo | "forcado" | "erro"; artes: number; erro?: string }
 
 export async function candidatasDoCliente(clientId: string): Promise<{ cands: ArteCandidata[]; novasDesde: (iso: string | null) => number }> {
-  const { data: cards } = await supabaseAdmin.from("content_cards").select("id, status").eq("client_id", clientId).in("status", ["published", "scheduled", "client_approval", "approval"]).limit(400);
+  const { data: cards } = await supabaseAdmin.from("content_cards").select("id, status").eq("client_id", clientId).in("status", statusDasEtapas("revisao", "com_cliente", "agendado", "no_ar")).limit(400);
   const ids = (cards ?? []).map((c) => c.id as string);
   if (!ids.length) return { cands: [], novasDesde: () => 0 };
   const status = new Map((cards ?? []).map((c) => [c.id as string, c.status as string]));

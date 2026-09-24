@@ -139,10 +139,12 @@ export const MENU: readonly GrupoMenu[] = [
       // Leva 5a: a Carteira saiu daqui (a lista de clientes é uma só: Clientes › Meus Clientes) e
       // Métricas + Entregas Mensais viraram Resultados, contados no Instagram real.
       { id: "social", rotulo: "Social Media", icone: Instagram, href: "/social", papeis: CONTEUDO,
-        descricao: "Board de produção, aprovação e resultados", termos: ["kanban", "posts", "instagram"],
+        descricao: "Quadro de produção, aprovação e resultados", termos: ["kanban", "board", "posts", "instagram", "pauta", "produção"],
         secoes: [
           { titulo: "Social Media", itens: [
-            { id: "social-board", rotulo: "Board de Produção", icone: Layers, href: "/social", aba: "kanban", badge: "socialPending" },
+            // Leva 5b: o quadro é um só (o mesmo do Designer), com as seis etapas e três vistas.
+            { id: "social-board", rotulo: "Produção", icone: Layers, href: "/social", aba: "kanban", badge: "socialPending",
+              termos: ["board de produção", "kanban", "quadro", "pauta", "com o designer", "revisão interna", "com o cliente"] },
             { id: "social-aprovacao", rotulo: "Inbox de Aprovação", icone: Inbox, href: "/social", aba: "aprovacao", badge: "socialApproval" },
           ] },
           { titulo: "Análise", itens: [
@@ -162,8 +164,10 @@ export const MENU: readonly GrupoMenu[] = [
         // "Clientes do Quadro" saiu na Leva 5a: a carteira é a lista única (Clientes › Meus Clientes).
         secoes: [
           { titulo: "Designer", itens: [
-            { id: "design-kanbans", rotulo: "Kanbans Social Media", icone: Columns3, href: "/design", aba: "kanbans" },
-            { id: "design-quadro", rotulo: "Quadro de Tarefas", icone: Layers, href: "/design", aba: "requests", badge: "designQueued" },
+            // Leva 5b: "Kanbans Social Media" e "Quadro de Tarefas" viraram o quadro de produção (o mesmo
+            // do Social). Os endereços antigos (#kanbans, #requests) abrem nele, na vista certa.
+            { id: "design-producao", rotulo: "Produção", icone: Columns3, href: "/design", aba: "producao", badge: "designQueued",
+              termos: ["kanbans", "quadro de tarefas", "fila", "demandas", "pedidos de arte", "por designer"] },
             { id: "design-performance", rotulo: "Performance", icone: Activity, href: "/design", aba: "performance" },
             { id: "design-historico", rotulo: "Histórico", icone: History, href: "/design", aba: "history" },
           ] },

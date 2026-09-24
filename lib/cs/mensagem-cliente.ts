@@ -14,6 +14,7 @@
 //   • nunca cobra o cliente nem sugere que ele está devendo algo
 //   • falhou a IA? cai no texto neutro. Nunca deixa o cliente sem mensagem nem manda meia-frase.
 
+import { statusNaEtapa } from "@/lib/conteudo/etapas";
 import { chatJson } from "@/lib/ai/openai";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getEstiloCliente } from "./estilo";
@@ -84,11 +85,11 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
     // CONFERE SE ELE REALMENTE NÃO APROVOU. Card pode estar em "aguardando aprovação" e já ter o
     // carimbo de aprovado — o cliente respondeu no grupo e ninguém moveu o card. Cobrar aprovação
     // de quem já aprovou passa a impressão de que a gente não presta atenção nele.
-    const aguardandoAprovacao = linhas.filter((c) => c.status === "client_approval" && !c.client_approved_at).length;
+    const aguardandoAprovacao = linhas.filter((c) => statusNaEtapa(c.status, "com_cliente") && !c.client_approved_at).length;
     const aprovouRecentemente = linhas.some((c) => c.client_approved_at && c.client_approved_at >= seteDias);
     // Quando a arte mais antiga entrou em "esperando o cliente" — marco pra ler a conversa depois.
     const esperando = linhas
-      .filter((c) => c.status === "client_approval" && !c.client_approved_at && c.status_changed_at)
+      .filter((c) => statusNaEtapa(c.status, "com_cliente") && !c.client_approved_at && c.status_changed_at)
       .map((c) => c.status_changed_at as string).sort();
     const esperandoDesde = esperando[0] ?? null;
     const entreguesNaSemana = linhas.filter((c) => c.designer_delivered_at && c.designer_delivered_at >= seteDias).length;

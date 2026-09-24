@@ -54,10 +54,14 @@ const ANTIGO_SECUNDARIO: Record<string, { rotas: string[]; abas: string[] }> = {
 // Abas que mudaram de nome sem sumir: o pedido antigo cai na nova (a tela aceita os dois nomes).
 //  - Leva 4: /traffic#rotina ("Rotina Diária") virou /traffic#hoje ("Hoje", o cockpit do gestor).
 //  - Leva 5a: /social#metricas e /social#entregas viraram /social#resultados (contado no Instagram).
+//  - Leva 5b: os dois quadros do Designer (#kanbans "Kanbans Social Media" e #requests "Quadro de
+//    Tarefas") viraram o quadro de produção único (#producao), o mesmo do Social.
 const ABAS_RENOMEADAS: Record<string, string> = {
   "/traffic#rotina": "/traffic#hoje",
   "/social#metricas": "/social#resultados",
   "/social#entregas": "/social#resultados",
+  "/design#kanbans": "/design#producao",
+  "/design#requests": "/design#producao",
 };
 // Abas que viraram OUTRA TELA (a aba sumiu; o conteúdo mora no endereço indicado).
 //  - Leva 5a: a Carteira do Social e os "Clientes do Quadro" do Designer eram listas de cliente

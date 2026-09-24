@@ -15,6 +15,7 @@ import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
 import { ehDoQuadro } from "@/lib/design/dono";
+import { ETAPAS_FINAIS, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { emOperacao } from "@/lib/clients/operacao";
 import { useNav, SIDEBAR_W, SIDEBAR_W_EXPANDED } from "@/lib/context/NavContext";
 import {
@@ -109,10 +110,10 @@ export default function Sidebar() {
 
   const badges: Record<ChaveBadge, number> = {
     atRisk: clients.filter((c) => c.status === "at_risk").length,
-    socialPending: cardsSocial.filter((c) => !["scheduled", "published"].includes(c.status)).length,
-    // Card já aprovado pelo cliente continua em client_approval até alguém agendar — não é pendência.
+    socialPending: cardsSocial.filter((c) => !statusNaEtapa(c.status, ...ETAPAS_FINAIS)).length,
+    // Card já aprovado pelo cliente continua "Com o cliente" até alguém agendar — não é pendência.
     socialApproval: cardsSocial.filter(
-      (c) => c.status === "approval" || (c.status === "client_approval" && !c.clientApprovedAt),
+      (c) => statusNaEtapa(c.status, "revisao") || (statusNaEtapa(c.status, "com_cliente") && !c.clientApprovedAt),
     ).length,
     socialOnboarding: Object.values(onboarding).reduce((sum, items) => sum + items.filter((it) => !it.completed).length, 0),
     designQueued,

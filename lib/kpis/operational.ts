@@ -2,6 +2,7 @@
 // content_cards (columnEnteredAt, dueDate, statusChangedAt, totalTimeSpentMs, nonDeliveryReason)
 // mas que nunca viravam indicador. Funções PURAS (testáveis), sem IO.
 
+import { rotuloCompleto, statusNaEtapa } from "@/lib/conteudo/etapas";
 import type { ContentCard } from "@/lib/types";
 
 const DAY = 86_400_000;
@@ -36,15 +37,12 @@ export interface OperationalKpis {
   nonDeliveryReasons: ReasonStat[];
 }
 
-const STAGE_LABEL: Record<string, string> = {
-  ideas: "Ideias", script: "Roteiro", in_production: "Produção", blocked: "Bloqueado",
-  approval: "Aprovação", client_approval: "Aprov. cliente", scheduled: "Agendado", published: "Publicado",
-};
-export const stageLabel = (s: string): string => STAGE_LABEL[s] ?? s;
+/** Nome da etapa de um status (lib/conteudo/etapas.ts — o mesmo do quadro). */
+export const stageLabel = (s: string): string => rotuloCompleto(s);
 
 // Quando o card foi publicado: entrada na coluna "published" ou, na falta, o statusChangedAt.
 function publishedAt(c: ContentCard): number | null {
-  return ms(c.columnEnteredAt?.published) ?? (c.status === "published" ? ms(c.statusChangedAt) : null);
+  return ms(c.columnEnteredAt?.published) ?? (statusNaEtapa(c.status, "no_ar") ? ms(c.statusChangedAt) : null);
 }
 // Quando o card "nasceu": entrada em ideas, ou o 1º timestamp registrado.
 function startedAt(c: ContentCard): number | null {
@@ -54,7 +52,7 @@ function startedAt(c: ContentCard): number | null {
 }
 
 export function computeOperationalKpis(cards: ContentCard[]): OperationalKpis {
-  const publicados = cards.filter((c) => c.status === "published");
+  const publicados = cards.filter((c) => statusNaEtapa(c.status, "no_ar"));
 
   // Lead time (ideia → publicado), em dias.
   const leadDays: number[] = [];

@@ -14,6 +14,7 @@ import { entraNaSemana, esfriou, motivosDoCliente, type ClienteSemana } from "@/
 import { DIAS_PRA_ESCALAR } from "@/lib/cs/cobranca-nominal";
 import { clientesSemPostNaSemana, semanaAlvo } from "@/lib/cs/lacunas";
 import { donoDaDemanda } from "@/lib/design/dono";
+import { ETAPAS_COMPROMETIDAS, ETAPAS_DE_APROVACAO, ETAPAS_FINAIS, statusDasEtapas, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { emSetupInicial, onboardingDesatualizado } from "@/lib/clients/operacao";
 import { temSocial, temTrafego } from "@/lib/clients/servico";
 import { evaluateAccount } from "@/lib/budgets/alert-engine";
@@ -27,8 +28,8 @@ import {
 
 // ── Cortes (com a origem) ───────────────────────────────────────────────────
 
-/** lib/cs/snapshot.ts COMPROMETIDO: só atrasa o que já é trabalho prometido (não "ideas"). */
-export const COMPROMETIDO = ["script", "in_production", "approval", "client_approval"];
+/** Trabalho PROMETIDO (lib/conteudo/etapas.ts): só atrasa o que saiu da Pauta e ainda não foi agendado. */
+export const COMPROMETIDO: string[] = statusDasEtapas(...ETAPAS_COMPROMETIDAS);
 /** lib/cs/snapshot.ts ATRASO_MAX: vencido há mais que isso é encalhado (higiene), não atraso do dia. */
 export const ATRASO_MAX = 30;
 /** lib/priority/fontes/producao.ts: até 7 dias ainda dá para salvar a semana → agir hoje. */
@@ -171,8 +172,8 @@ export function regraAtrasados(d: Dados, ctx: Contexto): ItemInterno[] {
 // É a mesma ação — postar — então vira um item. Card já atrasado fica só no item de atraso.
 export function regraPostar(d: Dados, ctx: Contexto, excluir: Set<string>): ItemInterno[] {
   const out: ItemInterno[] = [];
-  const pronto = (k: CardRow) => !!k.designer_delivered_at && !k.social_confirmed_at && !["published", "scheduled", "ideas"].includes(k.status ?? "");
-  const aprovado = (k: CardRow) => !!k.client_approved_at && !["published", "scheduled"].includes(k.status ?? "");
+  const pronto = (k: CardRow) => !!k.designer_delivered_at && !k.social_confirmed_at && !statusNaEtapa(k.status, "pauta", ...ETAPAS_FINAIS);
+  const aprovado = (k: CardRow) => !!k.client_approved_at && !statusNaEtapa(k.status, ...ETAPAS_FINAIS);
   const lista = d.cards.filter((k) => !excluir.has(k.id) && (pronto(k) || aprovado(k)));
   for (const [c, cards] of porCliente(ctx, lista, (k) => k.client_id)) {
     const parado = (k: CardRow) => diasDesde(aprovado(k) ? k.client_approved_at : k.designer_delivered_at, ctx.agoraMs);
@@ -203,11 +204,11 @@ export function regraAprovacao(d: Dados, ctx: Contexto, excluir: Set<string>): I
     const desde = k.column_entered_at?.[k.status ?? ""] ?? k.status_changed_at;
     return desde ? (ctx.agoraMs - new Date(desde).getTime()) / 3_600_000 : 0;
   };
-  const lista = d.cards.filter((k) => !excluir.has(k.id) && ["approval", "client_approval"].includes(k.status ?? "")
+  const lista = d.cards.filter((k) => !excluir.has(k.id) && statusNaEtapa(k.status, ...ETAPAS_DE_APROVACAO)
     && !k.client_approved_at && horas(k) >= HORAS_PARADO);
   for (const [c, cards] of porCliente(ctx, lista, (k) => k.client_id)) {
     const max = Math.max(...cards.map((k) => Math.floor(horas(k) / 24)));
-    const noCliente = cards.filter((k) => k.status === "client_approval").length;
+    const noCliente = cards.filter((k) => statusNaEtapa(k.status, "com_cliente")).length;
     const um = cards.length === 1;
     out.push(item(ctx, {
       problema: "aprovacao", area: "producao", cliente: c, severidade: "warning",
@@ -343,8 +344,10 @@ export function regraTarefas(d: Dados, ctx: Contexto): ItemInterno[] {
 // Fontes: app/design (prazo = deadline do pedido ou, sem ele, a data do card) + lib/design/dono
 // (atribuição explícita vence a carteira) + lib/cs/snapshot.ts (alteração = rejeição mais nova que
 // a última entrega).
+// Leva 5b: o prazo da arte é a data de postagem do CARD (o pedido guarda uma cópia que o banco
+// espelha). Sem data de postagem (criativo de anúncio, tarefa do designer), vale o prazo do pedido.
 export function prazoDoPedido(p: { deadline: string | null; content_card_id: string | null }, cardPorId: Map<string, CardRow>): string | null {
-  const bruto = p.deadline || (p.content_card_id ? cardPorId.get(p.content_card_id)?.due_date : null) || null;
+  const bruto = (p.content_card_id ? cardPorId.get(p.content_card_id)?.due_date : null) || p.deadline || null;
   return bruto ? bruto.slice(0, 10) : null;
 }
 
@@ -379,8 +382,11 @@ export function cardsComAlteracao(d: Dados): CardRow[] {
     if (r.reviewed_at && (!atual || r.reviewed_at > atual)) ultima.set(r.card_id, r.reviewed_at);
   }
   return d.cards.filter((k) => {
+    if (statusNaEtapa(k.status, "no_ar")) return false;
+    // Leva 5b: "pedir alteração" grava no card (social, cliente no portal ou no WhatsApp); a entrega zera.
+    if (k.alteracao_pendente_em) return true;
     const rej = ultima.get(k.id);
-    if (!rej || k.status === "published") return false;
+    if (!rej) return false;
     return !(k.designer_delivered_at && rej <= k.designer_delivered_at); // entregou depois = já refez
   });
 }

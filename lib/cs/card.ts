@@ -6,6 +6,8 @@
 // o card pelo board dele (filtra por assigned_designer), independente do social_media.
 
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { executarTransicao } from "@/lib/conteudo/producao-server";
+import { statusDaEtapa } from "@/lib/conteudo/etapas";
 
 const PRIO: Record<string, string> = { alta: "high", media: "medium", baixa: "low" };
 
@@ -63,13 +65,13 @@ export async function criarCardDemanda(opts: {
       client_id: opts.clientId,
       client_name: opts.clienteNome,
       social_media: dono,
-      status: "ideas",
+      status: statusDaEtapa("pauta"),
       priority: PRIO[opts.urgencia] ?? "medium",
       due_date: opts.dueDate !== undefined ? opts.dueDate : dueDatePorUrgencia(opts.tipo, opts.urgencia),
       briefing: opts.briefing,
       requested_by_traffic: pilot ? "🤖 Agente CS (teste)" : "🤖 Agente CS",
       status_changed_at: new Date().toISOString(),
-      column_entered_at: { ideas: new Date().toISOString() },
+      column_entered_at: { [statusDaEtapa("pauta")]: new Date().toISOString() },
       ...(opts.decisao ? {
         pilar: opts.decisao.pilar ?? null, objetivo: opts.decisao.objetivo ?? null,
         posicao_funil: opts.decisao.posicao_funil ?? null, angulo: opts.decisao.angulo ?? null,
@@ -94,37 +96,31 @@ export async function criarCardDemanda(opts: {
 }
 
 /** Roteia um AJUSTE pra uma arte JÁ EXISTENTE (em vez de criar card novo): anexa a correção ao
- *  briefing, comenta no card, volta pra produção (limpa designer_delivered_at → o designer refaz e a
- *  vigilância cobra) e notifica. Retorna false se o card sumiu. */
+ *  briefing, comenta no card, volta pro designer e notifica. Retorna false se o card sumiu.
+ *
+ *  A volta pro designer é a transição "pedir_alteracao" (lib/conteudo/producao-server.ts) — a mesma
+ *  da reprovação pelo social: card em "Com o designer", entrega anterior deixa de valer (a vigilância
+ *  volta a cobrar o designer), motivo gravado e o pedido de arte reaberto. Antes este caminho fazia
+ *  tudo isso à mão, e o do portal e o da reprovação faziam cada um o seu. */
 export async function aplicarAjusteNoCard(opts: {
   cardId: string; correcao: string; clientId: string; clienteNome: string;
 }): Promise<boolean> {
   const { data: card } = await supabaseAdmin
     .from("content_cards").select("briefing, title").eq("id", opts.cardId).is("archived_at", null).maybeSingle();
   if (!card) return false;
-  const nowIso = new Date().toISOString();
   const briefingNovo = `${(card.briefing as string) || ""}\n\n---\n✏️ AJUSTE DO CLIENTE (via Agente CS): ${opts.correcao}`.slice(0, 6000);
-  const { error } = await supabaseAdmin.from("content_cards").update({
-    briefing: briefingNovo,
-    status: "in_production",       // volta pra produção pro designer refazer
-    designer_delivered_at: null,   // "não entregue" de novo → a vigilância cobra o designer
-    status_changed_at: nowIso,
-    column_entered_at: { in_production: nowIso },
-  }).eq("id", opts.cardId);
-  if (error) { console.error("[CS] aplicar ajuste no card:", error.message); return false; }
-  // Reabre a demanda do designer. Sem isto o board do DESIGNER continuava mostrando "Concluído"
-  // enquanto o card voltava pra produção — ele não via que tinha trabalho pra refazer. (O caminho de
-  // reprovação pelo social já fazia isso; o do cliente, não.)
-  await supabaseAdmin.from("design_requests")
-    .update({ status: "in_progress" })
-    .eq("content_card_id", opts.cardId).neq("status", "in_progress")
-    .then(() => {}, () => {});
+  const { error } = await supabaseAdmin.from("content_cards").update({ briefing: briefingNovo }).eq("id", opts.cardId);
+  if (error) { console.error("[CS] aplicar ajuste no card (briefing):", error.message); return false; }
+  const r = await executarTransicao(opts.cardId, { tipo: "pedir_alteracao", motivo: opts.correcao }, {
+    quem: opts.clienteNome ? `${opts.clienteNome} (cliente)` : "Cliente", origem: "cliente",
+  });
+  if (!r.ok) { console.error("[CS] aplicar ajuste no card:", r.erro); return false; }
   await supabaseAdmin.from("card_comments").insert({
     card_id: opts.cardId, author: "🤖 Agente CS", role: "system", text: `✏️ Ajuste do cliente: ${opts.correcao.slice(0, 400)}`,
   }).then(() => {}, () => {});
   await supabaseAdmin.from("notifications").insert({
     type: "content", title: "✏️ Ajuste na arte (Agente CS)",
-    body: `"${(card.title as string) || "arte"}" (${opts.clienteNome}) — o cliente pediu ajuste. Voltou pra produção.`,
+    body: `"${(card.title as string) || "arte"}" (${opts.clienteNome}) — o cliente pediu ajuste. Voltou pro designer.`,
     client_id: opts.clientId, card_id: opts.cardId,
   }).then(() => {}, () => {});
   return true;

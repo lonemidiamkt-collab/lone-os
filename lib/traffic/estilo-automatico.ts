@@ -3,22 +3,26 @@
 // sistema (card_attachments). Este módulo é PURO: escolhe quais artes representam o cliente e
 // decide se está na hora de reler. Quem grava é lib/traffic/estilo-ler.ts.
 
+import { etapaDoStatus, type Etapa } from "@/lib/conteudo/etapas";
+
 export interface ArteCandidata { url: string; tipo: string | null; status: string; criadoEm: string; posicao: number | null }
 export interface LeituraAnterior { fonte: string; criadoEm: string; imagens: string[] }
 
 export const MAX_ARTES = 6;
+
 export const DIAS_VALIDADE = 45;
 export const NOVAS_PARA_RELER = 6;
 
 // Preferência: publicada > agendada > aprovada pelo cliente > em aprovação. Referência do cliente
 // (foto que ele mandou) NUNCA entra — não é arte nossa. Anexo sem tipo (anteriores à separação)
 // só conta se o card já passou da aprovação interna.
-const PESO: Record<string, number> = { published: 4, scheduled: 3, client_approval: 2, approval: 1 };
+const PESO_DA_ETAPA: Partial<Record<Etapa, number>> = { no_ar: 4, agendado: 3, com_cliente: 2, revisao: 1 };
+const peso = (status: string): number => PESO_DA_ETAPA[etapaDoStatus(status)] ?? 0;
 const ehImagem = (u: string) => /\.(png|jpe?g|webp)(\?|$)/i.test(u);
 
 export function escolherArtes(cands: ArteCandidata[], max = MAX_ARTES): string[] {
-  const ok = cands.filter((c) => ehImagem(c.url) && c.tipo !== "referencia" && (c.tipo === "entrega" || (c.tipo == null && (PESO[c.status] ?? 0) >= 2)) && (PESO[c.status] ?? 0) >= 1);
-  ok.sort((a, b) => (PESO[b.status] ?? 0) - (PESO[a.status] ?? 0) || b.criadoEm.localeCompare(a.criadoEm) || (a.posicao ?? 0) - (b.posicao ?? 0));
+  const ok = cands.filter((c) => ehImagem(c.url) && c.tipo !== "referencia" && (c.tipo === "entrega" || (c.tipo == null && peso(c.status) >= 2)) && peso(c.status) >= 1);
+  ok.sort((a, b) => peso(b.status) - peso(a.status) || b.criadoEm.localeCompare(a.criadoEm) || (a.posicao ?? 0) - (b.posicao ?? 0));
   const vistos = new Set<string>();
   const out: string[] = [];
   for (const c of ok) { if (vistos.has(c.url)) continue; vistos.add(c.url); out.push(c.url); if (out.length >= max) break; }

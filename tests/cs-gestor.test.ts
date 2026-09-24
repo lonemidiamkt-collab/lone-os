@@ -27,11 +27,21 @@ describe("cardsParados", () => {
     ];
     const horas: Record<string, number> = { "1": 999, "2": 4, "3": 20 };
     const out = cardsParados(cards, (c) => horas[c.id], 16);
-    expect(out.map((p) => p.etapa)).toEqual(["Aprovação"]);
+    expect(out.map((p) => p.etapa)).toEqual(["Revisão interna"]); // nome da etapa: lib/conteudo/etapas.ts
+  });
+
+  it("roteiro é Pauta (Leva 5b): não conta como travado", () => {
+    const out = cardsParados([card({ id: "r", status: "script" })], () => 999, 16);
+    expect(out).toHaveLength(0);
+  });
+
+  it("devolvido pelo designer (bloqueado) conta: está com o designer", () => {
+    const out = cardsParados([card({ id: "b", status: "blocked" })], () => 30, 16);
+    expect(out.map((p) => p.etapa)).toEqual(["Com o designer · Bloqueado"]);
   });
 
   it("ordena do mais travado pro menos", () => {
-    const cards = [card({ id: "a", status: "script" }), card({ id: "b", status: "approval" })];
+    const cards = [card({ id: "a", status: "in_production" }), card({ id: "b", status: "approval" })];
     const horas: Record<string, number> = { a: 20, b: 40 };
     const out = cardsParados(cards, (c) => horas[c.id], 16);
     expect(out.map((p) => p.horasUteis)).toEqual([40, 20]);
@@ -47,7 +57,7 @@ describe("formatRaioXGestor", () => {
   it("sem travados → 'Nada travado' + gargalo/lead time do fluxo", () => {
     const msg = formatRaioXGestor(KPIS, [], "06/07");
     expect(msg).toContain("Nada travado");
-    expect(msg).toContain("gargalo: *Aprovação*");
+    expect(msg).toContain("gargalo: *Revisão interna*");
     expect(msg).toContain("Lead time: *5* dias");
   });
 

@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { ETAPAS_FINAIS, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { estaPausado } from "@/lib/clients/pausa";
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   // arquivadas) — esses continuam valendo para o cliente. Mas arquivar também é como se descarta
   // arte recusada ou pedido cancelado, e isso não é do cliente ver. Regra: arquivado só se publicado.
   const visiveis = (cards ?? []).filter((c) =>
-    !c.archived_at || c.status === "published" || !!c.publish_verified_at);
+    !c.archived_at || statusNaEtapa(c.status as string, "no_ar") || !!c.publish_verified_at);
 
   // Capa vinda dos anexos (a primeira, por posição) para os cards sem image_url.
   const semCapa = visiveis.filter((c) => !(c.image_url as string)?.trim()).map((c) => c.id as string);
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     .map((c) => {
       const aprovada = !!c.client_approved_at;
       const entregue = !!c.designer_delivered_at;
-      const publicado = ["published", "scheduled"].includes((c.status as string) || "");
+      const publicado = statusNaEtapa(c.status as string, ...ETAPAS_FINAIS);
       // Pendente de aprovação DO CLIENTE: arte entregue, ainda não aprovada e ainda não publicada/agendada.
       // Card ARQUIVADO pelo time não está pendente de nada — o time já deu o assunto por encerrado;
       // mostrar "Onboarding" de agosto como "aguardando sua aprovação" confunde o cliente.

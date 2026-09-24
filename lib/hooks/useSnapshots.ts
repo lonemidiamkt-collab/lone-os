@@ -1,5 +1,6 @@
 "use client";
 
+import { statusNaEtapa } from "@/lib/conteudo/etapas";
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useOKRMetrics } from "@/lib/hooks/useOKRMetrics";
@@ -222,12 +223,12 @@ export function useSnapshots() {
 
     // Posts published this month
     const published = contentCards.filter((c) =>
-      c.status === "published" && c.statusChangedAt && c.statusChangedAt.slice(0, 7) === period
+      statusNaEtapa(c.status, "no_ar") && c.statusChangedAt && c.statusChangedAt.slice(0, 7) === period
     );
 
     // SLA: average hours from start to publish
     const slaCards = contentCards.filter((c) =>
-      c.status === "published" && c.workStartedAt && c.publishVerifiedAt
+      statusNaEtapa(c.status, "no_ar") && c.workStartedAt && c.publishVerifiedAt
     );
     const avgSLA = slaCards.length > 0
       ? slaCards.reduce((sum, c) => {

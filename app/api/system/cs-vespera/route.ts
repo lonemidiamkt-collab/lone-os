@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { passouDaEntrega } from "@/lib/conteudo/etapas";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCron } from "@/lib/api/cron-guard";
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
     const cid = k.client_id as string;
     // "approved" não existe como status — os reais são approval/client_approval (arte já entregue,
     // em aprovação) além de scheduled/published.
-    const delivered = !!k.designer_delivered_at || ["published", "scheduled", "approval", "client_approval"].includes(k.status as string);
+    const delivered = !!k.designer_delivered_at || passouDaEntrega(k.status as string);
     const prev = cardByClient.get(cid);
     cardByClient.set(cid, { allDelivered: (prev?.allDelivered ?? true) && delivered });
   }

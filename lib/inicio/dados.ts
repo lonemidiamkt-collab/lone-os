@@ -47,6 +47,8 @@ export interface CardRow {
   status_changed_at: string | null;
   column_entered_at: Record<string, string> | null;
   publish_verified_at: string | null;
+  /** Leva 5b: alteração pedida e ainda não reentregue (a transição de design grava). */
+  alteracao_pendente_em?: string | null;
 }
 
 export interface DemandaRow {

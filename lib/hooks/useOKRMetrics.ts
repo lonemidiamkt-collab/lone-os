@@ -1,5 +1,6 @@
 "use client";
 
+import { statusNaEtapa } from "@/lib/conteudo/etapas";
 import { useMemo } from "react";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { calcHealthScore, spDateStr } from "@/lib/utils";
@@ -181,7 +182,7 @@ export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
 
     // Posts delivered this month: cards that reached "published" status
     const publishedThisMonth = contentCards.filter((c) =>
-      c.status === "published" && c.statusChangedAt && isInCurrentMonth(c.statusChangedAt.slice(0, 10))
+      statusNaEtapa(c.status, "no_ar") && c.statusChangedAt && isInCurrentMonth(c.statusChangedAt.slice(0, 10))
     );
     const postsDelivered = publishedThisMonth.length;
 
@@ -202,7 +203,7 @@ export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
 
     // SLA: average time from creation/in_production to published
     const slaCards = contentCards.filter((c) => {
-      if (c.status !== "published") return false;
+      if (!statusNaEtapa(c.status, "no_ar")) return false;
       return !!(c.publishVerifiedAt || c.statusChangedAt) && !!(c.workStartedAt || c.columnEnteredAt?.in_production);
     });
 

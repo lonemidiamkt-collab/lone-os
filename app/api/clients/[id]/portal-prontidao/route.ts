@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { statusDasEtapas } from "@/lib/conteudo/etapas";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const [{ data: cli }, { data: snap }, { count: artes }] = await Promise.all([
     supabaseAdmin.from("clients").select("status, service_type, meta_ad_account_id, ig_business_account_id, join_date").eq("id", id).maybeSingle(),
     supabaseAdmin.from("client_report_snapshots").select("data, generated_at").eq("client_id", id).eq("period_kind", "last_week").order("generated_at", { ascending: false }).limit(1).maybeSingle(),
-    supabaseAdmin.from("content_cards").select("id", { count: "exact", head: true }).eq("client_id", id).in("status", ["published", "scheduled", "client_approval"]),
+    supabaseAdmin.from("content_cards").select("id", { count: "exact", head: true }).eq("client_id", id).in("status", statusDasEtapas("com_cliente", "agendado", "no_ar")),
   ]);
   if (!cli) return NextResponse.json({ error: "cliente não encontrado" }, { status: 404 });
   const st = (cli.service_type as string) || "lone_growth";

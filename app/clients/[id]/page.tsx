@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
+import { corDoStatus, rotuloCompleto } from "@/lib/conteudo/etapas";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import HolidaysPdfButton from "@/components/HolidaysPdfButton";
 import { MarkdownEditor } from "@/components/Markdown";
@@ -1182,15 +1183,9 @@ export default function ClientDetailPage() {
                       <span className="bg-muted px-2 py-0.5 rounded-full">{card.format}</span>
                       <span>SM: {card.socialMedia}</span>
                       {card.dueDate && <span className="flex items-center gap-1"><Calendar size={11} /> {card.dueDate}</span>}
-                      <span className={`badge text-xs ${
-                        card.status === "published" ? "bg-primary/15 text-primary" :
-                        card.status === "scheduled" ? "bg-primary/15 text-primary" :
-                        card.status === "approval" ? "bg-card text-muted-foreground" :
-                        card.status === "in_production" ? "bg-primary/15 text-primary" :
-                        card.status === "script" ? "bg-primary/15 text-primary" :
-                        "bg-muted text-muted-foreground"
-                      }`}>
-                        {card.status === "published" ? "Publicado" : card.status === "scheduled" ? "Agendado" : card.status === "approval" ? "Aprovação" : card.status === "in_production" ? "Em Produção" : card.status === "script" ? "Roteiro" : "Ideia"}
+                      <span className="badge text-xs bg-muted text-muted-foreground inline-flex items-center gap-1.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${corDoStatus(card.status)}`} aria-hidden="true" />
+                        {rotuloCompleto(card.status)}
                       </span>
                     </div>
                   </div>
