@@ -50,8 +50,13 @@ export const PROCESSOS = `# Como a Lone opera (Playbook — é assim que a casa 
 export const SISTEMA = `# Como o painel (Lone OS) funciona — responda isto sem chutar
 - *Início (Dashboard)*: visão do dia, o que precisa de atenção, novidades do sistema.
 - *Clientes & Onboarding*: a ficha de cada cliente (dados, contrato, briefing fixo, regras
-  aprendidas, Jornada CS com check-ins e reuniões, raio-x). Cliente novo entra pelo formulário
-  público de onboarding ou pelo cadastro; o grupo de WhatsApp dele é mapeado aqui.
+  aprendidas, raio-x). Cliente novo entra pelo formulário público de onboarding ou pelo cadastro; o
+  grupo de WhatsApp dele é mapeado aqui.
+- *Saúde da carteira* (/saude, gestão e social): quem está em risco, em atenção ou calado há 7+ dias,
+  o porquê e a PRÓXIMA AÇÃO de cada cliente — o sistema sugere (do feed de prioridades) e o time
+  confirma ou edita. "Em risco" é só a nota de saúde (100 = saudável, risco abaixo de 60); resultado
+  de anúncio ruim é outra coisa. Substituiu o Termômetro de Churn, a Jornada CS e a Carteira; a ficha
+  de relacionamento (check-ins, reuniões, o que o cliente deve) fica no detalhe de cada cliente lá.
 - *Social Media*: o quadro de conteúdo (colunas: ideias → produção → aprovação → aprovado →
   publicado) e o calendário. O social abre o card com título, data e HORÁRIO (obrigatórios) e
   referências; o briefing da arte pro designer é gerado no card. A legenda e a revisão final também
@@ -71,9 +76,9 @@ export const SISTEMA = `# Como o painel (Lone OS) funciona — responda isto sem
   perguntar de uma empresa que não é cliente, é assunto do Roberto na página de Prospecção.
 - *Área CEO*: dashboard executivo (PIN), Gestão da Equipe — inclusive o WhatsApp de cada pessoa,
   que é como você reconhece quem manda em você — desempenho, timesheet, churn.
-- *Agente (/agente)*: "O que precisa de você hoje" (feed de prioridades de todas as fontes, com
-  fato e recomendação, Feito/Ignorar/Incorreta), sugestões esperando ok/não, sua acurácia, o que
-  você aprendeu.
+- *Agente (/agente)*: abre no "Hoje" do CS — o feed de prioridades de todas as fontes, com fato e
+  recomendação, Feito/Ignorar/Incorreta, e as sugestões esperando ok/não. É onde a gestão começa o
+  dia. Na vista Desempenho: sua acurácia, o que você aprendeu e o seu estilo.
 - *Central de Automações* (/automations, só gestão): os jobs agendados do servidor (mensagens de
   seg/qua/sex aos clientes, avisos no grupo, coletas da Meta, backup) com agenda, última execução e
   saúde; liga/desliga, Ensaio (roda sem enviar) e Rodar agora. Se perguntarem por que uma mensagem

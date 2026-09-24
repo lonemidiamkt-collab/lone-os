@@ -28,6 +28,7 @@ import { cn, todaySP } from "@/lib/utils";
 import { SEM_DONO } from "@/lib/design/dono";
 import { ETAPAS, infoEtapa, type Etapa } from "@/lib/conteudo/etapas";
 import { somarDias } from "@/lib/conteudo/no-ar";
+import { emRisco as clienteEmRisco } from "@/lib/saude/carteira";
 import {
   VISTAS, colunasPorCliente, colunasPorDesigner, colunasPorEtapa, montarItens, passaNoFiltro, resumir,
   type ItemQuadro, type Vista,
@@ -81,7 +82,9 @@ export default function QuadroProducao({ pessoa, modo, vista, onVista, onAbrirCa
 
   const hoje = todaySP();
   const clientesDono = useMemo(() => todosClientes.map((c) => ({ id: c.id, assignedDesigner: c.assignedDesigner })), [todosClientes]);
-  const emRisco = useMemo(() => new Set(todosClientes.filter((c) => c.status === "at_risk").map((c) => c.id)), [todosClientes]);
+  // "Cliente em risco" = saúde em risco (lib/saude/carteira.ts), a mesma resposta de toda tela — não o
+  // resultado do anúncio (clients.status), que marcava cliente bem atendido como risco por CPL alto.
+  const emRisco = useMemo(() => new Set(todosClientes.filter(clienteEmRisco).map((c) => c.id)), [todosClientes]);
   const todos = useMemo(() => montarItens(cards, pedidos, clientesDono), [cards, pedidos, clientesDono]);
 
   const filtroBase = { busca, clientId: clienteId || null };

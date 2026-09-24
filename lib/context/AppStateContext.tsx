@@ -15,7 +15,6 @@ import type {
   CreativeAsset,
   Notice,
   SocialProofEntry,
-  CrisisNote,
   SocialTeamMember,
   AppNotification,
   NotificationType,
@@ -65,7 +64,6 @@ interface PersistedState {
   onboarding: Record<string, OnboardingItem[]>;
   notices: Notice[];
   socialProofs: Record<string, SocialProofEntry[]>;
-  crisisNotes: Record<string, CrisisNote[]>;
   socialTeam: SocialTeamMember[];
   socialAuthUser: string | null;
   notifications: AppNotification[];
@@ -167,7 +165,6 @@ interface AppStateContextValue {
   creativeAssets: Record<string, CreativeAsset[]>;
   notices: Notice[];
   socialProofs: Record<string, SocialProofEntry[]>;
-  crisisNotes: Record<string, CrisisNote[]>;
   socialTeam: SocialTeamMember[];
   socialAuthUser: string | null;
   notifications: AppNotification[];
@@ -188,7 +185,6 @@ interface AppStateContextValue {
   deleteNotice: (id: string) => void;
   addNotice: (data: { title: string; body: string; urgent: boolean; createdBy: string; scheduledAt?: string; category?: "general" | "meeting" | "deadline" | "reminder" }) => void;
   addSocialProof: (entry: Omit<SocialProofEntry, "id" | "createdAt">) => void;
-  addCrisisNote: (clientId: string, note: string, actor: string) => void;
   addSocialTeamMember: (name: string, password: string) => void;
   loginSocial: (name: string, password: string) => boolean;
   logoutSocial: () => void;
@@ -256,7 +252,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [onboarding, setOnboarding] = useState<Record<string, OnboardingItem[]>>(() => cached.current?.onboarding ?? {});
   const [notices, setNotices] = useState<Notice[]>(() => cached.current?.notices ?? []);
   const [socialProofs, setSocialProofs] = useState<Record<string, SocialProofEntry[]>>(() => cached.current?.socialProofs ?? {});
-  const [crisisNotes, setCrisisNotes] = useState<Record<string, CrisisNote[]>>(() => cached.current?.crisisNotes ?? {});
   const [socialTeam, setSocialTeam] = useState<SocialTeamMember[]>(() => cached.current?.socialTeam ?? initSocialTeam());
   const [socialAuthUser, setSocialAuthUser] = useState<string | null>(() => cached.current?.socialAuthUser ?? null);
   const [notifications, setNotifications] = useState<AppNotification[]>(() => cached.current?.notifications ?? initNotifications());
@@ -305,7 +300,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setOnboarding(initOnboarding());
     setNotices(mockNotices);
     setSocialProofs({});
-    setCrisisNotes({});
     setSocialTeam(initSocialTeam());
     setSocialAuthUser(null);
     setNotifications(initNotifications());
@@ -354,7 +348,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           dbMood,
           dbCreative,
           dbSocialProofs,
-          dbCrisis,
           dbNotifications,
           dbQuinz,
           dbAccess,
@@ -372,7 +365,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           db.fetchMoodEntries(),
           db.fetchCreativeAssets(),
           db.fetchSocialProofs(),
-          db.fetchCrisisNotes(),
           db.fetchNotifications(),
           db.fetchQuinzReports(),
           // SEGURANÇA: NÃO busca client_access no client (RLS libera authenticated → todo logado, até
@@ -427,7 +419,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         if (Object.keys(dbMood).length > 0) setMoodHistory(dbMood);
         if (Object.keys(dbCreative).length > 0) setCreativeAssets(dbCreative);
         if (Object.keys(dbSocialProofs).length > 0) setSocialProofs(dbSocialProofs);
-        if (Object.keys(dbCrisis).length > 0) setCrisisNotes(dbCrisis);
         if (dbNotifications.length > 0) setNotifications(dbNotifications);
         if (dbQuinz.length > 0) setQuinzReports(dbQuinz);
         if (Object.keys(dbAccess).length > 0) setClientAccess(dbAccess);
@@ -1658,38 +1649,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     [pushTimeline, now]
   );
 
-  const addCrisisNote = useCallback(
-    (clientId: string, note: string, actor: string) => {
-      const newNote: CrisisNote = {
-        id: `cn-${Date.now()}`,
-        clientId,
-        note,
-        createdBy: actor,
-        createdAt: now(),
-      };
-      setCrisisNotes((prev) => ({
-        ...prev,
-        [clientId]: [newNote, ...(prev[clientId] ?? [])],
-      }));
-      pushTimeline({
-        clientId,
-        type: "status",
-        actor,
-        description: `Nota de crise registrada: "${note.slice(0, 80)}${note.length > 80 ? "..." : ""}"`,
-        timestamp: now(),
-      });
-      const client = clients.find((c) => c.id === clientId);
-      pushNotification(
-        "sla",
-        "Nota de crise registrada",
-        `${actor} registrou crise em ${client?.name ?? "cliente"}: "${note.slice(0, 80)}${note.length > 80 ? "..." : ""}"`,
-        clientId
-      );
-      db.insertCrisisNote(clientId, note, actor).catch(() => {});
-    },
-    [pushTimeline, pushNotification, now, clients]
-  );
-
   const toggleOnboardingItem = useCallback(
     (clientId: string, itemId: string, actor: string) => {
       setOnboarding((prev) => {
@@ -1809,7 +1768,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         creativeAssets,
         notices,
         socialProofs,
-        crisisNotes,
         socialTeam,
         socialAuthUser,
         notifications,
@@ -1837,7 +1795,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         addCreativeAsset,
         addNotice,
         addSocialProof,
-        addCrisisNote,
         addSocialTeamMember,
         loginSocial,
         logoutSocial,

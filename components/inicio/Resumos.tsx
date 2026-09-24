@@ -78,7 +78,7 @@ export function Carteira({ c }: { c: ResumoCarteira }) {
   ];
   return (
     <div className="space-y-4">
-      <Bloco eyebrow="Carteira" titulo={`${c.clientes} clientes por saúde`} acao={{ label: "Ver clientes", href: "/clients" }}>
+      <Bloco eyebrow="Carteira" titulo={`${c.clientes} clientes por saúde`} acao={{ label: "Ver saúde da carteira", href: "/saude" }}>
         <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted" role="img"
           aria-label={faixas.map((f) => `${f.n} ${f.rotulo.toLowerCase()}`).join(", ")}>
           {faixas.map((f) => f.n > 0 && <span key={f.rotulo} className={f.barra} style={{ width: `${(f.n / total) * 100}%` }} />)}

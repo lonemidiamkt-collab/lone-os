@@ -82,11 +82,6 @@ export async function POST(req: NextRequest) {
       const socialProofs = await db.fetchSocialProofs();
       return NextResponse.json({ socialProofs });
     }
-    case "insertCrisisNote": {
-      await db.insertCrisisNote(body.clientId, body.note, body.actor);
-      const crisisNotes = await db.fetchCrisisNotes();
-      return NextResponse.json({ crisisNotes });
-    }
     case "insertQuinzReport": {
       await db.insertQuinzReport(body.report);
       const quinzReports = await db.fetchQuinzReports();

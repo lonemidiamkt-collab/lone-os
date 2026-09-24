@@ -15,6 +15,7 @@
 // "não sei". Confundir os dois foi o que fez a tela mentir com cara de precisão.
 
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { emRisco as clienteEmRisco } from "@/lib/saude/carteira";
 
 export interface Metrica {
   valor: number | null;
@@ -60,7 +61,7 @@ export async function calcularCockpit(periodo = periodoAtualBRT()): Promise<Cock
 
   const [{ data: clientes }, { data: cards }, { data: tarefas }, { data: posts }] = await Promise.all([
     supabaseAdmin.from("clients")
-      .select("id, status, current_health_score, posts_goal, last_client_msg_at")
+      .select("id, status, current_health_score, current_health_level, posts_goal, last_client_msg_at")
       .is("draft_status", null).or("active.is.null,active.eq.true"),
     supabaseAdmin.from("content_cards")
       .select("designer_delivered_at, due_date, work_started_at, publish_verified_at")
@@ -72,7 +73,9 @@ export async function calcularCockpit(periodo = periodoAtualBRT()): Promise<Cock
 
   const cli = clientes ?? [];
   const ativos = cli.filter((c) => c.status !== "onboarding");
-  const emRisco = cli.filter((c) => c.status === "at_risk");
+  // Em risco = saúde em risco (lib/saude/carteira.ts), a mesma resposta de toda tela. Antes contava
+  // clients.status = at_risk, que é o resultado do ANÚNCIO (CPL x meta), não risco de churn.
+  const emRisco = cli.filter((c) => clienteEmRisco(c as { current_health_level?: string | null; current_health_score?: number | null }));
 
   // ── Saúde: só quem TEM score entra na média. Contar quem não tem como zero puxava tudo pra baixo.
   const comScore = cli.filter((c) => c.current_health_score != null);

@@ -17,6 +17,7 @@ import { useTrafficStore } from "@/stores/useTrafficStore";
 import { ehDoQuadro } from "@/lib/design/dono";
 import { ETAPAS_FINAIS, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { emOperacao } from "@/lib/clients/operacao";
+import { emRisco } from "@/lib/saude/carteira";
 import { useNav, SIDEBAR_W, SIDEBAR_W_EXPANDED } from "@/lib/context/NavContext";
 import {
   menuDoPapel, casarRota, grupoTemPainel, temPainelFixo, pontuarHref,
@@ -109,7 +110,9 @@ export default function Sidebar() {
   ).length;
 
   const badges: Record<ChaveBadge, number> = {
-    atRisk: clients.filter((c) => c.status === "at_risk").length,
+    // "Em Risco" = risco de churn pela saúde (lib/saude/carteira.ts) — o mesmo número da tela Saúde da
+    // carteira e do filtro de Clientes. Antes contava o resultado do ANÚNCIO (clients.status), outra pergunta.
+    atRisk: clients.filter((c) => c.active !== false && emRisco(c)).length,
     socialPending: cardsSocial.filter((c) => !statusNaEtapa(c.status, ...ETAPAS_FINAIS)).length,
     // Card já aprovado pelo cliente continua "Com o cliente" até alguém agendar — não é pendência.
     socialApproval: cardsSocial.filter(

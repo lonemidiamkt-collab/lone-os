@@ -124,6 +124,14 @@ export const AUTOMACOES: Automacao[] = [
     familia: "Clientes (WhatsApp)", destino: "grupos dos clientes", cron: "0 11-20 * * 1-5",
     agendaBRT: "seg a sex, de hora em hora das 8h às 17h", maxSilencioHoras: 65, ensaio: "dry=1", enviaParaCliente: true,
   }),
+  // NASCE DESLIGADO (migration 20260924213000 grava enabled=false). A rota ainda exige o job ligado
+  // de propósito: sem linha na Central, ela não manda nada.
+  ep("cs-nps", {
+    nome: "NPS depois da reunião",
+    descricao: "Depois de uma reunião marcada como realizada, pergunta ao cliente no grupo dele a nota de 0 a 10 (e \"o que faria virar 10?\" quando a nota é até 8). A nota entra na saúde do cliente.",
+    familia: "Clientes (WhatsApp)", destino: "grupos dos clientes", cron: "15 12-20 * * 1-5",
+    agendaBRT: "seg a sex, de hora em hora das 9h15 às 17h15", maxSilencioHoras: 66, ensaio: "dry=1", enviaParaCliente: true,
+  }),
 
   // ── CS / time ───────────────────────────────────────────────────────────────────────────────
   // cs-manha substituiu cs-bom-dia + cs-postagem + cs-pendencias + cs-setup; cs-risco-semanal

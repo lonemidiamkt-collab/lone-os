@@ -26,11 +26,14 @@ interface Props {
   onboardingLink?: string | null;
   /** false enquanto os campos sensíveis não chegaram (ou falharam): editar agora gravaria vazio por cima. */
   dadosCompletos: boolean;
+  /**
+   * Qual metade da antiga aba "Dados" (Leva 6B): "identidade" = logo e materiais da marca (aba Marca &
+   * Briefing); "cadastro" = identificação, cofre de acessos, documentos, configuração e ações (aba Admin).
+   */
+  parte?: "identidade" | "cadastro";
 }
 
-type Tab = "overview" | "dados" | "contratos" | "chat" | "historico" | "tasks" | "content" | "onboarding" | "wallet" | "reports";
-
-export default function DadosTab({ client, role, currentUser, updateClientData, onNavigateTab, generateOnboardingLink, generatingLink, onboardingLink, dadosCompletos }: Props) {
+export default function DadosTab({ client, role, currentUser, updateClientData, onNavigateTab, generateOnboardingLink, generatingLink, onboardingLink, dadosCompletos, parte = "cadastro" }: Props) {
   const isAdmin = role === "admin" || role === "manager";
   const team = useTeamMembers();
 
@@ -110,7 +113,6 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   };
 
   const companyName = client.nomeFantasia || client.razaoSocial || client.name;
-  const companyInitial = companyName.charAt(0).toUpperCase();
 
   const initForm = () => ({
     nomeFantasia: client.nomeFantasia || "", razaoSocial: client.razaoSocial || "",
@@ -332,22 +334,14 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Logo + Actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {client.docLogo ? (
-            <img src={client.docLogo} alt="Logo" className="w-12 h-12 rounded-xl object-contain border border-border bg-card" />
-          ) : (
-            <div className="w-12 h-12 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center">
-              <span className="text-lg font-bold text-primary">{companyInitial}</span>
-            </div>
-          )}
-          <div>
-            <p className="text-sm font-medium text-foreground">{companyName}</p>
-            <p className="text-[10px] text-muted-foreground">QG de Informações</p>
-          </div>
+      {parte === "cadastro" && (<>
+      {/* Título + ações (o logo e o nome já estão no topo da ficha) */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-lone-h2 text-foreground">Dados do cadastro</p>
+          <p className="text-lone-caption text-muted-foreground">Identificação, acessos, documentos e configuração da operação.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isAdmin && (
             <button onClick={generateOnboardingLink} disabled={generatingLink}
               className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-lone-warning-border hover:text-lone-warning">
@@ -371,13 +365,6 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             </button>
           ) : null}
         </div>
-      </div>
-
-      {/* Materiais da marca: todas as versões da logo, links de Figma/Drive, upload e capa.
-          Antes só existia UMA logo (doc_logo, do onboarding) e 32 de 52 clientes não tinham. */}
-      <div className="rounded-xl border border-border bg-card p-4">
-        <MarcaDoCliente clientId={client.id} podeEditar={["admin", "manager", "social", "designer", "traffic"].includes(role)}
-          onCapaChange={(url) => { updateClientData(client.id, { docLogo: url }).catch((e) => toast.error(`Capa não salva: ${e instanceof Error ? e.message : "erro"}`)); }} />
       </div>
 
       {/* Link de Correção gerado */}
@@ -422,6 +409,9 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         </div>
       )}
 
+      </>)}
+
+      {parte === "identidade" && (<>
       {/* BLOCO 0: Identidade Visual — em destaque, visivel a todos (team precisa do logo) */}
       <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.04] to-transparent p-5">
         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5 mb-4">
@@ -478,6 +468,15 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         </div>
       </div>
 
+      {/* Materiais da marca: todas as versões da logo, links de Figma/Drive, upload e capa.
+          Antes só existia UMA logo (doc_logo, do onboarding) e 32 de 52 clientes não tinham. */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <MarcaDoCliente clientId={client.id} podeEditar={["admin", "manager", "social", "designer", "traffic"].includes(role)}
+          onCapaChange={(url) => { updateClientData(client.id, { docLogo: url }).catch((e) => toast.error(`Capa não salva: ${e instanceof Error ? e.message : "erro"}`)); }} />
+      </div>
+      </>)}
+
+      {parte === "cadastro" && (<>
       {/* Contract status — RESTRITO a admin/manager (operadores não veem contrato/valor) */}
       {isAdmin && (
       <div className="rounded-xl border border-border bg-card p-4 flex items-center justify-between">
@@ -851,6 +850,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           })()}
         </div>
       )}
+      </>)}
 
     </div>
   );

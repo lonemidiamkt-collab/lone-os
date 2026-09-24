@@ -19,14 +19,12 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
 import { estaPausado, hojeSP } from "@/lib/clients/pausa";
 import { canonizarDono, SEM_DONO } from "@/lib/cs/cobranca-nominal";
-import { nivelDaSaude, type NivelSaude } from "@/lib/scores/health";
+import { diasQuietoDoCliente, donoDoCliente, nivelDoCliente, scoreDoCliente } from "@/lib/saude/carteira";
 import {
   agruparSemana, contar, textoRiscoSemanal, resumoRiscoSemanal, type ClienteSemana,
 } from "@/lib/cs/risco-semanal";
 import { avisoNominal } from "@/lib/cs/aviso-nominal";
 
-const DIA_MS = 86_400_000;
-const NIVEIS: NivelSaude[] = ["saudavel", "atencao", "risco", "sem_dado"];
 
 export async function POST(req: NextRequest) {
   const denied = requireCron(req); if (denied) return denied;
@@ -63,22 +61,18 @@ export async function POST(req: NextRequest) {
   const time = (membros ?? []).map((m) => m.name as string).filter(Boolean);
 
   const agora = Date.now();
-  const lista: ClienteSemana[] = ativos.map((c) => {
-    const score = c.current_health_score != null ? Number(c.current_health_score) : null;
-    const cache = c.current_health_level as string | null;
-    const nivel: NivelSaude = cache && (NIVEIS as string[]).includes(cache) ? cache as NivelSaude : nivelDaSaude(score);
-    const ultimaFala = c.last_client_msg_at as string | null;
-    return {
-      cliente: (c.nome_fantasia as string) || (c.name as string) || "Cliente",
-      // Dono é o social da conta (como no cs-esfriando/cs-risco); cliente só-tráfego cai no tráfego.
-      dono: canonizarDono((c.assigned_social as string) || (c.assigned_traffic as string) || null, time),
-      nivel,
-      score: Number.isFinite(score) ? score : null,
-      motivos: motivosPor.get(c.id as string) ?? [],
-      // Agente desligado no grupo = não dá pra afirmar que o cliente sumiu (mesma regra do cs-esfriando).
-      diasQuieto: ultimaFala && c.agente_ativo !== false ? Math.floor((agora - new Date(ultimaFala).getTime()) / DIA_MS) : null,
-    };
-  });
+  // Nível, dono e "calado" pelo modelo único (lib/saude/carteira.ts) — a mesma leitura da tela Saúde da
+  // carteira, do Início e do filtro "Em Risco" de Clientes.
+  const lista: ClienteSemana[] = ativos.map((c) => ({
+    cliente: (c.nome_fantasia as string) || (c.name as string) || "Cliente",
+    // Dono é o social da conta (como no cs-esfriando/cs-risco); cliente só-tráfego cai no tráfego.
+    dono: canonizarDono(donoDoCliente(c as { assigned_social: string | null; assigned_traffic: string | null }), time),
+    nivel: nivelDoCliente(c as { current_health_level: string | null; current_health_score: number | null }),
+    score: scoreDoCliente(c as { current_health_score: number | null }),
+    motivos: motivosPor.get(c.id as string) ?? [],
+    // Agente desligado no grupo = não dá pra afirmar que o cliente sumiu (mesma regra do cs-esfriando).
+    diasQuieto: diasQuietoDoCliente(c as { last_client_msg_at: string | null; agente_ativo: boolean | null }, agora),
+  }));
 
   const now = spNow();
   // A semana começa na segunda: rodando em qualquer dia, o rótulo é o da segunda corrente.

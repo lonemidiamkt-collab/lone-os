@@ -90,12 +90,16 @@ function rotasAntigas(role: Role): Set<string> {
 //  - /clients?resp=mine (Leva 5a): a lista única de clientes no filtro "Meus clientes" — para quem
 //    executa é o que /meus-clientes mostrava (a carteira dele); a ficha do cliente (/clients/…) ele já
 //    abria pelo Social, Designer, Tráfego, notificações e ⌘K. Para a gestão é um filtro da tela que já tinha.
+//  - /saude (Leva 6A): Termômetro, Jornada CS e Carteira viraram a Saúde da carteira — a mesma tela
+//    para quem via alguma das três (o social, que via só a Jornada, continua sem /churn e /carteira).
+//  - /agente?view=desempenho (Leva 6A): a parte "painel" do Agente Lone virou vista; a área abre no Hoje.
 const MINHA_CARTEIRA = ["/clients?resp=mine", "/clients"];
+const LEVA_6A_GESTAO = ["/saude", "/agente?view=desempenho"];
 const ACRESCIMOS: Record<Role, string[]> = {
-  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine"],
-  manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine"],
+  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO],
+  manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO],
   traffic:   ["/settings", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
-  social:    ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
+  social:    ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA, "/saude"],
   designer:  ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
   comercial: ["/settings", "/"], // Início por papel (Leva 3): o comercial ganhou o dele
 };
@@ -236,6 +240,44 @@ describe("menu — ninguém ganha nem perde tela", () => {
     expect(res.texto).toContain("entregas");
   });
 
+  it("Leva 6A: Termômetro, Jornada CS e Carteira viram a Saúde da carteira; os endereços antigos continuam", () => {
+    for (const r of ["admin", "manager"] as Role[]) {
+      const clientes = menuDoPapel(r).find((g) => g.id === "clientes")!;
+      const rotulos = clientes.itens.map((i) => i.rotulo);
+      expect(rotulos).toContain("Saúde da carteira");
+      for (const velho of ["Termômetro de Churn", "Jornada CS", "Carteira"]) expect(rotulos).not.toContain(velho);
+      for (const rota of ["/saude", "/churn", "/jornada", "/carteira"]) expect(papelVe(r, rota)).toBe(true);
+    }
+    // O social tinha só a Jornada: ganha a tela nova por ela, e só por ela.
+    expect(papelVe("social", "/saude")).toBe(true);
+    expect(papelVe("social", "/jornada")).toBe(true);
+    expect(papelVe("social", "/churn")).toBe(false);
+    expect(papelVe("social", "/carteira")).toBe(false);
+    for (const r of ["traffic", "designer", "comercial"] as Role[]) expect(papelVe(r, "/saude")).toBe(false);
+    // Quem procura pelo nome antigo acha a tela nova.
+    for (const termo of ["termometro", "jornada", "carteira", "churn"]) {
+      expect(telasParaBusca("admin").some((t) => t.href === "/saude" && t.texto.includes(termo))).toBe(true);
+    }
+    // "Em Risco" do painel de Clientes continua lá (agora filtra pela saúde, não pelo anúncio).
+    const risco = menuDoPapel("admin").find((g) => g.id === "clientes")!.itens.find((i) => i.id === "clientes")!
+      .secoes!.flatMap((s) => s.itens).find((i) => i.id === "clientes-risco")!;
+    expect(risco).toMatchObject({ href: "/clients?filter=at_risk", badge: "atRisk" });
+  });
+
+  it("Leva 6A: o Agente Lone abre no Hoje do CS; o painel antigo virou a vista Desempenho", () => {
+    for (const r of ["admin", "manager"] as Role[]) {
+      const agente = menuDoPapel(r).find((g) => g.id === "agente")!;
+      expect(agente.itens[0]).toMatchObject({ rotulo: "Hoje", href: "/agente" });
+      expect(agente.itens.map((i) => i.href)).toContain("/agente?view=desempenho");
+    }
+    for (const r of ["traffic", "social", "designer", "comercial"] as Role[]) expect(papelVe(r, "/agente")).toBe(false);
+    const hoje = telasParaBusca("admin").find((t) => t.id === "tela-agente")!;
+    expect(hoje.titulo).toBe("Agente Lone — Hoje");
+    expect(hoje.texto).toContain("hoje do cs");
+    // O "Hoje" do Meu Trabalho continua com o nome dele na busca.
+    expect(telasParaBusca("social").find((t) => t.id === "tela-meu-trabalho-hoje")!.titulo).toBe("Meu Trabalho — Hoje");
+  });
+
   it("/tarefas vira vista do Meu Trabalho, menos pro comercial (que não tem Meu Trabalho)", () => {
     for (const r of OP) expect(papelVe(r, "/my-work?view=tarefas")).toBe(true);
     expect(papelVe("comercial", "/my-work?view=tarefas")).toBe(false);
@@ -265,6 +307,17 @@ describe("menu — qual área acende", () => {
     expect(onde("admin", "/automations")).toBe("sistema/automacoes");
     expect(onde("traffic", "/conexao-meta")).toBe("sistema/conexao-meta");
     expect(onde("admin", "/integrations")).toBe("sistema/conexao-meta");
+  });
+
+  it("Leva 6A: as três telas antigas acendem a Saúde da carteira; o Agente acende a vista certa", () => {
+    expect(onde("admin", "/saude")).toBe("clientes/saude-carteira");
+    expect(onde("admin", "/churn")).toBe("clientes/saude-carteira");
+    expect(onde("manager", "/jornada")).toBe("clientes/saude-carteira");
+    expect(onde("admin", "/carteira")).toBe("clientes/saude-carteira");
+    expect(onde("social", "/saude")).toBe("clientes/saude-carteira-social");
+    expect(onde("social", "/jornada")).toBe("clientes/saude-carteira-social");
+    expect(onde("admin", "/agente")).toBe("agente/agente");
+    expect(onde("admin", "/agente?view=desempenho")).toBe("agente/agente-desempenho");
   });
 
   it("vistas do Meu Trabalho e endereços antigos", () => {

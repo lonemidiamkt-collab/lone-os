@@ -1,9 +1,12 @@
-// lib/cs/jornada.ts — a ficha de RELACIONAMENTO do CS + o risco CONSOLIDADO (junta os 5 detectores
-// que hoje rodam soltos num veredito só). SEM financeiro. Alimenta o painel /jornada (8 perguntas).
+// lib/cs/jornada.ts — a ficha de RELACIONAMENTO do CS + o risco CONSOLIDADO. SEM financeiro.
+// Alimenta o preparo e a pauta de reunião (WhatsApp e /api/reunioes/gerenciar). O painel /jornada
+// virou a vista "Jornada" da Saúde da carteira (/saude) — Leva 6A; o risco vem do modelo único
+// (lib/saude/carteira.ts).
 
 import { ETAPAS_FINAIS, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
+import { diasQuietoDoCliente, ESTADO_GRAVADO, etapaDaJornada, nivelDoCliente, situacaoDaSaude } from "@/lib/saude/carteira";
 
 export type NivelRisco = "saudavel" | "atencao" | "risco" | "critico";
 
@@ -23,34 +26,34 @@ export interface FichaJornada {
   attentionLevel: string | null; diasSemFalar: number | null;
 }
 
-function diasDesde(iso?: string | null): number | null {
-  if (!iso) return null;
-  const d = Math.floor((spNow().getTime() - new Date(iso).getTime()) / 86400000);
-  return d >= 0 ? d : 0;
-}
-
-// O veredito único, a partir dos sinais que já existem no cliente + reclamação recente.
-// healthLevel vem de clients.current_health_level (escritor único /api/scores, 100 = saudável):
-// saudavel | atencao | risco | sem_dado.
+// O veredito, a partir do modelo ÚNICO de risco (lib/saude/carteira.ts — Leva 6A). Antes esta função
+// tinha régua própria (reclamação ou 14 dias calado viravam "risco" mesmo com a saúde boa; atenção
+// crítica virava "crítico" sozinha) e a Jornada discordava do Termômetro sobre o mesmo cliente.
+// Agora: nível = saúde do escritor único (/api/scores); calado 7+ dias = atenção (esfriando).
+// Atenção crítica e reclamação recente continuam aparecendo — como PORQUÊ, e "crítico" só sobe um
+// cliente que já está em risco pela saúde.
 export function riscoConsolidado(c: {
   healthLevel: string | null; attentionLevel: string | null; diasSemFalar: number | null; reclamacaoRecente: boolean;
+  /** breakdown.motivos da última nota, quando a rota tiver. */
+  motivosSaude?: string[];
 }): { nivel: NivelRisco; motivos: string[] } {
+  const sit = situacaoDaSaude({
+    nivel: nivelDoCliente({ current_health_level: c.healthLevel }), score: null,
+    motivos: c.motivosSaude ?? [], diasQuieto: c.diasSemFalar,
+  });
   const motivos: string[] = [];
-  const h = c.healthLevel, a = c.attentionLevel, dias = c.diasSemFalar;
-
-  if (a === "critical") motivos.push("atenção crítica (feedback grave)");
-  if (h === "risco") motivos.push("saúde em risco");
+  if (c.attentionLevel === "critical") motivos.push("atenção crítica (feedback grave)");
+  if (sit.nivel === "risco") motivos.push("saúde em risco");
+  else if (sit.nivel === "atencao") motivos.push("saúde em atenção");
+  // "sem dado" não é motivo de nada para a reunião — só o calado conta.
+  if (sit.nivel !== "sem_dado" || sit.esfriando) motivos.push(...sit.motivos);
   if (c.reclamacaoRecente) motivos.push("reclamação nos últimos 14 dias");
-  if (dias != null && dias >= 14) motivos.push(`sumido há ${dias} dias`);
-  else if (dias != null && dias >= 7) motivos.push(`sem falar há ${dias} dias`);
-  if (h === "atencao") motivos.push("saúde em atenção");
-  if (a === "high") motivos.push("atenção alta");
+  if (c.attentionLevel === "high") motivos.push("atenção alta");
 
-  let nivel: NivelRisco = "saudavel";
-  if (a === "critical") nivel = "critico";
-  else if (h === "risco" || c.reclamacaoRecente || (dias != null && dias >= 14)) nivel = "risco";
-  else if (h === "atencao" || a === "high" || (dias != null && dias >= 7)) nivel = "atencao";
-  return { nivel, motivos };
+  const nivel: NivelRisco = sit.nivel === "risco"
+    ? (c.attentionLevel === "critical" ? "critico" : "risco")
+    : sit.pedeAtencao ? "atencao" : "saudavel";
+  return { nivel, motivos: [...new Set(motivos)] };
 }
 
 export async function montarJornada(): Promise<FichaJornada[]> {
@@ -59,7 +62,7 @@ export async function montarJornada(): Promise<FichaJornada[]> {
 
   const [{ data: clients }, { data: journeys }, { data: cardsAtras }, { data: recl }] = await Promise.all([
     supabaseAdmin.from("clients")
-      .select("id, name, nome_fantasia, status, current_health_level, current_health_score, attention_level, last_client_msg_at, assigned_social")
+      .select("id, name, nome_fantasia, status, current_health_level, current_health_score, attention_level, last_client_msg_at, agente_ativo, assigned_social")
       .is("draft_status", null).neq("active", false).order("name"),
     supabaseAdmin.from("client_journey").select("*"),
     supabaseAdmin.from("content_cards")
@@ -80,15 +83,17 @@ export async function montarJornada(): Promise<FichaJornada[]> {
   return (clients ?? []).map((c) => {
     const nome = (c.nome_fantasia as string) || (c.name as string);
     const j = jMap.get(c.id as string);
-    const dias = diasDesde(c.last_client_msg_at as string);
+    // Mesma régua de "calado" da Saúde da carteira: agente desligado no grupo = não dá para afirmar.
+    const dias = diasQuietoDoCliente({ last_client_msg_at: c.last_client_msg_at as string | null, agente_ativo: c.agente_ativo as boolean | null }, spNow().getTime());
     const risco = riscoConsolidado({
       healthLevel: c.current_health_level as string, attentionLevel: c.attention_level as string,
       diasSemFalar: dias, reclamacaoRecente: reclSet.has(c.id as string),
     });
-    // Estado: override manual OU derivado
-    const estadoDerivado = (c.status === "onboarding") ? "onboarding"
-      : risco.nivel === "critico" || risco.nivel === "risco" ? "risco"
-      : risco.nivel === "atencao" ? "atenção" : "ativo";
+    // Estado: override manual OU derivado (a mesma etapa da vista Jornada da Saúde da carteira)
+    const estadoDerivado = ESTADO_GRAVADO[etapaDaJornada({ status: c.status as string | null }, {
+      nivel: risco.nivel === "critico" || risco.nivel === "risco" ? "risco" : "saudavel",
+      pedeAtencao: risco.nivel !== "saudavel",
+    })];
     // Percebe valor (proxy participação+sentimento): NÃO percebe se sumiu ≥7d OU atenção alta/crítica OU risco alto
     const percebeValor = !((dias != null && dias >= 7) || c.attention_level === "high" || c.attention_level === "critical" || risco.nivel === "risco" || risco.nivel === "critico");
 

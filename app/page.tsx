@@ -14,6 +14,7 @@ import { AlertTriangle, RotateCw } from "lucide-react";
 import Header from "@/components/Header";
 import PlatformUpdatesWidget from "@/components/PlatformUpdatesWidget";
 import FeedAtencao, { FeedAtencaoSkeleton } from "@/components/inicio/FeedAtencao";
+import HojeDoCs from "@/components/inicio/HojeDoCs";
 import {
   Carteira, FilaDesigner, ResumoContas, ResumoFunil, ResumoSkeleton, SeuDiaSocial,
 } from "@/components/inicio/Resumos";
@@ -130,7 +131,9 @@ export default function InicioPage() {
           {gestao ? (
             <div className="grid gap-6 xl:grid-cols-3">
               <div className="min-w-0 xl:col-span-2">{atencao}</div>
-              <aside aria-label="Estado da carteira" className="min-w-0">
+              <aside aria-label="Estado da carteira" className="min-w-0 space-y-4">
+                {/* Leva 6A: o CS começa o dia no feed de prioridades do agente — daqui, um clique. */}
+                <HojeDoCs />
                 {dados?.resumo.tipo === "gestao"
                   ? <Carteira c={dados.resumo.carteira} />
                   : !erro && <div className="space-y-4"><ResumoSkeleton /><ResumoSkeleton altura="h-24" /><ResumoSkeleton altura="h-32" /></div>}

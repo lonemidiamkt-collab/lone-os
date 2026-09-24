@@ -6,6 +6,7 @@ import { useAppState } from "@/lib/context/AppStateContext";
 import { calcHealthScore, spDateStr } from "@/lib/utils";
 import { mockAdCampaigns } from "@/lib/mockData";
 import type { ContentCard, DesignRequest, AdCampaign } from "@/lib/types";
+import { emRisco } from "@/lib/saude/carteira";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -99,17 +100,16 @@ export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
     // COMPANY OKRs (always real)
     // ═══════════════════════════════════════════════════════════
 
-    const atRiskCount = clients.filter((c) => c.status === "at_risk").length;
+    // "Em risco" é a SAÚDE (lib/saude/carteira.ts), não o resultado do anúncio (clients.status =
+    // CPL x meta): anúncio ruim numa semana não é cliente saindo. Mesma régua da tela Saúde da carteira.
+    const atRiskCount = clients.filter((c) => emRisco(c)).length;
     const churnRate = clients.length > 0 ? (atRiskCount / clients.length) * 100 : 0;
-    audit.push({ metric: "Churn Rate", source: "Clients (status)", status: "ok", detail: `${atRiskCount}/${clients.length} at_risk` });
+    audit.push({ metric: "Churn Rate", source: "Saúde (lib/saude/carteira)", status: "ok", detail: `${atRiskCount}/${clients.length} em risco` });
 
     const avgHealth = clients.length > 0
       ? clients.reduce((sum, c) => sum + calcHealthScore(c), 0) / clients.length / 10
       : 0;
     audit.push({ metric: "NPS (Health)", source: "calcHealthScore()", status: "ok", detail: `Avg: ${avgHealth.toFixed(2)} across ${clients.length} clients` });
-
-    // NPS average from client_nps table (if available)
-    const npsAvg = clients.reduce((sum, c) => sum + (c.npsScore || 0), 0) / Math.max(clients.filter((c) => c.npsScore).length, 1);
 
     // Active clients: em operacao (good/average/at_risk) — exclui onboarding/draft
     const activeClientsCount = clients.filter((c) => c.status === "good" || c.status === "average" || c.status === "at_risk").length;

@@ -25,7 +25,7 @@ import { supabaseAdmin } from "./server";
 import type {
   Client, Task, ContentCard, DesignRequest, AppNotification,
   TimelineEntry, ChatMessage, OnboardingItem,
-  MoodEntry, MoodType, CreativeAsset, SocialProofEntry, CrisisNote,
+  MoodEntry, MoodType, CreativeAsset, SocialProofEntry,
   Notice, QuinzReport, ClientAccess,
   TrafficRoutineCheck, ContentApproval,
   Role, CardAttachment, CsClientRule, CrmLead, CrmEstagio, CrmLeadActivity, CrmAtividadeTipo, CrmMeta,
@@ -126,7 +126,6 @@ function snakeToClient(row: Record<string, unknown>): Client {
     instagramLogin: (row.instagram_login as string) ?? undefined,
     instagramPassword: undefined,
     budgetAlertPct: (row.budget_alert_pct as number) ?? undefined,
-    npsScore: (row.nps_score as number) ?? undefined,
     firstValueDeliveredAt: (row.first_value_delivered_at as string) ?? undefined,
     activatedAt: (row.activated_at as string) ?? undefined,
     ttvDays: (row.ttv_days as number) ?? undefined,
@@ -231,7 +230,7 @@ const CLIENT_LEAN_COLS = [
   "contact_role", "razao_social", "nome_fantasia", "cnpj", "email", "email_corporativo", "phone",
   "company_phone", "contact_phone",
   "last_kanban_activity", "campaign_briefing", "fixed_briefing", "agente_ativo", "meta_ad_account_id",
-  "meta_ad_account_name", "lead_source", "budget_alert_pct", "nps_score", "first_value_delivered_at",
+  "meta_ad_account_name", "lead_source", "budget_alert_pct", "first_value_delivered_at",
   "activated_at", "ttv_days", "public_report_enabled", "ficha_viva_enabled", "whatsapp_team_phone",
   "whatsapp_group_jid", "whatsapp_group_name", "portal_welcome_message", "brand_color", "fb_page_id",
   "ig_business_account_id", "ig_public_username", "ig_username_cache", "current_health_level",
@@ -870,35 +869,6 @@ export async function insertSocialProof(entry: Omit<SocialProofEntry, "id" | "cr
     created_by: entry.createdBy,
   });
   if (error) console.error("[DB] insertSocialProof:", error);
-}
-
-// ═══════════════════════════════════════════════════════════
-// CRISIS NOTES
-// ═══════════════════════════════════════════════════════════
-
-export async function fetchCrisisNotes(): Promise<Record<string, CrisisNote[]>> {
-  const { data, error } = await db.from("crisis_notes").select("*").order("created_at", { ascending: false });
-  if (error) { console.error("[DB] fetchCrisisNotes:", error); return {}; }
-  const result: Record<string, CrisisNote[]> = {};
-  for (const row of data ?? []) {
-    const clientId = row.client_id as string;
-    if (!result[clientId]) result[clientId] = [];
-    result[clientId].push({
-      id: row.id as string,
-      clientId,
-      note: row.note as string,
-      createdBy: row.created_by as string,
-      createdAt: row.created_at as string,
-    });
-  }
-  return result;
-}
-
-export async function insertCrisisNote(clientId: string, note: string, actor: string): Promise<void> {
-  const { error } = await db.from("crisis_notes").insert({
-    client_id: clientId, note, created_by: actor,
-  });
-  if (error) console.error("[DB] insertCrisisNote:", error);
 }
 
 // ═══════════════════════════════════════════════════════════

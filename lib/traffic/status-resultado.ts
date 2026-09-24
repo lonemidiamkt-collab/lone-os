@@ -94,5 +94,6 @@ export const ROTULO: Record<StatusResultado | "onboarding", string> = {
   onboarding: "Onboarding",
   good: "Bons resultados",
   average: "Resultados médios",
-  at_risk: "Em risco",
+  // "Em risco" é só a saúde do cliente (lib/saude/carteira.ts — Leva 6A); aqui é o anúncio.
+  at_risk: "Resultados ruins",
 };

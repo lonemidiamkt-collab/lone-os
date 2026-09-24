@@ -152,7 +152,6 @@ export interface Client {
   instagramLogin?: string;
   instagramPassword?: string;
   budgetAlertPct?: number;
-  npsScore?: number;
   firstValueDeliveredAt?: string;
   activatedAt?: string;
   ttvDays?: number;
@@ -457,14 +456,6 @@ export interface SocialProofEntry {
   metric3Label: string;
   metric3Value: string;
   period: string;
-  createdBy: string;
-  createdAt: string;
-}
-
-export interface CrisisNote {
-  id: string;
-  clientId: string;
-  note: string;
   createdBy: string;
   createdAt: string;
 }

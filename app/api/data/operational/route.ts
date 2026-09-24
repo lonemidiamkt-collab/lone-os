@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   const [
     timeline, onboardingItems, tasks, notices,
-    creativeAssets, socialProofs, crisisNotes, quinzReports,
+    creativeAssets, socialProofs, quinzReports,
     moodEntries, clientAccessCifrado,
   ] = await Promise.all([
     db.fetchTimeline(),
@@ -28,7 +28,6 @@ export async function GET(req: NextRequest) {
     db.fetchNotices(),
     db.fetchCreativeAssets(),
     db.fetchSocialProofs(),
-    db.fetchCrisisNotes(),
     db.fetchQuinzReports(),
     db.fetchMoodEntries(),
     canSeeCofre ? db.fetchClientAccess() : Promise.resolve({}),
@@ -51,10 +50,11 @@ export async function GET(req: NextRequest) {
     clientAccess[id] = aberto;
   }
 
+  // `crisisNotes` saiu (Leva 6B): a "nota de crise" da ficha foi removida na Leva 1 e ninguém mais lia.
   // `globalChat` saiu (Leva 5a): o Chat Interno não tem tela desde a Leva 1 (2 mensagens na vida).
   return NextResponse.json({
     timeline, onboardingItems, tasks, notices,
-    creativeAssets, socialProofs, crisisNotes, quinzReports,
+    creativeAssets, socialProofs, quinzReports,
     moodEntries, clientAccess,
   });
 }

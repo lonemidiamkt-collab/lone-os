@@ -3,6 +3,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { temTrafego } from "@/lib/clients/servico";
+import { nivelDoCliente } from "@/lib/saude/carteira";
 import type { ItemBruto, ContextoRanking } from "../tipos";
 import { itensDoTrafego } from "./trafego";
 import { itensDaProducao } from "./producao";
@@ -23,7 +24,7 @@ export interface ClienteRef {
 /** Clientes ativos, com quem cuida e o peso de cada um. Uma leitura, todas as fontes usam. */
 export async function carregarClientes(): Promise<{ porId: Map<string, ClienteRef>; porNome: Map<string, ClienteRef> }> {
   const { data, error } = await supabaseAdmin.from("clients")
-    .select("id, name, nome_fantasia, assigned_social, assigned_traffic, monthly_budget, status, attention_level, service_type")
+    .select("id, name, nome_fantasia, assigned_social, assigned_traffic, monthly_budget, status, attention_level, service_type, current_health_level, current_health_score")
     // Cliente vivo: active ≠ false, sem churn e sem rascunho de cadastro (é o critério do diagnóstico).
     .or("active.is.null,active.eq.true").is("churned_at", null).is("draft_status", null);
   if (error) throw new Error(`clients: ${error.message}`);
@@ -32,9 +33,11 @@ export async function carregarClientes(): Promise<{ porId: Map<string, ClienteRe
   for (const c of data ?? []) {
     const verba = Number(c.monthly_budget ?? 0);
     // 70 de base; cliente em risco pesa mais (o custo de errar com ele é perder a conta); verba
-    // maior pesa um pouco mais, em escala log para não engolir os pequenos.
+    // maior pesa um pouco mais, em escala log para não engolir os pequenos. "Em risco" é a SAÚDE
+    // (lib/saude/carteira.ts) — antes era clients.status, o resultado do anúncio.
+    const nivel = nivelDoCliente(c as { current_health_level?: string | null; current_health_score?: number | null });
     const importancia = Math.min(100, 70
-      + (c.status === "at_risk" ? 15 : c.status === "average" ? 5 : 0)
+      + (nivel === "risco" ? 15 : nivel === "atencao" ? 5 : 0)
       + (c.attention_level === "critical" ? 10 : c.attention_level === "high" ? 5 : 0)
       + (verba > 0 ? Math.min(10, Math.round(Math.log10(verba + 1) * 2.5)) : 0));
     const ref: ClienteRef = {

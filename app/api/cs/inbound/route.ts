@@ -77,6 +77,7 @@ import { guardarPendente, planoPendenteDe, criarCardsDoPlano, fecharPendente, pe
 import { planejarPeriodo, executarPlano, datasDoPeriodo } from "@/lib/cs/motor";
 import { calendarioPdfHtml } from "@/lib/cs/calendario-pdf";
 import { proximaPergunta, registrarEnvio, capturarResposta, textoParaEnvio } from "@/lib/cs/checkin";
+import { tratarRespostaNps } from "@/lib/cs/nps-server";
 import { gerarCobrancaPendencias } from "@/lib/cs/cobranca";
 import { montarJornada } from "@/lib/cs/jornada";
 import { montarPrepReuniao, pontosPraReuniao, resumirReuniao, formatResumoReuniao, extrairNotasReuniao } from "@/lib/cs/reuniao";
@@ -1009,6 +1010,19 @@ async function processarInbound(req: NextRequest) {
       console.log(`[CS/inbound] onboarding concluído → ${cliente} (briefing salvo=${salvou})`);
       return NextResponse.json({ ok: true, onboarding: "concluido", cliente });
     }
+  }
+
+  // ─── NPS pós-reunião (lib/cs/nps-server.ts). Estreito: só age quando há pesquisa pendente PARA
+  // ESTE GRUPO e a mensagem do cliente é a nota (0 a 10) ou o "o que faria virar 10". Vem antes da
+  // allowlist pelo mesmo motivo do onboarding: a pergunta vai ao grupo do cliente, que pode não
+  // estar nela. E antes do isTrivial, que descartaria um "9" (1 caractere). Só a nota → para aqui;
+  // nota com pedido junto, ou o motivo → grava e segue o fluxo normal. ───
+  if (msg.text && !isLoneTeam(msg.authorJid, equipeJids)) {
+    const nps = await tratarRespostaNps({
+      groupJid: msg.groupJid, texto: msg.text, messageId: msg.messageId,
+      citadaId: msg.quotedMsgId ?? null, autor: msg.authorName || msg.authorJid || null,
+    });
+    if (nps.consumir) return NextResponse.json({ ok: true, nps: nps.estado, nota: nps.nota });
   }
 
   // A ALLOWLIST É SOBRE GRUPO DE CLIENTE, NÃO SOBRE OS NOSSOS. Ela existe pra limitar em quais

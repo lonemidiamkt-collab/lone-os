@@ -10,6 +10,14 @@
 //   Resultado/Performance 30 · Entrega/SLA 15 · Relacionamento 15 · Sentimento 15 ·
 //   Pendências 10 · Engajamento do cliente 10 · Financeiro 5
 //
+// Satisfação (NPS pós-reunião, Leva 6B) entra com peso 10 e é OPCIONAL: só pesa quando o cliente
+// respondeu nos últimos 120 dias (lib/cs/nps.ts → componenteSatisfacao = nota × 10) e fica FORA da
+// cobertura — ninguém cai para "sem dado" por não ter respondido uma pesquisa que talvez nem recebeu.
+// Com os componentes medidos hoje (entrega, relacionamento, sentimento, pendências, engajamento =
+// 65 de peso), a nota do cliente responde por 10/75 ≈ 13% da saúde: um 0 no NPS derruba no máximo
+// ~13 pontos; um 10 levanta no máximo o mesmo. Sinal de verdade da boca do cliente, sem dominar a
+// conta — ele responde uma vez por mês, os outros componentes mudam toda semana.
+//
 // E o mais importante do pedido: "média esconde problema. 40 clientes com 80 e 3 com 20 dá uma
 // média que não parece catastrófica, mas você está com 3 churns potenciais." Por isso
 // `distribuicao()` existe — e a Home deve mostrar a distribuição, não a média.
@@ -18,7 +26,7 @@ import type { Situacao } from "./indicador";
 
 export type ComponenteSaude =
   | "resultado" | "entrega" | "relacionamento" | "sentimento"
-  | "pendencias" | "engajamento" | "financeiro";
+  | "pendencias" | "engajamento" | "financeiro" | "satisfacao";
 
 export const PESOS_SAUDE: Record<ComponenteSaude, number> = {
   resultado: 30,
@@ -28,7 +36,11 @@ export const PESOS_SAUDE: Record<ComponenteSaude, number> = {
   pendencias: 10,
   engajamento: 10,
   financeiro: 5,
+  satisfacao: 10,
 };
+
+/** Componentes que só pesam quando existem — não entram na cobertura (ver o topo do arquivo). */
+export const COMPONENTES_OPCIONAIS: readonly ComponenteSaude[] = ["satisfacao"];
 
 export const NOME_COMPONENTE: Record<ComponenteSaude, string> = {
   resultado: "Resultado",
@@ -38,6 +50,7 @@ export const NOME_COMPONENTE: Record<ComponenteSaude, string> = {
   pendencias: "Pendências",
   engajamento: "Engajamento do cliente",
   financeiro: "Financeiro",
+  satisfacao: "Satisfação (NPS)",
 };
 
 /** Cada componente vale 0..100, ou null quando não há como medir. */
@@ -93,9 +106,12 @@ export function calcularSaude(p: {
 
   const comDado = linhas.filter((l) => l.valor !== null && Number.isFinite(l.valor as number));
   const pesoMedido = comDado.reduce((s, l) => s + l.peso, 0);
-  const pesoTotal = chaves.reduce((s, k) => s + PESOS_SAUDE[k], 0);
+  // Cobertura só com os componentes fixos: o opcional (NPS) soma na nota, não no "quanto foi medido".
+  const fixo = (k: ComponenteSaude) => !COMPONENTES_OPCIONAIS.includes(k);
+  const pesoTotal = chaves.filter(fixo).reduce((s, k) => s + PESOS_SAUDE[k], 0);
+  const pesoMedidoFixo = comDado.filter((l) => fixo(l.chave)).reduce((s, l) => s + l.peso, 0);
 
-  const cobertura = Math.round((pesoMedido / pesoTotal) * 100);
+  const cobertura = Math.round((pesoMedidoFixo / pesoTotal) * 100);
   const parcial = pesoMedido > 0
     ? Math.round(comDado.reduce((s, l) => s + (l.valor as number) * l.peso, 0) / pesoMedido)
     : null;

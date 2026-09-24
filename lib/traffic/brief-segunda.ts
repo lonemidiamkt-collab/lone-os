@@ -12,7 +12,7 @@ export interface ContaDoBrief {
 }
 
 const brl = (n: number) => `R$ ${n.toFixed(2).replace(".", ",")}`;
-const STATUS: Record<string, string> = { good: "bons resultados", average: "resultado médio", at_risk: "em risco", onboarding: "onboarding" };
+const STATUS: Record<string, string> = { good: "bons resultados", average: "resultado médio", at_risk: "resultado ruim", onboarding: "onboarding" };
 
 export function linhasDaConta(c: ContaDoBrief): string {
   const estado = `${STATUS[c.status ?? ""] ?? "sem status"} · ${brl(c.gasto7d)} em 7d · ${c.conversas7d} conversas${c.cpl7d != null ? ` · ${brl(c.cpl7d)}/conversa${c.cplMeta ? ` (meta ${brl(c.cplMeta)})` : ""}` : ""}`;

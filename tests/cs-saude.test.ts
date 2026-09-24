@@ -10,6 +10,14 @@ describe("avaliarSaude", () => {
   it("status at_risk → alto", () => {
     expect(avaliarSaude("Y", { status: "at_risk", reclamacaoRecente: false, retracaoRecente: false, diasSemPost: 2 }).risco).toBe("alto");
   });
+  it("com o nível da saúde (Leva 6A), é ELE que diz 'em risco' — o status do anúncio deixa de contar", () => {
+    const base = { reclamacaoRecente: false, retracaoRecente: false, diasSemPost: 2 };
+    expect(avaliarSaude("A", { ...base, status: "at_risk", nivelSaude: "saudavel" }).risco).toBe("baixo");
+    const r = avaliarSaude("B", { ...base, status: "good", nivelSaude: "risco" });
+    expect(r.risco).toBe("alto");
+    expect(r.motivos).toContain("saúde em risco");
+    expect(avaliarSaude("C", { ...base, status: "good", nivelSaude: "atencao" }).risco).toBe("baixo");
+  });
   it(">30 dias sem post → alto; entre 21-30 → médio", () => {
     expect(avaliarSaude("A", { status: "good", reclamacaoRecente: false, retracaoRecente: false, diasSemPost: 40 }).risco).toBe("alto");
     expect(avaliarSaude("B", { status: "good", reclamacaoRecente: false, retracaoRecente: false, diasSemPost: 25 }).risco).toBe("medio");

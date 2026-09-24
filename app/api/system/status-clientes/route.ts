@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
     const linhas = (f: string) => porFaixa(f).map((m) => `• *${m.cliente}* — ${rot(m.de)} → ${rot(m.para)}\n  _${m.motivo}_`).join("\n");
     const corpo = mudancas.length
       ? [
-          porFaixa("at_risk").length ? `🔴 *Em risco*\n${linhas("at_risk")}` : "",
+          porFaixa("at_risk").length ? `🔴 *${ROTULO.at_risk}*\n${linhas("at_risk")}` : "",
           porFaixa("average").length ? `🟠 *Resultados médios*\n${linhas("average")}` : "",
           porFaixa("good").length ? `🟢 *Bons resultados*\n${linhas("good")}` : "",
         ].filter(Boolean).join("\n\n")

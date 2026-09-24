@@ -16,7 +16,8 @@ import {
   getStatusLed,
   calcHealthScore,
 } from "@/lib/utils";
-import { saudeExibida, ROTULO_NIVEL_SAUDE, COR_NIVEL_SAUDE } from "@/lib/scores/health";
+import { saudeExibida, ROTULO_NIVEL_SAUDE, COR_NIVEL_SAUDE, type NivelSaude } from "@/lib/scores/health";
+import { nivelDoCliente } from "@/lib/saude/carteira";
 import { ROTULO_RESULTADO_ANUNCIO, TITULO_RESULTADO_ANUNCIO } from "@/lib/scores/resultado-anuncio";
 import {
   Search, UserPlus, ChevronRight,
@@ -58,6 +59,10 @@ export default function ClientsPage() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  // Saúde (risco de churn) — o nível do escritor único, lido por lib/saude/carteira.ts: a MESMA resposta
+  // da tela Saúde da carteira, do badge "Em Risco" do menu e da Área CEO. O filtro de cima ("Resultado
+  // do anúncio") é outra pergunta: CPL x meta.
+  const [saudeFiltro, setSaudeFiltro] = useState<"all" | NivelSaude>("all");
   // ── REUNIÃO COMO INDICADOR DA LISTA ───────────────────────────────────
   //
   // Roberto (09/09): "na tabela de clientes quero incluir informações relacionadas às reuniões […]
@@ -254,6 +259,7 @@ export default function ClientsPage() {
       .filter(Boolean).join(" ").toLowerCase();
     const matchSearch = !q || haystack.includes(q);
     const matchStatus = statusFilter === "all" || c.status === statusFilter;
+    const matchSaude = saudeFiltro === "all" || nivelDoCliente(c) === saudeFiltro;
     // Role-based filter: operators see only their clients by default
     const matchResponsible =
       filtroResp === "all" ? true
@@ -269,7 +275,7 @@ export default function ClientsPage() {
       if (filtroReuniao === "meta_nao_batida") return !r.metaAtingida;
       return r.status === filtroReuniao;
     })();
-    return matchSearch && matchStatus && matchResponsible && matchReuniao;
+    return matchSearch && matchStatus && matchSaude && matchResponsible && matchReuniao;
   });
 
   return (
@@ -418,7 +424,9 @@ export default function ClientsPage() {
         <Suspense fallback={null}>
           <FiltroDaUrl
             aoMudar={(f) => {
-              setStatusFilter(f ?? "all");
+              // ?filter=at_risk é o "Em Risco" do menu: risco de CHURN (saúde), não anúncio ruim.
+              setSaudeFiltro(f === "at_risk" ? "risco" : "all");
+              setStatusFilter(f === "onboarding" ? "onboarding" : "all");
               if (f) setResponsibleFilter("all");
             }}
             aoMudarResp={(r) => setResponsibleFilter(r ?? "")}
@@ -507,6 +515,17 @@ export default function ClientsPage() {
                 <option value="good">Anúncio: {ROTULO_RESULTADO_ANUNCIO.good}</option>
                 <option value="average">Anúncio: {ROTULO_RESULTADO_ANUNCIO.average}</option>
                 <option value="at_risk">Anúncio: {ROTULO_RESULTADO_ANUNCIO.at_risk}</option>
+              </select>
+              <select
+                aria-label="Saúde do cliente"
+                value={saudeFiltro}
+                onChange={(e) => setSaudeFiltro(e.target.value as "all" | NivelSaude)}
+                className="bg-card border border-border text-sm text-secondary-foreground rounded-lg px-3 py-2 outline-none focus:border-primary"
+              >
+                <option value="all">Saúde: todos</option>
+                {(["risco", "atencao", "saudavel", "sem_dado"] as const).map((n) => (
+                  <option key={n} value={n}>Saúde: {ROTULO_NIVEL_SAUDE[n]}</option>
+                ))}
               </select>
               <select
                 value={filtroReuniao}
@@ -780,6 +799,7 @@ export default function ClientsPage() {
 
 // ?filter=at_risk|onboarding vindo do menu ou de um link. Reage também quando a URL muda com a
 // tela já aberta (clicar "Em Risco" estando em Clientes); sem filtro depois de um, volta pra "all".
+// Leva 6A: at_risk filtra pela SAÚDE (lib/saude/carteira.ts), não pelo resultado do anúncio.
 // ?resp=mine|all: "Meus clientes" (o item do menu de quem executa e o /meus-clientes antigo).
 function FiltroDaUrl({ aoMudar, aoMudarResp }: {
   aoMudar: (f: "at_risk" | "onboarding" | null) => void;

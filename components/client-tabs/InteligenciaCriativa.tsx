@@ -23,7 +23,11 @@ const ESTADO: Record<string, string> = { CRITICAL: "Crítico", FATIGUE_PROBABLE:
 const brl = (n?: number) => (n ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : "—");
 
-export default function InteligenciaCriativa({ clientId, role }: { clientId: string; role: string }) {
+/**
+ * `parte="anuncios"` (Leva 6B): só o que está rodando nos anúncios — vencedores, alertas, testes,
+ * aprendizados e padrão. A identidade (marca, estilo, catálogo) mora na aba Marca & Briefing.
+ */
+export default function InteligenciaCriativa({ clientId, role, parte = "tudo" }: { clientId: string; role: string; parte?: "tudo" | "anuncios" }) {
   const [d, setD] = useState<Dados | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [demorando, setDemorando] = useState(false);
@@ -71,7 +75,7 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
     <div className="animate-fade-in space-y-5">
       <div>
         <h3 className="font-semibold text-foreground">Inteligência Criativa</h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">O que define esta marca, o que está funcionando nos anúncios, o que está sendo testado e o que já aprendemos. {d?.dia && <>Avaliação de {d.dia.split("-").reverse().join("/")}.</>}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{parte === "anuncios" ? "O que está funcionando nos anúncios, o que está sendo testado e o que já aprendemos." : "O que define esta marca, o que está funcionando nos anúncios, o que está sendo testado e o que já aprendemos."} {d?.dia && <>Avaliação de {d.dia.split("-").reverse().join("/")}.</>}</p>
       </div>
       {(erro || (demorando && !d)) && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs">
@@ -80,6 +84,7 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
         </div>
       )}
 
+      {parte === "tudo" && (<>
       <section className="rounded-xl border border-border bg-card p-4">
         <MarcaDoCliente clientId={clientId} podeEditar={podeEditarMarca} />
       </section>
@@ -91,6 +96,7 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
       <section className="rounded-xl border border-border bg-card p-4">
         <CatalogoProdutos clientId={clientId} podeEditar={podeEditarMarca} />
       </section>
+      </>)}
 
       <section className="rounded-xl border border-border bg-card p-4">
         <h4 className="text-sm font-semibold text-foreground">Vencedores agora {vencedores.length ? `(${vencedores.length})` : ""}</h4>

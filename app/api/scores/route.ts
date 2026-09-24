@@ -16,6 +16,8 @@ import {
   tendenciaConversa, observacoes,
 } from "@/lib/scores/sinais-loninho";
 import type { Indicador } from "@/lib/scores/indicador";
+import { componenteSatisfacao } from "@/lib/cs/nps";
+import { notasParaSaude } from "@/lib/cs/nps-server";
 
 // GET /api/scores — a fonte única do Lone Score, da saúde por cliente e do desempenho por pessoa.
 //
@@ -73,6 +75,9 @@ export async function GET(req: NextRequest) {
 
   // ── O QUE O LONINHO VIU ────────────────────────────────────────────────
   const sinais = await sinaisDoLoninho(ids);
+  // O que o CLIENTE respondeu no NPS pós-reunião (lib/cs/nps.ts). Sem tabela/nota → componente null.
+  const notasNps = await notasParaSaude(ids);
+  const agoraNps = new Date();
 
   // ── SAÚDE POR CLIENTE, com o porquê ────────────────────────────────────
   const cardsPorCliente = new Map<string, typeof cards>();
@@ -113,6 +118,8 @@ export async function GET(req: NextRequest) {
         pendencias: s ? componentePendencias(s) : null,
         engajamento: s ? componenteEngajamento(s) : null,
         financeiro: null,
+        // Opcional (peso 10, fora da cobertura): a última nota do cliente nos últimos 120 dias × 10.
+        satisfacao: componenteSatisfacao(notasNps.get(id) ?? [], agoraNps),
       },
       observacoes: s ? observacoes(s) : [],
     });

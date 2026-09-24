@@ -16,7 +16,7 @@ import {
   Sun, ClipboardCheck, Calendar, BookOpen,
   Activity, HeartPulse, ShieldAlert, MessageCircle, Plug, Users2, Megaphone, Wallet,
   Instagram, CalendarClock, Palette, Layers, Columns3, UserCheck, History, BarChart2, ShieldCheck,
-  AlertTriangle, Target, Thermometer, FileSignature,
+  AlertTriangle, Target, FileSignature,
   Radar, ListOrdered, Building2, MessageSquare, Settings2, BarChart3,
   Lock, Zap, Info,
 } from "lucide-react";
@@ -72,6 +72,12 @@ export const OPERACAO: readonly Role[] = ["admin", "manager", "traffic", "social
 export const GESTAO: readonly Role[] = ["admin", "manager"];
 const TRAFEGO: readonly Role[] = ["admin", "manager", "traffic"];
 const CONTEUDO: readonly Role[] = ["admin", "manager", "social", "designer"];
+
+/** Quem procura pelo nome de uma das três telas antigas acha a Saúde da carteira. */
+const TERMOS_SAUDE: readonly string[] = [
+  "risco", "em risco", "churn", "termômetro", "termometro", "jornada", "jornada cs", "cs", "sucesso do cliente",
+  "carteira", "próxima ação", "proxima acao", "saúde", "saude", "health",
+];
 
 // ─── O menu ────────────────────────────────────────────────────────────────
 // Ordem do rail: Início, Meu Trabalho, Tráfego, Conteúdo, Clientes, Comercial, Agente Lone, Gestão,
@@ -192,12 +198,16 @@ export const MENU: readonly GrupoMenu[] = [
       { id: "meus-clientes", rotulo: "Meus Clientes", icone: UserCheck, href: "/clients?resp=mine", papeis: ["traffic", "social", "designer"],
         tambemEm: ["/meus-clientes", "/clients"],
         descricao: "Sua carteira e o briefing de cada cliente", termos: ["briefing", "carteira", "clientes do quadro"] },
-      { id: "churn", rotulo: "Termômetro de Churn", icone: Thermometer, href: "/churn", papeis: GESTAO,
-        descricao: "Score preditivo de risco", termos: ["risco", "termômetro"] },
-      { id: "jornada", rotulo: "Jornada CS", icone: HeartPulse, href: "/jornada", papeis: ["admin", "manager", "social"],
-        descricao: "Saúde e próxima ação de cada cliente", termos: ["cs", "sucesso do cliente"] },
-      { id: "carteira", rotulo: "Carteira", icone: Layers, href: "/carteira", papeis: GESTAO,
-        descricao: "Distribuição de clientes por pessoa" },
+      // Leva 6A: Termômetro de Churn, Jornada CS e Carteira viraram UMA tela — três respostas diferentes
+      // para "este cliente está em risco?" viraram a do modelo único (lib/saude/carteira.ts). As rotas
+      // antigas redirecionam para a vista equivalente e continuam acendendo este item. O social, que
+      // tinha só a Jornada, continua só com ela (o mesmo item, com o endereço antigo dele).
+      { id: "saude-carteira", rotulo: "Saúde da carteira", icone: HeartPulse, href: "/saude", papeis: GESTAO,
+        tambemEm: ["/churn", "/jornada", "/carteira"],
+        descricao: "Quem está em risco, por quê e a próxima ação de cada cliente", termos: TERMOS_SAUDE },
+      { id: "saude-carteira-social", rotulo: "Saúde da carteira", icone: HeartPulse, href: "/saude", papeis: ["social"],
+        tambemEm: ["/jornada"],
+        descricao: "Quem está em risco, por quê e a próxima ação de cada cliente", termos: TERMOS_SAUDE },
       { id: "contratos", rotulo: "Contratos", icone: FileSignature, href: "/contratos", papeis: GESTAO,
         descricao: "Lista global de contratos" },
     ],
@@ -242,8 +252,14 @@ export const MENU: readonly GrupoMenu[] = [
   {
     id: "agente", rotulo: "Agente Lone", icone: Bot,
     itens: [
-      { id: "agente", rotulo: "Agente Lone", icone: Bot, href: "/agente", papeis: GESTAO,
-        descricao: "Prioridades e decisões do agente", termos: ["ia", "prioridades"] },
+      // Leva 6A: o CS começa o dia AQUI. O feed de prioridades do agente é o "Hoje" do CS (a área abre
+      // nele); acurácia, aprendizado e estilo foram para a vista Desempenho, na mesma tela.
+      { id: "agente", rotulo: "Hoje", icone: Sun, href: "/agente", papeis: GESTAO,
+        descricao: "Hoje do CS: o que precisa de você, de todas as fontes, com o porquê",
+        termos: ["cs", "hoje do cs", "prioridades", "o que fazer", "ia", "agente lone", "feed"] },
+      { id: "agente-desempenho", rotulo: "Desempenho do agente", icone: Activity, href: "/agente?view=desempenho", papeis: GESTAO,
+        descricao: "Acurácia, aprendizado e estilo de comunicação do agente",
+        termos: ["acurácia", "acuracia", "aprendizado", "estilo", "ia"] },
     ],
   },
   {
@@ -407,7 +423,8 @@ export function telasParaBusca(role: Role, menu: readonly GrupoMenu[] = MENU): T
       const onde = it.rotulo === g.rotulo ? g.rotulo : `${g.rotulo} · ${it.rotulo}`;
       out.push({
         id: `tela-${it.id}`,
-        titulo: it.rotulo === "Hoje" ? "Meu Trabalho — Hoje" : it.rotulo,
+        // "Hoje" existe em mais de uma área (Meu Trabalho, Agente): na busca vai com o nome da área.
+        titulo: it.rotulo === "Hoje" ? `${g.rotulo} — Hoje` : it.rotulo,
         subtitulo: [it.rotulo === g.rotulo ? null : g.rotulo, it.descricao].filter(Boolean).join(" · "),
         href: it.href,
         aba: it.aba,

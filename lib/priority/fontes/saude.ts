@@ -4,6 +4,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { ItemBruto } from "../tipos";
+import { ACAO_SAUDE } from "@/lib/clientes/proxima-acao";
 import type { ClienteRef } from "./index";
 
 interface Breakdown { motivos?: string[]; cobertura?: number; sinais_loninho?: { dias_sem_contato?: number; reclamacoes_30d?: number; sem_resposta_no_dia?: number } }
@@ -32,9 +33,8 @@ export async function itensDaSaude(clientes: { porId: Map<string, ClienteRef> })
       titulo: `${c.nome}: saúde ${critico ? "em risco" : "em atenção"} (${h.score}/100)`,
       fato: motivos,
       inferencia: [`Saúde ${h.score}/100 (100 = saudável) com ${cobertura}% dos sinais medidos`],
-      recomendacao: critico
-        ? "Ligar para o cliente hoje: ouvir, registrar o que ele pediu e marcar a reunião do mês"
-        : "Falar com o cliente esta semana com um resultado ou uma próxima peça na mão",
+      // O mesmo texto que a próxima ação sugerida usa quando não há recomendação (lib/clientes/proxima-acao.ts).
+      recomendacao: critico ? ACAO_SAUDE.risco : ACAO_SAUDE.atencao,
       acaoProposta: { tipo: "ver_cliente", clientId: c.id },
       severidade: critico ? 90 : 70,
       urgencia: critico ? 85 : 55,

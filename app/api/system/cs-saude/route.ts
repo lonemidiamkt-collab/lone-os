@@ -9,6 +9,7 @@ import { spNow, ymd } from "@/lib/cs/vigilancia";
 
 const primeiroNome = (n: string) => (n || "").trim().split(/\s+/)[0] || n;
 import { avaliarSaude, formatSaudeDigest, type SinaisSaude } from "@/lib/cs/saude";
+import { nivelDoCliente } from "@/lib/saude/carteira";
 import { clientesSemPostar, clientesSemInstagram, clientesIlegiveis, instagramDuplicado, textoCobranca as cobrancaSemPostar, textoEscalada as escaladaSemPostar } from "@/lib/cs/sem-postar";
 import { saudePessoaPdfHtml, legendaSaude, ordenar, type BlocoSaude, type ClienteSaude } from "@/lib/reports/saudePdf";
 
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
   // Clientes ativos (em operação), sem o cliente-teste. Filtro de `active` obrigatório: cliente
   // arquivado/churnado mantém o status antigo e aparecia toda segunda como risco 🔴.
   const { data: clientsData } = await supabaseAdmin
-    .from("clients").select("id, name, nome_fantasia, status, active, assigned_social")
+    .from("clients").select("id, name, nome_fantasia, status, active, assigned_social, current_health_level, current_health_score")
     .in("status", ["good", "average", "at_risk"])
     .or("active.is.null,active.eq.true")
     .not("name", "ilike", "%(teste)%");
@@ -74,6 +75,8 @@ export async function POST(req: NextRequest) {
       : last ? Math.floor((Date.now() - new Date(last).getTime()) / 86_400_000) : null;
     const sinais: SinaisSaude = {
       status: (c.status as string) || "good",
+      // "Em risco" pela saúde (modelo único), não pelo resultado do anúncio — Leva 6A.
+      nivelSaude: nivelDoCliente(c as { current_health_level: string | null; current_health_score: number | null }),
       reclamacaoRecente: reclamou.has(c.id as string),
       retracaoRecente: retraiu.has(c.id as string),
       diasSemPost,

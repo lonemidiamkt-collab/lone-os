@@ -1,8 +1,15 @@
 // lib/cs/saude.ts — 3ª função do agente: saúde/risco de churn do cliente. Avalia sinais (reclamação,
 // status, sem postagem, retração) e gera um digest dos clientes em risco pra equipe. Puro/testável.
 
+import type { NivelSaude } from "@/lib/scores/health";
+
 export interface SinaisSaude {
-  status: string;              // clients.status (good|average|at_risk|onboarding)
+  status: string;              // clients.status (good|average|at_risk|onboarding) — resultado do ANÚNCIO
+  /**
+   * Nível do modelo único de saúde (lib/saude/carteira.ts → nivelDoCliente). Quando vem, é ELE que diz
+   * "em risco" (Leva 6A) — o status acima é CPL x meta, não risco de churn.
+   */
+  nivelSaude?: NivelSaude;
   reclamacaoRecente: boolean;  // reclamou nos últimos 14d
   retracaoRecente: boolean;    // cancelou/pausou pauta nos últimos 14d
   diasSemPost: number | null;  // dias desde a última postagem publicada (null = nunca postou)
@@ -18,7 +25,9 @@ export function avaliarSaude(cliente: string, s: SinaisSaude): AvaliacaoSaude {
   const motivos: string[] = [];
   let alto = false;
   if (s.reclamacaoRecente) { motivos.push("reclamou nos últimos 14 dias"); alto = true; }
-  if (s.status === "at_risk") { motivos.push("marcado como 'em risco'"); alto = true; }
+  if (s.nivelSaude !== undefined) {
+    if (s.nivelSaude === "risco") { motivos.push("saúde em risco"); alto = true; }
+  } else if (s.status === "at_risk") { motivos.push("marcado como 'em risco'"); alto = true; }
   if (s.retracaoRecente) { motivos.push("cancelou/pausou pauta recentemente"); alto = true; }
   // "Parou de postar" só conta pra quem JÁ postou e ficou em silêncio (>21d). Quem nunca teve post
   // publicado NÃO é flag — o rastreio de posts é incompleto (nem tudo é marcado "published"), seria ruído.

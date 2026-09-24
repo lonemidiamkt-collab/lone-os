@@ -19,6 +19,13 @@ const { _decodificarJwtParaTeste, asciiSeguro } = await import("@/lib/obs/ator")
 const { deveReportar, tabelaDaUrl, reportarErroPostgrest, _limparJanelaErros } = await import("@/lib/obs/erro-postgrest");
 
 const tick = () => new Promise((r) => setTimeout(r, 5));
+// A linha de agent_runs é gravada em segundo plano (fire-and-forget). Um tique de 5ms não basta com a
+// máquina carregada (a suíte inteira falhava aqui de vez em quando); espera até ela aparecer.
+const linhaDe = (tabela: string) => vi.waitFor(() => {
+  const achada = inserts.find((i) => i.tabela === tabela);
+  if (!achada) throw new Error(`${tabela} ainda não gravada`);
+  return achada;
+}, { timeout: 2000, interval: 5 });
 beforeEach(() => { inserts.length = 0; _limparJanelaErros(); });
 
 describe("preço por chamada", () => {
@@ -49,9 +56,7 @@ describe("uma execução, um id", () => {
       return Response.json({ ok: true, classified: true, cliente: "Quero Tintas" });
     });
     expect(idCorrelacao()).toBeNull();
-    await tick();
-    const run = inserts.find((i) => i.tabela === "agent_runs")!;
-    expect(run).toBeTruthy();
+    const run = await linhaDe("agent_runs");
     expect(run.linha).toMatchObject({
       id: visto, origem: "teste", ator: "Julio", papel: "manager", chamadas_llm: 1, tokens_prompt: 1000, envios: 1,
       notas: ["demanda criada"], resultado: { status: 200, ok: true, classified: true, cliente: "Quero Tintas" }, erro: null,
@@ -61,8 +66,7 @@ describe("uma execução, um id", () => {
 
   it("erro na execução: rethrow E linha com o erro", async () => {
     await expect(comExecucao({ origem: "teste" }, async () => { throw new Error("quebrou"); })).rejects.toThrow("quebrou");
-    await tick();
-    expect(inserts.find((i) => i.tabela === "agent_runs")?.linha.erro).toMatch(/quebrou/);
+    expect((await linhaDe("agent_runs")).linha.erro).toMatch(/quebrou/);
   });
 
   it("custo incompleto quando um modelo não tem preço", () => {

@@ -7,7 +7,6 @@ import type {
   Notice,
   CreativeAsset,
   SocialProofEntry,
-  CrisisNote,
   QuinzReport,
   MoodEntry,
   MoodType,
@@ -23,7 +22,6 @@ interface OperationalState {
   notices: Notice[];
   creativeAssets: Record<string, CreativeAsset[]>;
   socialProofs: Record<string, SocialProofEntry[]>;
-  crisisNotes: Record<string, CrisisNote[]>;
   quinzReports: QuinzReport[];
   moodHistory: Record<string, MoodEntry[]>;
   clientAccess: Record<string, ClientAccess>;
@@ -37,7 +35,6 @@ interface OperationalState {
 
   addCreativeAsset: (asset: Omit<CreativeAsset, "id">) => Promise<void>;
   addSocialProof: (entry: Omit<SocialProofEntry, "id" | "createdAt">) => Promise<void>;
-  addCrisisNote: (clientId: string, note: string, actor: string) => Promise<void>;
   addQuinzReport: (report: Omit<QuinzReport, "id" | "createdAt">) => Promise<void>;
   addMoodEntry: (clientId: string, mood: MoodType, note: string, actor: string) => void;
   updateClientAccess: (clientId: string, access: Partial<ClientAccess>, actor: string) => Promise<void>;
@@ -56,9 +53,6 @@ export const selectClientCreativeAssets = (clientId: string) => (s: OperationalS
 export const selectSocialProofs = (s: OperationalState) => s.socialProofs;
 export const selectClientSocialProofs = (clientId: string) => (s: OperationalState) =>
   s.socialProofs[clientId] ?? [];
-export const selectCrisisNotes = (s: OperationalState) => s.crisisNotes;
-export const selectClientCrisisNotes = (clientId: string) => (s: OperationalState) =>
-  s.crisisNotes[clientId] ?? [];
 export const selectQuinzReports = (s: OperationalState) => s.quinzReports;
 export const selectMoodHistory = (s: OperationalState) => s.moodHistory;
 export const selectClientMoodHistory = (clientId: string) => (s: OperationalState) =>
@@ -82,7 +76,6 @@ export const useOperationalStore = create<OperationalState>()(
       notices: [],
       creativeAssets: {},
       socialProofs: {},
-      crisisNotes: {},
       quinzReports: [],
       moodHistory: {},
       clientAccess: {},
@@ -93,8 +86,8 @@ export const useOperationalStore = create<OperationalState>()(
         try {
           const res = await authedFetch("/api/data/operational");
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const { timeline, onboardingItems, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodEntries, clientAccess } = await res.json();
-          set({ timeline, onboarding: onboardingItems, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodHistory: moodEntries, clientAccess, initialized: true }, false, "ops/init/done");
+          const { timeline, onboardingItems, tasks, notices, creativeAssets, socialProofs, quinzReports, moodEntries, clientAccess } = await res.json();
+          set({ timeline, onboarding: onboardingItems, tasks, notices, creativeAssets, socialProofs, quinzReports, moodHistory: moodEntries, clientAccess, initialized: true }, false, "ops/init/done");
         } catch {}
       },
 
@@ -229,17 +222,6 @@ export const useOperationalStore = create<OperationalState>()(
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const { socialProofs } = await res.json();
         set({ socialProofs }, false, "ops/socialproof/add");
-      },
-
-      addCrisisNote: async (clientId, note, actor) => {
-        const res = await authedFetch("/api/data/operational/mutations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "insertCrisisNote", clientId, note, actor }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const { crisisNotes } = await res.json();
-        set({ crisisNotes }, false, "ops/crisis/add");
       },
 
       addQuinzReport: async (report) => {

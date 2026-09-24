@@ -45,7 +45,9 @@ const STATUS_COLUMNS = [
   { id: "onboarding", title: "Onboarding", color: "bg-muted" },
   { id: "good", title: "Bons Resultados", color: "bg-primary" },
   { id: "average", title: "Resultados Médios", color: "bg-muted" },
-  { id: "at_risk", title: "Em Risco", color: "bg-destructive" },
+  // Resultado do ANÚNCIO (CPL x meta), não risco de churn — "Em risco" é só a saúde do cliente
+  // (lib/saude/carteira.ts). Leva 6A: o rótulo antigo fazia esta coluna competir com a Saúde da carteira.
+  { id: "at_risk", title: "Resultados Ruins", color: "bg-destructive" },
 ];
 
 type TabType = "hoje" | "defesa" | "status" | "anuncios";
@@ -232,7 +234,7 @@ export default function TrafficPage() {
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           <MetricCard icon={Users} label="Clientes" value={filteredClients.length} sub="na carteira" iconColor="text-primary" iconBg="bg-primary/15" onClick={() => setActiveTab("status")} />
           <MetricCard icon={CheckCircle} label="Bons Resultados" value={goodCount} sub="clientes" iconColor="text-primary" iconBg="bg-primary/15" />
-          <MetricCard icon={AlertTriangle} label="Em Risco" value={atRiskCount} sub="clientes" iconColor="text-destructive" iconBg="bg-destructive/10" />
+          <MetricCard icon={AlertTriangle} label="Resultado ruim" value={atRiskCount} sub="clientes · anúncio" iconColor="text-destructive" iconBg="bg-destructive/10" />
           <MetricCard icon={ClipboardCheck} label="Tarefas do tráfego" value={trafficTasks.filter(t => t.status !== "done").length} sub="abertas · ver em Meu Trabalho" iconColor="text-primary" iconBg="bg-primary/15" onClick={() => router.push("/my-work?view=tarefas&area=trafego")} />
         </div>
 

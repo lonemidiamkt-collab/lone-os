@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useOKRMetrics } from "@/lib/hooks/useOKRMetrics";
 import { calcHealthScore } from "@/lib/utils";
+import { emRisco } from "@/lib/saude/carteira";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -188,7 +189,7 @@ function generateFeedback(deltas: Delta[], currentSnapshot: Snapshot, previousSn
     } else if (worst.metric === "designOnTime") {
       suggestion = `Design atrasado: entregas no prazo cairam ${Math.abs(worst.delta).toFixed(0)}%. Considerar designer adicional ou repriorizar fila.`;
     } else if (worst.metric === "churnRate") {
-      suggestion = `Risco de churn subiu ${Math.abs(worst.delta).toFixed(0)}%. Acionar CS para contato proativo com clientes at_risk.`;
+      suggestion = `Risco de churn subiu ${Math.abs(worst.delta).toFixed(0)}%. Acionar CS para contato proativo com os clientes em risco (Saúde da carteira).`;
     } else if (worst.metric === "postsPublished") {
       suggestion = `Producao de conteudo caiu ${Math.abs(worst.delta).toFixed(0)}%. Verificar gargalo no pipeline Social → Design → Publicacao.`;
     } else {
@@ -219,7 +220,8 @@ export function useSnapshots() {
     const period = getCurrentPeriod();
     const monthStart = `${period}-01`;
     const active = clients.filter((c) => c.status !== "onboarding");
-    const atRisk = clients.filter((c) => c.status === "at_risk");
+    // Em risco = saúde em risco (lib/saude/carteira.ts), não o resultado do anúncio (clients.status).
+    const atRisk = clients.filter((c) => c.active !== false && emRisco(c));
 
     // Posts published this month
     const published = contentCards.filter((c) =>

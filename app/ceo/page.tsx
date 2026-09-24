@@ -22,30 +22,14 @@ import { useRole } from "@/lib/context/RoleContext";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import MedievalAvatar, { AVATAR_OPTIONS, getUserAvatar, setUserAvatar, type AvatarType } from "@/components/MedievalAvatars";
 import type { Role, Client } from "@/lib/types";
+import { emRisco, scoreDoCliente } from "@/lib/saude/carteira";
 
 // Mês corrente em SP ("YYYY-MM") — "este mês" é o mês de verdade, não o acumulado.
 const mesSP = () => todaySP().slice(0, 7);
 const noMesSP = (iso?: string | null) => !!iso && spDateStr(iso).slice(0, 7) === mesSP();
 
-// Score de risco de churn (0-100, maior = pior) — extraído pra dar pra ORDENAR a lista.
-function churnRiskScore(client: Client): number {
-  let score = 0;
-  if (client.status === "at_risk") score += 35;
-  else if (client.status === "average") score += 15;
-  const kanbanHoursAgo = client.lastKanbanActivity ? (Date.now() - new Date(client.lastKanbanActivity).getTime()) / 3600000 : 999;
-  if (kanbanHoursAgo > 168) score += 25;
-  else if (kanbanHoursAgo > 72) score += 10;
-  const postRatio = client.postsGoal ? (client.postsThisMonth ?? 0) / client.postsGoal : 0.5;
-  if (postRatio < 0.3) score += 20;
-  else if (postRatio < 0.6) score += 8;
-  if (!client.lastPostDate) score += 10;
-  else {
-    const daysSincePost = (Date.now() - new Date(client.lastPostDate).getTime()) / 86400000;
-    if (daysSincePost > 14) score += 15;
-    else if (daysSincePost > 7) score += 5;
-  }
-  return Math.min(100, score);
-}
+// Risco de churn = saúde em risco (lib/saude/carteira.ts). A pontuação local que morava aqui (status do
+// anúncio + kanban + posts) era a 9ª resposta diferente para "este cliente está em risco?".
 
 export default function CEOPage() {
   const { profiles, role, hydrated } = useRole();   // equipe do banco, não lista em arquivo
@@ -428,7 +412,7 @@ export default function CEOPage() {
           <div className="card">
             <p className="text-xs text-muted-foreground">Risco de Churn</p>
             <p className="text-2xl font-bold text-destructive mt-1">
-              {clients.filter((c) => c.status === "at_risk").length} clientes
+              {clients.filter((c) => c.active !== false && emRisco(c)).length} clientes
             </p>
             <p className="text-xs text-muted-foreground mt-1">precisam de atenção</p>
           </div>
@@ -473,11 +457,11 @@ export default function CEOPage() {
                   if (!enteredAt) return false;
                   return (Date.now() - new Date(enteredAt).getTime()) / 86400000 >= 3;
                 }).length;
-                const topRisk = [...clients]
-                  .filter((c) => c.status !== "onboarding")
-                  .map((c) => ({ c, score: churnRiskScore(c) }))
-                  .filter((x) => x.score >= 45)
-                  .sort((a, b) => b.score - a.score)
+                // Os 3 piores em saúde (100 = saudável), pela mesma régua da Saúde da carteira.
+                const topRisk = clients
+                  .filter((c) => c.active !== false && emRisco(c))
+                  .map((c) => ({ c, score: scoreDoCliente(c) }))
+                  .sort((a, b) => (a.score ?? 101) - (b.score ?? 101))
                   .slice(0, 3);
                 return (
                   <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
@@ -509,7 +493,7 @@ export default function CEOPage() {
                             >
                               <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
                               <span className="font-medium text-foreground">{c.name}</span>
-                              <span className="text-destructive font-semibold">{score}%</span>
+                              {score !== null && <span className="text-destructive font-semibold tabular-nums">{Math.round(score)}/100</span>}
                             </button>
                           ))}
                           {stuckCount > 0 && (
@@ -517,6 +501,12 @@ export default function CEOPage() {
                               {stuckCount} card(s) parado(s) +3 dias
                             </span>
                           )}
+                          <button
+                            onClick={() => router.push("/saude?nivel=risco&resp=all")}
+                            className="px-2 py-1.5 text-xs font-medium text-primary hover:underline"
+                          >
+                            Ver na Saúde da carteira
+                          </button>
                         </div>
                       </div>
                     )}
