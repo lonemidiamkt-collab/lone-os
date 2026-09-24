@@ -19,7 +19,8 @@ import type { AdCampaign } from "@/lib/types";
 
 export interface Demografia {
   ageRanges: { range: string; percentage: number }[];
-  genderSplit: { women: number; men: number };
+  /** null = a Meta não soube o gênero (antes vinha um 50/50 inventado). */
+  genderSplit: { women: number; men: number } | null;
 }
 
 export interface ItemAnuncios {

@@ -3,13 +3,13 @@
 // grupos dos clientes (/api/system/client-messages).
 
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { estaPausado, type ClienteComPausa } from "@/lib/clients/pausa";
-import { fetchCampaignInsights, fetchAccountDemographics, fetchAccountReach } from "@/lib/meta/insights-server";
-import { buildTrafficReportData, buildClientReportHtml } from "@/lib/exportTrafficPdf";
+import { estaPausado, hojeSP, type ClienteComPausa } from "@/lib/clients/pausa";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { getIgSnapshotCached, type IgSnapshot } from "@/lib/meta/igSnapshot";
-import { igSectionHtml, buildIgOnlyHtml } from "@/lib/traffic/igReportSection";
-import type { AdCampaign } from "@/lib/types";
+import { janelaDoRelatorio, janelaDosUltimosDias } from "@/lib/reports/relatorioCliente";
+import { lerRelatorioAnuncios } from "@/lib/reports/relatorioClienteDados";
+import { relatorioClienteHtml } from "@/lib/reports/relatorioClientePdf";
+import { loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 
 export interface ReportClientRow {
   id: string;
@@ -125,34 +125,55 @@ export async function selectActiveClientsWithGroup(onlyClientId?: string | null)
   return (data ?? []).filter((c) => !estaPausado(c as ClienteComPausa)) as ReportClientRow[];
 }
 
+/** Um cliente pelo id, SEM os filtros de envio (status, pausa, contrato) — só pra PRÉVIA do relatório. */
+export async function selectReportClient(id: string): Promise<ReportClientRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from("clients")
+    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, whatsapp_group_jid, whatsapp_group_name")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as ReportClientRow | null) ?? null;
+}
+
+const contaGraph = (id: string) => (id.startsWith("act_") ? id : `act_${id}`);
+
+function baseUrlPublica(): string {
+  return process.env.NEXT_PUBLIC_PORTAL_DOMAIN || process.env.NEXT_PUBLIC_SITE_URL || "https://painel.lonemidia.com";
+}
+
 /**
- * Gera o PDF (Buffer) do relatório de 7 dias de UM cliente. Nunca lança. Monta o que o cliente
- * tiver: tráfego (anúncios Meta) + Instagram orgânico. Se tem os dois → UM PDF com as duas seções.
- * Só tráfego → só tráfego. Só social → só Instagram. O IG vem do cache (evita rate limit).
+ * Monta o HTML do relatório de UM cliente. Nunca lança. Monta o que o cliente tiver: anúncios
+ * (Meta) + Instagram orgânico. Tem os dois → uma folha de anúncios e uma de Instagram. Só um → só ele.
+ * O IG vem do cache (evita rate limit).
+ *
+ * Desenho e contas: lib/reports/relatorioCliente*.ts (24/09 — comparação com o período anterior,
+ * público corrigido, conjunto com nome, gráfico honesto).
  */
-export async function buildClientPdf(
+export async function montarHtmlRelatorioCliente(
   token: string,
   client: ReportClientRow,
   periodDays = 7,
-  /** Intervalo EXATO (YYYY-MM-DD). Quando vem, manda nos anúncios em vez do preset de N dias —
+  /** Intervalo EXATO (YYYY-MM-DD). Quando vem, manda nos anúncios em vez da janela de N dias —
    *  é como se pede "julho fechado" em vez de "últimos 30 dias".
    *  O Instagram NÃO acompanha: a API só oferece janelas fixas (7d/28d), então o bloco de IG
-   *  continua no preset e o PDF passa a escrever o período de CADA bloco, pra ninguém ler um
+   *  continua no preset e o PDF escreve o período de CADA bloco, pra ninguém ler um
    *  número de julho ao lado de um número de 28 dias achando que são a mesma janela. */
   dateFrom?: string,
   dateTo?: string,
-): Promise<{ ok: boolean; buffer?: Buffer; error?: string }> {
+): Promise<{ ok: boolean; html?: string; error?: string }> {
   const accountId = client.meta_ad_account_id;
   const clientName = clientDisplayName(client);
   const intervaloExato = !!(dateFrom && dateTo);
-  const periodo = intervaloExato ? rotuloIntervalo(dateFrom!, dateTo!) : periodLabelDays(periodDays);
+  const hoje = hojeSP();
+  // A janela de N dias termina ONTEM (a Meta não fecha o dia de hoje) — a mesma do date_preset
+  // last_7d/last_30d que o relatório usava. Rodando na segunda, é segunda → domingo da semana passada.
+  const janela = intervaloExato ? janelaDoRelatorio(dateFrom!, dateTo!) : janelaDosUltimosDias(periodDays, hoje);
   // A JANELA DO INSTAGRAM SAI DO INTERVALO, NÃO DO periodDays. No primeiro envio de julho eu
   // passei só since/until e esqueci o period=month: os anúncios vieram do mês fechado e o bloco de
   // IG veio de 7 DIAS, no mesmo PDF. Derivar do intervalo tira essa pegadinha do chamador.
   // (A API do IG só tem janelas fixas — pega a mais próxima do tamanho pedido.)
-  const diasDoIntervalo = intervaloExato
-    ? Math.round((Date.parse(`${dateTo}T00:00:00Z`) - Date.parse(`${dateFrom}T00:00:00Z`)) / 86_400_000) + 1
-    : periodDays;
+  const diasDoIntervalo = janela.dias;
   const igPeriodo: "7d" | "14d" | "30d" =
     diasDoIntervalo >= 21 ? "30d" : diasDoIntervalo >= 11 ? "14d" : "7d";
 
@@ -166,48 +187,37 @@ export async function buildClientPdf(
     } catch { /* IG é best-effort — se falhar, sai só o tráfego */ }
   }
 
-  // ── Tráfego (anúncios) ──
-  let trafficHtml: string | null = null;
+  // ── Anúncios ──
+  // Falha na leitura do período atual NÃO vira relatório só de Instagram: pro cliente de tráfego,
+  // um PDF sem os anúncios pareceria "não anunciamos nada". Vira erro nomeado pro time.
+  let anuncios: Awaited<ReturnType<typeof lerRelatorioAnuncios>> = null;
   if (accountId) {
-    const raw = await fetchCampaignInsights(token, accountId, periodDays, dateFrom, dateTo);
-    const campaigns = (raw as Array<{ error?: boolean }>).filter((c) => !c.error) as unknown as AdCampaign[];
-    if (campaigns.length > 0) {
-      let demographics: ReturnType<typeof buildTrafficReportData>["demographics"] | undefined;
-      try {
-        const demo = await fetchAccountDemographics(token, accountId, periodDays, dateFrom, dateTo);
-        demographics = demo ?? undefined;
-      } catch { /* demografia é opcional */ }
-      // Alcance deduplicado no nível da conta (não somar campanha a campanha).
-      // TENTA DUAS VEZES antes de desistir: sem ele o PDF omite a métrica, e perder o alcance do
-      // relatório do cliente por um soluço de rede seria bobo. Se falhar de novo, fica sem — e
-      // aparece no log, porque relatório saindo torto em silêncio foi o problema de junho.
-      let accountReach = await fetchAccountReach(token, accountId, periodDays, dateFrom, dateTo);
-      if (accountReach == null) {
-        await new Promise((r) => setTimeout(r, 1500));
-        accountReach = await fetchAccountReach(token, accountId, periodDays, dateFrom, dateTo);
-        if (accountReach == null) {
-          console.error(`[relatorio] ${clientName}: alcance deduplicado indisponível — PDF sai SEM a métrica de alcance`);
-        }
-      }
-      const reportData = buildTrafficReportData(clientName, campaigns, periodo, undefined, demographics, undefined, periodDays, accountReach ?? undefined);
-      trafficHtml = buildClientReportHtml(reportData);
+    try {
+      anuncios = await lerRelatorioAnuncios(token, contaGraph(accountId), janela, clientName);
+    } catch (e) {
+      return { ok: false, error: `Meta: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}` };
     }
   }
-
-  // ── Combina: tráfego + (IG encaixado antes do rodapé) / só um / nenhum ──
-  let html: string;
-  if (trafficHtml) {
-    // Combinado: Instagram SEMPRE numa página nova (page 1 = anúncios, page 2 = Instagram) — não mistura.
-    html = igSnap
-      ? trafficHtml.replace("<!-- FOOTER -->", `<div style="break-before:page;page-break-before:always;">${igSectionHtml(igSnap)}</div>\n  <!-- FOOTER -->`)
-      : trafficHtml;
-  } else if (igSnap) {
-    html = buildIgOnlyHtml(clientName, periodo, igSnap);
-  } else {
-    return { ok: false, error: accountId ? "sem campanhas nem Instagram no período" : "cliente sem tráfego nem Instagram" };
+  if (!anuncios && !igSnap) {
+    return { ok: false, error: accountId ? "sem veiculação nem Instagram no período" : "cliente sem tráfego nem Instagram" };
   }
 
-  const pdf = await htmlToPdf(html);
+  const logo = (await loadLoneLogo().catch(() => "")) || `${baseUrlPublica()}/logo.png`;
+  const html = relatorioClienteHtml({ clienteNome: clientName, logo, geradoEm: hoje, janela, anuncios, instagram: igSnap });
+  return { ok: true, html };
+}
+
+/** Gera o PDF (Buffer) do relatório de UM cliente. Nunca lança. Ver montarHtmlRelatorioCliente. */
+export async function buildClientPdf(
+  token: string,
+  client: ReportClientRow,
+  periodDays = 7,
+  dateFrom?: string,
+  dateTo?: string,
+): Promise<{ ok: boolean; buffer?: Buffer; error?: string }> {
+  const h = await montarHtmlRelatorioCliente(token, client, periodDays, dateFrom, dateTo);
+  if (!h.ok || !h.html) return { ok: false, error: h.error ?? "falha ao montar o relatório" };
+  const pdf = await htmlToPdf(h.html);
   if (!pdf.ok || !pdf.buffer) return { ok: false, error: pdf.error ?? "falha no render" };
   return { ok: true, buffer: pdf.buffer };
 }

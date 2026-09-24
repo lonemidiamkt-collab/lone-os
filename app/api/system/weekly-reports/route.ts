@@ -1,14 +1,23 @@
 // app/api/system/weekly-reports/route.ts
 //
-// Relatório semanal (7 dias) por cliente em PDF, entregue toda segunda no grupo.
-// Reusa o MESMO PDF "PDF Cliente" da página de Anúncios Meta (buildClientReportHtml),
-// renderizado server-side via browserless. Crontab (VPS):
-//   0 11 * * 1 /opt/loneos/scripts/cron-call.sh weekly-reports POST >> /var/log/loneos-weekly-reports.log 2>&1
+// Relatório do cliente em PDF (lib/traffic/weekly-report.ts → lib/reports/relatorioCliente*.ts),
+// renderizado server-side via browserless. É por aqui que sai o MENSAL (scripts/relatorio-mensal.sh,
+// dia 1º, com ?since=&until=&destino=cliente); o semanal de segunda sai por client-messages?kind=monday,
+// com o mesmo PDF.
 //
 //   POST                      → gera o PDF de cada cliente ativo-com-Meta e envia ao grupo.
 //   POST ?dryRun=1            → apenas lista/conta os clientes elegíveis (não gera/envia).
 //   POST ?clientId=<id>       → gera SÓ esse cliente. Com dryRun, salva no Storage e devolve a URL (preview).
 //   POST ?force=1             → ignora a idempotência do dia.
+//
+// PRÉVIA SEM ENVIAR (GET ou POST, exige o CRON_SECRET). Não envia, não grava log, não sobe no Storage:
+//   ?baixar=1&cliente=<id>    → devolve o PDF (application/pdf).
+//   ?dry=1&cliente=<id>       → devolve o HTML do relatório (abre no navegador).
+//   + nada                    → semanal: os 7 dias que terminam ontem (o mesmo da segunda).
+//   + &since=AAAA-MM-DD&until=AAAA-MM-DD → mensal/intervalo exato (ex.: 2026-08-01 a 2026-08-31).
+//   + &period=month           → últimos 30 dias.
+//   Ex.: curl -H "Authorization: Bearer $CRON_SECRET" \
+//          "https://painel.lonemidia.com/api/system/weekly-reports?baixar=1&cliente=<id>" -o relatorio.pdf
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +32,9 @@ import { sendMediaDocument } from "@/lib/whatsapp/evolution";
 import { csSendGroupText } from "@/lib/cs/notify";
 import {
   buildClientPdf, selectActiveMetaClients, periodLabelDays, slug,
+  montarHtmlRelatorioCliente, selectReportClient, clientDisplayName,
 } from "@/lib/traffic/weekly-report";
+import { htmlToPdf } from "@/lib/traffic/renderPdf";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
 const REPORTS_BUCKET = "reports";
@@ -46,6 +57,67 @@ async function notifyAdminFailure(subject: string, detail: string) {
   }
 }
 
+// ── Prévia (não envia nada) ─────────────────────────────────
+
+const ISO_DIA = /^\d{4}-\d{2}-\d{2}$/;
+
+async function previa(url: URL): Promise<NextResponse> {
+  const baixar = url.searchParams.get("baixar") === "1";
+  const cliente = url.searchParams.get("cliente") || url.searchParams.get("clientId") || "";
+  if (!cliente) {
+    return NextResponse.json({ error: "Prévia precisa de ?cliente=<id>. Use ?baixar=1 (PDF) ou ?dry=1 (HTML); opcional &since=&until= (AAAA-MM-DD) ou &period=month." }, { status: 400 });
+  }
+  const since = url.searchParams.get("since") || "";
+  const until = url.searchParams.get("until") || "";
+  const intervalo = ISO_DIA.test(since) && ISO_DIA.test(until) && since <= until;
+  if ((since || until) && !intervalo) {
+    return NextResponse.json({ error: "since/until precisam ser YYYY-MM-DD com since <= until." }, { status: 400 });
+  }
+  const periodDays = url.searchParams.get("period") === "month" ? 30 : 7;
+
+  const c = await selectReportClient(cliente);
+  if (!c) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+  const token = await getMetaToken();
+  if (!token) return NextResponse.json({ ok: false, error: "Token Meta ausente/expirado" }, { status: 503 });
+
+  const h = await montarHtmlRelatorioCliente(token, c, periodDays, intervalo ? since : undefined, intervalo ? until : undefined);
+  if (!h.ok || !h.html) {
+    return NextResponse.json({ ok: false, client: clientDisplayName(c), error: h.error }, { status: 422 });
+  }
+  if (!baixar) {
+    return new NextResponse(h.html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  }
+  const pdf = await htmlToPdf(h.html);
+  if (!pdf.ok || !pdf.buffer) {
+    return NextResponse.json({ ok: false, client: clientDisplayName(c), error: `PDF: ${pdf.error ?? "falhou"}` }, { status: 502 });
+  }
+  const nome = `relatorio-${slug(clientDisplayName(c))}-${intervalo ? `${since}_${until}` : todayKeyBRT()}.pdf`;
+  return new NextResponse(new Uint8Array(pdf.buffer), {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="${nome}"`,
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+const ehPrevia = (url: URL) => url.searchParams.get("baixar") === "1" || url.searchParams.get("dry") === "1";
+
+/** GET só existe pra prévia: nunca envia. */
+export async function GET(req: NextRequest) {
+  const denied = requireCron(req);
+  if (denied) return denied;
+  const url = new URL(req.url);
+  if (!ehPrevia(url)) {
+    return NextResponse.json({ error: "GET só faz prévia: ?baixar=1&cliente=<id> (PDF) ou ?dry=1&cliente=<id> (HTML)." }, { status: 400 });
+  }
+  try {
+    return await previa(url);
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+  }
+}
+
 // ── POST ─────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -53,6 +125,14 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
 
   const url = new URL(req.url);
+  // Prévia pedida por POST: responde aqui e sai — antes de qualquer seleção, trava ou envio.
+  if (ehPrevia(url)) {
+    try {
+      return await previa(url);
+    } catch (e) {
+      return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    }
+  }
   const dryRun = url.searchParams.get("dryRun") === "1";
   const force = url.searchParams.get("force") === "1";
   const onlyClientId = url.searchParams.get("clientId");

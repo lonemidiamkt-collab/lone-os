@@ -1,4 +1,5 @@
 import type { AdCampaign } from "@/lib/types";
+import { ticksRedondos } from "@/lib/reports/relatorioCliente";
 
 // Base URL do logo no PDF. No browser usa a origem atual; no servidor (geração
 // agendada do PDF) usa o domínio público, já que não há `window`.
@@ -46,7 +47,8 @@ export interface TrafficReportData {
   }[];
   demographics?: {
     ageRanges: { range: string; percentage: number }[];
-    genderSplit: { women: number; men: number };
+    /** null = a Meta não soube o gênero de ninguém (antes virava um 50/50 inventado). */
+    genderSplit: { women: number; men: number } | null;
   };
   observations?: string;
   dailyMessages?: { date: string; messages: number }[];
@@ -63,14 +65,11 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 
 // ── Client report chart helpers ───────────────────────────────────────────────
 
+// Linha RETA entre os dias. A curva de Bézier de antes passava por valores que não existiram
+// (subia antes do pico, afundava entre dois dias iguais) — gráfico de cliente tem que ser literal.
 function svgLinePath(pts: { x: number; y: number }[]): string {
   if (pts.length < 2) return "";
-  let d = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const cpx = ((pts[i].x + pts[i + 1].x) / 2).toFixed(1);
-    d += ` C ${cpx},${pts[i].y.toFixed(1)} ${cpx},${pts[i + 1].y.toFixed(1)} ${pts[i + 1].x.toFixed(1)},${pts[i + 1].y.toFixed(1)}`;
-  }
-  return d;
+  return pts.map((p, i) => `${i ? "L" : "M"} ${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
 }
 
 function toDayLabel(dateStr: string, periodDays: number): string {
@@ -86,7 +85,9 @@ function buildDailyChart(daily: { date: string; messages: number }[], periodDays
   const plotH = H - padT - padB;
   const n = daily.length;
   const maxVal = Math.max(...daily.map(d => d.messages), 1);
-  const chartMax = maxVal * 1.15;
+  // Eixo a partir do zero com passo redondo (antes: 33/66/100% do pico → marcas 3/5/8).
+  const ticks = ticksRedondos(maxVal);
+  const chartMax = ticks[ticks.length - 1] || 1;
 
   const pts = daily.map((d, i) => ({
     x: padL + (i / (n - 1)) * plotW,
@@ -101,10 +102,10 @@ function buildDailyChart(daily: { date: string; messages: number }[], periodDays
   const linePath = svgLinePath(pts);
   const areaPath = `${linePath} L ${pts[n - 1].x.toFixed(1)},${H - padB} L ${pts[0].x.toFixed(1)},${H - padB} Z`;
 
-  const gridLines = [0.33, 0.66, 1.0].map(pct => {
-    const y = (padT + (1 - pct) * plotH).toFixed(1);
+  const gridLines = ticks.map(t => {
+    const y = (padT + (1 - t / chartMax) * plotH).toFixed(1);
     return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#1c1c28" stroke-width="1" stroke-dasharray="3,5"/>
-      <text x="${padL - 5}" y="${(+y + 3.5).toFixed(1)}" font-size="8" fill="#5b6172" text-anchor="end">${Math.round(maxVal * pct)}</text>`;
+      <text x="${padL - 5}" y="${(+y + 3.5).toFixed(1)}" font-size="8" fill="#5b6172" text-anchor="end">${fmtNum(t)}</text>`;
   }).join("");
 
   const labelEvery = Math.max(1, Math.ceil(n / 8));
@@ -118,13 +119,13 @@ function buildDailyChart(daily: { date: string; messages: number }[], periodDays
     i === peakIdx ? "" : `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2b3cff" opacity="0.7"/>`
   ).join("");
 
-  const cw = 70;
+  const cw = 84;
   const cx = Math.min(Math.max(peak.x - cw / 2, padL), W - padR - cw);
   const cy = peak.y - 34;
   const peakEl = `
     <line x1="${peak.x.toFixed(1)}" y1="${(cy + 20).toFixed(1)}" x2="${peak.x.toFixed(1)}" y2="${(peak.y - 8).toFixed(1)}" stroke="#2b3cff" stroke-width="1" stroke-dasharray="2,3" opacity="0.5"/>
     <rect x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" width="${cw}" height="20" rx="10" fill="#2b3cff"/>
-    <text x="${(cx + cw / 2).toFixed(1)}" y="${(cy + 13.5).toFixed(1)}" font-size="9.5" font-weight="700" fill="#fff" text-anchor="middle">${fmtNum(peak.messages)} msgs</text>
+    <text x="${(cx + cw / 2).toFixed(1)}" y="${(cy + 13.5).toFixed(1)}" font-size="9.5" font-weight="700" fill="#fff" text-anchor="middle">${fmtNum(peak.messages)} ${peak.messages === 1 ? "conversa" : "conversas"}</text>
     <circle cx="${peak.x.toFixed(1)}" cy="${peak.y.toFixed(1)}" r="8" fill="#060814" stroke="#2b3cff" stroke-width="2"/>
     <circle cx="${peak.x.toFixed(1)}" cy="${peak.y.toFixed(1)}" r="3.5" fill="#ffffff"/>`;
 
@@ -233,13 +234,14 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
     const maxAgePct = Math.max(...d.ageRanges.map((a) => a.percentage), 1);
     const r = 36;
     const circumference = 2 * Math.PI * r;
-    const menArc = (d.genderSplit.men / 100) * circumference;
-    const womenArc = (d.genderSplit.women / 100) * circumference;
+    const g = d.genderSplit ?? { men: 0, women: 0 };
+    const menArc = (g.men / 100) * circumference;
+    const womenArc = (g.women / 100) * circumference;
     const ageBars = d.ageRanges.map((a) => `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
         <span style="width:34px;font-size:10px;color:#8b91a1;flex-shrink:0;font-weight:500;">${a.range}</span>
         <div style="flex:1;height:6px;background:#1a1f33;border-radius:3px;overflow:hidden;">
-          <div style="width:${Math.max(Math.round((a.percentage / maxAgePct) * 100), 5)}%;height:100%;background:#2b3cff;border-radius:3px;"></div>
+          <div style="width:${a.percentage > 0 ? Math.max(Math.round((a.percentage / maxAgePct) * 100), 5) : 0}%;height:100%;background:#2b3cff;border-radius:3px;"></div>
         </div>
         <span style="font-size:10px;font-weight:700;color:#eef0f6;width:38px;text-align:right;">${a.percentage.toFixed(1)}%</span>
       </div>`).join("");
@@ -249,14 +251,14 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
       <div class="sec-title">Perfil do Público</div>
       <div style="background:#0b0e1e;border-radius:10px;padding:20px 24px;border:1px solid #1a1f33;">
         <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
-          <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:12px;min-width:110px;">
+          <div style="flex-shrink:0;display:${d.genderSplit ? "flex" : "none"};flex-direction:column;align-items:center;gap:12px;min-width:110px;">
             <div style="font-size:9px;font-weight:700;color:#5b6172;letter-spacing:.06em;text-transform:uppercase;">Gênero</div>
             <div style="position:relative;width:88px;height:88px;">
               <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
                 <circle cx="50" cy="50" r="${r}" fill="none" stroke="#1a1f33" stroke-width="14"/>
                 <circle cx="50" cy="50" r="${r}" fill="none" stroke="#2b3cff" stroke-width="14"
                   stroke-dasharray="${menArc.toFixed(2)} ${circumference.toFixed(2)}"/>
-                <circle cx="50" cy="50" r="${r}" fill="none" stroke="#8b91a1" stroke-width="14"
+                <circle cx="50" cy="50" r="${r}" fill="none" stroke="#8b5cf6" stroke-width="14"
                   stroke-dasharray="${womenArc.toFixed(2)} ${circumference.toFixed(2)}"
                   stroke-dashoffset="${(-menArc).toFixed(2)}"/>
               </svg>
@@ -265,12 +267,12 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
               <div style="display:flex;align-items:center;gap:6px;">
                 <div style="width:9px;height:9px;border-radius:50%;background:#2b3cff;flex-shrink:0;"></div>
                 <span style="font-size:10px;color:#8b91a1;flex:1;">Homens</span>
-                <span style="font-size:11px;font-weight:700;color:#eef0f6;">${d.genderSplit.men.toFixed(1)}%</span>
+                <span style="font-size:11px;font-weight:700;color:#eef0f6;">${g.men.toFixed(1)}%</span>
               </div>
               <div style="display:flex;align-items:center;gap:6px;">
-                <div style="width:9px;height:9px;border-radius:50%;background:#8b91a1;flex-shrink:0;"></div>
+                <div style="width:9px;height:9px;border-radius:50%;background:#8b5cf6;flex-shrink:0;"></div>
                 <span style="font-size:10px;color:#8b91a1;flex:1;">Mulheres</span>
-                <span style="font-size:11px;font-weight:700;color:#eef0f6;">${d.genderSplit.women.toFixed(1)}%</span>
+                <span style="font-size:11px;font-weight:700;color:#eef0f6;">${g.women.toFixed(1)}%</span>
               </div>
             </div>
           </div>
@@ -516,14 +518,15 @@ function buildClientDemographicsSection(demographics: TrafficReportData["demogra
   const d = demographics;
   const r = 36;
   const circumference = 2 * Math.PI * r;
-  const menArc = (d.genderSplit.men / 100) * circumference;
-  const womenArc = (d.genderSplit.women / 100) * circumference;
+  const g = d.genderSplit ?? { men: 0, women: 0 };
+  const menArc = (g.men / 100) * circumference;
+  const womenArc = (g.women / 100) * circumference;
   const maxAgePct = Math.max(...d.ageRanges.map((a) => a.percentage), 1);
   const ageBars = d.ageRanges.map((a) => `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:9px;">
       <span style="width:44px;font-size:10px;color:#8b91a1;flex-shrink:0;font-weight:500;">${a.range}</span>
       <div style="flex:1;height:6px;background:#1a1f33;border-radius:3px;overflow:hidden;">
-        <div style="width:${Math.max(Math.round((a.percentage / maxAgePct) * 100), 5)}%;height:100%;background:#2b3cff;border-radius:3px;"></div>
+        <div style="width:${a.percentage > 0 ? Math.max(Math.round((a.percentage / maxAgePct) * 100), 5) : 0}%;height:100%;background:#2b3cff;border-radius:3px;"></div>
       </div>
       <span style="font-size:10px;font-weight:700;color:#eef0f6;width:42px;text-align:right;">${a.percentage.toFixed(1)}%</span>
     </div>`).join("");
@@ -532,14 +535,14 @@ function buildClientDemographicsSection(demographics: TrafficReportData["demogra
   <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#2b3cff;margin-bottom:10px;">Público dos Anúncios</div>
   <div style="background:#0b0e1e;border-radius:12px;padding:18px 22px;border:1px solid #1a1f33;">
     <div style="display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap;">
-      <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:12px;min-width:120px;">
+      <div style="flex-shrink:0;display:${d.genderSplit ? "flex" : "none"};flex-direction:column;align-items:center;gap:12px;min-width:120px;">
         <div style="font-size:9px;font-weight:700;color:#5b6172;letter-spacing:.06em;text-transform:uppercase;">Gênero</div>
         <div style="position:relative;width:88px;height:88px;">
           <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
             <circle cx="50" cy="50" r="${r}" fill="none" stroke="#1a1f33" stroke-width="14"/>
             <circle cx="50" cy="50" r="${r}" fill="none" stroke="#2b3cff" stroke-width="14"
               stroke-dasharray="${menArc.toFixed(2)} ${circumference.toFixed(2)}"/>
-            <circle cx="50" cy="50" r="${r}" fill="none" stroke="#8b91a1" stroke-width="14"
+            <circle cx="50" cy="50" r="${r}" fill="none" stroke="#8b5cf6" stroke-width="14"
               stroke-dasharray="${womenArc.toFixed(2)} ${circumference.toFixed(2)}"
               stroke-dashoffset="${(-menArc).toFixed(2)}"/>
           </svg>
@@ -548,12 +551,12 @@ function buildClientDemographicsSection(demographics: TrafficReportData["demogra
           <div style="display:flex;align-items:center;gap:6px;">
             <div style="width:9px;height:9px;border-radius:50%;background:#2b3cff;flex-shrink:0;"></div>
             <span style="font-size:10px;color:#8b91a1;flex:1;">Homens</span>
-            <span style="font-size:11px;font-weight:700;color:#eef0f6;">${d.genderSplit.men.toFixed(1)}%</span>
+            <span style="font-size:11px;font-weight:700;color:#eef0f6;">${g.men.toFixed(1)}%</span>
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
-            <div style="width:9px;height:9px;border-radius:50%;background:#8b91a1;flex-shrink:0;"></div>
+            <div style="width:9px;height:9px;border-radius:50%;background:#8b5cf6;flex-shrink:0;"></div>
             <span style="font-size:10px;color:#8b91a1;flex:1;">Mulheres</span>
-            <span style="font-size:11px;font-weight:700;color:#eef0f6;">${d.genderSplit.women.toFixed(1)}%</span>
+            <span style="font-size:11px;font-weight:700;color:#eef0f6;">${g.women.toFixed(1)}%</span>
           </div>
         </div>
       </div>
@@ -675,7 +678,7 @@ ${actionBar}
     <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:10px;">
       <div>
         <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#2b3cff;">Evolução</div>
-        <div style="font-size:15px;font-weight:800;color:#fff;letter-spacing:-.01em;">Mensagens por Dia</div>
+        <div style="font-size:15px;font-weight:800;color:#fff;letter-spacing:-.01em;">Conversas por Dia</div>
       </div>
       ${peakDay ? `
       <div style="display:flex;align-items:center;gap:6px;background:#2b3cff15;border:1px solid #2b3cff30;border-radius:20px;padding:5px 12px;margin-bottom:2px;">

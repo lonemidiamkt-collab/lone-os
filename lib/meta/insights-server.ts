@@ -6,6 +6,7 @@
 
 import { countMessagesFromActions } from "@/lib/meta/messages";
 import { metaJson } from "@/lib/meta/fetch";
+import { lerPublico, type LinhaDemografia } from "@/lib/meta/publico";
 
 export class TokenExpiredError extends Error {
   constructor(message: string) {
@@ -196,10 +197,14 @@ export async function fetchCampaignInsights(
           limit: "1",
         });
 
-        // Insights por conjunto de anúncios — usado para encontrar o conjunto mais barato de mensagens
+        // Insights por conjunto de anúncios — usado para encontrar o conjunto mais barato de mensagens.
+        // SEM `effective_status`: não é campo do /insights. Com ele a Meta recusava a chamada INTEIRA
+        // (#100), o `adsetRes.ok` dava false e o "conjunto campeão" caía sempre no custo médio da
+        // campanha com nome vazio — o card "Conjunto com melhor resultado" do PDF do cliente saía só
+        // com "R$ 4,65 por conversa" (Horto Naenc, 14–20/09).
         const adsetParams = new URLSearchParams({
           access_token: token,
-          fields: "adset_id,adset_name,effective_status,spend,actions",
+          fields: "adset_id,adset_name,spend,actions",
           action_attribution_windows: '["7d_click"]',
           ...(datePreset ? { date_preset: datePreset } : { time_range: timeRangeParam! }),
           level: "adset",
@@ -268,24 +273,20 @@ export async function fetchCampaignInsights(
         }
         costPerResult = results > 0 ? totalSpend / results : 0;
 
-        // Conjunto Campeão: menor CPA de mensagens entre os conjuntos com volume real.
+        // Conjunto Campeão: menor CPA de mensagens entre os conjuntos com volume real NO PERÍODO.
         // 1. Mapeamos todos os adsets com spend e mensagens > 0
         // 2. Aplicamos filtro mínimo de volume para excluir outliers (ex: R$1 + 1 msg)
-        // 3. Priorizamos effective_status=ACTIVE; se nenhum estiver ativo, usamos qualquer um que passou o filtro
-        type AdsetRow = { name: string; spend: number; messages: number; effectiveStatus: string };
-        const allAdsetRows: AdsetRow[] = (adsetData.data ?? [])
+        // (A preferência por conjunto ATIVO dependia do effective_status, que o /insights não tem —
+        // nunca funcionou. O campeão é o do período, esteja ele no ar hoje ou não.)
+        type AdsetRow = { name: string; spend: number; messages: number };
+        const candidateAdsets: AdsetRow[] = (adsetData.data ?? [])
           .map((a: any) => ({
             name: (a.adset_name as string) ?? "",
             spend: safeFloat(a.spend),
             messages: countMessages(a.actions as { action_type: string; value: string }[] | undefined),
-            effectiveStatus: (a.effective_status as string) ?? "",
           }))
           // Volume mínimo: ao menos 2 mensagens OU R$10 gastos — filtra conjuntos com amostragem irrelevante
           .filter((a: AdsetRow) => a.messages > 0 && a.spend > 0 && (a.messages >= 2 || a.spend > 10));
-
-        // Prefere ativos; se não houver, aceita qualquer candidato que passou o filtro de volume
-        const activeAdsets = allAdsetRows.filter((a) => a.effectiveStatus === "ACTIVE");
-        const candidateAdsets = activeAdsets.length > 0 ? activeAdsets : allAdsetRows;
 
         let cheapestAdSetCostPerMessage = totalMessages > 0 ? totalSpend / totalMessages : 0;
         let cheapestAdSetName = "";
@@ -366,13 +367,20 @@ export async function fetchCampaignInsights(
   return out;
 }
 
+/**
+ * Gênero e faixa etária das pessoas alcançadas na conta (Anúncios Meta e o PDF interno). A leitura
+ * das linhas é a MESMA do relatório do cliente (lerPublico, lib/meta/publico.ts):
+ * sem 50/50 inventado quando a Meta não sabe o gênero (genderSplit null), sem a faixa "Unknown"
+ * virando barra, faixas adultas sempre presentes (0% quando ninguém daquela idade viu) e base em
+ * pessoas alcançadas. Segue a paginação (paging.next) em vez de confiar que tudo cabe numa página.
+ */
 export async function fetchAccountDemographics(
   token: string,
   accountId: string,
   days: number = 30,
   dateFrom?: string,
   dateTo?: string,
-): Promise<{ ageRanges: { range: string; percentage: number }[]; genderSplit: { women: number; men: number } } | null> {
+): Promise<{ ageRanges: { range: string; percentage: number }[]; genderSplit: { women: number; men: number } | null } | null> {
   try {
     const PRESET_MAP: Record<number, string> = { 7: "last_7d", 14: "last_14d", 30: "last_30d", 90: "last_90d" };
     const usePreset = !dateFrom && !dateTo && days in PRESET_MAP;
@@ -388,45 +396,26 @@ export async function fetchAccountDemographics(
         : { time_range: timeRange! }),
       limit: "200",
     });
-    const res = await fetch(`https://graph.facebook.com/v21.0/${accountId}/insights?${params}`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      console.warn("[Demographics] API error:", res.status, err?.error?.message ?? "");
-      return null;
-    }
-    const json = await res.json();
-    const rows: { age?: string; gender?: string; impressions?: string; reach?: string }[] = json.data ?? [];
-    if (rows.length === 0) return null;
-
-    const ageMap: Record<string, number> = {};
-    const genderMap: Record<string, number> = { male: 0, female: 0, unknown: 0 };
-    for (const row of rows) {
-      const imp = safeInt(row.impressions);
-      const age = row.age ?? "unknown";
-      const gender = (row.gender ?? "unknown").toLowerCase();
-      ageMap[age] = (ageMap[age] ?? 0) + imp;
-      if (gender === "male" || gender === "female") genderMap[gender] += imp;
-      else genderMap.unknown += imp;
-    }
-
-    const totalImpressions = Object.values(ageMap).reduce((s, v) => s + v, 0);
-    if (totalImpressions === 0) return null;
-
-    const AGE_ORDER = ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
-    const ageRanges = AGE_ORDER
-      .filter((r) => r in ageMap)
-      .map((r) => ({ range: r, percentage: parseFloat(((ageMap[r] / totalImpressions) * 100).toFixed(1)) }));
-    for (const [r, v] of Object.entries(ageMap)) {
-      if (!AGE_ORDER.includes(r) && r !== "unknown") {
-        ageRanges.push({ range: r, percentage: parseFloat(((v / totalImpressions) * 100).toFixed(1)) });
+    const rows: LinhaDemografia[] = [];
+    let url: string | null = `https://graph.facebook.com/v21.0/${accountId}/insights?${params}`;
+    for (let pagina = 0; url && pagina < 3; pagina++) {
+      const res: Response = await fetch(url);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.warn("[Demographics] API error:", res.status, err?.error?.message ?? "");
+        return null;
       }
+      const json: { data?: LinhaDemografia[]; paging?: { next?: string } } = await res.json();
+      rows.push(...(json.data ?? []));
+      url = json.paging?.next ?? null;
     }
-    if (ageRanges.length === 0) return null;
 
-    const totalGender = genderMap.male + genderMap.female;
-    const men = totalGender > 0 ? parseFloat(((genderMap.male / totalGender) * 100).toFixed(1)) : 50;
-    const women = totalGender > 0 ? parseFloat(((genderMap.female / totalGender) * 100).toFixed(1)) : 50;
-    return { ageRanges, genderSplit: { women, men } };
+    const publico = lerPublico(rows);
+    if (!publico) return null;
+    return {
+      ageRanges: publico.idades.map((i) => ({ range: i.faixa, percentage: i.pct })),
+      genderSplit: publico.genero ? { women: publico.genero.mulheres, men: publico.genero.homens } : null,
+    };
   } catch {
     return null;
   }
