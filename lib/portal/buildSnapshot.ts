@@ -7,7 +7,7 @@ import {
   getDemographicBreakdown,
   getActiveAdsWithInsights,
 } from "@/lib/meta/api";
-import { countMessagesFromActions } from "@/lib/meta/messages";
+import { contarPorTipo, resultadoSemObjetivo, type TipoResultado } from "@/lib/meta/resultado";
 import { fetchAccountReach } from "@/lib/meta/insights-server";
 import { hojeSP } from "@/lib/clients/pausa";
 import { montarAnunciosAtivos } from "./anunciosAtivos";
@@ -116,6 +116,34 @@ export function calcPeriod(kind: PeriodKind, now: Date) {
     previous_start: prevStart,
     previous_end: prevEnd,
   };
+}
+
+// ── Resultado do anúncio pelo objetivo (Leva 7A, N4) ──────────────────────
+// O portal contava tudo como CONVERSA. Conta de formulário (lead) ou de venda no site aparecia com
+// "0 conversas" — o cliente via o anúncio "sem resultado" enquanto o Gerenciador mostrava leads. Aqui só
+// existe a leitura da CONTA (sem o objetivo de cada campanha), então vale resultadoSemObjetivo: conversas
+// quando houver; senão leads; senão compras. O tipo é decidido UMA vez para o período (a série diária,
+// o anterior e os criativos contam a mesma coisa — dia de lead ao lado de dia de conversa não se soma).
+
+type LinhaComAcoes = { actions?: { action_type: string; value: string }[] };
+
+/** Soma as ações de várias linhas (dias, anúncios) por tipo de ação. Pura. */
+export function somarAcoes(linhas: readonly LinhaComAcoes[]): { action_type: string; value: string }[] {
+  const soma = new Map<string, number>();
+  for (const l of linhas) {
+    for (const a of l.actions ?? []) {
+      const v = parseInt(a.value, 10);
+      if (Number.isFinite(v)) soma.set(a.action_type, (soma.get(a.action_type) ?? 0) + v);
+    }
+  }
+  return [...soma.entries()].map(([action_type, v]) => ({ action_type, value: String(v) }));
+}
+
+/** O tipo de resultado do período: o do período atual; sem resultado nenhum nele, o do anterior. Pura. */
+export function tipoResultadoDoPeriodo(atual: readonly LinhaComAcoes[], anterior: readonly LinhaComAcoes[] = []): TipoResultado {
+  const r = resultadoSemObjetivo(somarAcoes(atual));
+  if (r.valor > 0) return r.tipo;
+  return resultadoSemObjetivo(somarAcoes(anterior)).tipo;
 }
 
 function delta(current: number, previous: number): { delta_pct: number | null; direction: "up" | "down" | "neutral" } {
@@ -296,13 +324,18 @@ export async function buildSnapshot(params: {
   const sumNum = (rows: typeof cur, field: keyof typeof cur[0]) =>
     rows.reduce((acc, r) => acc + (parseFloat(r[field] as string) || 0), 0);
 
-  const curMessages = cur.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
+  // N4: "messages" continua sendo o nome do campo (o snapshot já gravado e as telas leem assim), mas o
+  // número é o RESULTADO do tipo do período — conversas, leads ou compras (result_kind).
+  const tipoResultado = tipoResultadoDoPeriodo(cur, prev);
+  const contarResultado = (actions?: { action_type: string; value: string }[]) => contarPorTipo(actions)[tipoResultado];
+
+  const curMessages = cur.reduce((acc, r) => acc + contarResultado(r.actions), 0);
   const curSpend    = sumNum(cur, "spend");
   // Alcance: usa o dedup da conta; só cai na soma diária (super-conta) se a API falhar.
   const curReach    = curReachDedup ?? sumNum(cur, "reach");
   const curCpa: number | null  = curMessages > 0 ? curSpend / curMessages : null;
 
-  const prevMessages = prev.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
+  const prevMessages = prev.reduce((acc, r) => acc + contarResultado(r.actions), 0);
   const prevSpend    = sumNum(prev, "spend");
   const prevReach    = prevReachDedup ?? sumNum(prev, "reach");
   const prevCpa: number | null = prevMessages > 0 ? prevSpend / prevMessages : null;
@@ -310,7 +343,7 @@ export async function buildSnapshot(params: {
   // ── Chart (série diária) ──────────────────────────────────────────────────
   const sortedDays = [...cur].sort((a, b) => a.date_start.localeCompare(b.date_start));
   const days = sortedDays.map((r) => r.date_start);
-  const msgSeries  = sortedDays.map((r) => countMessagesFromActions(r.actions));
+  const msgSeries  = sortedDays.map((r) => contarResultado(r.actions));
   // Mesmo dia relativo do período anterior (a Meta omite dia sem veiculação: ausente = 0; dia além
   // do fim do período anterior, ex. 31/mar × fevereiro, não existe = null). O período anterior já
   // vem inteiro na mesma chamada — as outras abas (cliques, investido, alcance) saem de graça.
@@ -322,7 +355,7 @@ export async function buildSnapshot(params: {
     return linha ? valor(linha) : 0;
   });
   const temAnterior = prevInsights.status === "fulfilled";
-  const previous_messages = temAnterior ? alinharAnterior((r) => countMessagesFromActions(r.actions)) : null;
+  const previous_messages = temAnterior ? alinharAnterior((r) => contarResultado(r.actions)) : null;
   const previous_series = temAnterior
     ? {
         clicks: alinharAnterior((r) => parseFloat(r.clicks) || 0),
@@ -334,7 +367,7 @@ export async function buildSnapshot(params: {
 
   // ── Top 5 criativos ───────────────────────────────────────────────────────
   const byMessages = [...ads]
-    .map((a) => ({ ...a, msgs: countMessagesFromActions(a.actions) }))
+    .map((a) => ({ ...a, msgs: contarResultado(a.actions) }))
     .sort((a, b) => b.msgs - a.msgs)
     .slice(0, 5);
 
@@ -379,7 +412,7 @@ export async function buildSnapshot(params: {
   let active_ads: ActiveAdsList | null = null;
   if (activeAdsR.status === "fulfilled") {
     const thumbPaths = new Map(top_creatives.map((c) => [c.id, c.thumbnail_path]));
-    active_ads = montarAnunciosAtivos(activeAdsR.value.ads, activeAdsR.value.insights, { thumbPaths });
+    active_ads = montarAnunciosAtivos(activeAdsR.value.ads, activeAdsR.value.insights, { thumbPaths, contar: contarResultado });
   } else {
     console.error(`[buildSnapshot] ${params.clientId} ${params.periodKind} → anúncios ativos: ${activeAdsR.reason}`);
     Sentry.captureMessage("Portal: lista de anúncios ativos falhou", {
@@ -421,6 +454,7 @@ export async function buildSnapshot(params: {
 
   return {
     ads_status,
+    result_kind: tipoResultado,
     period: { kind: params.periodKind, ...period },
     kpis: {
       messages: { value: curMessages, ...delta(curMessages, prevMessages) },

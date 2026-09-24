@@ -6,6 +6,7 @@ import { encryptVault } from "@/lib/crypto/vault";
 import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { dispararLinkDoPortal } from "@/lib/portal/link-automatico";
 import { espelharNoCofre } from "@/lib/cofre/espelhar";
 import {
   itensOnboardingPara, nichoValido, pacoteValido, prazoEm, tarefasDaConversao, PROXIMA_ACAO_CONVERSAO,
@@ -220,6 +221,8 @@ export async function POST(req: NextRequest) {
         avisos.push(e instanceof Error ? e.message : "erro");
       }
       if (avisos.length) console.error("[onboarding] conversão: parte do setup falhou (segue):", avisos.join(" · "));
+      // Lead ganho virou cliente: já nasce com o link do portal, e o grupo de cadastro recebe (uma vez).
+      dispararLinkDoPortal(client.id as string, "crm");
       return NextResponse.json({ token, url: `/onboarding/${token}`, clientId: client.id, avisos });
     }
 
@@ -566,6 +569,9 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    // Virou cliente: link do portal + aviso no grupo de cadastro (uma vez só, mesmo se aprovar de novo).
+    dispararLinkDoPortal(clientId, "aprovacao");
+
     // ESPELHA A SENHA NO COFRE DO SOCIAL. Aqui era o vazamento: a ativação gravava a senha só em
     // `clients` (criptografada, só admin lê) e o social/gestor ficavam sem — "é como se não
     // existisse, mas no painel admin tem". Usa os valores em TEXTO do formulário (subRow), nunca
@@ -651,6 +657,10 @@ export async function POST(req: NextRequest) {
   if (body.action === "provision") {
     const { clientId } = body;
     if (!clientId) return NextResponse.json({ error: "clientId obrigatório" }, { status: 400 });
+
+    // A tela de Pendentes já tirou o draft_status: é aqui que o cliente vira cliente. Link do portal +
+    // aviso no grupo de cadastro (a função confere se o rascunho saiu mesmo e manda uma vez só).
+    dispararLinkDoPortal(clientId, "aprovacao");
 
     const { data: clientRow } = await supabase
       .from("clients")

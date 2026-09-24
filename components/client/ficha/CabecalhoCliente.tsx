@@ -3,6 +3,7 @@
 // components/client/ficha/CabecalhoCliente.tsx — o topo da ficha: logo, nome, serviço, quem cuida,
 // a saúde e as ações principais. É o que se lê em 3 segundos; o resto mora nas abas.
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, ExternalLink, KanbanSquare, Loader2, Palette, Pause, Pencil } from "lucide-react";
 import { FotoPessoa } from "@/components/ui/FotoPessoa";
@@ -60,6 +61,8 @@ export default function CabecalhoCliente(p: {
   onLinkOnboarding: () => void;
   gerandoLink: boolean;
   linkCopiado: boolean;
+  /** O botão "Portal" (components/client/ficha/PortalDoCliente.tsx) — só para quem recebe o link. */
+  portal?: ReactNode;
 }) {
   const { client: c } = p;
   const { members } = useTeamMembers();
@@ -141,6 +144,7 @@ export default function CabecalhoCliente(p: {
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-sm text-foreground transition-colors hover:bg-accent">
             <KanbanSquare size={15} aria-hidden="true" /> Abrir no quadro
           </Link>
+          {p.portal}
           {p.isAdmin && (
             <>
               <button onClick={p.onEditar}

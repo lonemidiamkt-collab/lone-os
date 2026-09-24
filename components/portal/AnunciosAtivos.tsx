@@ -3,7 +3,8 @@
 // "Ver todos os anúncios ativos" — o CEO pediu (24/09) que o cliente veja TODOS os criativos no ar,
 // não só os que estão dando certo. Abre uma gaveta (de baixo no celular, da direita no computador)
 // com a lista que veio pronta no snapshot (lib/portal/anunciosAtivos.ts): nenhuma chamada à Meta
-// sai do navegador. Os anúncios sem conversa aparecem marcados, nunca escondidos.
+// sai do navegador. Os anúncios sem resultado aparecem marcados, nunca escondidos. O resultado é o do
+// período (N4): conversas, leads ou compras — as palavras acompanham.
 
 import { useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -14,15 +15,17 @@ import { clsx } from "clsx";
 import { cn } from "@/lib/utils";
 import type { ActiveAdItem, ActiveAdsList, PeriodKind } from "@/lib/portal/types";
 import { ordenarAnuncios, situacaoAnuncio, type CriterioAnuncios, type SituacaoAnuncio } from "@/lib/portal/anunciosAtivos";
-import { formatarBRL, formatarNumero } from "@/lib/portal/formatos";
+import {
+  formatarBRL, formatarNumero, palavrasDoResultado, type PalavrasResultado, type TipoResultadoPortal,
+} from "@/lib/portal/formatos";
 import CriativoThumb from "./CriativoThumb";
 import { Segmentado } from "./ui";
 
-const SELO: Record<SituacaoAnuncio, { texto: string; classes: string }> = {
-  com_resultado:  { texto: "Com conversas",             classes: "border-lone-success-border bg-lone-success-bg text-lone-success" },
-  sem_resultado:  { texto: "Sem conversas no período",  classes: "border-lone-warning-border bg-lone-warning-bg text-lone-warning" },
-  sem_veiculacao: { texto: "Sem veiculação no período", classes: "border-border bg-muted text-muted-foreground" },
-};
+function selo(situacao: SituacaoAnuncio, p: PalavrasResultado): { texto: string; classes: string } {
+  if (situacao === "com_resultado") return { texto: `Com ${p.varios}`, classes: "border-lone-success-border bg-lone-success-bg text-lone-success" };
+  if (situacao === "sem_resultado") return { texto: `Sem ${p.varios} no período`, classes: "border-lone-warning-border bg-lone-warning-bg text-lone-warning" };
+  return { texto: "Sem veiculação no período", classes: "border-border bg-muted text-muted-foreground" };
+}
 
 // "com os números dos últimos 7 dias" — o rótulo do período ("Últimos 7 dias") não encaixa na frase.
 const DO_PERIODO: Record<PeriodKind, string> = {
@@ -32,13 +35,16 @@ const DO_PERIODO: Record<PeriodKind, string> = {
   last_month: "do mês passado",
 };
 
-const conversas = (n: number) => `${formatarNumero(n)} ${n === 1 ? "conversa" : "conversas"}`;
+const resultados = (n: number, p: PalavrasResultado) => `${formatarNumero(n)} ${n === 1 ? p.um : p.varios}`;
 
-export default function AnunciosAtivos({ lista, periodo }: {
+export default function AnunciosAtivos({ lista, periodo, tipoResultado }: {
   lista: ActiveAdsList;
   /** De qual período são os números da lista. */
   periodo: PeriodKind;
+  /** O que o resultado conta (result_kind do snapshot). Ausente = conversas. */
+  tipoResultado?: TipoResultadoPortal | null;
 }) {
+  const palavras = palavrasDoResultado(tipoResultado);
   const [aberto, setAberto] = useState(false);
   const [criterio, setCriterio] = useState<CriterioAnuncios>("resultado");
   const itens = useMemo(() => ordenarAnuncios(lista.items, criterio), [lista.items, criterio]);
@@ -95,8 +101,8 @@ export default function AnunciosAtivos({ lista, periodo }: {
             <dl className="mt-4 grid grid-cols-3 gap-2">
               {([
                 ["No ar", lista.total],
-                ["Com conversas", comResultado],
-                ["Sem conversas", semResultado],
+                [`Com ${palavras.varios}`, comResultado],
+                [`Sem ${palavras.varios}`, semResultado],
               ] as const).map(([rotulo, n]) => (
                 <div key={rotulo} className="rounded-lg border border-border bg-card px-3 py-2">
                   <dt className="truncate text-lone-caption text-muted-foreground">{rotulo}</dt>
@@ -110,7 +116,7 @@ export default function AnunciosAtivos({ lista, periodo }: {
               rotulo="Ordenar anúncios por"
               tamanho="sm"
               cheio
-              opcoes={[{ valor: "resultado", rotulo: "Mais conversas" }, { valor: "custo", rotulo: "Menor custo" }]}
+              opcoes={[{ valor: "resultado", rotulo: `Mais ${palavras.varios}` }, { valor: "custo", rotulo: "Menor custo" }]}
               valor={criterio}
               onChange={setCriterio}
             />
@@ -121,12 +127,12 @@ export default function AnunciosAtivos({ lista, periodo }: {
               <p className="py-10 text-center text-lone-body text-muted-foreground">Nenhum anúncio no ar agora.</p>
             ) : (
               <ul className="divide-y divide-border">
-                {itens.map((a) => <LinhaAnuncio key={a.id} anuncio={a} criterio={criterio} />)}
+                {itens.map((a) => <LinhaAnuncio key={a.id} anuncio={a} criterio={criterio} palavras={palavras} />)}
               </ul>
             )}
             <p className="py-4 text-lone-caption text-muted-foreground">
               {limitada ? `Mostrando os ${lista.items.length} que mais renderam, de ${lista.total} anúncios ativos. ` : ""}
-              Conversas atribuídas em até 7 dias após o clique.
+              {palavras.Varios} {palavras.atribuidos} em até 7 dias após o clique.
             </p>
           </div>
         </Dialog.Content>
@@ -135,35 +141,34 @@ export default function AnunciosAtivos({ lista, periodo }: {
   );
 }
 
-function LinhaAnuncio({ anuncio: a, criterio }: { anuncio: ActiveAdItem; criterio: CriterioAnuncios }) {
-  const situacao = situacaoAnuncio(a);
-  const selo = SELO[situacao];
+function LinhaAnuncio({ anuncio: a, criterio, palavras }: { anuncio: ActiveAdItem; criterio: CriterioAnuncios; palavras: PalavrasResultado }) {
+  const { texto: textoSelo, classes: classesSelo } = selo(situacaoAnuncio(a), palavras);
   const porCusto = criterio === "custo";
   return (
     <li className="flex items-start gap-3 py-3">
       <CriativoThumb url={a.thumbnail_url} path={a.thumbnail_path} name={a.name} className="h-12 w-12" />
       <div className="min-w-0 flex-1">
         <p className="line-clamp-2 break-words text-lone-body font-medium text-foreground">{a.name}</p>
-        <span className={cn("mt-1.5 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium", selo.classes)}>
-          {selo.texto}
+        <span className={cn("mt-1.5 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium", classesSelo)}>
+          {textoSelo}
         </span>
         <p className="mt-1.5 text-lone-caption text-muted-foreground">
           {a.spend > 0 ? <><span className="tabular-nums text-foreground">{formatarBRL(a.spend)}</span> investido</> : "Nada investido no período"}
           {porCusto
-            ? <> · <span className="tabular-nums text-foreground">{conversas(a.messages)}</span></>
-            : a.cpa != null && <> · <span className="tabular-nums text-foreground">{formatarBRL(a.cpa)}</span> por conversa</>}
+            ? <> · <span className="tabular-nums text-foreground">{resultados(a.messages, palavras)}</span></>
+            : a.cpa != null && <> · <span className="tabular-nums text-foreground">{formatarBRL(a.cpa)}</span> {palavras.porUm}</>}
         </p>
       </div>
       <div className="shrink-0 text-right">
         {porCusto ? (
           <>
             <p className="text-lone-h2 font-semibold tabular-nums text-foreground">{a.cpa != null ? formatarBRL(a.cpa) : "—"}</p>
-            <p className="text-lone-caption text-muted-foreground">por conversa</p>
+            <p className="text-lone-caption text-muted-foreground">{palavras.porUm}</p>
           </>
         ) : (
           <>
             <p className={clsx("text-lone-h2 font-semibold tabular-nums", a.messages > 0 ? "text-foreground" : "text-muted-foreground")}>{formatarNumero(a.messages)}</p>
-            <p className="text-lone-caption text-muted-foreground">{a.messages === 1 ? "conversa" : "conversas"}</p>
+            <p className="text-lone-caption text-muted-foreground">{a.messages === 1 ? palavras.um : palavras.varios}</p>
           </>
         )}
       </div>

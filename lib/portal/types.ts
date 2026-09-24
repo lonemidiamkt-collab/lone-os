@@ -72,6 +72,10 @@ export interface SnapshotData {
   ads_status?: AdsStatus;
   /** Quando o portal cai de volta num snapshot antigo por falha da Meta, guarda de quando ele é. */
   stale_since?: string | null;
+  /** O que `kpis.messages`, `chart.series.messages` e `messages` dos criativos contam (Leva 7A, N4):
+   *  conversas, leads ou compras, pelo que a conta trouxe no período. Ausente (snapshot antigo, sem
+   *  conta, indisponível) = conversas. */
+  result_kind?: "mensagens" | "leads" | "compras";
   period: {
     kind: PeriodKind;
     start: string;

@@ -7,7 +7,10 @@ import type { NextRequest } from "next/server";
 // "/api/team/roster" e NÃO "/api/team": a tela de login precisa da lista de quem existe ANTES de
 // alguém entrar, mas criar/editar membro segue exigindo gestão logada. startsWith casa o caminho
 // exato — liberar "/api/team" abriria o cadastro da equipe pro mundo.
-const PUBLIC_PATHS = ["/api/auth", "/api/team/roster", "/api/meta", "/api/ai", "/api/system", "/api/sync", "/api/onboarding", "/api/cs", "/api/emails", "/api/broadcasts", "/api/platform-updates", "/api/holidays", "/api/portal", "/api/ficha", "/onboarding", "/portal", "/ficha", "/monitoring", "/_next", "/favicon.ico", "/logo.png", "/icon-192.png", "/icon-512.png", "/manifest.json", "/sw.js", "/public"];
+// "/api/trafego/vendas/portal" e NÃO "/api/trafego/vendas": as vendas que o CLIENTE registra no portal
+// (link público, sem login — a rota valida o token do portal como as de /api/portal). O resto de
+// /api/trafego segue exigindo sessão.
+const PUBLIC_PATHS = ["/api/auth", "/api/team/roster", "/api/trafego/vendas/portal", "/api/meta", "/api/ai", "/api/system", "/api/sync", "/api/onboarding", "/api/cs", "/api/emails", "/api/broadcasts", "/api/platform-updates", "/api/holidays", "/api/portal", "/api/ficha", "/onboarding", "/portal", "/ficha", "/monitoring", "/_next", "/favicon.ico", "/logo.png", "/icon-192.png", "/icon-512.png", "/manifest.json", "/sw.js", "/public"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

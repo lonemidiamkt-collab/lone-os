@@ -18,6 +18,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { dispararLinkDoPortal } from "@/lib/portal/link-automatico";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { MOTIVOS_SAIDA } from "@/lib/clients/churn";
 
@@ -171,6 +172,10 @@ export async function POST(
     // porque o WhatsApp falhou.
     console.error("[lifecycle] pós-arquivamento:", e);
   }
+
+  // Voltou a ser cliente: se nunca teve link do portal, ganha agora (e o grupo de cadastro recebe uma
+  // vez). Link revogado de propósito continua revogado.
+  if (d.action === "reactivate") dispararLinkDoPortal(id, "reativacao");
 
   return NextResponse.json({ success: true, client: data });
 }

@@ -25,6 +25,7 @@ import { nivelDoCliente, scoreDoCliente } from "@/lib/saude/carteira";
 import type { Client } from "@/lib/types";
 import CabecalhoCliente from "@/components/client/ficha/CabecalhoCliente";
 import PedirArteModal from "@/components/client/ficha/PedirArteModal";
+import PainelPortal, { BotaoPortal } from "@/components/client/ficha/PortalDoCliente";
 import AbaResumo from "@/components/client/ficha/AbaResumo";
 import AbaMarca from "@/components/client/ficha/AbaMarca";
 import AbaEntregas from "@/components/client/ficha/AbaEntregas";
@@ -74,6 +75,7 @@ export default function ClientDetailPage() {
   const tasks = useOperationalStore((s) => s.tasks);
   const onboarding = useOperationalStore((s) => s.onboarding);
 
+  const patchClientLocal = useClientsStore((s) => s.patchClientLocal);
   const initClients = useClientsStore((s) => s.init);
   const subClients = useClientsStore((s) => s.subscribeRealtime);
   const initContent = useContentStore((s) => s.init);
@@ -175,6 +177,25 @@ export default function ClientDetailPage() {
   }, [irPara]);
 
   // ── Ações do topo ─────────────────────────────────────────────────────────
+  // Portal: o painel abre sozinho quando o link é ?tab=portal (o antigo endereço da seção do portal).
+  const [portalAberto, setPortalAberto] = useState(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "portal");
+  // O token e as datas do link são campos sensíveis (clientExtra): mudar só no store não aparecia,
+  // porque o merge lá em cima dá a palavra final ao clientExtra. Os comuns vão também pro store.
+  const aoMudarPortal = useCallback((patch: Partial<Client>) => {
+    setClientExtra((e) => ({ ...e, ...patch }));
+    const comuns = Object.fromEntries(Object.entries(patch).filter(([k]) => !SENSIVEIS.includes(k as keyof Client)));
+    if (Object.keys(comuns).length) patchClientLocal(clientId, comuns as Partial<Client>);
+  }, [clientId, patchClientLocal]);
+  const fecharPortal = useCallback(() => {
+    setPortalAberto(false);
+    // Veio por ?tab=portal: fechar deixa o endereço no Resumo (recarregar não reabre o painel).
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("tab") === "portal") {
+      url.searchParams.set("tab", "resumo");
+      window.history.replaceState(window.history.state, "", url.toString());
+    }
+  }, []);
   const [editando, setEditando] = useState(false);
   const [pedindoArte, setPedindoArte] = useState(false);
   const [onboardingLink, setOnboardingLink] = useState<string | null>(null);
@@ -252,6 +273,8 @@ export default function ClientDetailPage() {
     irPara, pedirArte: () => setPedindoArte(true),
   };
   const dadosCompletos = extraStatus === "ok";
+  // Quem recebe o link do portal (a rota /api/clients/[id] só manda o token para gestão e social).
+  const veLinkPortal = isAdmin || role === "social";
 
   return (
     <div className="flex flex-1 flex-col overflow-auto">
@@ -265,6 +288,9 @@ export default function ClientDetailPage() {
         onLinkOnboarding={gerarLinkOnboarding}
         gerandoLink={gerandoLink}
         linkCopiado={!!onboardingLink}
+        portal={veLinkPortal
+          ? <BotaoPortal client={client} carregado={extraStatus === "ok"} onClick={() => setPortalAberto(true)} />
+          : undefined}
       />
 
       {/* Abas: rolam na horizontal no celular — o rótulo nunca é cortado. */}
@@ -300,6 +326,10 @@ export default function ClientDetailPage() {
         )}
       </main>
 
+      {veLinkPortal && (
+        <PainelPortal client={client} aberto={portalAberto} aoFechar={fecharPortal}
+          podeGerir={isAdmin} dados={extraStatus} onMudou={aoMudarPortal} />
+      )}
       {pedindoArte && <PedirArteModal client={client} currentUser={currentUser} aoFechar={() => setPedindoArte(false)} />}
       {editando && <EditClientModal client={client} onClose={() => setEditando(false)} />}
     </div>

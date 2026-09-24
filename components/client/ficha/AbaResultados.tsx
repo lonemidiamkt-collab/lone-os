@@ -1,15 +1,15 @@
 "use client";
 
 // components/client/ficha/AbaResultados.tsx — RESULTADOS: anúncios (período × anterior), crescimento
-// do negócio do cliente, prova social, os criativos que estão funcionando, a análise da IA e o portal.
-// Juntou Crescimento, Inteligência Criativa (a parte dos anúncios), Análise IA, Portal e a Prova Social
-// que ficava na Visão Geral. Designer continua sem os números de negócio (como era a aba Crescimento).
+// do negócio do cliente, prova social, os criativos que estão funcionando e a análise da IA.
+// Juntou Crescimento, Inteligência Criativa (a parte dos anúncios), Análise IA e a Prova Social que
+// ficava na Visão Geral. O portal do cliente saiu daqui: mora no botão "Portal" do topo da ficha.
+// Designer continua sem os números de negócio (como era a aba Crescimento).
 
 import { toast } from "sonner";
 import CrescimentoTab from "@/components/fichaviva/CrescimentoTab";
 import InteligenciaCriativa from "@/components/client-tabs/InteligenciaCriativa";
 import AIAuditsTab from "@/components/client-tabs/AIAuditsTab";
-import PortalManagementCard from "@/components/PortalManagementCard";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { ROTULO_RESULTADO_ANUNCIO, TITULO_RESULTADO_ANUNCIO } from "@/lib/scores/resultado-anuncio";
 import { temTrafego } from "@/lib/clients/servico";
@@ -26,7 +26,6 @@ const OPCOES_STATUS: ClientStatus[] = ["onboarding", "good", "average", "at_risk
 export default function AbaResultados({ ctx }: { ctx: FichaCtx }) {
   const { client: c, role, currentUser, isAdmin } = ctx;
   const updateClientStatus = useClientsStore((s) => s.updateClientStatus);
-  const patchClientLocal = useClientsStore((s) => s.patchClientLocal);
   const veNegocio = role !== "designer";
   const comTrafego = temTrafego({ service_type: c.serviceType });
   // Quem fecha o mês com o cliente (a rota tem o mesmo recorte).
@@ -44,7 +43,7 @@ export default function AbaResultados({ ctx }: { ctx: FichaCtx }) {
 
       {veNegocio && (
         <Secao id={SECAO.anuncios} titulo="Anúncios" semCard
-          descricao={comTrafego ? "Conversas, investimento e custo — o mesmo número que o cliente vê no portal." : undefined}
+          descricao={comTrafego ? "Resultado (conversas, leads ou compras, conforme o objetivo), investimento e custo — o mesmo número que o cliente vê no portal." : undefined}
           acoes={isAdmin ? (
             <label className="flex items-center gap-2 text-lone-caption text-muted-foreground">
               {TITULO_RESULTADO_ANUNCIO}
@@ -85,14 +84,6 @@ export default function AbaResultados({ ctx }: { ctx: FichaCtx }) {
       <Secao id={SECAO.analiseIa} titulo="Análise da IA" semCard>
         <AIAuditsTab clientId={c.id} isAdmin={isAdmin} />
       </Secao>
-
-      {isAdmin && (
-        <Secao id={SECAO.portal} titulo="Portal do cliente" semCard descricao="O link de resultados que o cliente abre.">
-          <div className="max-w-xl">
-            <PortalManagementCard client={c} onUpdate={(patch) => patchClientLocal(c.id, patch)} />
-          </div>
-        </Secao>
-      )}
     </div>
   );
 }

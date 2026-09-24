@@ -1,4 +1,5 @@
 import type { PeriodKind } from "./types";
+import { palavrasDoResultado, type TipoResultadoPortal } from "./formatos";
 
 export type MetricType = "messages" | "reach" | "cpa" | "spend";
 
@@ -93,11 +94,15 @@ const ANTERIOR: Record<PeriodKind, string> = {
   last_month:   "o mês anterior",
 };
 
-/** Frase de topo: "Nos últimos 7 dias: 48 conversas, 12% a mais que a semana anterior." */
-export function resumoConversas(conversas: number | null, deltaPercent: number | null, period: PeriodKind): string | null {
+/**
+ * Frase de topo: "Nos últimos 7 dias: 48 conversas, 12% a mais que a semana anterior." Com o tipo do
+ * resultado do snapshot (N4), a palavra acompanha: "…: 12 leads, …".
+ */
+export function resumoConversas(conversas: number | null, deltaPercent: number | null, period: PeriodKind, tipo?: TipoResultadoPortal | null): string | null {
   if (conversas == null) return null;
   const n = conversas.toLocaleString("pt-BR");
-  const nome = conversas === 1 ? "conversa" : "conversas";
+  const p = palavrasDoResultado(tipo);
+  const nome = conversas === 1 ? p.um : p.varios;
   const base = `${ABERTURA[period]}: ${n} ${nome}`;
   if (deltaPercent == null || !Number.isFinite(deltaPercent)) return `${base}.`;
   if (Math.abs(deltaPercent) <= THRESHOLD) return `${base}, parecido com ${ANTERIOR[period]}.`;

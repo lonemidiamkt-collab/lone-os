@@ -4,9 +4,11 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { gravarTokenDoPortal } from "@/lib/portal/link-automatico";
+import { urlDoPortal } from "@/lib/portal/link";
 
-const BASE_URL = process.env.NEXT_PUBLIC_PORTAL_DOMAIN ?? "https://resultados.lonemidia.com";
-
+// Gera (ou reativa com um novo) o link do portal. Botão "Portal" da ficha. Só admin.
+// A mesma escrita que a automação do cadastro usa (lib/portal/link-automatico.ts).
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -17,38 +19,17 @@ export async function POST(
 
   const { id: clientId } = await params;
 
-  // Verifica se o cliente existe
   const { data: client, error: fetchErr } = await supabaseAdmin
     .from("clients")
-    .select("id, name, public_report_token, public_report_enabled")
+    .select("id")
     .eq("id", clientId)
-    .single();
-
+    .maybeSingle();
   if (fetchErr || !client) {
     return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
   }
 
-  // Gera novo token (UUID v4 via Postgres)
-  const { data: tokenRow } = await supabaseAdmin
-    .rpc("gen_random_uuid")
-    .single<{ gen_random_uuid: string }>();
+  const g = await gravarTokenDoPortal(clientId);
+  if (!g.ok) return NextResponse.json({ error: g.erro }, { status: 500 });
 
-  const token = tokenRow?.gen_random_uuid ?? crypto.randomUUID();
-
-  const { error: updateErr } = await supabaseAdmin
-    .from("clients")
-    .update({
-      public_report_token: token,
-      public_report_token_created_at: new Date().toISOString(),
-      public_report_token_revoked_at: null,
-      public_report_enabled: true,
-    })
-    .eq("id", clientId);
-
-  if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
-  }
-
-  const fullUrl = `${BASE_URL}/portal/${token}`;
-  return NextResponse.json({ success: true, token, full_url: fullUrl });
+  return NextResponse.json({ success: true, token: g.token, full_url: urlDoPortal(g.token) });
 }

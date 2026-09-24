@@ -48,6 +48,9 @@ const PERMITIDOS = new Set([
   // topo
   "ads_status", "stale_since", "period", "kpis", "chart", "top_creatives", "active_ads", "demographics",
   "agency_actions", "generated_at",
+  // o que o resultado conta — conversas, leads ou compras (N4). Decidido: o cliente vê o tipo do próprio
+  // resultado; é o que o Gerenciador dele mostra.
+  "result_kind",
   // período
   "kind", "start", "end", "label", "previous_start", "previous_end",
   // kpis
@@ -143,6 +146,65 @@ describe("portal: o snapshot público só leva campos permitidos", () => {
     for (const s of [indisponivel, semConta]) {
       expect([...chaves(s)].filter((k) => !PERMITIDOS.has(k))).toEqual([]);
     }
+  });
+});
+
+// ── Leva 7A (N4): o resultado segue o objetivo — conversas, leads ou compras ──────────────────────
+
+describe("portal: o resultado do cliente segue o objetivo da campanha (N4)", () => {
+  const agora = new Date("2026-09-23T15:00:00Z");
+  const leads = (n: number) => [{ action_type: "lead", value: String(n) }, { action_type: "link_click", value: "90" }];
+  const compras = (n: number) => [{ action_type: "omni_purchase", value: String(n) }];
+
+  it("conta de WhatsApp: continua contando conversas, igual a antes", async () => {
+    const s = await buildSnapshot({ clientId: "c1", periodKind: "last_week", now: agora });
+    expect(s.result_kind).toBe("mensagens");
+    expect(s.kpis.messages.value).toBe(10);
+    expect(s.kpis.cpa.value).toBe(10);
+    expect(s.top_creatives[0].messages).toBe(9);
+  });
+
+  it("conta de formulário: conta leads (antes eram 0 conversas), no KPI, no custo, na série e nos criativos", async () => {
+    meta.getInsightsByDateRange.mockResolvedValue([
+      { date_start: "2026-09-16", date_stop: "2026-09-16", spend: "60", reach: "500", clicks: "30", actions: leads(4) },
+      { date_start: "2026-09-17", date_stop: "2026-09-17", spend: "40", reach: "300", clicks: "20", actions: leads(1) },
+    ]);
+    meta.getTopAdInsights.mockResolvedValue([
+      { ad_id: "ad1", ad_name: "Cadastro", spend: "100", ctr: "3", frequency: "1.1", actions: leads(5) },
+    ]);
+    meta.getActiveAdsWithInsights.mockResolvedValue({
+      ads: [{ id: "ad1", name: "Cadastro", effective_status: "ACTIVE" }],
+      insights: [{ ad_id: "ad1", spend: "100", clicks: "50", actions: leads(5) }],
+    });
+    const s = await buildSnapshot({ clientId: "c1", periodKind: "last_week", now: agora });
+    expect(s.result_kind).toBe("leads");
+    expect(s.kpis.messages.value).toBe(5);
+    expect(s.kpis.cpa.value).toBe(20);
+    expect(s.chart.series.messages).toEqual([4, 1]);
+    expect(s.top_creatives[0].messages).toBe(5);
+    expect(s.active_ads?.items[0].messages).toBe(5);
+    expect(s.active_ads?.with_messages).toBe(1);
+  });
+
+  it("conta de venda: conta compras; o período anterior conta a mesma coisa", async () => {
+    meta.getInsightsByDateRange.mockImplementation(async (_c: string, _t: string, inicio: string) =>
+      inicio === "2026-09-16"
+        ? [{ date_start: "2026-09-16", date_stop: "2026-09-16", spend: "90", reach: "500", clicks: "30", actions: compras(3) }]
+        : [{ date_start: "2026-09-09", date_stop: "2026-09-09", spend: "90", reach: "500", clicks: "30", actions: [...compras(2), ...conversas(40)] }]);
+    const s = await buildSnapshot({ clientId: "c1", periodKind: "last_week", now: agora });
+    expect(s.result_kind).toBe("compras");
+    expect(s.kpis.messages.value).toBe(3);
+    expect(s.kpis.messages.delta_pct).toBe(50); // 3 compras × 2 compras — não 3 × 40 conversas
+  });
+
+  it("período sem resultado nenhum: usa o tipo do período anterior (conta de lead zerada é '0 leads')", async () => {
+    meta.getInsightsByDateRange.mockImplementation(async (_c: string, _t: string, inicio: string) =>
+      inicio === "2026-09-16"
+        ? [{ date_start: "2026-09-16", date_stop: "2026-09-16", spend: "50", reach: "500", clicks: "30", actions: [] }]
+        : [{ date_start: "2026-09-09", date_stop: "2026-09-09", spend: "50", reach: "500", clicks: "30", actions: leads(6) }]);
+    const s = await buildSnapshot({ clientId: "c1", periodKind: "last_week", now: agora });
+    expect(s.result_kind).toBe("leads");
+    expect(s.kpis.messages.value).toBe(0);
   });
 });
 

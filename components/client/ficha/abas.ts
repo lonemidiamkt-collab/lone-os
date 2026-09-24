@@ -45,7 +45,6 @@ export const SECAO = {
   provaSocial: "prova-social",
   inteligencia: "inteligencia-criativa",
   analiseIa: "analise-ia",
-  portal: "portal",
   // Relacionamento
   reunioes: "reunioes",
   nps: "nps",
@@ -79,7 +78,7 @@ export interface Destino { aba: AbaFicha; secao?: string }
  *   content (Conteúdo)            → Entregas
  *   onboarding                    → Admin
  *   wallet (Creative Wallet)      → Marca & Briefing
- *   portal                        → Resultados
+ *   portal                        → Resumo, com o painel do botão "Portal" do topo já aberto
  *   ficha-viva (Comercial)        → Marca & Briefing
  *   reports (Relatórios, saiu na Leva 1 — virou o PDF automático) → Resultados
  */
@@ -97,7 +96,7 @@ export const ABA_ANTIGA: Readonly<Record<string, Destino>> = {
   content: { aba: "entregas", secao: SECAO.producao },
   onboarding: { aba: "admin", secao: SECAO.onboarding },
   wallet: { aba: "marca", secao: SECAO.wallet },
-  portal: { aba: "resultados", secao: SECAO.portal },
+  portal: { aba: "resumo" }, // o painel "Portal" abre sozinho (app/clients/[id]/page.tsx)
   "ficha-viva": { aba: "marca", secao: SECAO.fichaViva },
   reports: { aba: "resultados" },
 };

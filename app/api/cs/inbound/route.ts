@@ -844,6 +844,11 @@ async function ensureClienteOnboarding(nome: string, groupJid: string): Promise<
     .from("clients").insert({ name: t || "Novo cliente", whatsapp_group_jid: groupJid, status: "onboarding" })
     .select("id, name").maybeSingle();
   if (error || !novo) { console.error("[CS/onboarding] criar cliente:", error?.message); return null; }
+  // Cliente novo pelo grupo: já nasce com o link do portal. O aviso vai ao grupo INTERNO de cadastro,
+  // nunca a este grupo (lib/portal/link-automatico.ts).
+  void import("@/lib/portal/link-automatico")
+    .then((m) => m.dispararLinkDoPortal(novo.id as string, "grupo_whatsapp"))
+    .catch((e) => console.error("[CS/onboarding] link do portal:", e));
   return { id: novo.id as string, nome: novo.name as string };
 }
 

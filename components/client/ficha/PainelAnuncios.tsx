@@ -3,14 +3,15 @@
 // components/client/ficha/PainelAnuncios.tsx — o resultado dos anúncios do cliente, período × anterior,
 // no mesmo painel comparativo do portal e do Crescimento (components/ui/painel-comparativo).
 // Os números saem do snapshot do portal (GET /api/clients/[id]/anuncios): nunca "zero" quando a Meta
-// falha — aí a tela diz que está indisponível.
+// falha — aí a tela diz que está indisponível. O resultado segue o objetivo (N4): conversas, leads ou
+// compras, com a palavra certa em cada lugar.
 
 import { useEffect, useState } from "react";
 import { PainelComparativo, type KpiComparativo } from "@/components/ui/painel-comparativo";
 import { tomDaVariacao } from "@/components/ui/painel-comparativo-utils";
 import { chamar } from "@/lib/api/chamar";
 import { fraseDelta, periodoAnterior, resumoConversas, type MetricType } from "@/lib/portal/formatDelta";
-import { formatarBRL, formatarNumero, rotuloDia } from "@/lib/portal/formatos";
+import { formatarBRL, formatarNumero, palavrasDoResultado, rotuloDia } from "@/lib/portal/formatos";
 import type { PeriodKind, SnapshotData } from "@/lib/portal/types";
 import { cn } from "@/lib/utils";
 import { Vazio } from "./Secao";
@@ -46,11 +47,13 @@ export default function PainelAnuncios({ clientId }: { clientId: string }) {
   const k = dados?.kpis;
   const chart = dados?.chart;
   const dias = chart?.days ?? [];
+  const tipoResultado = dados?.result_kind ?? null;
+  const palavras = palavrasDoResultado(tipoResultado);
   const serie = dias.map((d, i) => ({ rotulo: rotuloDia(d), atual: chart?.series.messages[i] ?? 0, anterior: chart?.previous_messages?.[i] ?? null }));
   const itens: { key: MetricType; rotulo: string; v: SnapshotData["kpis"]["messages"] | undefined; f: (n: number) => string }[] = [
-    { key: "messages", rotulo: "Conversas", v: k?.messages, f: formatarNumero },
+    { key: "messages", rotulo: palavras.Varios, v: k?.messages, f: formatarNumero },
     { key: "spend", rotulo: "Investido (do cliente)", v: k?.spend, f: formatarBRL },
-    { key: "cpa", rotulo: "Custo por conversa", v: k?.cpa, f: formatarBRL },
+    { key: "cpa", rotulo: palavras.custo, v: k?.cpa, f: formatarBRL },
     { key: "reach", rotulo: "Pessoas alcançadas", v: k?.reach, f: formatarNumero },
   ];
   const kpis: KpiComparativo[] = itens.map(({ key, rotulo, v, f }) => ({
@@ -60,7 +63,7 @@ export default function PainelAnuncios({ clientId }: { clientId: string }) {
     natureza: key === "cpa" ? "inversa" : key === "spend" ? "neutra" : "direta",
     dica: fraseDelta(key, v?.delta_pct ?? null, periodo) ?? undefined,
   }));
-  const resumo = k ? resumoConversas(k.messages.value, k.messages.delta_pct, periodo) : null;
+  const resumo = k ? resumoConversas(k.messages.value, k.messages.delta_pct, periodo, tipoResultado) : null;
   const per = dados?.period;
 
   return (
@@ -88,7 +91,7 @@ export default function PainelAnuncios({ clientId }: { clientId: string }) {
           carregando={carregando}
           erro={erro}
           onTentarDeNovo={() => setTentativa((t) => t + 1)}
-          titulo="Conversas por dia"
+          titulo={`${palavras.Varios} por dia`}
           subtitulo={per ? `${per.label}, comparado com ${periodoAnterior(periodo)}` : undefined}
           rotuloAtual="Este período"
           rotuloAnterior="Período anterior"
@@ -97,7 +100,7 @@ export default function PainelAnuncios({ clientId }: { clientId: string }) {
           destaque={resumo ? { texto: resumo, tom: tomDaVariacao(k?.messages.delta_pct, "direta", 5), detalhe: per ? `${rotuloDia(per.start)} a ${rotuloDia(per.end)}` : undefined } : null}
           kpis={kpis}
           limiarNeutroPct={5}
-          vazio="Nenhuma conversa neste período."
+          vazio={`Nenhum resultado (${palavras.varios}) neste período.`}
         />
       )}
       {dados?.stale_since && (

@@ -52,9 +52,16 @@ export function ordenarAnuncios(items: readonly ActiveAdItem[], criterio: Criter
 export function montarAnunciosAtivos(
   ads: readonly AnuncioMeta[],
   insights: readonly InsightMeta[],
-  opts: { limite?: number; thumbPaths?: ReadonlyMap<string, string | null> } = {},
+  opts: {
+    limite?: number;
+    thumbPaths?: ReadonlyMap<string, string | null>;
+    /** Como contar o resultado de um anúncio (N4: o tipo do período — conversas, leads ou compras).
+     *  Padrão: conversas. */
+    contar?: (actions?: { action_type: string; value: string }[]) => number;
+  } = {},
 ): ActiveAdsList {
   const limite = opts.limite ?? LIMITE_ANUNCIOS_ATIVOS;
+  const contar = opts.contar ?? countMessagesFromActions;
 
   // A Meta pode devolver mais de uma linha por anúncio (paginação/atribuição): soma.
   const porAnuncio = new Map<string, { spend: number; clicks: number; messages: number }>();
@@ -63,7 +70,7 @@ export function montarAnunciosAtivos(
     const atual = porAnuncio.get(r.ad_id) ?? { spend: 0, clicks: 0, messages: 0 };
     atual.spend += parseFloat(r.spend ?? "") || 0;
     atual.clicks += parseInt(r.clicks ?? "", 10) || 0;
-    atual.messages += countMessagesFromActions(r.actions);
+    atual.messages += contar(r.actions);
     porAnuncio.set(r.ad_id, atual);
   }
 

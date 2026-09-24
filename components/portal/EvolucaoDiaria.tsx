@@ -15,7 +15,7 @@ import { clsx } from "clsx";
 import { cn } from "@/lib/utils";
 import { formatarVariacao, tomDaVariacao, variacao, type Natureza } from "@/components/ui/painel-comparativo-utils";
 import {
-  ROTULO_METRICA, formatarEixo, formatarMetrica, melhorDia, rotuloDia, rotuloDiaLongo, type MetricaDiaria,
+  formatarEixo, formatarMetrica, melhorDia, rotuloDia, rotuloDiaLongo, rotuloMetrica, type MetricaDiaria, type TipoResultadoPortal,
 } from "@/lib/portal/formatos";
 import { Cartao, CabecalhoSecao, Segmentado } from "./ui";
 
@@ -32,6 +32,8 @@ export interface EvolucaoDiariaProps {
   /** Mesmo dia relativo do período anterior, alinhado com `dias`. null/ausente = sem comparação. */
   anteriores: Partial<Record<MetricaDiaria, (number | null)[] | null | undefined>>;
   carregando?: boolean;
+  /** O que a série "messages" conta (result_kind do snapshot, N4). Ausente = conversas. */
+  tipoResultado?: TipoResultadoPortal | null;
   /** Texto quando não há série (sem dado no período, ou números ainda chegando). */
   vazio: string;
   className?: string;
@@ -39,7 +41,7 @@ export interface EvolucaoDiariaProps {
 
 const soma = (v: readonly (number | null)[]) => v.reduce<number>((s, n) => s + (n ?? 0), 0);
 
-export default function EvolucaoDiaria({ dias, series, anteriores, carregando = false, vazio, className }: EvolucaoDiariaProps) {
+export default function EvolucaoDiaria({ dias, series, anteriores, carregando = false, tipoResultado = null, vazio, className }: EvolucaoDiariaProps) {
   const [metrica, setMetrica] = useState<MetricaDiaria>("messages");
   const gradId = `evo-grad-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const reduzMovimento = useReducedMotion() ?? false;
@@ -78,7 +80,7 @@ export default function EvolucaoDiaria({ dias, series, anteriores, carregando = 
         rotulo="Métrica do gráfico"
         tamanho="sm"
         cheio
-        opcoes={METRICAS.map((m) => ({ valor: m, rotulo: ROTULO_METRICA[m] }))}
+        opcoes={METRICAS.map((m) => ({ valor: m, rotulo: rotuloMetrica(m, tipoResultado) }))}
         valor={metrica}
         onChange={setMetrica}
       />
@@ -97,7 +99,7 @@ export default function EvolucaoDiaria({ dias, series, anteriores, carregando = 
             <div className="min-w-0">
               <dt className="text-lone-caption text-muted-foreground">{ehAlcance ? "Média por dia" : "Total no período"}</dt>
               <dd className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="text-lone-h2 font-semibold tabular-nums text-foreground">{formatarMetrica(metrica, totalAtual)}</span>
+                <span className="text-lone-h2 font-semibold tabular-nums text-foreground">{formatarMetrica(metrica, totalAtual, tipoResultado)}</span>
                 <SeloVariacao pct={pct} natureza={NATUREZA[metrica]} />
               </dd>
             </div>
@@ -106,13 +108,13 @@ export default function EvolucaoDiaria({ dias, series, anteriores, carregando = 
               <dd className="mt-0.5 text-lone-body text-foreground">
                 {pico ? (
                   <><span className="font-medium">{rotuloDiaLongo(pico.dia)}</span>
-                    <span className="text-muted-foreground"> · {formatarMetrica(metrica, pico.valor)}</span></>
+                    <span className="text-muted-foreground"> · {formatarMetrica(metrica, pico.valor, tipoResultado)}</span></>
                 ) : "—"}
               </dd>
             </div>
           </dl>
 
-          <div role="figure" aria-label={`${ROTULO_METRICA[metrica]} por dia${temAnterior ? ", comparado com o período anterior" : ""}`}
+          <div role="figure" aria-label={`${rotuloMetrica(metrica, tipoResultado)} por dia${temAnterior ? ", comparado com o período anterior" : ""}`}
             className="relative mt-3 h-[200px] sm:h-[240px] lg:h-[260px]">
             <div className="absolute inset-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -135,7 +137,7 @@ export default function EvolucaoDiaria({ dias, series, anteriores, carregando = 
                     cursor={{ stroke: "var(--border)" }}
                     content={(p) => (
                       <DicaDiaria ativo={p.active} linha={p.payload?.[0]?.payload as Linha | undefined}
-                        metrica={metrica} temAnterior={temAnterior} />
+                        metrica={metrica} temAnterior={temAnterior} tipoResultado={tipoResultado} />
                     )}
                   />
                   <Area key={`a-${metrica}`} type="monotone" dataKey="atual" stroke="var(--primary)" strokeWidth={2}
@@ -196,8 +198,8 @@ function SeloVariacao({ pct, natureza }: { pct: number | null; natureza: Naturez
   );
 }
 
-function DicaDiaria({ ativo, linha, metrica, temAnterior }: {
-  ativo?: boolean; linha?: Linha; metrica: MetricaDiaria; temAnterior: boolean;
+function DicaDiaria({ ativo, linha, metrica, temAnterior, tipoResultado }: {
+  ativo?: boolean; linha?: Linha; metrica: MetricaDiaria; temAnterior: boolean; tipoResultado: TipoResultadoPortal | null;
 }) {
   if (!ativo || !linha) return null;
   const pct = variacao(linha.atual, linha.anterior);
@@ -207,12 +209,12 @@ function DicaDiaria({ ativo, linha, metrica, temAnterior }: {
       <div className="space-y-1 text-lone-body">
         <p className="flex items-center justify-between gap-4">
           <span className="inline-flex items-center gap-1.5 text-muted-foreground"><span className="h-0.5 w-3 rounded-full bg-primary" />Este período</span>
-          <span className="font-medium tabular-nums text-foreground">{formatarMetrica(metrica, linha.atual)}</span>
+          <span className="font-medium tabular-nums text-foreground">{formatarMetrica(metrica, linha.atual, tipoResultado)}</span>
         </p>
         {temAnterior && (
           <p className="flex items-center justify-between gap-4">
             <span className="inline-flex items-center gap-1.5 text-muted-foreground"><span className="w-3 border-t border-dashed border-muted-foreground" />Período anterior</span>
-            <span className="tabular-nums text-muted-foreground">{linha.anterior == null ? "—" : formatarMetrica(metrica, linha.anterior)}</span>
+            <span className="tabular-nums text-muted-foreground">{linha.anterior == null ? "—" : formatarMetrica(metrica, linha.anterior, tipoResultado)}</span>
           </p>
         )}
       </div>

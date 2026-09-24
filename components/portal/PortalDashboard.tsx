@@ -25,6 +25,7 @@ import PortalMateriais from "./PortalMateriais";
 import EvolucaoDiaria from "./EvolucaoDiaria";
 import PublicoCard from "./PublicoCard";
 import AnunciosAtivos from "./AnunciosAtivos";
+import VendasDoCliente from "@/components/trafego/vendas/VendasDoCliente";
 import CriativoThumb from "./CriativoThumb";
 import { Aviso, Cartao, CabecalhoSecao, Segmentado, entrada } from "./ui";
 import Skeleton from "@/components/ui/Skeleton";
@@ -33,7 +34,7 @@ import { chamar } from "@/lib/api/chamar";
 import { cn } from "@/lib/utils";
 import { WHATSAPP_EQUIPE, linkWhatsapp } from "@/lib/portal/contato";
 import { fraseDelta, periodoAnterior, resumoConversas, type MetricType } from "@/lib/portal/formatDelta";
-import { formatarBRL, formatarNumero, rotuloDia } from "@/lib/portal/formatos";
+import { formatarBRL, formatarNumero, palavrasDoResultado, rotuloDia, type PalavrasResultado } from "@/lib/portal/formatos";
 import { PainelComparativo, type KpiComparativo } from "@/components/ui/painel-comparativo";
 import { tomDaVariacao } from "@/components/ui/painel-comparativo-utils";
 
@@ -136,20 +137,23 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
 
   const genAt = data?.generated_at && !atualizando ? fmtDataHora(data.generated_at) : null;
   const periodoDado: PeriodKind = data?.period?.kind ?? period;
-  const resumo = kpis ? resumoConversas(kpis.messages.value, kpis.messages.delta_pct, periodoDado) : null;
+  // O resultado segue o objetivo da campanha (N4): conversas, leads ou compras. Snapshot antigo = conversas.
+  const tipoResultado = data?.result_kind ?? null;
+  const palavras = palavrasDoResultado(tipoResultado);
+  const resumo = kpis ? resumoConversas(kpis.messages.value, kpis.messages.delta_pct, periodoDado, tipoResultado) : null;
 
   const kpiItems: Array<{
     key: MetricType; label: string;
     val: { value: number | null; delta_pct: number | null; direction: string } | undefined;
     format: (v: number) => string;
   }> = [
-    { key: "messages", label: "Mensagens",          val: kpis?.messages, format: (v) => fmt(v) },
+    { key: "messages", label: palavras.Varios,      val: kpis?.messages, format: (v) => fmt(v) },
     { key: "spend",    label: "Investido",          val: kpis?.spend,    format: (v) => formatarBRL(v) },
-    { key: "cpa",      label: "Custo por conversa", val: kpis?.cpa,      format: (v) => formatarBRL(v) },
+    { key: "cpa",      label: palavras.custo,       val: kpis?.cpa,      format: (v) => formatarBRL(v) },
     { key: "reach",    label: "Pessoas alcançadas", val: kpis?.reach,    format: (v) => fmt(v) },
   ];
 
-  // Resumo do topo: conversas por dia × mesmo dia do período anterior + os 4 números principais.
+  // Resumo do topo: resultado por dia × mesmo dia do período anterior + os 4 números principais.
   const dias = chart?.days ?? [];
   const prevConversas = chart?.previous_messages ?? null;
   const serieConversas = dias.map((d, i) => ({ rotulo: rotuloDia(d), atual: chart?.series.messages[i] ?? 0, anterior: prevConversas?.[i] ?? null }));
@@ -157,7 +161,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
     rotulo: label,
     valor: val?.value != null ? format(val.value) : "—",
     variacaoPct: val?.delta_pct ?? null,
-    // Custo por conversa: cair é bom. Investimento: nem bom nem ruim.
+    // Custo por resultado: cair é bom. Investimento: nem bom nem ruim.
     natureza: key === "cpa" ? "inversa" : key === "spend" ? "neutra" : "direta",
     dica: fraseDelta(key, val?.delta_pct ?? null, periodoDado) ?? undefined,
   }));
@@ -318,7 +322,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
               {(loading || (!erro && !atualizando && kpis)) && (
                 <PainelComparativo
                   carregando={loading}
-                  titulo="Conversas por dia"
+                  titulo={`${palavras.Varios} por dia`}
                   subtitulo={per ? `${per.label}, comparado com ${periodoAnterior(periodoDado)}` : undefined}
                   rotuloAtual="Este período"
                   rotuloAnterior="Período anterior"
@@ -328,7 +332,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                   kpis={kpisResumo}
                   limiarNeutroPct={5}
                   tomRuim="atencao"
-                  vazio="Ainda não houve conversas neste período."
+                  vazio={`Ainda não houve ${palavras.varios} neste período.`}
                 />
               )}
 
@@ -353,6 +357,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                         reach: chart?.previous_series?.reach,
                       }}
                       carregando={loading}
+                      tipoResultado={tipoResultado}
                       vazio={!data || atualizando ? "Aguardando os números…" : "Sem dados para o período."}
                     />
                   </motion.div>
@@ -373,14 +378,14 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                 <div className="contents lg:col-span-2 lg:flex lg:flex-col lg:gap-6">
                   {mostraCriativos && (
                     <motion.section variants={entrada} initial="oculto" animate="visivel" custom={1} className="order-2 min-w-0 space-y-3">
-                      <CabecalhoSecao icone={Trophy} titulo="Top criativos" descricao="Os anúncios que mais trouxeram conversas no período" />
+                      <CabecalhoSecao icone={Trophy} titulo="Top criativos" descricao={`Os anúncios que mais trouxeram ${palavras.varios} no período`} />
                       <div className="space-y-2">
                         {loading
                           ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-[72px] rounded-xl" />)
-                          : top.map((c, i) => <CardCriativo key={c.id} criativo={c} posicao={i + 1} />)}
+                          : top.map((c, i) => <CardCriativo key={c.id} criativo={c} posicao={i + 1} palavras={palavras} />)}
                       </div>
                       {!loading && ativos && ativos.total > 0 && per && (
-                        <AnunciosAtivos lista={ativos} periodo={per.kind} />
+                        <AnunciosAtivos lista={ativos} periodo={per.kind} tipoResultado={tipoResultado} />
                       )}
                     </motion.section>
                   )}
@@ -415,6 +420,13 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                   )}
                 </div>
               </div>
+
+              {/* Vendas × investimento (Leva 7A, N9): depois dos resultados dos anúncios, o que eles
+                  viraram em venda. O cliente registra as vendas dele aqui; é o dinheiro dele — nada da
+                  agência aparece. */}
+              <motion.div variants={entrada} initial="oculto" animate="visivel" custom={4} className="min-w-0">
+                <VendasDoCliente token={token} />
+              </motion.div>
             </div>
           )}
           </motion.div>
@@ -437,8 +449,8 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   );
 }
 
-/** Criativo do topo: toca pra ver taxa de clique, frequência e custo por conversa. */
-function CardCriativo({ criativo: c, posicao }: { criativo: CreativeItem; posicao: number }) {
+/** Criativo do topo: toca pra ver taxa de clique, frequência e custo por resultado. */
+function CardCriativo({ criativo: c, posicao, palavras }: { criativo: CreativeItem; posicao: number; palavras: PalavrasResultado }) {
   const [aberto, setAberto] = useState(false);
   const idDetalhe = `criativo-${c.id}`;
   return (
@@ -462,10 +474,10 @@ function CardCriativo({ criativo: c, posicao }: { criativo: CreativeItem; posica
             )}
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-lone-caption text-muted-foreground">
-            <span><span className="font-medium tabular-nums text-foreground">{fmt(c.messages)}</span> {c.messages === 1 ? "conversa" : "conversas"}</span>
+            <span><span className="font-medium tabular-nums text-foreground">{fmt(c.messages)}</span> {c.messages === 1 ? palavras.um : palavras.varios}</span>
             <span aria-hidden>·</span>
             <span className="tabular-nums">{formatarBRL(c.spend)}</span>
-            {c.cpa != null && <><span aria-hidden>·</span><span><span className="tabular-nums">{formatarBRL(c.cpa)}</span> por conversa</span></>}
+            {c.cpa != null && <><span aria-hidden>·</span><span><span className="tabular-nums">{formatarBRL(c.cpa)}</span> {palavras.porUm}</span></>}
           </p>
         </div>
         <ChevronDown size={16} className={cn("shrink-0 text-muted-foreground transition-transform duration-200", aberto && "rotate-180")} aria-hidden />
@@ -490,7 +502,7 @@ function CardCriativo({ criativo: c, posicao }: { criativo: CreativeItem; posica
                 <dd className="mt-0.5 font-medium tabular-nums text-foreground">{c.frequency.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}x</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Custo por conversa</dt>
+                <dt className="text-muted-foreground">{palavras.custo}</dt>
                 <dd className="mt-0.5 font-medium tabular-nums text-foreground">{c.cpa != null ? formatarBRL(c.cpa) : "—"}</dd>
               </div>
             </dl>

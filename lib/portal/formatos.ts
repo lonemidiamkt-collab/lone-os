@@ -2,7 +2,44 @@
 // Puro (sem React): testado em tests/portal-formatos.test.ts. Tudo em pt-BR, com o nome da coisa
 // junto do número — o tooltip antigo mostrava a chave crua ("messages : 29").
 
+import { ROTULO_RESULTADO } from "@/lib/meta/resultado";
+
 export type MetricaDiaria = "messages" | "clicks" | "spend" | "reach";
+
+// ── O resultado do anúncio (Leva 7A, N4) ─────────────────────────────────────
+// O snapshot diz o que "messages" conta (result_kind): conversas, leads ou compras. As telas falam a
+// palavra certa — "conversas" continua "conversas" quando é isso.
+
+export type TipoResultadoPortal = "mensagens" | "leads" | "compras";
+
+export interface PalavrasResultado {
+  /** "conversa", "lead", "compra" */
+  um: string;
+  /** "conversas", "leads", "compras" */
+  varios: string;
+  /** "Conversas", "Leads", "Compras" */
+  Varios: string;
+  /** "Custo por conversa" */
+  custo: string;
+  /** "por conversa" */
+  porUm: string;
+  /** "atribuídas" / "atribuídos" (lead é masculino) */
+  atribuidos: string;
+}
+
+export function palavrasDoResultado(tipo?: TipoResultadoPortal | null): PalavrasResultado {
+  const t = tipo === "leads" || tipo === "compras" ? tipo : "mensagens";
+  const r = ROTULO_RESULTADO[t];
+  const maiuscula = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+  return {
+    um: r.um,
+    varios: r.varios,
+    Varios: maiuscula(r.varios),
+    custo: maiuscula(r.custo),
+    porUm: `por ${r.um}`,
+    atribuidos: t === "leads" ? "atribuídos" : "atribuídas",
+  };
+}
 
 // ── Números ──────────────────────────────────────────────────────────────────
 
@@ -36,10 +73,18 @@ export const ROTULO_METRICA: Record<MetricaDiaria, string> = {
   reach: "Alcance",
 };
 
-/** Valor com a unidade por extenso: "29 conversas", "1 clique", "R$ 120,50", "1.234 pessoas". */
-export function formatarMetrica(metrica: MetricaDiaria, n: number): string {
+/** Nome da métrica no seletor do gráfico; "messages" vira o resultado do período (N4). */
+export function rotuloMetrica(metrica: MetricaDiaria, tipo?: TipoResultadoPortal | null): string {
+  return metrica === "messages" ? palavrasDoResultado(tipo).Varios : ROTULO_METRICA[metrica];
+}
+
+/** Valor com a unidade por extenso: "29 conversas", "3 leads", "1 clique", "R$ 120,50", "1.234 pessoas". */
+export function formatarMetrica(metrica: MetricaDiaria, n: number, tipo?: TipoResultadoPortal | null): string {
   switch (metrica) {
-    case "messages": return `${formatarNumero(n)} ${plural(n, "conversa", "conversas")}`;
+    case "messages": {
+      const p = palavrasDoResultado(tipo);
+      return `${formatarNumero(n)} ${plural(n, p.um, p.varios)}`;
+    }
     case "clicks":   return `${formatarNumero(n)} ${plural(n, "clique", "cliques")}`;
     case "spend":    return formatarBRL(n);
     case "reach":    return `${formatarNumero(n)} ${plural(n, "pessoa", "pessoas")}`;

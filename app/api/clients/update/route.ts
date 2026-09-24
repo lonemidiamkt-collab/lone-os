@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { dispararLinkDoPortal } from "@/lib/portal/link-automatico";
 
 // camelCase → snake_case mapping for Client fields
 const FIELD_MAP: Record<string, string> = {
@@ -190,6 +191,10 @@ export async function POST(req: NextRequest) {
         { onConflict: "meta_account_id" },
       );
     }
+
+    // Rascunho saindo (draft_status apagado) = o cliente virou cliente: link do portal + aviso no grupo
+    // de cadastro. A função manda uma vez só por cliente — cliente que já era ativo não recebe de novo.
+    if ("draft_status" in row && row.draft_status === null) dispararLinkDoPortal(id, "aprovacao");
 
     return NextResponse.json({ success: true, client: updated });
   } catch (err) {

@@ -22,13 +22,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const st = (cli.service_type as string) || "lone_growth";
   const socialOnly = ["assessoria_social", "assessoria_design"].includes(st);
   const anuncios = !socialOnly && !!cli.meta_ad_account_id;
-  const d = (snap?.data as { ads_status?: string; totals?: { spend?: number } } | null) ?? null;
-  const gastoSemana = Number(d?.totals?.spend ?? 0);
+  // O snapshot guarda o investimento em kpis.spend.value (lib/portal/types.ts). Ler `totals.spend`
+  // — campo que o snapshot nunca teve — dava sempre zero, e a ficha dizia "sem gasto na última
+  // semana" para todo cliente com anúncio rodando.
+  const d = (snap?.data as { kpis?: { spend?: { value?: number | null } } } | null) ?? null;
+  const gastoSemana = Number(d?.kpis?.spend?.value ?? 0);
   const instagram = !!cli.ig_business_account_id;
   const n = artes ?? 0;
   const pronto = (anuncios && gastoSemana > 0) || instagram || n > 0;
   return NextResponse.json({
     pronto, status: cli.status, socialOnly,
+    // Quando os números de anúncio do portal foram montados pela última vez (últimos 7 dias).
+    snapshotEm: (snap?.generated_at as string | null | undefined) ?? null,
     itens: [
       { chave: "anuncios", ok: anuncios && gastoSemana > 0, texto: socialOnly ? "Pacote sem anúncios — seção não aparece" : !cli.meta_ad_account_id ? "Conta de anúncio não vinculada — vincule em Dados › Meta" : gastoSemana > 0 ? `Anúncios: R$ ${gastoSemana.toFixed(2).replace(".", ",")} na última semana` : "Conta vinculada, mas sem gasto na última semana — a seção abre zerada" },
       { chave: "instagram", ok: instagram, texto: instagram ? "Instagram vinculado" : "Instagram não vinculado — o portal diz 'ainda não conectado'" },

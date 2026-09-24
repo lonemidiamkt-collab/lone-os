@@ -2,11 +2,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { gravarTokenDoPortal } from "@/lib/portal/link-automatico";
+import { urlDoPortal } from "@/lib/portal/link";
 
-const BASE_URL = process.env.NEXT_PUBLIC_PORTAL_DOMAIN ?? "https://resultados.lonemidia.com";
-
+// Troca o link do portal: o atual para de abrir na hora e nasce um novo. Só admin.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -16,21 +16,9 @@ export async function POST(
   if (!user.isAdmin) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
 
   const { id } = await params;
-  const newToken = crypto.randomUUID();
+  // Uma escrita só: o token antigo deixa de existir no mesmo update que grava o novo.
+  const g = await gravarTokenDoPortal(id);
+  if (!g.ok) return NextResponse.json({ error: g.erro }, { status: g.erro === "Cliente não encontrado" ? 404 : 500 });
 
-  // Revoga o token atual e emite um novo atomicamente
-  const { error } = await supabaseAdmin
-    .from("clients")
-    .update({
-      public_report_token: newToken,
-      public_report_token_created_at: new Date().toISOString(),
-      public_report_token_revoked_at: null,
-      public_report_enabled: true,
-    })
-    .eq("id", id);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  const fullUrl = `${BASE_URL}/portal/${newToken}`;
-  return NextResponse.json({ success: true, token: newToken, full_url: fullUrl });
+  return NextResponse.json({ success: true, token: g.token, full_url: urlDoPortal(g.token) });
 }
