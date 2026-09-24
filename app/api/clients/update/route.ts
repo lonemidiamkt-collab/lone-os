@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { normalizarEmail, mensagemDadosInvalidos } from "@/lib/clients/email";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -38,6 +39,8 @@ const FIELD_MAP: Record<string, string> = {
 
 // Texto opcional que aceita null (= apagar o campo). Antes só `.optional()`: não havia como limpar.
 const txt = (max: number) => z.string().max(max).nullable().optional();
+// E-mail: limpa espaço/ponto final colado antes de validar; vazio vira null (lib/clients/email.ts).
+const emailOpc = z.preprocess(normalizarEmail, z.string().email().max(256).nullable().optional());
 
 const ClientUpdateSchema = z.object({
   id: z.string().uuid("id deve ser um UUID válido"),
@@ -76,7 +79,7 @@ const ClientUpdateSchema = z.object({
   cpfCnpj: txt(32),
   birthDate: txt(32),
   phone: txt(32),
-  email: z.string().email().max(256).nullable().optional(),
+  email: emailOpc,
   draftStatus: txt(64),
   agenteAtivo: z.boolean().optional(),
   perfilConteudo: z.enum(["so_arte", "video", "completo"]).nullable().optional(),
@@ -84,7 +87,7 @@ const ClientUpdateSchema = z.object({
   cnpj: txt(32),
   contactName: txt(256),
   contactRole: txt(128),
-  emailCorporativo: z.string().email().max(256).nullable().optional(),
+  emailCorporativo: emailOpc,
   endereco: txt(512),
   enderecoRua: txt(256),
   enderecoNumero: txt(32),
@@ -110,7 +113,7 @@ export async function POST(req: NextRequest) {
   const parsed = ClientUpdateSchema.safeParse(rawBody);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Dados inválidos", issues: parsed.error.issues },
+      { error: mensagemDadosInvalidos(parsed.error.issues.map((i) => i.path[0])), issues: parsed.error.issues },
       { status: 422 }
     );
   }
