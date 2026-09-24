@@ -51,6 +51,11 @@ const ANTIGO_SECUNDARIO: Record<string, { rotas: string[]; abas: string[] }> = {
   "/prospeccao": { rotas: [], abas: ["visao", "fila", "prospects", "conversas", "agenda", "configuracao", "relatorios"] },
   "/crm":        { rotas: [], abas: ["hoje", "dashboard", "funil", "agenda", "relatorios"] },
 };
+// Abas que mudaram de nome sem sumir: o pedido antigo cai na nova (a tela aceita os dois nomes).
+//  - Leva 4: /traffic#rotina ("Rotina Diária") virou /traffic#hoje ("Hoje", o cockpit do gestor).
+const ABAS_RENOMEADAS: Record<string, string> = {
+  "/traffic#rotina": "/traffic#hoje",
+};
 
 function rotasAntigas(role: Role): Set<string> {
   const out = new Set<string>();
@@ -65,12 +70,13 @@ function rotasAntigas(role: Role): Set<string> {
 // Entradas NOVAS no menu — todas telas que o papel já abria por outro caminho, sem ganho de acesso:
 //  - /settings: a engrenagem da barra do topo já levava todo papel pra lá;
 //  - /broadcasts: a página só abre pra gestão (checa o papel) e já existia fora do menu;
-//  - /integrations: já estava na busca ⌘K pra esses mesmos papéis;
+//  - /integrations: já estava na busca ⌘K pra esses mesmos papéis; na Leva 4 virou /conexao-meta
+//    (Sistema › Conexão Meta, a mesma tela) e /integrations redireciona pra lá;
 //  - /my-work?view=…: as novas vistas do Meu Trabalho (conteúdo de /tarefas e /calendar, que já eram do papel).
 const ACRESCIMOS: Record<Role, string[]> = {
-  admin:     ["/settings", "/broadcasts", "/integrations", "/my-work?view=tarefas", "/my-work?view=agenda"],
-  manager:   ["/settings", "/broadcasts", "/integrations", "/my-work?view=tarefas", "/my-work?view=agenda"],
-  traffic:   ["/settings", "/integrations", "/my-work?view=tarefas", "/my-work?view=agenda"],
+  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda"],
+  manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda"],
+  traffic:   ["/settings", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda"],
   social:    ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda"],
   designer:  ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda"],
   comercial: ["/settings", "/"], // Início por papel (Leva 3): o comercial ganhou o dele
@@ -139,7 +145,8 @@ describe("menu — ninguém ganha nem perde tela", () => {
     for (const it of ANTIGO_PRIMARIO) {
       if (!it.roles.includes(role)) continue;
       for (const aba of ANTIGO_SECUNDARIO[it.href]?.abas ?? []) {
-        if (!novas.has(`${it.href}#${aba}`)) faltando.push(`${it.href}#${aba}`);
+        const antiga = `${it.href}#${aba}`;
+        if (!novas.has(ABAS_RENOMEADAS[antiga] ?? antiga)) faltando.push(antiga);
       }
     }
     expect(faltando).toEqual([]);
@@ -148,6 +155,39 @@ describe("menu — ninguém ganha nem perde tela", () => {
   it("papéis sem a tela não recebem as abas dela", () => {
     expect([...abasDoPapel("comercial")].every((a) => a.startsWith("/crm#"))).toBe(true);
     expect([...abasDoPapel("traffic")].every((a) => a.startsWith("/traffic#"))).toBe(true);
+  });
+
+  it("Leva 4: Tráfego abre no Hoje, a Defesa Ativa é aba dele e /defesa continua no menu", () => {
+    for (const r of ["admin", "manager", "traffic"] as Role[]) {
+      const abas = abasDoPapel(r);
+      expect(abas.has("/traffic#hoje")).toBe(true);
+      expect(abas.has("/traffic#defesa")).toBe(true);
+      expect(abas.has("/traffic#rotina")).toBe(false);
+      expect(papelVe(r, "/defesa")).toBe(true);
+    }
+    expect(papelVe("social", "/defesa")).toBe(false);
+    const hoje = telasParaBusca("traffic").find((t) => t.id === "tela-trafego-hoje");
+    expect(hoje).toMatchObject({ href: "/traffic", aba: "hoje" });
+    expect(hoje!.texto).toContain("rotina"); // quem procura "rotina" acha o Hoje
+  });
+
+  it("Leva 4: Contas & Verba no lugar de Saldos + Investimento; Conexão Meta mora no Sistema", () => {
+    for (const r of ["admin", "manager", "traffic"] as Role[]) {
+      const trafego = menuDoPapel(r).find((g) => g.id === "trafego")!;
+      const rotulos = trafego.itens.map((i) => i.rotulo);
+      expect(rotulos).toContain("Contas & Verba");
+      expect(rotulos).not.toContain("Saldos, Verba & Alertas");
+      expect(rotulos).not.toContain("Conexão Meta");
+      expect(abasDoPapel(r).has("/traffic#investimento")).toBe(false);
+      const sistema = menuDoPapel(r).find((g) => g.id === "sistema")!;
+      expect(sistema.itens.find((i) => i.id === "conexao-meta")).toMatchObject({ href: "/conexao-meta" });
+      expect(papelVe(r, "/integrations")).toBe(true); // endereço antigo continua valendo
+    }
+    for (const r of ["social", "designer", "comercial"] as Role[]) expect(papelVe(r, "/conexao-meta")).toBe(false);
+    // Quem procura "investimento" ou "verba" acha Contas & Verba.
+    const contas = telasParaBusca("traffic").find((t) => t.id === "tela-trafego-saldos")!;
+    expect(contas.texto).toContain("investimento");
+    expect(contas.texto).toContain("verba");
   });
 
   it("Área CEO continua só do admin; Prospecção só da gestão", () => {
@@ -175,7 +215,8 @@ describe("menu — qual área acende", () => {
     expect(onde("admin", "/")).toBe("inicio/inicio");
     expect(onde("admin", "/traffic")).toBe("trafego/trafego-pago");
     expect(onde("admin", "/traffic/budgets")).toBe("trafego/trafego-saldos");
-    expect(onde("traffic", "/defesa")).toBe("trafego/defesa");
+    // Defesa Ativa virou aba do Tráfego Pago (Leva 4): /defesa redireciona e acende o Tráfego Pago.
+    expect(onde("traffic", "/defesa")).toBe("trafego/trafego-pago");
     expect(onde("admin", "/clients/abc-123")).toBe("clientes/clientes");
     expect(onde("admin", "/clients?filter=at_risk")).toBe("clientes/clientes");
     expect(onde("social", "/planejamento")).toBe("conteudo/planejamento");
@@ -183,6 +224,8 @@ describe("menu — qual área acende", () => {
     expect(onde("admin", "/processos/algum-processo")).toBe("meu-trabalho/processos");
     expect(onde("admin", "/goals")).toBe("gestao/metas");
     expect(onde("admin", "/automations")).toBe("sistema/automacoes");
+    expect(onde("traffic", "/conexao-meta")).toBe("sistema/conexao-meta");
+    expect(onde("admin", "/integrations")).toBe("sistema/conexao-meta");
   });
 
   it("vistas do Meu Trabalho e endereços antigos", () => {

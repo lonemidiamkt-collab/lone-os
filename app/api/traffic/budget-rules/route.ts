@@ -43,7 +43,17 @@ export async function GET(req: NextRequest) {
 }
 
 // ── POST /api/traffic/budget-rules ───────────────────────────
-// Body: { adAccountId, isPrepaid?, spendCap?, monthlyBudget?, dailyBudget?, paymentMethod?, verbaMinima?, phone?, pixKey? }
+// Body: { adAccountId, isPrepaid?, spendCap?, monthlyBudget?, dailyBudget?, paymentMethod?, nextPaymentDate?,
+//         verbaMinima?, phone?, pixKey? }
+// Leva 4: é o ÚNICO lugar que grava verba, forma de pagamento e próximo aporte (modal "Verba e alertas"
+// de Tráfego › Contas & Verba). A aba Investimento, que gravava verba num segundo lugar e o aporte só
+// no navegador, saiu. ad_accounts.monthly_budget é a verba de verdade (alertas, ritmo do mês);
+// clients.monthly_budget é espelho para quem ainda lê de lá (digest de verba faltando, Design).
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+const PAGAMENTOS = new Set(["pix", "boleto", "cartao", "transferencia"]);
+const semColuna = (e: { code?: string; message?: string } | null) =>
+  !!e && (e.code === "42703" || e.code === "PGRST204" || /next_payment_date/.test(e.message ?? ""));
 
 export async function POST(req: NextRequest) {
   const gate = await requireRole(req, PODE_VERBA);
@@ -56,6 +66,7 @@ export async function POST(req: NextRequest) {
     monthlyBudget?: number | null;
     dailyBudget?: number | null;
     paymentMethod?: string | null;
+    nextPaymentDate?: string | null;
     verbaMinima?: number | null;
     phone?: string | null;
     pixKey?: string | null;
@@ -67,10 +78,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
 
-  const { adAccountId, isPrepaid, spendCap, monthlyBudget, dailyBudget, paymentMethod, verbaMinima, phone, pixKey } = body;
+  const { adAccountId, isPrepaid, spendCap, monthlyBudget, dailyBudget, paymentMethod, nextPaymentDate, verbaMinima, phone, pixKey } = body;
   if (!adAccountId) return NextResponse.json({ error: "adAccountId obrigatório" }, { status: 400 });
   if (verbaMinima != null && (!Number.isFinite(verbaMinima) || verbaMinima < 0)) {
     return NextResponse.json({ error: "Limite de saldo inválido" }, { status: 422 });
+  }
+  for (const [nome, v] of [["Verba mensal", monthlyBudget], ["Verba diária", dailyBudget], ["Spend cap", spendCap]] as const) {
+    if (v != null && (!Number.isFinite(v) || v < 0)) return NextResponse.json({ error: `${nome}: valor inválido` }, { status: 422 });
+  }
+  if (paymentMethod != null && !PAGAMENTOS.has(paymentMethod)) {
+    return NextResponse.json({ error: "Forma de pagamento inválida" }, { status: 422 });
+  }
+  if (nextPaymentDate != null && nextPaymentDate !== "" && !YMD.test(nextPaymentDate)) {
+    return NextResponse.json({ error: "Data do próximo aporte inválida" }, { status: 422 });
   }
 
   const { data: acct, error: aErr } = await supabaseAdmin
@@ -86,16 +106,27 @@ export async function POST(req: NextRequest) {
   const { error: upAccErr } = await supabaseAdmin.from("ad_accounts").update(accountUpdate).eq("id", adAccountId);
   if (upAccErr) return NextResponse.json({ error: upAccErr.message }, { status: 500 });
 
+  const avisos: string[] = [];
   if (acct.client_id) {
     // ── cliente (contato + verba sincronizada) ──
     const clientUpdate: Record<string, unknown> = {};
     if (phone !== undefined) clientUpdate.client_finance_phone = phone;
     if (pixKey !== undefined) clientUpdate.client_pix_key = pixKey;
-    if (monthlyBudget !== undefined) clientUpdate.monthly_budget = monthlyBudget;
+    // clients.monthly_budget é NOT NULL (default 0): "sem verba" no espelho é 0.
+    if (monthlyBudget !== undefined) clientUpdate.monthly_budget = monthlyBudget ?? 0;
     if (dailyBudget !== undefined) clientUpdate.daily_budget = dailyBudget;
-    if (paymentMethod !== undefined) clientUpdate.payment_method = paymentMethod;
+    if (paymentMethod !== undefined && paymentMethod !== null) clientUpdate.payment_method = paymentMethod;
+    if (nextPaymentDate !== undefined) clientUpdate.next_payment_date = nextPaymentDate || null;
     if (Object.keys(clientUpdate).length > 0) {
-      const { error: cErr } = await supabaseAdmin.from("clients").update(clientUpdate).eq("id", acct.client_id);
+      let { error: cErr } = await supabaseAdmin.from("clients").update(clientUpdate).eq("id", acct.client_id);
+      // Migração 20260924160000 ainda não aplicada: grava o resto e avisa que o aporte ficou de fora.
+      if (cErr && semColuna(cErr) && "next_payment_date" in clientUpdate) {
+        delete clientUpdate.next_payment_date;
+        avisos.push("A data do próximo aporte ainda não é salva no servidor (falta aplicar a migração 20260924160000).");
+        cErr = Object.keys(clientUpdate).length > 0
+          ? (await supabaseAdmin.from("clients").update(clientUpdate).eq("id", acct.client_id)).error
+          : null;
+      }
       if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 });
     }
 
@@ -110,5 +141,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, ...(avisos.length ? { avisos } : {}) });
 }

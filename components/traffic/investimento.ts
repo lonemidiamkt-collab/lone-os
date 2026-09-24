@@ -1,34 +1,7 @@
-// components/traffic/investimento.ts — regras puras do Controle de Investimento (/traffic).
-// Ficam fora da página pra terem teste: pacing que mente e valor mal lido já aconteceram aqui.
-
-/**
- * Lê valor digitado em reais. Aceita "1.500,50", "1500,50", "1500.50", "1,500.50" e "R$ 1.500".
- * O antigo tirava todo ponto e lia "1500.50" como 150050.
- */
-export function parseBRL(raw: string): number {
-  const s = (raw ?? "").replace(/[^0-9,.\-]/g, "");
-  if (!s) return 0;
-  const ultimaVirgula = s.lastIndexOf(",");
-  const ultimoPonto = s.lastIndexOf(".");
-  let normal: string;
-  if (ultimaVirgula >= 0 && ultimoPonto >= 0) {
-    // Os dois aparecem: o que vem por último é o decimal, o outro é milhar.
-    normal = ultimaVirgula > ultimoPonto
-      ? s.replace(/\./g, "").replace(",", ".")
-      : s.replace(/,/g, "");
-  } else if (ultimaVirgula >= 0) {
-    normal = s.replace(/,(?=.*,)/g, "").replace(",", ".");
-  } else if (ultimoPonto >= 0) {
-    const pontos = s.split(".").length - 1;
-    const depois = s.length - ultimoPonto - 1;
-    // "1.500" (milhar pt-BR) vs "1500.50" (decimal): um ponto seguido de 3 dígitos é milhar.
-    normal = pontos > 1 || depois === 3 ? s.replace(/\./g, "") : s;
-  } else {
-    normal = s;
-  }
-  const n = parseFloat(normal);
-  return Number.isFinite(n) ? n : 0;
-}
+// components/traffic/investimento.ts — regras puras de ritmo de verba e datas de calendário (SP).
+// Nasceram no antigo Controle de Investimento; desde a Leva 4 o ritmo do mês aparece em Tráfego ›
+// Contas & Verba (lib/trafego/contas-verba.ts). Ficam fora das telas pra terem teste: pacing que
+// mentia ("no ritmo" com conta parada) já aconteceu aqui.
 
 export type StatusPacing = "ok" | "warning" | "critical" | "slow" | "parado" | "sem_dados";
 

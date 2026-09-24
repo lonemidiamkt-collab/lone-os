@@ -24,15 +24,12 @@ import type {
   ClientAccess,
   DesignRequest,
   Task,
-  TrafficMonthlyReport,
   TrafficRoutineCheck,
   SocialMonthlyReport,
   ContentApproval,
   MonthlyDeliveryReport,
   SocialPerformanceScore,
   PerformanceLevel,
-  ClientInvestmentData,
-  InvestmentPaymentMethod,
   Reminder,
 } from "@/lib/types";
 import {
@@ -48,7 +45,6 @@ import {
   mockQuinzReports,
   mockDesignRequests,
   mockTasks,
-  mockTrafficReports,
   mockTrafficRoutineChecks,
   mockSocialReports,
 } from "@/lib/mockData";
@@ -65,7 +61,6 @@ const STORAGE_KEY = "lone-os-state";
 
 interface PersistedState {
   clients: Client[];
-  investmentData: Record<string, ClientInvestmentData>;
   contentCards: ContentCard[];
   timeline: Record<string, TimelineEntry[]>;
   moodHistory: Record<string, MoodEntry[]>;
@@ -82,7 +77,6 @@ interface PersistedState {
   quinzReports: QuinzReport[];
   designRequests: DesignRequest[];
   tasks: Task[];
-  trafficReports: TrafficMonthlyReport[];
   trafficRoutineChecks: TrafficRoutineCheck[];
   socialReports: SocialMonthlyReport[];
   contentApprovals: ContentApproval[];
@@ -136,21 +130,6 @@ function clearStorage() {
 function initClientChats(): Record<string, ChatMessage[]> { return {}; }
 function initOnboarding(): Record<string, OnboardingItem[]> { return {}; }
 
-function initInvestmentData(): Record<string, ClientInvestmentData> {
-  const result: Record<string, ClientInvestmentData> = {};
-  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-  mockClients.forEach((c) => {
-    const pm: InvestmentPaymentMethod = c.paymentMethod === "transferencia" ? "pix" : (c.paymentMethod as InvestmentPaymentMethod);
-    result[c.id] = {
-      clientId: c.id,
-      monthlyBudget: c.monthlyBudget,
-      dailyBudget: parseFloat((c.monthlyBudget / daysInMonth).toFixed(2)),
-      paymentMethod: pm,
-    };
-  });
-  return result;
-}
-
 function initClientAccess(): Record<string, ClientAccess> {
   const result: Record<string, ClientAccess> = {};
   mockClients.forEach((c) => {
@@ -203,10 +182,7 @@ interface AppStateContextValue {
   designRequests: DesignRequest[];
   clientAccess: Record<string, ClientAccess>;
   tasks: Task[];
-  trafficReports: TrafficMonthlyReport[];
   trafficRoutineChecks: TrafficRoutineCheck[];
-  addTrafficReport: (report: Omit<TrafficMonthlyReport, "id" | "createdAt">) => TrafficMonthlyReport;
-  updateTrafficReport: (id: string, updates: Partial<TrafficMonthlyReport>) => void;
   addTrafficRoutineCheck: (check: Omit<TrafficRoutineCheck, "id" | "completedAt">) => void;
   socialReports: SocialMonthlyReport[];
   addSocialReport: (report: Omit<SocialMonthlyReport, "id" | "createdAt">) => SocialMonthlyReport;
@@ -259,10 +235,6 @@ interface AppStateContextValue {
   toggleReminder: (id: string) => void;
   updateReminder: (id: string, updates: Partial<Reminder>) => void;
 
-  // Investment Control
-  investmentData: Record<string, ClientInvestmentData>;
-  updateInvestmentData: (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => void;
-
   // DB loading state
   dbReady: boolean;
 
@@ -288,18 +260,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   // ---------- State (initialized from localStorage → fallback to mock) ----------
   const [clients, setClients] = useState<Client[]>(() => cached.current?.clients ?? []);
 
-  const [investmentData, setInvestmentData] = useState<Record<string, ClientInvestmentData>>(() => {
-    if (cached.current?.investmentData) return cached.current.investmentData;
-    // Legacy localStorage key migration
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("lone_investmentData");
-        if (saved) return JSON.parse(saved) as Record<string, ClientInvestmentData>;
-      } catch {}
-    }
-    return initInvestmentData();
-  });
-
   const [contentCards, setContentCards] = useState<ContentCard[]>(() => cached.current?.contentCards ?? []);
   const [timeline, setTimeline] = useState<Record<string, TimelineEntry[]>>(() => cached.current?.timeline ?? {});
   const [moodHistory, setMoodHistory] = useState<Record<string, MoodEntry[]>>(() => cached.current?.moodHistory ?? {});
@@ -317,7 +277,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [quinzReports, setQuinzReports] = useState<QuinzReport[]>(() => cached.current?.quinzReports ?? []);
   const [designRequests, setDesignRequests] = useState<DesignRequest[]>(() => cached.current?.designRequests ?? []);
   const [tasks, setTasks] = useState<Task[]>(() => cached.current?.tasks ?? []);
-  const [trafficReports, setTrafficReports] = useState<TrafficMonthlyReport[]>(() => cached.current?.trafficReports ?? []);
   const [trafficRoutineChecks, setTrafficRoutineChecks] = useState<TrafficRoutineCheck[]>(() => cached.current?.trafficRoutineChecks ?? []);
   const [socialReports, setSocialReports] = useState<SocialMonthlyReport[]>(() => cached.current?.socialReports ?? []);
   const [contentApprovals, setContentApprovals] = useState<ContentApproval[]>(() => cached.current?.contentApprovals ?? []);
@@ -352,7 +311,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const resetState = useCallback(() => {
     clearStorage();
     setClients(mockClients);
-    setInvestmentData(initInvestmentData());
     setContentCards(mockContentCards);
     setTimeline(mockTimeline);
     setMoodHistory(mockMoodHistory);
@@ -369,7 +327,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setQuinzReports(mockQuinzReports);
     setDesignRequests(mockDesignRequests);
     setTasks(mockTasks);
-    setTrafficReports(mockTrafficReports);
     setTrafficRoutineChecks(mockTrafficRoutineChecks);
     setSocialReports(mockSocialReports);
     setContentApprovals([]);
@@ -418,7 +375,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           dbNotifications,
           dbQuinz,
           dbAccess,
-          dbTrafficReports,
           dbRoutineChecks,
           dbSocialReports,
           dbApprovals,
@@ -442,7 +398,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           // designer, recebia as senhas planas dos clientes). A aba Acessos usa o caminho GATED
           // (useOperationalStore → /api/data/operational com canSeeCofre, service role). Aqui fica vazio.
           Promise.resolve({} as Record<string, import("@/lib/types").ClientAccess>),
-          db.fetchTrafficReports(),
           db.fetchTrafficRoutineChecks(),
           db.fetchSocialReports(),
           db.fetchContentApprovals(),
@@ -497,7 +452,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         if (dbNotifications.length > 0) setNotifications(dbNotifications);
         if (dbQuinz.length > 0) setQuinzReports(dbQuinz);
         if (Object.keys(dbAccess).length > 0) setClientAccess(dbAccess);
-        if (dbTrafficReports.length > 0) setTrafficReports(dbTrafficReports);
         if (dbRoutineChecks.length > 0) setTrafficRoutineChecks(dbRoutineChecks);
         if (dbSocialReports.length > 0) setSocialReports(dbSocialReports);
         if (dbApprovals.length > 0) setContentApprovals(dbApprovals);
@@ -1266,27 +1220,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     [pushNotification]
   );
 
-  const updateInvestmentData = useCallback(
-    (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => {
-      setInvestmentData((prev) => ({
-        ...prev,
-        [clientId]: {
-          ...(prev[clientId] ?? { clientId, monthlyBudget: 0, dailyBudget: 0, paymentMethod: "pix" as InvestmentPaymentMethod }),
-          ...data,
-          updatedBy: actor,
-          updatedAt: new Date().toISOString(),
-        },
-      }));
-      // Also sync monthlyBudget back to the Client record for consistency
-      if (data.monthlyBudget !== undefined) {
-        setClients((prev) =>
-          prev.map((c) => (c.id === clientId ? { ...c, monthlyBudget: data.monthlyBudget! } : c))
-        );
-      }
-    },
-    []
-  );
-
   const addMoodEntry = useCallback(
     (clientId: string, mood: MoodType, note: string, actor: string) => {
       const entry: MoodEntry = {
@@ -1711,29 +1644,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const addTrafficReport = useCallback(
-    (report: Omit<TrafficMonthlyReport, "id" | "createdAt">): TrafficMonthlyReport => {
-      const newReport: TrafficMonthlyReport = {
-        ...report,
-        id: `tr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        createdAt: new Date().toISOString().slice(0, 10),
-      };
-      setTrafficReports((prev) => [newReport, ...prev]);
-      pushNotification("system", "Relatório de tráfego criado", `Relatório de ${report.clientName} (${report.month}) — ${report.messages} mensagens, custo R$${report.messageCost.toFixed(2)}.`, report.clientId);
-      db.insertTrafficReport(report).catch(() => {});
-      return newReport;
-    },
-    [pushNotification]
-  );
-
-  const updateTrafficReport = useCallback(
-    (id: string, updates: Partial<TrafficMonthlyReport>) => {
-      setTrafficReports((prev) => prev.map((r) => (r.id === id ? { ...r, ...updates } : r)));
-      db.updateTrafficReportDb(id, updates).catch(() => {});
-    },
-    []
-  );
-
   const addTrafficRoutineCheck = useCallback(
     (check: Omit<TrafficRoutineCheck, "id" | "completedAt">) => {
       const newCheck: TrafficRoutineCheck = {
@@ -2056,10 +1966,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         designRequests,
         clientAccess,
         tasks,
-        trafficReports,
         trafficRoutineChecks,
-        addTrafficReport,
-        updateTrafficReport,
         addTrafficRoutineCheck,
         socialReports,
         addSocialReport,
@@ -2104,8 +2011,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         addReminder,
         toggleReminder,
         updateReminder,
-        investmentData,
-        updateInvestmentData,
         dbReady,
         resetState,
       }}

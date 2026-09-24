@@ -7,7 +7,7 @@
 import { useMemo, useState } from "react";
 import {
   Check, Clock, AlertTriangle, Calendar, CheckCircle,
-  User, Trash2, CircleDot, Flag,
+  User, Trash2, CircleDot, Flag, X,
 } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import { useOperationalStore } from "@/stores/useOperationalStore";
@@ -25,7 +25,14 @@ const fmtData = (iso?: string) => {
   return `${d}/${m}`;
 };
 
-export default function Tarefas() {
+/** Áreas que dá pra abrir filtradas pela URL (?area=). Hoje só o tráfego: o card "Tarefas do tráfego"
+ *  do /traffic abre /my-work?view=tarefas&area=trafego (o Kanban de tarefas do tráfego saiu — era esta
+ *  mesma lista mostrada duas vezes). O filtro é o papel de quem recebeu a tarefa. */
+const AREAS: Record<string, { rotulo: string; papel: Task["role"] }> = {
+  trafego: { rotulo: "Só tarefas do tráfego", papel: "traffic" },
+};
+
+export default function Tarefas({ area, onLimparArea }: { area?: string | null; onLimparArea?: () => void } = {}) {
   const COLABORADORES = useColaboradores();
   const tasks = useOperationalStore((s) => s.tasks);
   const updateTask = useOperationalStore((s) => s.updateTask);
@@ -34,14 +41,16 @@ export default function Tarefas() {
   const isGestao = role === "admin" || role === "manager";
 
   const [filtroPessoa, setFiltroPessoa] = useState<string>("todos");
+  const filtroArea = area ? AREAS[area] ?? null : null;
   const [verConcluidas, setVerConcluidas] = useState(false);
 
   // Quem vê o quê: gestão vê tudo; staff vê o que é DELE (recebeu) ou o que ELE criou.
   const visiveis = useMemo(() => {
     let arr = tasks.filter((t) => !isGestao ? (t.assignedTo === currentUser || t.createdBy === currentUser) : true);
     if (isGestao && filtroPessoa !== "todos") arr = arr.filter((t) => t.assignedTo === filtroPessoa);
+    if (filtroArea) arr = arr.filter((t) => t.role === filtroArea.papel);
     return arr;
-  }, [tasks, isGestao, currentUser, filtroPessoa]);
+  }, [tasks, isGestao, currentUser, filtroPessoa, filtroArea]);
 
   const h = hoje();
   const abertas = visiveis.filter((t) => t.status !== "done");
@@ -77,6 +86,16 @@ export default function Tarefas() {
             <option value="todos">Todos os colaboradores</option>
             {COLABORADORES.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
           </select>
+        )}
+        {filtroArea && (
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs text-primary">
+            {filtroArea.rotulo}
+            {onLimparArea && (
+              <button type="button" onClick={onLimparArea} aria-label="Tirar o filtro de área" className="hover:opacity-80">
+                <X size={12} />
+              </button>
+            )}
+          </span>
         )}
         <button
           onClick={() => setVerConcluidas((v) => !v)}

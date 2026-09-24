@@ -158,56 +158,5 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PATCH /api/traffic/ad-accounts
-// Persiste os dados de investimento do cliente (verba mensal, verba diária, forma de
-// pagamento) no banco — em clients (exibição + cross-device) e sincroniza a verba mensal
-// em ad_accounts (fonte dos alertas). Usado pelo editor de investimento da tela de Tráfego,
-// em vez de salvar só no localStorage.
-export async function PATCH(req: NextRequest) {
-  const denied = await requireCronOrUser(req);
-  if (denied) return denied;
-  try {
-    const body = await req.json();
-    const { clientId, monthlyBudget, dailyBudget, paymentMethod } = body as {
-      clientId?: string;
-      monthlyBudget?: number | null;
-      dailyBudget?: number | null;
-      paymentMethod?: string | null;
-    };
-    if (!clientId) {
-      return NextResponse.json({ error: "clientId obrigatório" }, { status: 400 });
-    }
-
-    // 1) Persiste no cliente (exibição + carrega em qualquer dispositivo)
-    const clientUpdate: Record<string, unknown> = {};
-    if (monthlyBudget !== undefined) clientUpdate.monthly_budget = monthlyBudget;
-    if (dailyBudget !== undefined) clientUpdate.daily_budget = dailyBudget;
-    if (paymentMethod !== undefined) clientUpdate.payment_method = paymentMethod;
-    if (Object.keys(clientUpdate).length > 0) {
-      const { error: cErr } = await supabaseAdmin.from("clients").update(clientUpdate).eq("id", clientId);
-      if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 });
-    }
-
-    // 2) Sincroniza a VERBA na conta de anúncio (fonte dos alertas de saldo/verba)
-    let alertsWired = false;
-    if (monthlyBudget !== undefined) {
-      const { data: acct } = await supabaseAdmin
-        .from("ad_accounts")
-        .select("id")
-        .eq("client_id", clientId)
-        .limit(1)
-        .maybeSingle();
-      if (acct?.id) {
-        await supabaseAdmin
-          .from("ad_accounts")
-          .update({ monthly_budget: monthlyBudget, updated_at: new Date().toISOString() })
-          .eq("id", acct.id);
-        alertsWired = true;
-      }
-    }
-
-    return NextResponse.json({ ok: true, alertsWired });
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 400 });
-  }
-}
+// (PATCH saiu na Leva 4: gravava a verba da aba Investimento num segundo lugar. A verba agora se
+// edita só em Contas & Verba → POST /api/traffic/budget-rules.)

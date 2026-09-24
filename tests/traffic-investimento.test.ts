@@ -1,22 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseBRL, statusPacing, diasEntre, segundaDaSemana, diaDaSemana, diasAntes } from "@/components/traffic/investimento";
-
-describe("parseBRL", () => {
-  it("lê formato brasileiro e americano", () => {
-    expect(parseBRL("1.500,50")).toBe(1500.5);
-    expect(parseBRL("1500.50")).toBe(1500.5); // antes virava 150050
-    expect(parseBRL("1500,50")).toBe(1500.5);
-    expect(parseBRL("1,500.50")).toBe(1500.5);
-    expect(parseBRL("R$ 1.234.567,89")).toBe(1234567.89);
-    expect(parseBRL("1.500")).toBe(1500);
-    expect(parseBRL("1500")).toBe(1500);
-    expect(parseBRL("0,5")).toBe(0.5);
-  });
-  it("vazio ou lixo vira 0", () => {
-    expect(parseBRL("")).toBe(0);
-    expect(parseBRL("abc")).toBe(0);
-  });
-});
+import { statusPacing, diasEntre, segundaDaSemana, diaDaSemana, diasAntes } from "@/components/traffic/investimento";
 
 describe("statusPacing", () => {
   const base = { verba: 3000, dia: 10, diasNoMes: 30 };

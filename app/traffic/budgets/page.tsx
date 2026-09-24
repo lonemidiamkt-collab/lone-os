@@ -1,10 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+// Tráfego › Contas & Verba (/traffic/budgets). Leva 4: saldo, limite e ritmo do mês de cada conta
+// numa tela só — antes eram "Saldos, Verba & Alertas" aqui e a aba "Investimento" no /traffic, que
+// editava a verba num SEGUNDO lugar e guardava o próximo aporte só no navegador.
+//
+// Verba, forma de pagamento, próximo aporte e limite de saldo se editam num lugar só: o modal
+// "Verba e alertas" (POST /api/traffic/budget-rules). Alertas por cliente (liga/desliga, destino,
+// grupo) seguem em Tráfego › Grupos dos Clientes — o link está no cabeçalho.
+
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
-  RefreshCw, Settings, MessageCircle, AlertTriangle, CheckCircle,
-  Wifi, WifiOff, Filter, X, Loader2, Plus, Search,
+  RefreshCw, Settings2, MessageCircle, AlertTriangle, CheckCircle,
+  Wifi, WifiOff, Filter, X, Loader2, Plus, Search, EyeOff, Eye, BellRing, CalendarClock,
 } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 import {
@@ -18,7 +27,11 @@ import {
   type BalanceDisplay,
 } from "@/lib/budgets/display";
 import { metaAccountStatus } from "@/lib/budgets/account-status";
-import { cn } from "@/lib/utils";
+import { cn, todaySP } from "@/lib/utils";
+import { ritmoDoMes, avisoAporte, aportesParaMigrar, syncAtrasado, CHAVE_LOCAL_INVESTIMENTO, type RitmoMes, type AvisoAporte } from "@/lib/trafego/contas-verba";
+import type { EstadoConexao } from "@/lib/trafego/anuncios";
+import CelulaRitmo from "@/components/trafego/contas/CelulaRitmo";
+import AvisoConexaoMeta from "@/components/trafego/AvisoConexaoMeta";
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -48,6 +61,8 @@ interface AdAccountRow {
     client_pix_key: string | null;
     daily_budget: number | null;
     payment_method: string | null;
+    /** Migração 20260924160000; ausente antes dela. */
+    next_payment_date?: string | null;
   };
   /** client_alert_config.verba_minima — o limite que o alerta do servidor usa. */
   verba_minima: number | null;
@@ -63,11 +78,15 @@ interface EnrichedAccount extends AdAccountRow {
   warningThreshold: number | null;
   criticalThreshold: number | null;
   display: BalanceDisplay;
+  ritmo: RitmoMes;
+  aporte: AvisoAporte;
 }
+
+type Filtro = DisplaySeverity | "all" | "ritmo";
 
 // ── Helpers ───────────────────────────────────────────────────
 
-function enrichAccount(a: AdAccountRow): EnrichedAccount {
+function enrichAccount(a: AdAccountRow, hoje: string): EnrichedAccount {
   const clientName = a.clients?.nome_fantasia || a.clients?.name || "—";
   const cur = a.currency || "BRL";
 
@@ -127,7 +146,10 @@ function enrichAccount(a: AdAccountRow): EnrichedAccount {
 
   const enriched = { ...a, clientName, availableBalance: available, balanceLabel, daysRemaining, avgDailySpend, severity, warningThreshold, criticalThreshold, currency: cur, payment_method: a.clients?.payment_method ?? null };
   const display = getBalanceDisplay(enriched);
-  return { ...enriched, display };
+  // Ritmo do mês: a MESMA verba que o alerta usa (ad_accounts.monthly_budget) contra o gasto sincronizado.
+  const ritmo = ritmoDoMes({ verba: a.monthly_budget, gasto: a.current_month_spend, hoje });
+  const aporte = avisoAporte({ forma: a.clients?.payment_method, proximo: a.clients?.next_payment_date, hoje, pctGasto: ritmo.pctGasto });
+  return { ...enriched, display, ritmo, aporte };
 }
 
 const DISPLAY_SEVERITY_ORDER: Record<DisplaySeverity, number> = {
@@ -151,6 +173,11 @@ function sortAccounts(accounts: EnrichedAccount[]): EnrichedAccount[] {
   });
 }
 
+/** Fora do ritmo = acima, acabando rápido ou parado. (Abaixo do ritmo é conta travada — também conta.) */
+function foraDoRitmo(r: RitmoMes): boolean {
+  return r.status === "critical" || r.status === "warning" || r.status === "parado" || r.status === "slow";
+}
+
 function formatCurrency(n: number | null | undefined, currency = "BRL"): string {
   if (n === null || n === undefined) return "—";
   return n.toLocaleString("pt-BR", { style: "currency", currency });
@@ -160,10 +187,12 @@ function timeSince(iso: string | null): string {
   if (!iso) return "nunca";
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
   if (diff < 60) return "agora";
-  if (diff < 3600) return `há ${Math.floor(diff / 60)}min`;
-  if (diff < 86400) return `há ${Math.floor(diff / 3600)}h`;
-  return `há ${Math.floor(diff / 86400)}d`;
+  if (diff < 3600) return `há ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `há ${Math.floor(diff / 3600)} h`;
+  return `há ${Math.floor(diff / 86400)} d`;
 }
+
+const COLUNAS = "grid-cols-[24px_minmax(0,1.3fr)_100px_130px_64px_88px_minmax(150px,1fr)_96px]";
 
 // ── Componentes de célula ─────────────────────────────────────
 
@@ -201,15 +230,16 @@ function StatusBadge({ display, syncError }: { display: BalanceDisplay; syncErro
   );
 }
 
-// ── Modal de configuração de alertas ─────────────────────────
+// ── Modal "Verba e alertas" — o ÚNICO lugar que edita verba ────
 
 interface AlertModalProps {
   account: EnrichedAccount;
+  aporteDisponivel: boolean;
   onClose: () => void;
   onSaved: () => void;
 }
 
-function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
+function AlertModal({ account, aporteDisponivel, onClose, onSaved }: AlertModalProps) {
   const [isPrepaid, setIsPrepaid] = useState(account.is_prepaid);
   const [spendCap, setSpendCap] = useState(account.spend_cap?.toFixed(2) ?? "");
   const [monthlyBudget, setMonthlyBudget] = useState(account.monthly_budget?.toFixed(2) ?? "");
@@ -217,11 +247,16 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
   const [pixKey, setPixKey] = useState(account.clients?.client_pix_key ?? "");
   const [dailyBudget, setDailyBudget] = useState(account.clients?.daily_budget?.toFixed(2) ?? "");
   const [paymentMethod, setPaymentMethod] = useState(account.clients?.payment_method ?? "pix");
+  const [nextPayment, setNextPayment] = useState(account.clients?.next_payment_date ?? "");
 
   const [verbaMinima, setVerbaMinima] = useState(account.verba_minima?.toFixed(2) ?? "");
 
   const [saving, setSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  const precisaAporte = paymentMethod === "pix" || paymentMethod === "boleto";
+  const hoje = todaySP();
+  const diasNoMes = ritmoDoMes({ verba: null, gasto: null, hoje }).diasNoMes;
 
   async function handleSave() {
     setValidationError(null);
@@ -233,19 +268,22 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
 
     setSaving(true);
     try {
-      const res = await chamar("/api/traffic/budget-rules", {
+      const res = await chamar<{ ok: boolean; avisos?: string[] }>("/api/traffic/budget-rules", {
           adAccountId: account.id,
           isPrepaid,
           spendCap: spendCap ? parseFloat(spendCap) : null,
           monthlyBudget: monthlyBudget ? parseFloat(monthlyBudget) : null,
           dailyBudget: dailyBudget ? parseFloat(dailyBudget) : null,
           paymentMethod: paymentMethod || null,
+          // Cartão não tem aporte: limpa a data para ela não virar aviso fantasma depois.
+          ...(aporteDisponivel ? { nextPaymentDate: precisaAporte && nextPayment ? nextPayment : null } : {}),
           verbaMinima: limite,
           phone: phone || null,
           pixKey: pixKey || null,
       });
       if (!res.ok) { setValidationError(res.erro ?? "Erro ao salvar"); return; }
-      toast.success(`${account.clientName}: configuração salva`);
+      toast.success(`${account.clientName}: verba e alertas salvos`);
+      res.data?.avisos?.forEach((a) => toast.warning(a));
       onSaved();
       onClose();
     } finally {
@@ -253,39 +291,92 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
     }
   }
 
+  const campo = "w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-label={`Verba e alertas — ${account.clientName}`} className="bg-card border border-border rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-sm">
         {/* Header */}
         <div className="p-5 border-b border-border flex items-start justify-between">
           <div>
-            <p className="text-sm font-semibold text-foreground">{account.clientName}</p>
+            <p className="text-lone-eyebrow uppercase text-muted-foreground">Verba e alertas</p>
+            <p className="text-sm font-semibold text-foreground mt-0.5">{account.clientName}</p>
             <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">{account.meta_account_id}</p>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className={cn(
-                "text-[10px] px-2 py-0.5 rounded-full border",
-                account.is_prepaid
-                  ? "bg-primary/10 border-primary/20 text-primary"
-                  : "bg-[color-mix(in_srgb,var(--chart-4)_10%,transparent)] border-[color-mix(in_srgb,var(--chart-4)_20%,transparent)] text-chart-4",
-              )}>
-                {account.is_prepaid ? "Pré-pago" : "Pós-pago"}
-              </span>
-            </div>
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} aria-label="Fechar" className="text-muted-foreground hover:text-foreground transition-colors">
             <X size={16} />
           </button>
         </div>
 
         <div className="p-5 space-y-4">
+          {/* Verba */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label htmlFor="verba-mensal" className="text-[10px] text-muted-foreground uppercase tracking-wider">Verba mensal (R$)</label>
+              <input
+                id="verba-mensal" type="number" min="0" step="100"
+                value={monthlyBudget}
+                onChange={(e) => setMonthlyBudget(e.target.value)}
+                placeholder="ex: 3000.00"
+                className={campo}
+              />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="verba-diaria" className="text-[10px] text-muted-foreground uppercase tracking-wider">Verba diária (R$)</label>
+              <input
+                id="verba-diaria" type="number" min="0" step="10"
+                value={dailyBudget}
+                onChange={(e) => setDailyBudget(e.target.value)}
+                placeholder={monthlyBudget && parseFloat(monthlyBudget) > 0 ? `≈ ${(parseFloat(monthlyBudget) / diasNoMes).toFixed(2)}` : "ex: 100.00"}
+                className={campo}
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground -mt-2">
+            A verba mensal é a que o ritmo do mês e o alerta de saldo usam.
+            {isPrepaid
+              ? " Pré-pago: em branco, o alerta olha só o saldo da carteira na Meta."
+              : " Pós-pago: o saldo mostrado vira verba − gasto do mês."}
+          </p>
+
+          {/* Pagamento */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label htmlFor="forma-pagamento" className="text-[10px] text-muted-foreground uppercase tracking-wider">Forma de pagamento</label>
+              <select id="forma-pagamento" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={campo}>
+                <option value="pix">Pix</option>
+                <option value="boleto">Boleto</option>
+                <option value="cartao">Cartão</option>
+              </select>
+            </div>
+            {precisaAporte ? (
+              <div className="space-y-1">
+                <label htmlFor="proximo-aporte" className="text-[10px] text-muted-foreground uppercase tracking-wider">Próximo aporte</label>
+                <input
+                  id="proximo-aporte" type="date"
+                  value={nextPayment}
+                  onChange={(e) => setNextPayment(e.target.value)}
+                  disabled={!aporteDisponivel}
+                  className={cn(campo, "disabled:opacity-50")}
+                />
+                {!aporteDisponivel && <p className="text-[10px] text-lone-warning">Disponível depois da migração do banco.</p>}
+              </div>
+            ) : (
+              <div className="flex items-end pb-2">
+                <p className="text-[11px] text-muted-foreground">Cartão: a Meta cobra direto, sem aporte.</p>
+              </div>
+            )}
+          </div>
+
           {/* Tipo de cobrança */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tipo de cobrança</p>
+              <label htmlFor="tipo-cobranca" className="text-[10px] text-muted-foreground uppercase tracking-wider">Tipo de cobrança</label>
               <select
+                id="tipo-cobranca"
                 value={isPrepaid ? "prepaid" : "postpaid"}
                 onChange={(e) => setIsPrepaid(e.target.value === "prepaid")}
-                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+                className={campo}
               >
                 <option value="prepaid">Pré-pago (Pix/Boleto)</option>
                 <option value="postpaid">Pós-pago (Cartão)</option>
@@ -293,111 +384,54 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
             </div>
             {!isPrepaid && (
               <div className="space-y-1">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Spend cap Meta (R$)</p>
+                <label htmlFor="spend-cap" className="text-[10px] text-muted-foreground uppercase tracking-wider">Spend cap Meta (R$)</label>
                 <input
-                  type="number" min="0" step="100"
+                  id="spend-cap" type="number" min="0" step="100"
                   value={spendCap}
                   onChange={(e) => setSpendCap(e.target.value)}
                   placeholder="ex: 2000.00"
-                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+                  className={campo}
                 />
               </div>
             )}
           </div>
 
-          {/* Verba mensal — sempre visível */}
-          <div className="space-y-1">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-              Verba mensal contratada (R$)
-            </p>
-            <input
-              type="number" min="0" step="100"
-              value={monthlyBudget}
-              onChange={(e) => setMonthlyBudget(e.target.value)}
-              placeholder="ex: 1000.00"
-              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
-            />
-            <p className="text-[10px] text-muted-foreground">
-              {isPrepaid
-                ? "Pré-pago: deixe em branco para usar o saldo da carteira Meta. Preencha para monitorar por verba contratada."
-                : <>Pós-pago: saldo exibido = <span className="text-muted-foreground">verba − gasto do mês (Insights)</span>. Mais preciso que o spend_cap quando esse é teto de segurança.</>}
-            </p>
-          </div>
-
-          {/* Verba diária + forma de pagamento (absorvido do Controle de Investimento) */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Verba diária (R$)</p>
-              <input
-                type="number" min="0" step="10"
-                value={dailyBudget}
-                onChange={(e) => setDailyBudget(e.target.value)}
-                placeholder="ex: 33.33"
-                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
-              />
-            </div>
-            <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Forma de pagamento</p>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
-              >
-                <option value="pix">Pix</option>
-                <option value="boleto">Boleto</option>
-                <option value="cartao">Cartão</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Contexto azul */}
+          {/* Contexto */}
           <div className="rounded-lg bg-primary/[0.06] border border-primary/20 p-3">
             <p className="text-[11px] text-primary leading-relaxed">
               {isPrepaid
                 ? "Pré-pago: saldo disponível = carteira na Meta (funding_source_details). Quando zera, campanhas pausam automaticamente."
                 : monthlyBudget
                   ? `Pós-pago com verba definida: mostra ${formatCurrency(parseFloat(monthlyBudget) || 0)}/mês − gasto do ciclo. Ideal para clientes onde o spend_cap da Meta é maior que o orçamento real.`
-                  : "Pós-pago: saldo = spend_cap − gasto do ciclo. Se o spend_cap for um teto de segurança alto, defina a Verba mensal acima para precisão."}
+                  : "Pós-pago: saldo = spend_cap − gasto do ciclo. Se o spend_cap for um teto de segurança alto, defina a verba mensal acima para precisão."}
+            </p>
+          </div>
+
+          {/* Limite de saldo baixo — client_alert_config.verba_minima, lido pelo alerta do servidor */}
+          <div className="space-y-1">
+            <label htmlFor="verba-minima" className="text-[10px] text-muted-foreground uppercase tracking-wider">Avisar quando o saldo ficar abaixo de (R$)</label>
+            <input
+              id="verba-minima" type="number" min="0" step="10"
+              value={verbaMinima}
+              onChange={(e) => setVerbaMinima(e.target.value)}
+              placeholder="em branco = % da verba mensal"
+              className={campo}
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Vale para o aviso de saldo baixo no grupo do tráfego. Em branco, o aviso usa o percentual da verba configurado na agência.
             </p>
           </div>
 
           {/* Contato financeiro */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tel. financeiro (WA)</p>
-              <input
-                type="text"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="5522999999999"
-                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
-              />
+              <label htmlFor="tel-financeiro" className="text-[10px] text-muted-foreground uppercase tracking-wider">Tel. financeiro (WA)</label>
+              <input id="tel-financeiro" type="text" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="5522999999999" className={campo} />
             </div>
             <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Chave Pix</p>
-              <input
-                type="text"
-                value={pixKey}
-                onChange={(e) => setPixKey(e.target.value)}
-                placeholder="CPF, e-mail ou telefone"
-                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
-              />
+              <label htmlFor="chave-pix" className="text-[10px] text-muted-foreground uppercase tracking-wider">Chave Pix</label>
+              <input id="chave-pix" type="text" value={pixKey} onChange={(e) => setPixKey(e.target.value)} placeholder="CPF, e-mail ou telefone" className={campo} />
             </div>
-          </div>
-
-          {/* Limite de saldo baixo — client_alert_config.verba_minima, lido pelo alerta do servidor */}
-          <div className="space-y-1">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Avisar quando o saldo ficar abaixo de (R$)</p>
-            <input
-              type="number" min="0" step="10"
-              value={verbaMinima}
-              onChange={(e) => setVerbaMinima(e.target.value)}
-              placeholder="em branco = % da verba mensal"
-              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
-            />
-            <p className="text-[10px] text-muted-foreground">
-              Vale para o aviso de saldo baixo no grupo do tráfego. Em branco, o aviso usa o percentual da verba configurado na agência.
-            </p>
           </div>
 
           {validationError && (
@@ -409,16 +443,21 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="p-5 border-t border-border flex justify-end gap-3">
-          <button onClick={onClose} className="btn-ghost text-xs border border-border px-4">Cancelar</button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-xs font-medium transition-all disabled:opacity-50"
-          >
-            {saving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
-            Salvar
-          </button>
+        <div className="p-5 border-t border-border flex items-center justify-between gap-3">
+          <Link href="/settings/grupos" className="text-[11px] text-muted-foreground hover:text-primary transition-colors">
+            Tipos de alerta e grupo →
+          </Link>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="btn-ghost text-xs border border-border px-4">Cancelar</button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium transition-all hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+              Salvar
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -495,14 +534,14 @@ function AddAccountModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+      <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-sm flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div>
             <h2 className="text-sm font-semibold text-foreground">Adicionar Conta de Anúncio</h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">Vincule uma conta do Meta Ads a um cliente</p>
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} aria-label="Fechar" className="text-muted-foreground hover:text-foreground transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -599,7 +638,7 @@ function AddAccountModal({
             <button
               onClick={handleAdd}
               disabled={saving || !selectedMeta || !selectedClient}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-xs font-medium transition-all disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium transition-all hover:opacity-90 disabled:opacity-50"
             >
               {saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
               Adicionar e Sincronizar
@@ -613,27 +652,35 @@ function AddAccountModal({
 
 // ── Página principal ──────────────────────────────────────────
 
-export default function BudgetsPage() {
+export default function ContasVerbaPage() {
   const [accounts, setAccounts] = useState<EnrichedAccount[]>([]);
   // Sem isso, uma falha de rede mostrava "nenhuma conta" em vez de "não consegui carregar".
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
-  const [filterSeverity, setFilterSeverity] = useState<DisplaySeverity | "all">("all");
+  const [aporteDisponivel, setAporteDisponivel] = useState(true);
+  const [filtro, setFiltro] = useState<Filtro>("all");
   const [clientSearch, setClientSearch] = useState("");
   const [modalAccount, setModalAccount] = useState<EnrichedAccount | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  // Contas ocultas (agency_settings.hidden_ad_accounts): somem do Início, do Hoje e dos Anúncios.
+  const [ocultas, setOcultas] = useState<Set<string>>(new Set());
+  const [verOcultas, setVerOcultas] = useState(false);
+  const [conexao, setConexao] = useState<EstadoConexao>("ok");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const migrouRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
-      const res = await chamar<{ accounts?: AdAccountRow[] }>("/api/traffic/sync-balances");
+      const res = await chamar<{ accounts?: AdAccountRow[]; aporteDisponivel?: boolean }>("/api/traffic/sync-balances");
       if (!res.ok) { setLoadError(res.erro); return; }
       setLoadError(null);
+      setAporteDisponivel(res.data?.aporteDisponivel !== false);
+      const hoje = todaySP();
       const raw: AdAccountRow[] = res.data?.accounts ?? [];
-      const enriched = sortAccounts(raw.map(enrichAccount));
+      const enriched = sortAccounts(raw.map((a) => enrichAccount(a, hoje)));
       setAccounts(enriched);
       // Última sync = o valor mais recente entre todas as contas
       const latest = enriched
@@ -647,6 +694,18 @@ export default function BudgetsPage() {
     }
   }, []);
 
+  const loadOcultas = useCallback(async () => {
+    const r = await chamar<{ ids?: string[] }>("/api/traffic/hidden-accounts");
+    if (r.ok && Array.isArray(r.data?.ids)) setOcultas(new Set(r.data!.ids));
+  }, []);
+
+  // Token da Meta: sem ele o "Sincronizar" não faz nada — melhor dizer do que girar em vão.
+  useEffect(() => {
+    chamar<{ estado: EstadoConexao }>("/api/trafego/conexao-meta").then((r) => {
+      if (r.ok && r.data) setConexao(r.data.estado);
+    });
+  }, []);
+
   const handleSync = useCallback(async () => {
     if (syncing) return;
     setSyncing(true);
@@ -658,12 +717,12 @@ export default function BudgetsPage() {
       );
       if (!res.ok) {
         toast.error(controller.signal.aborted
-          ? "Sincronização demorou mais de 60s. Verifique o token Meta."
+          ? "Sincronização demorou mais de 60s. Verifique a Conexão Meta."
           : `Falha na sincronização: ${res.erro}`);
       } else {
         const { synced = 0, errors: errs = 0, total = 0 } = res.data ?? {};
         if (errs > 0) {
-          toast.warning(`${synced} de ${total} contas sincronizadas — ${errs} com erro (verifique o token Meta)`);
+          toast.warning(`${synced} de ${total} contas sincronizadas — ${errs} com erro (verifique a Conexão Meta)`);
         } else {
           toast.success(`${synced} contas sincronizadas com sucesso`);
         }
@@ -693,30 +752,81 @@ export default function BudgetsPage() {
     }
   }, [togglingId, load]);
 
+  const alternarOculta = useCallback(async (account: EnrichedAccount) => {
+    const next = new Set(ocultas);
+    const ocultar = !next.has(account.meta_account_id);
+    if (ocultar) next.add(account.meta_account_id); else next.delete(account.meta_account_id);
+    setOcultas(next);
+    const r = await chamar("/api/traffic/hidden-accounts", { ids: [...next] });
+    if (!r.ok) {
+      toast.error(`Não consegui ${ocultar ? "ocultar" : "mostrar"} a conta: ${r.erro}`);
+      loadOcultas();
+      return;
+    }
+    toast.success(ocultar
+      ? `${account.clientName} oculta — sai do Início, do Hoje e dos Anúncios.`
+      : `${account.clientName} de volta às telas do tráfego.`);
+  }, [ocultas, loadOcultas]);
+
   useEffect(() => {
     load();
+    loadOcultas();
     // Auto-refresh a cada 5 minutos
     intervalRef.current = setInterval(load, 5 * 60_000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [load]);
+  }, [load, loadOcultas]);
+
+  // Migração única: "Data do próximo aporte" que ficou só no localStorage do antigo Controle de
+  // Investimento vai para o servidor (só datas que ainda valem e que o servidor não tem).
+  useEffect(() => {
+    if (migrouRef.current || loading || !aporteDisponivel || accounts.length === 0) return;
+    migrouRef.current = true;
+    let bruto: string | null = null;
+    try { bruto = localStorage.getItem(CHAVE_LOCAL_INVESTIMENTO); } catch { return; }
+    if (!bruto) return;
+    const pendentes = aportesParaMigrar(
+      bruto,
+      accounts.map((a) => ({ id: a.id, clientId: a.clients?.id, proximoAporte: a.clients?.next_payment_date ?? null })),
+      todaySP(),
+    );
+    (async () => {
+      let tudoCerto = true;
+      for (const p of pendentes) {
+        const r = await chamar<{ avisos?: string[] }>("/api/traffic/budget-rules", { adAccountId: p.adAccountId, nextPaymentDate: p.data });
+        if (!r.ok || (r.data?.avisos?.length ?? 0) > 0) tudoCerto = false;
+      }
+      if (!tudoCerto) return; // tenta de novo na próxima visita
+      try { localStorage.removeItem(CHAVE_LOCAL_INVESTIMENTO); } catch { /* sem storage, sem problema */ }
+      if (pendentes.length > 0) {
+        toast.message(`${pendentes.length} data(s) de próximo aporte que estavam só neste navegador foram salvas no servidor.`);
+        load();
+      }
+    })();
+  }, [loading, aporteDisponivel, accounts, load]);
 
   // ── Dados computados ─────────────────────────────────────
-  const bySeverity = filterSeverity === "all"
-    ? accounts
-    : accounts.filter((a) => a.display.severity === filterSeverity);
+  const visiveis = useMemo(() => accounts.filter((a) => !ocultas.has(a.meta_account_id)), [accounts, ocultas]);
+  const escondidas = useMemo(() => accounts.filter((a) => ocultas.has(a.meta_account_id)), [accounts, ocultas]);
+
+  const porFiltro = filtro === "all"
+    ? visiveis
+    : filtro === "ritmo"
+      ? visiveis.filter((a) => foraDoRitmo(a.ritmo))
+      : visiveis.filter((a) => a.display.severity === filtro);
   const q = clientSearch.trim().toLowerCase();
   const filtered = q
-    ? bySeverity.filter((a) => a.clientName.toLowerCase().includes(q) || a.meta_account_id.toLowerCase().includes(q))
-    : bySeverity;
+    ? porFiltro.filter((a) => a.clientName.toLowerCase().includes(q) || a.meta_account_id.toLowerCase().includes(q))
+    : porFiltro;
 
-  const criticalCount  = accounts.filter((a) => a.display.severity === "critical").length;
-  const warningCount   = accounts.filter((a) => a.display.severity === "warning").length;
-  const reviewCount    = accounts.filter((a) => a.display.severity === "review").length;
+  const criticalCount  = visiveis.filter((a) => a.display.severity === "critical").length;
+  const warningCount   = visiveis.filter((a) => a.display.severity === "warning").length;
+  const reviewCount    = visiveis.filter((a) => a.display.severity === "review").length;
+  const comVerba       = visiveis.filter((a) => a.ritmo.status !== "sem_verba").length;
+  const foraRitmoCount = visiveis.filter((a) => foraDoRitmo(a.ritmo)).length;
 
-  // Alerta de sync desatualizado (>30min)
-  const syncStale = lastSyncAt
-    ? (Date.now() - new Date(lastSyncAt).getTime()) > 30 * 60_000
-    : false;
+  // Sync atrasado: o servidor sincroniza de 2 em 2 horas das 8h às 20h (sync-saldos). O antigo
+  // "mais de 30 min" acendia o dia inteiro e ninguém mais olhava.
+  const syncStale = syncAtrasado(lastSyncAt, Date.now());
 
   // ── WhatsApp link ─────────────────────────────────────────
   function buildWaLink(account: EnrichedAccount): string {
@@ -743,6 +853,173 @@ export default function BudgetsPage() {
     );
   }
 
+  const linha = (account: EnrichedAccount, oculta = false) => {
+    const isCritical = account.display.severity === "critical";
+    const isWarning  = account.display.severity === "warning";
+    const isReview   = account.display.severity === "review";
+    const isPaused   = account.display.severity === "paused";
+    const waLink = buildWaLink(account);
+
+    return (
+      <div
+        key={account.id}
+        className={cn(
+          "grid gap-3 px-4 py-3 border-b border-border last:border-b-0 items-center transition-colors hover:bg-muted/40",
+          COLUNAS,
+          // Crítico é o mais alto: fundo tintado + borda cheia; atenção só a borda.
+          !oculta && isCritical && "bg-lone-danger-bg border-l-4 border-l-destructive",
+          !oculta && isWarning  && "border-l-[3px] border-l-lone-warning",
+          !oculta && isReview   && "border-l-[3px] border-l-lone-warning-border",
+          (isPaused || oculta) && "opacity-60",
+        )}
+      >
+        {/* Dot */}
+        <div className="flex items-center justify-center">
+          <SeverityDot severity={account.display.severity} />
+        </div>
+
+        {/* Cliente / Conta */}
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground truncate">{account.clientName}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-[10px] text-muted-foreground font-mono truncate">{account.meta_account_id}</p>
+            <button
+              onClick={(e) => handleToggleBillingType(account, e)}
+              disabled={togglingId === account.id}
+              title={`${account.is_prepaid ? "Pré-pago" : "Pós-pago"} · definido ${account.billing_type_source === "manual" ? "manualmente" : "automaticamente"} · clique pra trocar`}
+              className={cn(
+                "text-[9px] px-1.5 py-0.5 rounded border transition-all cursor-pointer hover:opacity-70 disabled:opacity-40",
+                account.is_prepaid
+                  ? "text-primary border-primary/20 bg-primary/[0.06]"
+                  : "text-chart-4 border-chart-4/20 bg-chart-4/5",
+              )}
+            >
+              {account.is_prepaid ? "pré" : "pós"}
+              {account.billing_type_source === "manual" && " (manual)"}
+            </button>
+          </div>
+          {account.aporte && (
+            <p className={cn(
+              "mt-0.5 flex items-center gap-1 text-[10px]",
+              account.aporte.tipo === "vencido" ? "text-destructive" : "text-lone-warning",
+            )}>
+              <CalendarClock size={10} /> {account.aporte.texto}
+            </p>
+          )}
+        </div>
+
+        {/* Status */}
+        <div>
+          <StatusBadge display={account.display} syncError={account.sync_error} />
+          {account.sync_error && (
+            <p
+              className="text-[9px] text-muted-foreground mt-0.5 truncate cursor-help max-w-24"
+              title={account.last_error_message ?? account.sync_error}
+            >
+              {account.sync_error}
+            </p>
+          )}
+        </div>
+
+        {/* Saldo disponível */}
+        <div>
+          <p className={cn(
+            "text-[15px] font-semibold leading-tight",
+            isCritical ? "text-destructive"
+              : isWarning ? "text-lone-warning"
+              : account.display.primary === "Ativa" ? "text-lone-success"
+              : isPaused || isReview ? "text-muted-foreground"
+              : "text-foreground",
+          )}>
+            {account.display.primary}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">{account.display.secondary}</p>
+          {account.warningThreshold != null && (
+            <p className="text-[10px] text-muted-foreground" title="Limite do aviso de saldo baixo (Verba e alertas)">
+              limite {formatCurrency(account.warningThreshold)}
+            </p>
+          )}
+        </div>
+
+        {/* Dias restantes */}
+        <div>
+          <p className={cn(
+            "text-sm font-medium",
+            account.daysRemaining !== null && account.daysRemaining <= 1
+              ? "text-destructive"
+              : "text-foreground",
+          )}>
+            {formatDaysRemaining(account.daysRemaining)}
+          </p>
+        </div>
+
+        {/* Gasto médio */}
+        <div>
+          <p className="text-sm text-foreground">
+            {account.avgDailySpend !== null ? formatCurrency(account.avgDailySpend) : "—"}
+          </p>
+          {account.avgDailySpend !== null && (
+            <p className="text-[10px] text-muted-foreground">/dia (3d)</p>
+          )}
+        </div>
+
+        {/* Ritmo do mês */}
+        <CelulaRitmo ritmo={account.ritmo} onDefinirVerba={() => setModalAccount(account)} />
+
+        {/* Ações */}
+        <div className="flex items-center gap-1.5">
+          {waLink ? (
+            <a
+              href={waLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`WhatsApp financeiro — ${account.clientName}`}
+              className={cn(
+                "p-1.5 rounded-lg border transition-all",
+                isCritical && !oculta
+                  ? "text-destructive border-lone-danger-border hover:bg-lone-danger-bg"
+                  : "text-muted-foreground border-border hover:text-lone-success hover:border-lone-success-border",
+              )}
+            >
+              <MessageCircle size={13} />
+            </a>
+          ) : (
+            <button
+              disabled
+              title="Cadastre o telefone financeiro em Verba e alertas"
+              className="p-1.5 rounded-lg border border-border text-muted-foreground cursor-not-allowed"
+            >
+              <MessageCircle size={13} />
+            </button>
+          )}
+          <button
+            onClick={() => setModalAccount(account)}
+            title="Verba e alertas"
+            aria-label={`Verba e alertas — ${account.clientName}`}
+            className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
+          >
+            <Settings2 size={13} />
+          </button>
+          <button
+            onClick={() => alternarOculta(account)}
+            title={oculta ? "Mostrar de novo nas telas do tráfego" : "Ocultar das telas do tráfego (Início, Hoje, Anúncios)"}
+            aria-label={oculta ? `Mostrar ${account.clientName}` : `Ocultar ${account.clientName}`}
+            className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
+          >
+            {oculta ? <Eye size={13} /> : <EyeOff size={13} />}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const cards: { chave: Filtro; label: string; value: number; sub: string; color: string }[] = [
+    { chave: "all", label: "Contas", value: visiveis.length, sub: "monitoradas", color: "text-foreground" },
+    { chave: "warning", label: "Atenção", value: warningCount + reviewCount, sub: "saldo baixo ou pendência na conta", color: "text-lone-warning" },
+    { chave: "critical", label: "Críticos", value: criticalCount, sub: "ação imediata", color: "text-destructive" },
+    { chave: "ritmo", label: "Fora do ritmo", value: foraRitmoCount, sub: `gasto do mês × verba · ${comVerba} com verba definida`, color: foraRitmoCount > 0 ? "text-lone-warning" : "text-foreground" },
+  ];
+
   return (
     <div className="flex flex-col flex-1 overflow-auto bg-background">
       <div className="max-w-[1400px] w-full mx-auto px-6 py-6 space-y-5">
@@ -752,26 +1029,40 @@ export default function BudgetsPage() {
           </div>
         )}
 
+        {conexao !== "ok" && (
+          <AvisoConexaoMeta
+            estado={conexao}
+            detalhe="Saldos e gasto do mês param de sincronizar até reconectar. Os valores abaixo são da última sincronização."
+          />
+        )}
 
         {/* Header */}
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-lg font-semibold text-foreground">Saldos</h1>
+            <h1 className="text-lone-h1 tracking-tight text-foreground">Contas &amp; Verba</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Saldo, limite e ritmo do mês de cada conta de anúncio.</p>
             <div className="flex items-center gap-1.5 mt-1">
               {syncStale
                 ? <WifiOff size={11} className="text-lone-warning" />
                 : <Wifi size={11} className="text-muted-foreground" />}
               <p className={cn("text-[11px]", syncStale ? "text-lone-warning" : "text-muted-foreground")}>
                 {syncStale
-                  ? `Última sincronização ${timeSince(lastSyncAt)} — verificar conexão Meta`
-                  : `Última sincronização Meta API · ${timeSince(lastSyncAt)}`}
+                  ? `Última sincronização ${timeSince(lastSyncAt)} — o servidor sincroniza de 2 em 2 horas (8h–20h); confira a Conexão Meta ou clique em Sincronizar`
+                  : `Última sincronização com a Meta ${timeSince(lastSyncAt)}`}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Link
+              href="/settings/grupos"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground hover:border-primary/30 hover:text-primary transition-all"
+            >
+              <BellRing size={12} />
+              Alertas por cliente
+            </Link>
             <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface border border-border text-xs text-foreground hover:border-primary/30 hover:text-primary transition-all"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground hover:border-primary/30 hover:text-primary transition-all"
             >
               <Plus size={12} />
               Adicionar Conta
@@ -779,7 +1070,7 @@ export default function BudgetsPage() {
             <button
               onClick={handleSync}
               disabled={syncing}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface border border-border text-xs text-foreground hover:border-primary/30 hover:text-primary transition-all disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground hover:border-primary/30 hover:text-primary transition-all disabled:opacity-50"
             >
               <RefreshCw size={12} className={syncing ? "animate-spin" : ""} />
               {syncing ? "Sincronizando..." : "Sincronizar"}
@@ -787,56 +1078,21 @@ export default function BudgetsPage() {
           </div>
         </div>
 
-        {/* Aviso sync desatualizado */}
-        {syncStale && (
-          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-lone-warning-bg border border-lone-warning-border">
-            <AlertTriangle size={13} className="text-lone-warning shrink-0" />
-            <p className="text-xs text-lone-warning">
-              Dados desatualizados há mais de 30 minutos. Clique em "Sincronizar" ou verifique o token Meta.
-            </p>
-          </div>
-        )}
-
         {/* Cards de resumo */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {[
-            {
-              label: "Total de contas",
-              value: accounts.length,
-              sub: "cadastradas",
-              onClick: () => setFilterSeverity("all"),
-              active: filterSeverity === "all",
-              color: "text-foreground",
-            },
-            {
-              label: "Atenção",
-              value: warningCount + reviewCount,
-              sub: "saldo baixo ou pendência na conta",
-              onClick: () => setFilterSeverity(filterSeverity === "warning" ? "all" : "warning"),
-              active: filterSeverity === "warning",
-              color: "text-lone-warning",
-            },
-            {
-              label: "Críticos",
-              value: criticalCount,
-              sub: "ação imediata",
-              onClick: () => setFilterSeverity(filterSeverity === "critical" ? "all" : "critical"),
-              active: filterSeverity === "critical",
-              color: "text-destructive",
-            },
-          ].map((card) => (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {cards.map((card) => (
             <button
               key={card.label}
-              onClick={card.onClick}
+              onClick={() => setFiltro(filtro === card.chave && card.chave !== "all" ? "all" : card.chave)}
               className={cn(
                 "text-left p-4 rounded-xl border transition-all",
-                card.active
+                filtro === card.chave
                   ? "bg-primary/5 border-primary/25"
-                  : "bg-card border-border hover:border-border",
+                  : "bg-card border-border hover:border-primary/20",
               )}
             >
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">{card.label}</p>
-              <p className={cn("text-2xl font-bold", card.color)}>{card.value}</p>
+              <p className="text-lone-eyebrow uppercase text-muted-foreground mb-1.5">{card.label}</p>
+              <p className={cn("text-2xl font-semibold tabular-nums", card.color)}>{card.value}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">{card.sub}</p>
             </button>
           ))}
@@ -844,12 +1100,13 @@ export default function BudgetsPage() {
 
         {/* Busca por cliente */}
         <div className="relative">
+          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             value={clientSearch}
             onChange={(e) => setClientSearch(e.target.value)}
             placeholder="Buscar cliente por nome ou ID da conta…"
-            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+            className="w-full rounded-lg border border-border bg-card pl-9 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
           />
           {clientSearch && (
             <button
@@ -863,14 +1120,14 @@ export default function BudgetsPage() {
         </div>
 
         {/* Filtro ativo */}
-        {filterSeverity !== "all" && (
+        {filtro !== "all" && (
           <div className="flex items-center gap-2">
             <Filter size={12} className="text-muted-foreground" />
             <span className="text-xs text-muted-foreground">
               Mostrando apenas:
-              <span className="ml-1 font-medium text-foreground capitalize">{filterSeverity}</span>
+              <span className="ml-1 font-medium text-foreground">{cards.find((c) => c.chave === filtro)?.label ?? filtro}</span>
             </span>
-            <button onClick={() => setFilterSeverity("all")} className="text-muted-foreground hover:text-muted-foreground transition-colors">
+            <button onClick={() => setFiltro("all")} aria-label="Limpar filtro" className="text-muted-foreground hover:text-foreground transition-colors">
               <X size={12} />
             </button>
           </div>
@@ -892,160 +1149,34 @@ export default function BudgetsPage() {
             )}
           </div>
         ) : (
-          <div className="rounded-xl border border-border overflow-hidden">
-            {/* Cabeçalho */}
-            <div className="grid grid-cols-[24px_1fr_100px_130px_80px_100px_80px] gap-3 px-4 py-2.5 bg-card border-b border-border">
-              {["", "Cliente / Conta", "Status", "Saldo disponível", "Dias", "Gasto/dia", "Ações"].map((h) => (
-                <p key={h} className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">{h}</p>
-              ))}
+          <div className="rounded-xl border border-border overflow-x-auto">
+            <div className="min-w-[980px]">
+              {/* Cabeçalho */}
+              <div className={cn("grid gap-3 px-4 py-2.5 bg-card border-b border-border", COLUNAS)}>
+                {["", "Cliente / Conta", "Status", "Saldo disponível", "Dias", "Gasto/dia", "Ritmo do mês", "Ações"].map((h, i) => (
+                  <p key={i} className="text-lone-eyebrow uppercase text-muted-foreground">{h}</p>
+                ))}
+              </div>
+              {filtered.map((a) => linha(a))}
             </div>
+          </div>
+        )}
 
-            {/* Linhas */}
-            {filtered.map((account) => {
-              const isCritical = account.display.severity === "critical";
-              const isWarning  = account.display.severity === "warning";
-              const isReview   = account.display.severity === "review";
-              const isPaused   = account.display.severity === "paused";
-              const waLink = buildWaLink(account);
-
-              return (
-                <div
-                  key={account.id}
-                  className={cn(
-                    "grid grid-cols-[24px_1fr_100px_130px_80px_100px_80px] gap-3 px-4 py-3 border-b border-border last:border-b-0 items-center transition-colors hover:bg-card/[0.02]",
-                    // Crítico é o mais alto: fundo tintado + borda cheia; atenção só a borda.
-                    isCritical && "bg-lone-danger-bg border-l-4 border-l-destructive",
-                    isWarning  && "border-l-[3px] border-l-lone-warning",
-                    isReview   && "border-l-[3px] border-l-lone-warning-border",
-                    isPaused   && "opacity-50",
-                  )}
-                >
-                  {/* Dot */}
-                  <div className="flex items-center justify-center">
-                    <SeverityDot severity={account.display.severity} />
-                  </div>
-
-                  {/* Cliente / Conta */}
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{account.clientName}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <p className="text-[10px] text-muted-foreground font-mono truncate">{account.meta_account_id}</p>
-                      <button
-                        onClick={(e) => handleToggleBillingType(account, e)}
-                        disabled={togglingId === account.id}
-                        title={`${account.is_prepaid ? "Pré-pago" : "Pós-pago"} · definido ${account.billing_type_source === "manual" ? "manualmente" : "automaticamente"} · clique pra trocar`}
-                        className={cn(
-                          "text-[9px] px-1.5 py-0.5 rounded border transition-all cursor-pointer hover:opacity-70 disabled:opacity-40",
-                          account.is_prepaid
-                            ? "text-primary border-primary/20 bg-primary/[0.06]"
-                            : "text-chart-4 border-[color-mix(in_srgb,var(--chart-4)_20%,transparent)] bg-[color-mix(in_srgb,var(--chart-4)_6%,transparent)]",
-                        )}
-                      >
-                        {account.is_prepaid ? "pré" : "pós"}
-                        {account.billing_type_source === "manual" && " ✓"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Status */}
-                  <div>
-                    <StatusBadge display={account.display} syncError={account.sync_error} />
-                    {account.sync_error && (
-                      <p
-                        className="text-[9px] text-muted-foreground mt-0.5 truncate cursor-help"
-                        title={account.last_error_message ?? account.sync_error}
-                        style={{ maxWidth: 96 }}
-                      >
-                        {account.sync_error}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Saldo disponível */}
-                  <div>
-                    <p className={cn(
-                      "text-[15px] font-semibold leading-tight",
-                      isCritical ? "text-destructive"
-                        : isWarning ? "text-lone-warning"
-                        : account.display.primary === "Ativa" ? "text-lone-success"
-                        : isPaused || isReview ? "text-muted-foreground"
-                        : "text-foreground",
-                    )}>
-                      {account.display.primary}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{account.display.secondary}</p>
-                    {/* CTA discreto para contas cartão sem verba definida */}
-                    {!account.is_prepaid && account.monthly_budget === null &&
-                     (account.spend_cap === null || account.spend_cap === 0) &&
-                     account.account_status === 1 && (
-                      <button
-                        onClick={() => setModalAccount(account)}
-                        className="text-[9px] text-muted-foreground hover:text-primary transition-colors mt-0.5"
-                      >
-                        Definir verba →
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Dias restantes */}
-                  <div>
-                    <p className={cn(
-                      "text-sm font-medium",
-                      account.daysRemaining !== null && account.daysRemaining <= 1
-                        ? "text-destructive"
-                        : "text-foreground",
-                    )}>
-                      {formatDaysRemaining(account.daysRemaining)}
-                    </p>
-                  </div>
-
-                  {/* Gasto médio */}
-                  <div>
-                    <p className="text-sm text-foreground">
-                      {account.avgDailySpend !== null ? formatCurrency(account.avgDailySpend) : "—"}
-                    </p>
-                    {account.avgDailySpend !== null && (
-                      <p className="text-[10px] text-muted-foreground">/dia</p>
-                    )}
-                  </div>
-
-                  {/* Ações */}
-                  <div className="flex items-center gap-1.5">
-                    {waLink ? (
-                      <a
-                        href={waLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={`WhatsApp financeiro — ${account.clientName}`}
-                        className={cn(
-                          "p-1.5 rounded-lg border transition-all",
-                          isCritical
-                            ? "text-destructive border-lone-danger-border hover:bg-lone-danger-bg"
-                            : "text-muted-foreground border-border hover:text-lone-success hover:border-lone-success-border",
-                        )}
-                      >
-                        <MessageCircle size={13} />
-                      </a>
-                    ) : (
-                      <button
-                        disabled
-                        title="Cadastre o telefone financeiro nas configurações"
-                        className="p-1.5 rounded-lg border border-border text-muted-foreground cursor-not-allowed"
-                      >
-                        <MessageCircle size={13} />
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setModalAccount(account)}
-                      title="Configurar alertas"
-                      className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-border transition-all"
-                    >
-                      <Settings size={13} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+        {/* Contas ocultas */}
+        {escondidas.length > 0 && (
+          <div className="rounded-xl border border-border">
+            <button
+              onClick={() => setVerOcultas((v) => !v)}
+              className="flex w-full items-center justify-between px-4 py-2.5 text-left text-xs text-muted-foreground hover:text-foreground"
+            >
+              <span className="flex items-center gap-1.5"><EyeOff size={12} /> {escondidas.length} conta(s) oculta(s) — não aparecem no Início, no Hoje nem nos Anúncios</span>
+              <span>{verOcultas ? "Esconder" : "Ver"}</span>
+            </button>
+            {verOcultas && (
+              <div className="overflow-x-auto border-t border-border">
+                <div className="min-w-[980px]">{escondidas.map((a) => linha(a, true))}</div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1063,13 +1194,18 @@ export default function BudgetsPage() {
               {item.label}
             </div>
           ))}
+          <div className="flex items-center gap-1.5">
+            <span className="h-2.5 w-0.5 rounded-full bg-foreground" aria-hidden="true" />
+            Ritmo do mês: a barra é o gasto sobre a verba; o traço é o dia de hoje
+          </div>
         </div>
       </div>
 
-      {/* Modal alertas */}
+      {/* Modal verba e alertas */}
       {modalAccount && (
         <AlertModal
           account={modalAccount}
+          aporteDisponivel={aporteDisponivel}
           onClose={() => setModalAccount(null)}
           onSaved={load}
         />

@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// lib/meta/insights-server.ts — versão SERVER-SAFE da busca de insights da Meta.
-// Cópia das funções de lib/meta/useMetaAds.ts (que é "use client" e não pode ser
-// chamada no servidor). Usada pela geração agendada do PDF semanal de tráfego.
-// ⚠️ Manter em sync com useMetaAds.ts se a lógica de insights/campanhas mudar.
+// lib/meta/insights-server.ts — a busca de insights de campanha da Meta (server-side).
+// Usada pelo PDF semanal de tráfego (lib/traffic/weekly-report.ts) e pela aba Anúncios Meta
+// (lib/trafego/anuncios-server.ts). Desde a Leva 4 é a ÚNICA cópia: a do navegador (useMetaAds.ts)
+// saiu junto com as chamadas à Meta pelo browser.
 
 import { countMessagesFromActions } from "@/lib/meta/messages";
 import { metaJson } from "@/lib/meta/fetch";
@@ -121,7 +121,7 @@ export async function fetchAccountReach(
   }
 }
 
-// ── Funções abaixo copiadas verbatim de useMetaAds.ts (via sed) ──────────────
+// ── Campanhas e demografia ──────────────────────────────────────────────────
 
 export async function fetchCampaignInsights(
   token: string,
@@ -212,6 +212,8 @@ export async function fetchCampaignInsights(
           fetch(`https://graph.facebook.com/v21.0/${campaign.id}/insights?${adsetParams}`),
         ]);
 
+        // Falha no insight NÃO é "gastou zero": marca pra quem mostra dizer "sem dados", nunca R$0.
+        const insightsFailed = !dailyRes.ok || !totalRes.ok;
         const dailyData = dailyRes.ok ? await dailyRes.json() : { data: [] };
         const totalData = totalRes.ok ? await totalRes.json() : { data: [] };
         const adsetData = adsetRes.ok ? await adsetRes.json() : { data: [] };
@@ -219,7 +221,7 @@ export async function fetchCampaignInsights(
         const dailyInsights = dailyData.data ?? [];
         const total = totalData.data?.[0];
 
-        const hasData = !!total;
+        const hasData = !!total && !insightsFailed;
 
         const totalSpend = safeFloat(total?.spend);
         const totalImpressions = safeInt(total?.impressions);
@@ -341,10 +343,17 @@ export async function fetchCampaignInsights(
           costPerResult,
           dailyMetrics,
           hasData,
+          insightsFailed,
           lastSyncAt: syncTimestamp,
         };
       } catch {
-        return { id: campaign.id, name: campaign.name, error: true };
+        // `error: true` continua (o relatório semanal descarta por ele); o resto deixa a aba Anúncios
+        // listar a campanha como "sem dados — falha na Meta" em vez de sumir com ela.
+        return {
+          id: campaign.id, name: campaign.name, objective: campaign.objective,
+          status: campaign.status?.toLowerCase() ?? "unknown",
+          error: true, insightsFailed: true, hasData: false, dailyMetrics: [],
+        };
       }
   };
   // Processa em LOTES pequenos p/ não estourar a concorrência de fetch no Node. Antes,

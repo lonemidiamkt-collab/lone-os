@@ -2,172 +2,41 @@ import { create } from "zustand";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
-import type { TrafficMonthlyReport, TrafficRoutineCheck, ClientInvestmentData, InvestmentPaymentMethod } from "@/lib/types";
+import type { TrafficRoutineCheck } from "@/lib/types";
 
-export interface AdAccount {
-  id: string;
-  clientId: string;
-  metaAccountId: string;
-  accountName: string;
-  billingType: "prepaid" | "postpaid" | "unknown";
-  balance: number | null;
-  currentMonthSpend: number | null;
-  lastSyncAt: string | null;
-}
-
-export interface AnomalyAlert {
-  id: string;
-  clientId: string;
-  metricDate: string;
-  anomalyType: string;
-  severity: "low" | "medium" | "high" | "critical";
-  message: string;
-  resolvedAt: string | null;
-  createdAt: string;
-}
+// Leva 4: o store do tráfego guarda só a rotina (checks de suporte/relatório/feedback). Saíram:
+//  - investmentData (verba no localStorage da aba Investimento) → Tráfego › Contas & Verba, no servidor;
+//  - trafficReports (Relatórios Mensais manuais, removidos na Leva 1) → o mensal é automático;
+//  - adAccounts/syncBalances: ninguém lia, e o init chamava /api/traffic/ad-accounts — que vai à Meta
+//    listar contas — a cada tela aberta; com o token vencido, virava "Não consegui carregar".
 
 interface TrafficState {
-  adAccounts: AdAccount[];
-  anomalyAlerts: AnomalyAlert[];
-  trafficReports: TrafficMonthlyReport[];
   trafficRoutineChecks: TrafficRoutineCheck[];
-  investmentData: Record<string, ClientInvestmentData>;
-  syncing: boolean;
-  /** Falha do último sync de saldos. Antes o erro sumia e o botão só parava de girar. */
-  syncError: string | null;
-  /** Falha ao carregar contas/rotina. Com erro, `initialized` fica false e o próximo init tenta de novo. */
+  /** Falha ao carregar a rotina. Com erro, `initialized` fica false e o próximo init tenta de novo. */
   loadError: string | null;
   initialized: boolean;
 
   init: () => Promise<void>;
-  syncBalances: () => Promise<void>;
-  addAdAccount: (clientId: string, metaAccountId: string, accountName: string) => Promise<AdAccount>;
-
-  addTrafficReport: (report: Omit<TrafficMonthlyReport, "id" | "createdAt">) => Promise<TrafficMonthlyReport>;
-  updateTrafficReport: (id: string, updates: Partial<TrafficMonthlyReport>) => Promise<void>;
   addTrafficRoutineCheck: (check: Omit<TrafficRoutineCheck, "id" | "completedAt">) => Promise<void>;
-  updateInvestmentData: (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
-export const selectAdAccounts = (s: TrafficState) => s.adAccounts;
-export const selectAnomalyAlerts = (s: TrafficState) => s.anomalyAlerts;
-export const selectTrafficSyncing = (s: TrafficState) => s.syncing;
-export const selectTrafficReports = (s: TrafficState) => s.trafficReports;
 export const selectTrafficRoutineChecks = (s: TrafficState) => s.trafficRoutineChecks;
-export const selectInvestmentData = (s: TrafficState) => s.investmentData;
-export const selectAdAccountsByClient = (clientId: string) => (s: TrafficState) =>
-  s.adAccounts.filter((a) => a.clientId === clientId);
-
-function loadInvestmentDataFromStorage(): Record<string, ClientInvestmentData> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem("lone_investmentData");
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveInvestmentDataToStorage(data: Record<string, ClientInvestmentData>): void {
-  if (typeof window === "undefined") return;
-  try { localStorage.setItem("lone_investmentData", JSON.stringify(data)); } catch {}
-}
 
 export const useTrafficStore = create<TrafficState>()(
   devtools(
     subscribeWithSelector((set, get) => ({
-      adAccounts: [],
-      anomalyAlerts: [],
-      trafficReports: [],
       trafficRoutineChecks: [],
-      investmentData: {},
-      syncing: false,
-      syncError: null,
       loadError: null,
       initialized: false,
 
       init: async () => {
         if (get().initialized) return;
-        const investmentData = loadInvestmentDataFromStorage();
-        const [contasRes, trafegoRes] = await Promise.all([
-          chamar<{ accounts?: AdAccount[] }>("/api/traffic/ad-accounts"),
-          chamar<{ trafficReports?: TrafficMonthlyReport[]; trafficRoutineChecks?: TrafficRoutineCheck[] }>("/api/data/traffic"),
-        ]);
+        const trafegoRes = await chamar<{ trafficRoutineChecks?: TrafficRoutineCheck[] }>("/api/data/traffic");
         // Resposta ruim NÃO vira lista vazia com cara de verdade: guarda o que veio e marca o erro.
-        const patch: Partial<TrafficState> = { investmentData };
-        if (contasRes.ok) patch.adAccounts = contasRes.data?.accounts ?? [];
-        if (trafegoRes.ok) {
-          patch.trafficReports = trafegoRes.data?.trafficReports ?? [];
-          patch.trafficRoutineChecks = trafegoRes.data?.trafficRoutineChecks ?? [];
-        }
-        const erro = !contasRes.ok ? contasRes.erro : !trafegoRes.ok ? trafegoRes.erro : null;
+        const patch: Partial<TrafficState> = {};
+        if (trafegoRes.ok) patch.trafficRoutineChecks = trafegoRes.data?.trafficRoutineChecks ?? [];
+        const erro = trafegoRes.ok ? null : trafegoRes.erro;
         set({ ...patch, loadError: erro, initialized: erro === null }, false, erro ? "traffic/init/error" : "traffic/init/done");
-      },
-
-      syncBalances: async () => {
-        set({ syncing: true }, false, "traffic/sync/start");
-        try {
-          const res = await chamar("/api/traffic/sync-balances", {});
-          if (!res.ok) { set({ syncError: res.erro }, false, "traffic/sync/error"); return; }
-          set({ initialized: false, syncError: null }, false, "traffic/sync/reset");
-          await get().init();
-        } finally {
-          set({ syncing: false }, false, "traffic/sync/done");
-        }
-      },
-
-      addAdAccount: async (clientId, metaAccountId, accountName) => {
-        const res = await authedFetch("/api/traffic/ad-accounts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clientId, metaAccountId, accountName }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const { id } = await res.json();
-        const account: AdAccount = {
-          id, clientId, metaAccountId, accountName,
-          billingType: "unknown", balance: null, currentMonthSpend: null, lastSyncAt: null,
-        };
-        set((s) => ({ adAccounts: [...s.adAccounts, account] }), false, "traffic/account/add");
-        return account;
-      },
-
-      addTrafficReport: async (report) => {
-        const tempId = `temp-tr-${Date.now()}`;
-        const optimistic: TrafficMonthlyReport = { ...report, id: tempId, createdAt: new Date().toISOString() } as TrafficMonthlyReport;
-        set((s) => ({ trafficReports: [optimistic, ...s.trafficReports] }), false, "traffic/report/add/optimistic");
-        try {
-          const res = await authedFetch("/api/data/traffic/mutations", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "insertTrafficReport", report }),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const { trafficReports } = await res.json();
-          set({ trafficReports }, false, "traffic/report/add/confirmed");
-          return trafficReports.find((r: TrafficMonthlyReport) => r.id !== tempId) ?? optimistic;
-        } catch (err) {
-          set((s) => ({ trafficReports: s.trafficReports.filter((r) => r.id !== tempId) }), false, "traffic/report/add/rollback");
-          throw err;
-        }
-      },
-
-      updateTrafficReport: async (id, updates) => {
-        const prev = get().trafficReports.find((r) => r.id === id);
-        set((s) => ({
-          trafficReports: s.trafficReports.map((r) => r.id === id ? { ...r, ...updates } : r),
-        }), false, "traffic/report/update/optimistic");
-        try {
-          const res = await authedFetch("/api/data/traffic/mutations", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "updateTrafficReport", id, updates }),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        } catch (err) {
-          if (prev) set((s) => ({ trafficReports: s.trafficReports.map((r) => r.id === id ? prev : r) }), false, "traffic/report/update/rollback");
-          throw err;
-        }
       },
 
       addTrafficRoutineCheck: async (check) => {
@@ -186,45 +55,6 @@ export const useTrafficStore = create<TrafficState>()(
         } catch {
           set((s) => ({ trafficRoutineChecks: s.trafficRoutineChecks.filter((c) => c.id !== tempId) }), false, "traffic/routineCheck/add/rollback");
         }
-      },
-
-      updateInvestmentData: async (clientId, data, actor) => {
-        const prev = get().investmentData[clientId];
-        const updated: ClientInvestmentData = {
-          ...(prev ?? { clientId, monthlyBudget: 0, dailyBudget: 0, paymentMethod: "pix" as InvestmentPaymentMethod }),
-          ...data,
-          updatedBy: actor,
-          updatedAt: new Date().toISOString(),
-        };
-        const next = { ...get().investmentData, [clientId]: updated };
-        set({ investmentData: next }, false, "traffic/investment/update");
-        saveInvestmentDataToStorage(next);
-
-        // Persiste a VERBA no banco (ad_accounts.monthly_budget). Sem isto a verba ficava
-        // só no localStorage — não chegava nos alertas nem em outro dispositivo (fake save).
-        if (data.monthlyBudget !== undefined || data.dailyBudget !== undefined || data.paymentMethod !== undefined || "nextPaymentDate" in data) {
-          try {
-            const res = await authedFetch("/api/traffic/ad-accounts", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                clientId,
-                monthlyBudget: data.monthlyBudget,
-                dailyBudget: data.dailyBudget,
-                paymentMethod: data.paymentMethod,
-                // Data do próximo aporte vai pro banco: no localStorage ela sumia em outro dispositivo.
-                ...("nextPaymentDate" in data ? { nextPaymentDate: data.nextPaymentDate ?? null } : {}),
-              }),
-            });
-            if (!res.ok) {
-              const d = (await res.json().catch(() => ({}))) as { error?: string };
-              return { ok: false, error: d.error ?? `Falha ao salvar no banco (HTTP ${res.status})` };
-            }
-          } catch {
-            return { ok: false, error: "Sem conexão ao salvar no banco." };
-          }
-        }
-        return { ok: true };
       },
     })),
     { name: "TrafficStore" }

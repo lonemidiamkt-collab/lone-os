@@ -37,7 +37,7 @@ export default function SystemAlertBanner() {
         </p>
       </div>
       <Link
-        href="/integrations"
+        href="/conexao-meta"
         className="flex items-center gap-1 text-xs text-destructive hover:text-destructive font-medium shrink-0 transition-colors"
       >
         Renovar token

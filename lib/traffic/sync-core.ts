@@ -32,6 +32,8 @@ import {
 import { fetchActiveCampaignCount } from "@/lib/meta/insights-server";
 import { toBRTDateStr } from "@/lib/meta/timezone";
 import { sendGroupText } from "@/lib/whatsapp/evolution";
+import { carregarVistos } from "@/lib/traffic/hoje/vistos";
+import { estaVisto } from "@/lib/traffic/hoje/visto";
 
 // ── Config de alerta (agency_settings) ───────────────────────
 
@@ -365,11 +367,16 @@ export async function alertasPendentes(
   const today = toBRTDateStr(new Date(now)); // dia de São Paulo — UTC virava o dia às 21h
   const vistos = new Set<string>();
   const out: AlertaSaldo[] = [];
+  // "Visto" no Hoje do Tráfego (traffic_alert_acks): quem marcou já está olhando — não avisa de novo
+  // por 24h, a menos que piore (atenção → crítico). Regra em lib/traffic/hoje/visto.ts; sem a
+  // tabela, ninguém está visto e tudo sai como antes.
+  const { mapa: vistosNoPainel } = await carregarVistos();
 
   for (const snap of snapshots) {
     const sev = snap.alert.severity;
     if (sev !== "critical" && sev !== "warning") continue;
     if (!snap.adAccountId) continue;
+    if (estaVisto(vistosNoPainel, snap.clientId, "saldo", sev, new Date(now))) continue;
 
     const cycleKey = `${snap.metaAccountId}|${sev}|${today}`;
     if (vistos.has(cycleKey)) continue; // mesma conta em dois cadastros: um aviso só

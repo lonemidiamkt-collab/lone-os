@@ -9,10 +9,8 @@ export async function GET(req: NextRequest) {
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [trafficReports, trafficRoutineChecks] = await Promise.all([
-    db.fetchTrafficReports(),
-    db.fetchTrafficRoutineChecks(),
-  ]);
+  // Só a rotina: os Relatórios Mensais manuais saíram (Leva 1) — o mensal é automático.
+  const trafficRoutineChecks = await db.fetchTrafficRoutineChecks();
 
-  return NextResponse.json({ trafficReports, trafficRoutineChecks });
+  return NextResponse.json({ trafficRoutineChecks });
 }

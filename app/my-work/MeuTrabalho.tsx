@@ -42,6 +42,8 @@ export default function MeuTrabalho() {
 
   const vista = lerVista(params?.get("view") ?? null);
   const acao = params?.get("acao") ?? null;
+  // ?area=trafego: Tarefas já abre filtrada (atalho "Tarefas do tráfego" do /traffic).
+  const area = params?.get("area") ?? null;
 
   // Vista já aberta fica montada (escondida): voltar pra ela não refaz a busca de reuniões nem perde
   // o mês que estava na agenda.
@@ -103,7 +105,11 @@ export default function MeuTrabalho() {
         </div>
 
         {montada("hoje") && <div role="tabpanel" hidden={vista !== "hoje"}><Hoje /></div>}
-        {montada("tarefas") && <div role="tabpanel" hidden={vista !== "tarefas"}><Tarefas /></div>}
+        {montada("tarefas") && (
+          <div role="tabpanel" hidden={vista !== "tarefas"}>
+            <Tarefas area={area} onLimparArea={() => router.replace(`${pathname}?view=tarefas`, { scroll: false })} />
+          </div>
+        )}
         {montada("agenda") && <div role="tabpanel" hidden={vista !== "agenda"}><Agenda embutido /></div>}
       </div>
     </div>

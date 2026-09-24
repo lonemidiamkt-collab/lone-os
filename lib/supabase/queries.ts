@@ -26,7 +26,7 @@ import type {
   Client, Task, ContentCard, DesignRequest, AppNotification,
   TimelineEntry, ChatMessage, GlobalChatMessage, OnboardingItem,
   MoodEntry, MoodType, CreativeAsset, SocialProofEntry, CrisisNote,
-  Notice, QuinzReport, ClientAccess, TrafficMonthlyReport,
+  Notice, QuinzReport, ClientAccess,
   TrafficRoutineCheck, SocialMonthlyReport, ContentApproval,
   Role, CardAttachment, CsClientRule, CrmLead, CrmEstagio, CrmLeadActivity, CrmAtividadeTipo, CrmMeta,
 } from "@/lib/types";
@@ -1210,52 +1210,6 @@ export async function upsertCrmMeta(mes: string, metaValor: number | null, metaL
     .select("*").single();
   if (error) { console.error("[DB] upsertCrmMeta falhou:", error.message); throw new Error(error.message); }
   return snakeToCrmMeta(data);
-}
-
-// ═══════════════════════════════════════════════════════════
-// TRAFFIC REPORTS
-// ═══════════════════════════════════════════════════════════
-
-export async function fetchTrafficReports(): Promise<TrafficMonthlyReport[]> {
-  const { data, error } = await db.from("traffic_reports").select("*").order("created_at", { ascending: false });
-  if (error) { console.error("[DB] fetchTrafficReports:", error); return []; }
-  return (data ?? []).map((row: Record<string, unknown>) => ({
-    id: row.id as string,
-    clientId: row.client_id as string,
-    clientName: row.client_name as string,
-    month: row.month as string,
-    createdBy: row.created_by as string,
-    createdAt: (row.created_at as string) ?? "",
-    messages: (row.messages as number) ?? 0,
-    messageCost: Number(row.message_cost ?? 0),
-    impressions: (row.impressions as number) ?? 0,
-    observations: (row.observations as string) ?? undefined,
-  }));
-}
-
-export async function insertTrafficReport(report: Omit<TrafficMonthlyReport, "id" | "createdAt">): Promise<void> {
-  const { error } = await db.from("traffic_reports").insert({
-    client_id: report.clientId,
-    client_name: report.clientName,
-    month: report.month,
-    created_by: report.createdBy,
-    messages: report.messages,
-    message_cost: report.messageCost,
-    impressions: report.impressions,
-    observations: report.observations,
-  });
-  if (error) console.error("[DB] insertTrafficReport:", error);
-}
-
-export async function updateTrafficReportDb(id: string, updates: Partial<TrafficMonthlyReport>): Promise<void> {
-  const row: Record<string, unknown> = {};
-  if (updates.messages !== undefined) row.messages = updates.messages;
-  if (updates.messageCost !== undefined) row.message_cost = updates.messageCost;
-  if (updates.impressions !== undefined) row.impressions = updates.impressions;
-  if (updates.observations !== undefined) row.observations = updates.observations;
-  if (Object.keys(row).length === 0) return;
-  const { error } = await db.from("traffic_reports").update(row).eq("id", id);
-  if (error) console.error("[DB] updateTrafficReport:", error);
 }
 
 // ═══════════════════════════════════════════════════════════

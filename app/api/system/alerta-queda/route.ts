@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { carregarVistos } from "@/lib/traffic/hoje/vistos";
+import { estaVisto, nivelDaAnomalia } from "@/lib/traffic/hoje/visto";
 
 // POST /api/system/alerta-queda — avisa o time quando o resultado de um cliente cai.
 //
@@ -36,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   // Últimas 24h. Alerta de anteontem já não é "antes do cliente perceber".
   const desde = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const { data: alertas, error } = await supabaseAdmin
+  const { data: lidos, error } = await supabaseAdmin
     .from("anomaly_alerts")
     .select("id, client_id, metric, severity, percent_change, current_value, baseline_value, metric_date")
     .is("notified_at", null).is("acknowledged_at", null)
@@ -45,7 +47,12 @@ export async function POST(req: NextRequest) {
     .order("detected_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: `leitura falhou: ${error.message}` }, { status: 500 });
-  if (!alertas?.length) return NextResponse.json({ ok: true, alertas: 0, clientes: 0, enviado: false });
+  // 4ª trava (Leva 4): queda que alguém marcou como "visto" no Hoje/Defesa Ativa não sai no grupo por
+  // 24h, a menos que piore. Não marca notified_at — se o visto vencer ainda dentro da janela, avisa.
+  const { mapa: vistos } = await carregarVistos();
+  const alertas = (lidos ?? []).filter((a) =>
+    !estaVisto(vistos, a.client_id as string, "entrega", nivelDaAnomalia(a.severity as string)));
+  if (!alertas.length) return NextResponse.json({ ok: true, alertas: 0, clientes: 0, enviado: false, vistos: (lidos?.length ?? 0) - alertas.length });
 
   // Nomes: um alerta com UUID no lugar do nome do cliente não serve pra ninguém agir.
   const ids = [...new Set(alertas.map((a) => a.client_id as string))];

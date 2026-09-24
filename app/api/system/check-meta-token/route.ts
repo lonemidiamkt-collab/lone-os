@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       : `expira em ${days} dia${days === 1 ? "" : "s"}`;
 
     const title = `Token Meta ${expiresLabel}`;
-    const body  = `O token de integração com o Meta Ads ${expiresLabel}. Acesse /integrations para renovar antes que as sincronizações parem.`;
+    const body  = `O token de integração com o Meta Ads ${expiresLabel}. Renove em Sistema › Conexão Meta (/conexao-meta) antes que as sincronizações parem.`;
 
     // 4. Criar notificação (se não existir hoje)
     if (!alreadyNotified) {
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
         subject:      `[Lone OS] ⚠️ Token Meta ${expiresLabel}`,
         html: `<p>Olá,</p>
                <p>O token de integração com o Meta Ads <strong>${expiresLabel}</strong>.</p>
-               <p>Acesse <a href="https://painel.lonemidia.com/integrations">painel.lonemidia.com/integrations</a> para renovar.</p>
+               <p>Renove em Sistema › Conexão Meta: <a href="https://painel.lonemidia.com/conexao-meta">painel.lonemidia.com/conexao-meta</a>.</p>
                <p>Se o token expirar, todas as sincronizações de saldo e relatórios de tráfego pararão de funcionar.</p>`,
         templateName: "meta-token-alert",
         toName:       "Roberto Lino",

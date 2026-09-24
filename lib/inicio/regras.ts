@@ -545,7 +545,7 @@ export function regraIntegracao(d: Dados, ctx: Contexto): ItemInterno[] {
     problema: "integracao", area: "sistema", cliente: null, chave: "sistema:meta-token", sujeito: "Integração Meta",
     severidade: "critical", titulo: "Token da Meta expirando",
     motivo: "Sem renovar, a leitura de saldo e os relatórios de tráfego param",
-    acao: { label: "Renovar token", href: "/integrations" }, donos: [], papeis: [], peso: 100,
+    acao: { label: "Renovar token", href: "/conexao-meta" }, donos: [], papeis: [], peso: 100,
   })];
 }
 

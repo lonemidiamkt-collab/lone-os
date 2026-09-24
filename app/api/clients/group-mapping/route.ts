@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   const clients = await selectActiveMetaClients();
   const configs = await getClientAlertConfigs();
   const settings = await getAlertSettings();
-  // Verba mensal por conta (Controle de Investimento) — p/ sincronizar o limite na tela.
+  // Verba mensal por conta (Tráfego › Contas & Verba) — p/ sincronizar o limite na tela.
   const { data: accts } = await supabaseAdmin.from("ad_accounts").select("meta_account_id, monthly_budget");
   const budgetByAccount = new Map(
     (accts ?? []).map((a: { meta_account_id: string; monthly_budget: number | null }) => [a.meta_account_id, a.monthly_budget] as const),

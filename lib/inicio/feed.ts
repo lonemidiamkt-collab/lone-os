@@ -67,10 +67,16 @@ export function feedPara(itens: ItemInterno[], v: Viewer): ItemInterno[] {
   return ordenar(deduplicar(itens).filter((i) => visivelPara(i, v) && !fora.has(i.problema)));
 }
 
-/** Tudo o que a rota devolve, a partir dos dados já lidos. */
-export function montarInicio(d: Dados, v: Viewer, agora: Date, falhas: string[] = []): RespostaInicio {
+/**
+ * Tudo o que a rota devolve, a partir dos dados já lidos. `ocultar` tira itens antes de deduplicar —
+ * é por onde entra o "visto" do Tráfego (lib/traffic/hoje/visto.ts): alerta visto no Hoje não repete
+ * aqui por 24h, a menos que piore.
+ */
+export function montarInicio(
+  d: Dados, v: Viewer, agora: Date, falhas: string[] = [], ocultar?: (i: ItemInterno) => boolean,
+): RespostaInicio {
   const ctx = montarContexto(d, agora);
-  const meus = feedPara(gerarItens(d, ctx), v);
+  const meus = feedPara(ocultar ? gerarItens(d, ctx).filter((i) => !ocultar(i)) : gerarItens(d, ctx), v);
   return {
     papel: v.papel,
     nome: v.nome,

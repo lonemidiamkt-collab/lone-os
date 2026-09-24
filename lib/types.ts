@@ -469,22 +469,6 @@ export interface CrisisNote {
   createdAt: string;
 }
 
-// --- Traffic Monthly Reports ---
-
-export interface TrafficMonthlyReport {
-  id: string;
-  clientId: string;
-  clientName: string;
-  month: string; // "2026-01", "2026-02", etc.
-  createdBy: string;
-  createdAt: string;
-  // Core metrics
-  messages: number;        // mensagens / leads
-  messageCost: number;     // custo por mensagem/lead
-  impressions: number;     // visualizações/impressões
-  observations?: string;   // notas do gestor
-}
-
 // --- Traffic Routine Checks ---
 
 export interface TrafficRoutineCheck {
@@ -586,20 +570,6 @@ export interface AppNotification {
   cardId?: string; // se a notificação é sobre um card, o clique abre /social?card=<cardId>
   read: boolean;
   createdAt: string; // ISO
-}
-
-// --- Client Investment Control ---
-
-export type InvestmentPaymentMethod = "pix" | "boleto" | "cartao";
-
-export interface ClientInvestmentData {
-  clientId: string;
-  monthlyBudget: number;       // Investimento mensal total (R$)
-  dailyBudget: number;         // Valor diário calculado (R$)
-  paymentMethod: InvestmentPaymentMethod;
-  nextPaymentDate?: string;    // "YYYY-MM-DD" — relevante para PIX/Boleto
-  updatedBy?: string;
-  updatedAt?: string;
 }
 
 // --- Ad Analytics (Meta Ads mock — Phase 1) ---

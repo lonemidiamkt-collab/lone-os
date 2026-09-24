@@ -11,6 +11,8 @@ import { loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { csSendGroupDocument } from "@/lib/cs/notify";
 import { responsavelDeTrafego } from "@/lib/cs/mencao";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { carregarVistos } from "@/lib/traffic/hoje/vistos";
+import { filtrarDiagnosticoVisto } from "@/lib/traffic/hoje/visto";
 
 // POST /api/system/traffic-diagnostico — o diagnóstico diário das contas, em PDF, no grupo de tráfego.
 //
@@ -26,7 +28,11 @@ export async function POST(req: NextRequest) {
   const dry = req.nextUrl.searchParams.get("dry") !== null;
   const baixar = req.nextUrl.searchParams.get("baixar") === "1";
 
-  const d = await montarDiagnostico();
+  // O que alguém já marcou como "visto" no Hoje/Defesa Ativa sai do PDF do dia (vale 24h, volta se
+  // piorar — lib/traffic/hoje/visto.ts). O texto de cada item não muda; só some o item visto.
+  const agora = new Date();
+  const { mapa: vistos } = await carregarVistos();
+  const d = filtrarDiagnosticoVisto(await montarDiagnostico(agora), vistos, agora);
 
   if (dry) {
     return NextResponse.json({

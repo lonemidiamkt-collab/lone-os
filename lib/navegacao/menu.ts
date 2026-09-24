@@ -108,26 +108,29 @@ export const MENU: readonly GrupoMenu[] = [
   {
     id: "trafego", rotulo: "Tráfego", icone: TrendingUp,
     itens: [
-      { id: "trafego-pago", rotulo: "Tráfego Pago", icone: TrendingUp, href: "/traffic", papeis: TRAFEGO,
-        descricao: "Rotina, status dos clientes, anúncios e investimento", termos: ["meta ads", "campanhas"],
+      // Leva 4: a Rotina Diária virou "Hoje" (o cockpit do gestor) e a Defesa Ativa virou aba daqui —
+      // /defesa redireciona para /traffic?aba=defesa e continua acendendo este item.
+      { id: "trafego-pago", rotulo: "Tráfego Pago", icone: TrendingUp, href: "/traffic", papeis: TRAFEGO, tambemEm: ["/defesa"],
+        descricao: "Hoje, alertas, status dos clientes e anúncios", termos: ["meta ads", "campanhas"],
         secoes: [
           { titulo: "Tráfego Pago", itens: [
-            { id: "trafego-rotina", rotulo: "Rotina Diária", icone: ClipboardCheck, href: "/traffic", aba: "rotina", badge: "trafficRotina" },
+            { id: "trafego-hoje", rotulo: "Hoje", icone: Sun, href: "/traffic", aba: "hoje",
+              termos: ["rotina", "rotina diária", "cockpit", "alertas", "saldo"] },
+            { id: "trafego-defesa", rotulo: "Defesa Ativa", icone: ShieldAlert, href: "/traffic", aba: "defesa",
+              termos: ["anomalia", "alertas", "queda"] },
             { id: "trafego-status", rotulo: "Status dos Clientes", icone: Users2, href: "/traffic", aba: "status" },
             { id: "trafego-anuncios", rotulo: "Anúncios Meta", icone: Megaphone, href: "/traffic", aba: "anuncios" },
-            { id: "trafego-investimento", rotulo: "Investimento", icone: Wallet, href: "/traffic", aba: "investimento" },
           ] },
         ] },
-      { id: "trafego-saldos", rotulo: "Saldos, Verba & Alertas", icone: Activity, href: "/traffic/budgets", papeis: TRAFEGO,
-        descricao: "Saldo das contas de anúncio e alertas de verba", termos: ["saldo", "budget"] },
+      // Leva 4: "Saldos, Verba & Alertas" + a aba Investimento viraram uma tela só (saldo, limite e ritmo
+      // do mês). A verba se edita só aqui. O id fica o mesmo (testes, ⌘K).
+      { id: "trafego-saldos", rotulo: "Contas & Verba", icone: Wallet, href: "/traffic/budgets", papeis: TRAFEGO,
+        descricao: "Saldo, limite e ritmo do mês de cada conta; verba e alertas",
+        termos: ["saldo", "saldos", "budget", "verba", "investimento", "ritmo", "aporte", "alertas de verba"] },
       { id: "trafego-criativos", rotulo: "Saúde dos Criativos", icone: HeartPulse, href: "/traffic/criativos", papeis: TRAFEGO,
         descricao: "Criativos cansados e o que replicar", termos: ["criativo", "fadiga"] },
-      { id: "defesa", rotulo: "Defesa Ativa", icone: ShieldAlert, href: "/defesa", papeis: TRAFEGO,
-        descricao: "Anomalias em Meta Ads", termos: ["anomalia"] },
       { id: "grupos-clientes", rotulo: "Grupos dos Clientes", icone: MessageCircle, href: "/settings/grupos", papeis: TRAFEGO,
         descricao: "Grupos de WhatsApp e envio de relatórios", termos: ["whatsapp"] },
-      { id: "conexao-meta", rotulo: "Conexão Meta", icone: Plug, href: "/integrations", papeis: TRAFEGO,
-        descricao: "Token e contas de anúncio", termos: ["integração", "token", "facebook"] },
     ],
   },
   {
@@ -250,6 +253,12 @@ export const MENU: readonly GrupoMenu[] = [
     itens: [
       { id: "automacoes", rotulo: "Central de Automações", icone: Zap, href: "/automations", papeis: GESTAO,
         descricao: "Rotinas agendadas do servidor", termos: ["automações", "cron"] },
+      // Leva 4: a única integração real (as outras 10 de /integrations eram simuladas). Saiu do Tráfego
+      // para cá; /integrations redireciona e continua acendendo este item.
+      { id: "conexao-meta", rotulo: "Conexão Meta", icone: Plug, href: "/conexao-meta", papeis: TRAFEGO,
+        tambemEm: ["/integrations"],
+        descricao: "Token da Meta que alimenta saldos, anúncios e relatórios",
+        termos: ["integração", "integrações", "token", "facebook", "meta ads", "reconectar"] },
       { id: "sobre", rotulo: "Sobre o Sistema", icone: Info, href: "/sobre", papeis: OPERACAO,
         descricao: "Manual vivo do Lone OS", termos: ["ajuda", "documentação"] },
       // Já abria pra todo papel pelo ícone de engrenagem da barra do topo.

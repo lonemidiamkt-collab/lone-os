@@ -13,16 +13,6 @@ export async function POST(req: NextRequest) {
   const { action } = body;
 
   switch (action) {
-    case "insertTrafficReport": {
-      await db.insertTrafficReport(body.report);
-      const trafficReports = await db.fetchTrafficReports();
-      return NextResponse.json({ trafficReports });
-    }
-    case "updateTrafficReport": {
-      await db.updateTrafficReportDb(body.id, body.updates);
-      const trafficReports = await db.fetchTrafficReports();
-      return NextResponse.json({ trafficReports });
-    }
     case "insertTrafficCheck": {
       await db.insertTrafficRoutineCheck(body.check);
       const trafficRoutineChecks = await db.fetchTrafficRoutineChecks();
