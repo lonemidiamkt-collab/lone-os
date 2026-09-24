@@ -444,8 +444,9 @@ export default function Sidebar() {
           ))}
         </nav>
 
-        {/* Bottom controls */}
-        <div className="flex flex-col items-center gap-1 shrink-0">
+        {/* Controles da conta: no computador moram na barra do topo (TopActions); aqui só no mobile,
+            onde a gaveta lateral é o único lugar deles. */}
+        <div className="flex flex-col items-center gap-1 shrink-0 lg:hidden">
           <ThemeToggle variant={expanded ? "pill" : "icon"} className={expanded ? "mb-1" : undefined} />
 
           <button

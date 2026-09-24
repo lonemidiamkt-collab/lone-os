@@ -1,5 +1,6 @@
 "use client";
 
+import { ABRIR_BUSCA } from "@/components/TopActions";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useClientsStore } from "@/stores/useClientsStore";
@@ -92,8 +93,10 @@ export default function GlobalSearch() {
         setOpen(false);
       }
     };
+    const abrir = () => setOpen(true);
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener(ABRIR_BUSCA, abrir);
+    return () => { window.removeEventListener("keydown", handler); window.removeEventListener(ABRIR_BUSCA, abrir); };
   }, []);
 
   // Focus input when opened

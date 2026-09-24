@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ABRIR_NOTIFICACOES } from "@/components/TopActions";
 import { useRouter } from "next/navigation";
 import { Bell, X, CheckCheck, AlertTriangle, Activity, FileText, Settings, Clock, Trash2 } from "lucide-react";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
@@ -37,13 +38,20 @@ export function destinoDaNotificacao(n: { title?: string; cardId?: string; clien
   return null;
 }
 
-export default function NotificationCenter() {
+export default function NotificationCenter({ semBotao = false }: { semBotao?: boolean }) {
   const notifications = useNotificationsStore((s) => s.notifications);
   const markNotificationRead = useNotificationsStore((s) => s.markRead);
   const markAllNotificationsRead = useNotificationsStore((s) => s.markAllRead);
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const router = useRouter();
+
+  // A barra de ações do topo abre a gaveta por evento (o sino mora nela agora).
+  useEffect(() => {
+    const abrir = () => setOpen((o) => !o);
+    window.addEventListener(ABRIR_NOTIFICACOES, abrir);
+    return () => window.removeEventListener(ABRIR_NOTIFICACOES, abrir);
+  }, []);
 
   // Clique na notificação: marca como lida e ABRE o alvo — card direto no board (/social?card=)
   // ou a ficha do cliente. Sem alvo, só marca como lida.
@@ -59,10 +67,10 @@ export default function NotificationCenter() {
   return (
     <>
       {/* Bell trigger */}
-      <button
+      {!semBotao && <button
         onClick={() => setOpen(!open)}
         className="relative w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card/[0.04] transition-all"
-        title="Notificacoes"
+        title="Notificações"
       >
         <Bell size={17} strokeWidth={1.8} />
         {unreadCount > 0 && (
@@ -70,7 +78,7 @@ export default function NotificationCenter() {
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
-      </button>
+      </button>}
 
       {/* Drawer */}
       {open && (
