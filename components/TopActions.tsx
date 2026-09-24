@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { create } from "zustand";
-import { Bell, ChevronDown, Info, LogOut, Moon, Plus, Search, Settings, Sun } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Moon, Plus, Search, Settings, Sun } from "lucide-react";
 import { ExpandableTabs, type ExpandableItem } from "@/components/ui/expandable-tabs";
 import { FotoPessoa } from "@/components/ui/FotoPessoa";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
-  DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger,
+  DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useRole } from "@/lib/context/RoleContext";
 import { useTheme } from "@/lib/context/ThemeContext";
@@ -61,6 +61,8 @@ export default function TopActions({ flutuante = false }: { flutuante?: boolean 
       ? [{ key: "novo", label: "Novo conteúdo", icon: Plus, href: "/social?action=new-content" }]
       : []),
     { key: "notificacoes", label: "Notificações", icon: Bell, badge: naoLidas, onClick: () => window.dispatchEvent(new Event(ABRIR_NOTIFICACOES)) },
+    { type: "separator", key: "sep" },
+    { key: "tema", label: theme === "dark" ? "Modo claro" : "Modo escuro", icon: theme === "dark" ? Sun : Moon, onClick: toggleTheme },
   ];
 
   return (
@@ -79,31 +81,23 @@ export default function TopActions({ flutuante = false }: { flutuante?: boolean 
           </span>
           <ChevronDown size={14} className="text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" sideOffset={8} className="w-64">
-          <DropdownMenuLabel className="flex items-center gap-3 py-2 font-normal">
-            <FotoPessoa perfil={currentProfile} size={40} />
-            <span className="min-w-0 leading-tight">
-              <span className="block truncate text-sm font-medium text-foreground">{currentProfile.name}</span>
-              <span className="block text-xs text-muted-foreground">{roleLabel}</span>
-              <span className="block truncate text-xs text-muted-foreground">{currentProfile.email}</span>
-            </span>
+        <DropdownMenuContent align="end" sideOffset={8} className="w-72 p-1.5">
+          <DropdownMenuLabel className="p-0 font-normal">
+            <div className="flex items-center gap-3 rounded-md bg-muted/60 p-3">
+              <FotoPessoa perfil={currentProfile} size={44} />
+              <div className="min-w-0 space-y-1">
+                <p className="truncate text-sm font-semibold leading-none text-foreground">{currentProfile.name}</p>
+                <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+                  {roleLabel}
+                </span>
+                <p className="truncate text-xs text-muted-foreground">{currentProfile.email}</p>
+              </div>
+            </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild className={pathname === "/settings" ? "bg-accent" : undefined}>
             <Link href="/settings"><Settings size={15} className="mr-2" />Perfil e configurações</Link>
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); toggleTheme(); }}>
-            {theme === "dark" ? <Sun size={15} className="mr-2" /> : <Moon size={15} className="mr-2" />}
-            {theme === "dark" ? "Modo claro" : "Modo escuro"}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event(ABRIR_BUSCA))}>
-            <Search size={15} className="mr-2" />Buscar
-            <DropdownMenuShortcut>{atalhoBusca}</DropdownMenuShortcut>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href="/sobre"><Info size={15} className="mr-2" />Novidades e manual</Link>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
           <DropdownMenuItem
             className="text-destructive focus:bg-destructive/10 focus:text-destructive"
             onSelect={() => { if (window.confirm("Sair da conta?")) logout(); }}
