@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   const { data: clientes, error } = await supabaseAdmin
     .from("clients")
     .select("id, name, nome_fantasia, status, assigned_social, assigned_traffic, current_health_score, current_health_level, last_client_msg_at, agente_ativo, active, churned_at, paused_at, paused_until")
-    .neq("status", "churned").is("draft_status", null)
+    .is("draft_status", null)
     .or("active.is.null,active.eq.true");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
