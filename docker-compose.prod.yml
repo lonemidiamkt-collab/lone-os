@@ -15,7 +15,9 @@ services:
         SENTRY_PROJECT: lone-os-portal
     restart: always
     ports:
-      - "3000:3000"
+      # Só o nginx do próprio servidor acessa (127.0.0.1). Publicado em 0.0.0.0, o Docker passava por cima
+      # do ufw e o painel respondia direto em http://IP:3000, sem Cloudflare nem HTTPS (achado 25/09).
+      - "127.0.0.1:3000:3000"
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_SUPABASE_URL: https://painel.lonemidia.com/supabase
