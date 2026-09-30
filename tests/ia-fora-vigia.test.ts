@@ -159,6 +159,29 @@ describe("aviso do vigia", () => {
     expect(r.marcar).toHaveLength(7);
   });
 
+  it("saldo recarregado depois da falha: a rotina não é avisada — o erro de 30/09 às 12h05", () => {
+    // As rotinas falharam às 7h30 (l.ultima.em), o saldo voltou às 11h49. Pedir recarga às 12h05
+    // era mandar fazer o que já tinha sido feito.
+    const r = avisoDoVigia({ ...base, ia: null, ultimoOkIa: "2026-09-30T14:49:00Z", ultimoAlerta: new Map() });
+    expect(r).toEqual({ texto: null, marcar: [] });
+  });
+
+  it("IA respondeu ANTES da falha da rotina: a causa é de agora, avisa normalmente", () => {
+    const r = avisoDoVigia({ ...base, ia: null, ultimoOkIa: "2026-09-30T09:00:00Z", ultimoAlerta: new Map() });
+    expect(r.texto).toContain("OpenAI sem crédito");
+  });
+
+  it("a volta da IA não esconde problema que não é da OpenAI", () => {
+    const outra = linha("cs-datas", "Radar de datas comemorativas");
+    const r = avisoDoVigia({
+      ...base, comProblema: [...SEIS, outra], ia: null, ultimoOkIa: "2026-09-30T14:49:00Z", ultimoAlerta: new Map(),
+      resumos: { ...RESUMOS, "cs-datas": '{"ok":false,"error":"timeout depois de 180 s"}' },
+    });
+    expect(r.texto).toContain("Radar de datas comemorativas");
+    expect(r.texto).not.toContain("OpenAI sem crédito");
+    expect(r.marcar).toEqual(["cs-datas"]);
+  });
+
   it("a IA caiu e nenhuma rotina falhou ainda: avisa só da IA — é o caso do Loninho", () => {
     const r = avisoDoVigia({ ...base, comProblema: [], ultimoAlerta: new Map() });
     expect(r.texto).toContain("OpenAI sem crédito");

@@ -242,6 +242,8 @@ export function avisoDoVigia(p: {
   resumos: Record<string, string | null>;
   ultimoAlerta: ReadonlyMap<string, string | null>;
   ia: IaFora | null;
+  /** Última chamada de IA que deu certo (llm_calls). Ver a regra de "a causa já passou" abaixo. */
+  ultimoOkIa?: string | null;
   agora: Date;
   repetirAposMs: number;
   urlCentral?: string;
@@ -251,10 +253,19 @@ export function avisoDoVigia(p: {
     return !t || p.agora.getTime() - new Date(t).getTime() >= p.repetirAposMs;
   };
 
+  // A CAUSA JÁ PASSOU (30/09, 12h05): o saldo foi recarregado às 11h49 e, 16 min depois, o vigia
+  // mandou "OpenAI sem crédito — recarregar" — o último erro das rotinas ainda era o da manhã.
+  // Rotina que falhou por causa da OpenAI ANTES de a IA voltar a responder não é problema de agora:
+  // volta sozinha no próximo horário. Não entra e não é marcada — se falhar de novo, avisa.
+  const okIa = p.ultimoOkIa ? new Date(p.ultimoOkIa).getTime() : NaN;
+  const jaPassou = (l: LinhaPainel, c: CausaConhecida) =>
+    c.chave.startsWith("openai-") && !Number.isNaN(okIa) && !!l.ultima && okIa > new Date(l.ultima.em).getTime();
+
   const porCausa = new Map<ChaveCausa, LinhaPainel[]>();
   const soltas: LinhaPainel[] = [];
   for (const l of p.comProblema) {
     const c = causaDoJob(l, p.resumos);
+    if (c && jaPassou(l, c)) continue;
     if (c) porCausa.set(c.chave, [...(porCausa.get(c.chave) ?? []), l]);
     else soltas.push(l);
   }

@@ -19,22 +19,28 @@ const REPETIR_APOS_MS = 24 * 3600_000;
 // vigia também lê llm_calls: falhas acumuladas desde o último sucesso, com causa conhecida, viram o
 // primeiro bloco do aviso (chave `ia:<causa>` em automation_settings, mesmo intervalo de 24h).
 
-/** Falhas de IA desde o último sucesso, nos últimos 7 dias. Nunca derruba o vigia: erro = sem dado. */
-async function iaAgora(agora: Date): Promise<IaFora | null> {
+/**
+ * Falhas de IA desde o último sucesso, nos últimos 7 dias, e a hora desse último sucesso (é ela que
+ * diz se a falta de crédito de uma rotina já passou). Nunca derruba o vigia: erro = sem dado.
+ */
+async function iaAgora(agora: Date): Promise<{ ia: IaFora | null; ultimoOk: string | null }> {
+  let ultimoOk: string | null = null;
   try {
     const semana = new Date(agora.getTime() - 7 * 86400_000).toISOString();
     const { data: ok } = await supabaseAdmin.from("llm_calls").select("created_at")
       .eq("ok", true).gte("created_at", semana).order("created_at", { ascending: false }).limit(1).maybeSingle();
-    const desde = (ok?.created_at as string | undefined) ?? semana;
+    ultimoOk = (ok?.created_at as string | undefined) ?? null;
+    const desde = ultimoOk ?? semana;
     const { data: falhas, error } = await supabaseAdmin.from("llm_calls").select("origem, erro, created_at")
       .eq("ok", false).gt("created_at", desde).order("created_at", { ascending: true }).limit(5000);
-    if (error) { console.error("[automacoes/vigia] llm_calls:", error.message); return null; }
-    return iaFora((falhas ?? []) as FalhaIa[], agora);
+    if (error) { console.error("[automacoes/vigia] llm_calls:", error.message); return { ia: null, ultimoOk }; }
+    return { ia: iaFora((falhas ?? []) as FalhaIa[], agora), ultimoOk };
   } catch (e) {
     console.error("[automacoes/vigia] saúde da IA:", e);
-    return null;
+    return { ia: null, ultimoOk };
   }
 }
+
 export async function POST(req: NextRequest) {
   const denied = requireCron(req);
   if (denied) return denied;
@@ -48,7 +54,7 @@ export async function POST(req: NextRequest) {
   const ultimoAlerta = new Map(configs.map((c) => [c.job, c.ultimo_alerta_em]));
 
   const comProblema = linhas.filter((l) => l.saude === "falhou" || l.saude === "parado");
-  const ia = await iaAgora(agora);
+  const { ia, ultimoOk: ultimoOkIa } = await iaAgora(agora);
 
   // O resumo da última falha diz o que quebrou — e é dele que sai a causa que agrupa os jobs. Por
   // isso vale pra TODO job com falha, não só os que venceram as 24h: o grupo precisa estar inteiro.
@@ -62,7 +68,7 @@ export async function POST(req: NextRequest) {
 
   const base = (process.env.NEXT_PUBLIC_APP_URL || "https://painel.lonemidia.com").replace(/\/+$/, "");
   const { texto, marcar } = avisoDoVigia({
-    comProblema, resumos, ultimoAlerta, ia, agora, repetirAposMs: REPETIR_APOS_MS, urlCentral: `${base}/automations`,
+    comProblema, resumos, ultimoAlerta, ia, ultimoOkIa, agora, repetirAposMs: REPETIR_APOS_MS, urlCentral: `${base}/automations`,
   });
   const iaResumo = ia ? { causa: ia.causa.chave, desde: ia.desde, falhas: ia.falhas } : null;
   if (!texto) {
