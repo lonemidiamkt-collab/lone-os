@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizarNumero } from "@/lib/cs/mencao";
+import { normalizarNumero, mencoesUnicas } from "@/lib/cs/mencao";
 import { readFileSync } from "node:fs";
 
 // Roberto: "quando você marca arroba Thiago, não está funcionando direito". O código escrevia
@@ -38,5 +38,32 @@ describe("responsável de tráfego sai do cadastro, não do código", () => {
 
   it("deriva de assigned_traffic", () => {
     expect(readFileSync("lib/cs/mencao.ts", "utf8")).toContain("assigned_traffic");
+  });
+});
+
+
+// 30/09/2026: o Vigia de entrega falhou em 28/09 e 30/09 com "mentioned contains duplicate item".
+// MAX Contabilidade, Reformar Construção e Veterinária Regional pararam de gastar no mesmo dia, as
+// três do Julio — o número dele entrou três vezes e a Evolution recusou a mensagem INTEIRA. Nos
+// dias com uma conta só, o aviso saía. Três contas sem gasto e o grupo de tráfego sem saber.
+describe("menções sem repetição", () => {
+  const JULIO = "5522999990000@s.whatsapp.net";
+
+  it("o mesmo gestor em três contas vira uma menção só", () => {
+    expect(mencoesUnicas([JULIO, JULIO, JULIO])).toEqual([JULIO]);
+  });
+
+  it("mantém a ordem e as pessoas diferentes", () => {
+    const THIAGO = "5522988880000@s.whatsapp.net";
+    expect(mencoesUnicas([JULIO, THIAGO, JULIO])).toEqual([JULIO, THIAGO]);
+  });
+
+  it("número com e sem sufixo do WhatsApp é a mesma pessoa", () => {
+    expect(mencoesUnicas([JULIO, "5522999990000"])).toEqual([JULIO]);
+  });
+
+  it("vazio, nulo e espaço não viram menção", () => {
+    expect(mencoesUnicas(["", null, undefined, "  "])).toEqual([]);
+    expect(mencoesUnicas(undefined)).toEqual([]);
   });
 });

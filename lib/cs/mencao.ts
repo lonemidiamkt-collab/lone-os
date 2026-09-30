@@ -21,6 +21,10 @@ export interface Mencao {
 
 const so = (s: string) => s.replace(/\D/g, "");
 
+// Sem repetição na lista `mentioned` — mora num arquivo sem dependências porque o envio
+// (lib/cs/notify.ts) não importa nada estático.
+export { mencoesUnicas } from "./mencoes-unicas";
+
 /** Normaliza para o formato que o WhatsApp usa: DDI+DDD+número, só dígitos. */
 export function normalizarNumero(bruto?: string | null): string | null {
   const d = so(bruto ?? "");

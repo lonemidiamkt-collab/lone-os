@@ -2,6 +2,8 @@
 // EVOLUTION_*_NEW). Separado do lib/whatsapp/evolution.ts, que usa o número do gestor.
 // NUNCA lança — um WhatsApp fora do ar não pode derrubar o webhook.
 
+import { mencoesUnicas } from "./mencoes-unicas";
+
 /** De onde saiu a mensagem — vira `origem` no cs_outbound. Opcional pra não quebrar quem já chama. */
 export interface CsSendMeta {
   origem?: string;
@@ -51,7 +53,8 @@ export async function csSendGroupText(
   try {
     const payload: Record<string, unknown> = { number: jid, text };
     if (quotedMsgId) payload.quoted = { key: { id: quotedMsgId } };
-    if (mencionados?.length) payload.mentioned = mencionados;
+    const unicos = mencoesUnicas(mencionados);
+    if (unicos.length) payload.mentioned = unicos;
     const res = await fetch(`${baseUrl}/message/sendText/${encodeURIComponent(instance)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: apiKey },
@@ -159,7 +162,7 @@ export async function csSendGroupDocument(
       body: JSON.stringify({
         number: jid, mediatype: "document", mimetype, media: base64, fileName,
         ...(caption ? { caption } : {}),
-        ...(mencionados?.length ? { mentioned: mencionados } : {}),
+        ...(mencoesUnicas(mencionados).length ? { mentioned: mencoesUnicas(mencionados) } : {}),
       }),
       signal: AbortSignal.timeout(60_000),
     });
