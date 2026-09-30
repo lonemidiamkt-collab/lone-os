@@ -601,7 +601,8 @@ const MODULES: Module[] = [
     context: "Onde o time de social produz, aprova e agenda conteúdo. Cada post passa por seis etapas — Pauta → Com o designer → Revisão interna → Com o cliente → Agendado → No ar — as mesmas em todas as telas (Leva 5b). Permite que Carlos e Thiago organizem o trabalho sem misturar com outros departamentos.",
     howItWorks: [
       "Em /social, a aba Produção é o quadro de produção — o MESMO do Designer — com três vistas: Meus (as seis etapas em colunas), Por cliente (cada cliente uma coluna) e Por designer (a fila de arte de cada um).",
-      "Filtro automático: cada social vê só os clientes da carteira dele.",
+      "Filtro automático: cada social vê só os clientes da carteira dele — e só os que CONTRATARAM social (Lone Growth, Assessoria Social, Design). Cliente só de tráfego nunca entra no quadro do social, mesmo que tenha um nome gravado (30/09: Dr. Júnior e JP Barbearia apareciam pro Carlos porque o serviço trocou e o social antigo ficou).",
+      "Trocou o serviço de um cliente para só Tráfego? O social media sai da carteira sozinho ao salvar — o formulário avisa quem sai, e o banco garante a regra em qualquer caminho de gravação. As listas de Gestor, Social e Designer têm a opção 'Nenhum' para tirar alguém na mão.",
       "Arrasta o card (ou escolhe a etapa no próprio card). Levar pra 'Com o designer' PEDE A ARTE — o pedido nasce junto, não é mais um registro à parte; voltar pra lá pede alteração (com o motivo); sair dela exige a arte entregue.",
       "A entrega do designer leva o card sozinha pra 'Revisão interna' — é ali que o social confere antes de mandar pro cliente.",
       "Depois de aprovado pelo cliente, vai pra 'Agendado' — indica que já está programado na ferramenta de agendamento.",

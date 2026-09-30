@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import type { Client } from "@/lib/types";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useRole } from "@/lib/context/RoleContext";
+import { temSocial as contratouSocial } from "@/lib/clients/servico";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -35,6 +36,9 @@ interface Props {
   client: Client;
   onClose: () => void;
 }
+
+/** O Select do Radix não aceita item com value="" — "Nenhum" usa um valor sentinela e vira "" ao gravar. */
+const NENHUM = "__nenhum__";
 
 export default function EditClientModal({ client, onClose }: Props) {
   const updateClientData = useClientsStore((s) => s.updateClient);
@@ -108,7 +112,12 @@ export default function EditClientModal({ client, onClose }: Props) {
   const temSocial = !!client.assignedSocial;
   const temDesigner = !!client.assignedDesigner;
   const needsTraffic = form.serviceType === "lone_growth" || form.serviceType === "assessoria_trafego" || temTraffic;
-  const needsSocial = form.serviceType === "lone_growth" || form.serviceType === "assessoria_social" || temSocial;
+  // SOCIAL SEGUE O CONTRATO, não quem já estava gravado (30/09). Trocar Lone Growth → só Tráfego
+  // deixava o social antigo na carteira pra sempre: o campo continuava aparecendo (porque tinha
+  // alguém) e não havia opção vazia. Era o Carlos vendo o Dr. Júnior e a JP no quadro dele. O banco
+  // também limpa (trg_social_so_com_servico) — aqui é pra tela dizer a verdade antes de salvar.
+  const needsSocial = contratouSocial({ service_type: form.serviceType });
+  const saiDoSocial = !needsSocial && temSocial ? client.assignedSocial : null;
   const needsDesigner = form.serviceType === "lone_growth" || form.serviceType === "assessoria_design"
     || form.serviceType === "assessoria_social"   // social sem designer não produz arte
     || temDesigner;
@@ -138,7 +147,8 @@ export default function EditClientModal({ client, onClose }: Props) {
         // `undefined` = não mexe. Só grava o que ESTAVA na tela — campo escondido não pode virar
         // instrução de apagar. Para tirar alguém da carteira, existe a opção vazia no próprio select.
         assignedTraffic: needsTraffic ? form.assignedTraffic : undefined,
-        assignedSocial: needsSocial ? form.assignedSocial : undefined,
+        // Sem social no contrato, grava vazio: aqui não é "campo escondido", é o serviço decidindo.
+        assignedSocial: needsSocial ? form.assignedSocial : (temSocial ? "" : undefined),
         assignedDesigner: needsDesigner ? form.assignedDesigner : undefined,
         metaAdAccountId: form.metaAdAccountId
           ? (form.metaAdAccountId.startsWith("act_") ? form.metaAdAccountId : `act_${form.metaAdAccountId}`)
@@ -304,27 +314,42 @@ export default function EditClientModal({ client, onClose }: Props) {
               {needsTraffic && (
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-1"><Users size={10} /> Gestor de Tráfego</Label>
-                  <Select value={form.assignedTraffic} onValueChange={(v) => set("assignedTraffic", v)}>
+                  <Select value={form.assignedTraffic || NENHUM} onValueChange={(v) => set("assignedTraffic", v === NENHUM ? "" : v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{team.forField("assignedTraffic").map((m) => <SelectItem key={m.id} value={m.name}>{m.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>
+                      <SelectItem value={NENHUM}>Nenhum</SelectItem>
+                      {team.forField("assignedTraffic").map((m) => <SelectItem key={m.id} value={m.name}>{m.name}</SelectItem>)}
+                    </SelectContent>
                   </Select>
                 </div>
               )}
               {needsSocial && (
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-1"><Users size={10} /> Social Media</Label>
-                  <Select value={form.assignedSocial} onValueChange={(v) => set("assignedSocial", v)}>
+                  <Select value={form.assignedSocial || NENHUM} onValueChange={(v) => set("assignedSocial", v === NENHUM ? "" : v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{team.forField("assignedSocial").map((m) => <SelectItem key={m.id} value={m.name}>{m.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>
+                      <SelectItem value={NENHUM}>Nenhum</SelectItem>
+                      {team.forField("assignedSocial").map((m) => <SelectItem key={m.id} value={m.name}>{m.name}</SelectItem>)}
+                    </SelectContent>
                   </Select>
                 </div>
+              )}
+              {saiDoSocial && (
+                <p className="text-xs text-muted-foreground rounded-lg border border-border px-3 py-2">
+                  Este serviço não inclui social media — ao salvar, <span className="text-foreground">{saiDoSocial}</span> deixa
+                  de ver este cliente no quadro do social.
+                </p>
               )}
               {needsDesigner && (
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-1"><Users size={10} /> Designer</Label>
-                  <Select value={form.assignedDesigner} onValueChange={(v) => set("assignedDesigner", v)}>
+                  <Select value={form.assignedDesigner || NENHUM} onValueChange={(v) => set("assignedDesigner", v === NENHUM ? "" : v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{team.forField("assignedDesigner").map((m) => <SelectItem key={m.id} value={m.name}>{m.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>
+                      <SelectItem value={NENHUM}>Nenhum</SelectItem>
+                      {team.forField("assignedDesigner").map((m) => <SelectItem key={m.id} value={m.name}>{m.name}</SelectItem>)}
+                    </SelectContent>
                   </Select>
                 </div>
               )}

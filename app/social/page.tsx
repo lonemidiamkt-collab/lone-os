@@ -45,6 +45,7 @@ import { Button } from "@/components/ui/button";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useClientsStore } from "@/stores/useClientsStore";
+import { temSocial } from "@/lib/clients/servico";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 
@@ -146,7 +147,9 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
   // Mesma lógica do workspace selector da página /social.
   const visibleClients = useMemo(() => {
     if (role === "social") {
-      return clients.filter((c) => c.assignedSocial === currentUser);
+      // Social no contrato E na carteira. Só o nome gravado não basta: cliente que virou só-tráfego
+      // ficava com o social antigo (Dr. Júnior e JP no quadro do Carlos, 30/09).
+      return clients.filter((c) => c.assignedSocial === currentUser && temSocial({ service_type: c.serviceType }));
     }
     return clients;
   }, [clients, role, currentUser]);
@@ -1239,7 +1242,9 @@ export default function SocialPage() {
 
   const activeWorkspace = canSelectWorkspace ? adminWorkspace : currentUser;
 
-  const filteredClients = clients.filter((c) => activeWorkspace === "Todos" || c.assignedSocial === activeWorkspace);
+  // O quadro do social é de quem CONTRATOU social — em "Todos" também (só-tráfego não tem pauta aqui).
+  const filteredClients = clients.filter((c) =>
+    temSocial({ service_type: c.serviceType }) && (activeWorkspace === "Todos" || c.assignedSocial === activeWorkspace));
 
   const filteredCards = contentCards.filter((c) => {
     if (c.archivedAt) return false;
