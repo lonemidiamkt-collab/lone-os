@@ -26,6 +26,10 @@ export async function POST(req: NextRequest) {
   const skipped = b.skipped === true;
   const httpStatus = num(b.http_status);
   let resumo = typeof b.resumo === "string" ? b.resumo.slice(0, 300) : null;
+  // O motivo da falha chega à parte (cron-call.sh): o resumo corta em 300 e o erro ficava de fora.
+  // Vai junto no mesmo campo, numa linha própria — é dela que o vigia tira a causa.
+  const erro = typeof b.erro === "string" ? b.erro.replace(/\s+/g, " ").trim().slice(0, 400) : "";
+  if (erro && !(resumo ?? "").includes(erro.slice(0, 60))) resumo = `${resumo ?? ""}\n⟶ erro: ${erro}`.trim();
   if (skipped && !resumo) {
     const p = await podeRodarJob(job).catch(() => null);
     resumo = `pulado: ${p?.motivo ?? "desligado na Central de Automações"}`;

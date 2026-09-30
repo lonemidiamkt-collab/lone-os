@@ -221,7 +221,9 @@ function reciboResponses(modelo: string, json: Record<string, unknown> | null, t
   registrarChamadaLlm({
     modelo, ms: Date.now() - t0, ok, origem, tipo: "responses",
     usage: u ? { prompt_tokens: u.input_tokens, completion_tokens: u.output_tokens, prompt_tokens_details: { cached_tokens: u.input_tokens_details?.cached_tokens } } : null,
-    erro: ok ? null : "sem resposta",
+    // A mensagem da OpenAI, não "sem resposta": entre 25 e 30/09 foram 72 falhas por saldo zerado gravadas
+    // como "sem resposta", e o Radar pareceu ter um defeito próprio que não tinha.
+    erro: ok ? null : ((json?.error as { message?: string } | undefined)?.message ?? "sem resposta"),
   });
 }
 

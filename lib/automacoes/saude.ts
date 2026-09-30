@@ -2,6 +2,8 @@
 // Central, pelo vigia e pelo registrar).
 
 import { AUTOMACOES, cronsDe, proximaDeVarias, type Automacao } from "./registro";
+import { causaDoErro, erroDoResumo, type CausaConhecida, type ChaveCausa } from "@/lib/ia/causa-erro";
+import type { IaFora } from "@/lib/ia/saude-ia";
 
 export type Saude = "ok" | "falhou" | "parado" | "desligado" | "sem-registro";
 
@@ -160,17 +162,117 @@ const quando = (iso: string) => new Date(iso).toLocaleString("pt-BR", {
   timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
 });
 
-/** A mensagem do vigia no grupo administrativo. `resumos` = resumo da última falha, por job. */
-export function textoVigia(linhas: LinhaPainel[], resumos: Record<string, string | null> = {}, urlCentral?: string): string {
-  const blocos = linhas.map((l) => {
-    if (l.saude === "falhou") {
-      const partes = [l.ultima ? `última: ${quando(l.ultima.em)}` : null, l.ultima?.status ? `HTTP ${l.ultima.status}` : null].filter(Boolean);
-      const r = (resumos[l.id] ?? "").replace(/\s+/g, " ").trim().slice(0, 110);
-      return `🔴 *${l.nome}* — falhou\n${partes.join(" · ")}${r ? `\n_${r}_` : ""}`;
-    }
-    const desde = l.ultimoSucessoEm ? `sem sucesso desde ${quando(l.ultimoSucessoEm)}` : "nenhuma execução com sucesso registrada";
-    return `🟡 *${l.nome}* — parado\n${desde} (agenda: ${l.agendaBRT})`;
-  });
-  const titulo = linhas.length === 1 ? "⚠️ *Uma automação com problema*" : `⚠️ *${linhas.length} automações com problema*`;
-  return [titulo, "", blocos.join("\n\n"), ...(urlCentral ? ["", `Central: ${urlCentral}`] : [])].join("\n");
+/** A causa conhecida da última falha de um job, se houver. Job parado não tem erro pra ler. */
+function causaDoJob(l: LinhaPainel, resumos: Record<string, string | null>): CausaConhecida | null {
+  return l.saude === "falhou" ? causaDoErro(resumos[l.id]) : null;
+}
+
+/** Bloco de UMA causa conhecida: o que é, o que fazer, e tudo o que parou por ela. */
+function blocoDaCausa(causa: CausaConhecida, linhas: LinhaPainel[], ia: IaFora | null): string {
+  const cabeca = ia ? `🔴 *${causa.titulo}* — desde ${quando(ia.desde)}` : `🔴 *${causa.titulo}*`;
+  const parou: string[] = [];
+  // As frentes que falharam ao vivo (o agente, a revisão de arte…) vêm primeiro: são as que o
+  // cliente sente. As rotinas agendadas entram numa linha só — são consequência da mesma causa.
+  for (const f of (ia?.porFrente ?? []).slice(0, 5)) parou.push(`• ${f.rotulo} — ${f.falhas} ${f.falhas === 1 ? "falha" : "falhas"}`);
+  if (linhas.length) {
+    const nomes = linhas.map((l) => l.nome).join(", ");
+    parou.push(linhas.length === 1 ? `• rotina: ${nomes}` : `• ${linhas.length} rotinas: ${nomes}`);
+  }
+  return [cabeca, causa.explicacao, `👉 ${causa.acao}`, ...(parou.length ? ["", "O que parou:", ...parou] : [])].join("\n");
+}
+
+/** Bloco de um job com problema que não tem causa conhecida — mostra o erro, não o JSON. */
+function blocoSolto(l: LinhaPainel, resumos: Record<string, string | null>): string {
+  if (l.saude === "falhou") {
+    const partes = [l.ultima ? `última: ${quando(l.ultima.em)}` : null, l.ultima?.status ? `HTTP ${l.ultima.status}` : null].filter(Boolean);
+    // Antes: os primeiros 110 caracteres do corpo, que eram contadores ("ok":false,"pendentes":566…)
+    // e cortavam o erro no meio. Agora a mensagem de erro, quando o corpo tem uma.
+    const bruto = (resumos[l.id] ?? "").replace(/\s+/g, " ").trim();
+    const r = (erroDoResumo(bruto) ?? bruto).slice(0, 180);
+    return `🔴 *${l.nome}* — falhou\n${partes.join(" · ")}${r ? `\n_${r}_` : ""}`;
+  }
+  const desde = l.ultimoSucessoEm ? `sem sucesso desde ${quando(l.ultimoSucessoEm)}` : "nenhuma execução com sucesso registrada";
+  return `🟡 *${l.nome}* — parado\n${desde} (agenda: ${l.agendaBRT})`;
+}
+
+/**
+ * A mensagem do vigia no grupo administrativo. `resumos` = resumo da última falha, por job.
+ *
+ * Jobs que falharam pela MESMA causa conhecida viram um bloco só, com a ação — seis "falhou" com
+ * JSON cortado eram, em 30/09, um saldo zerado na OpenAI. `ia` = a IA fora do ar (llm_calls), que
+ * entra no bloco da causa dela mesmo que nenhuma rotina tenha falhado ainda.
+ */
+export function textoVigia(
+  linhas: LinhaPainel[],
+  resumos: Record<string, string | null> = {},
+  urlCentral?: string,
+  ia: IaFora | null = null,
+): string {
+  const porCausa = new Map<ChaveCausa, { causa: CausaConhecida; linhas: LinhaPainel[] }>();
+  if (ia) porCausa.set(ia.causa.chave, { causa: ia.causa, linhas: [] });
+  const soltas: LinhaPainel[] = [];
+  for (const l of linhas) {
+    const c = causaDoJob(l, resumos);
+    if (!c) { soltas.push(l); continue; }
+    const g = porCausa.get(c.chave) ?? { causa: c, linhas: [] };
+    g.linhas.push(l);
+    porCausa.set(c.chave, g);
+  }
+
+  const blocos = [
+    ...[...porCausa.values()].map((g) => blocoDaCausa(g.causa, g.linhas, ia?.causa.chave === g.causa.chave ? ia : null)),
+    ...soltas.map((l) => blocoSolto(l, resumos)),
+  ];
+  // Um bloco de causa já tem título próprio; o genérico só aparece quando há mais de um assunto.
+  const titulo = blocos.length > 1
+    ? `⚠️ *${blocos.length} problemas nas automações*`
+    : soltas.length === 1 ? "⚠️ *Uma automação com problema*" : null;
+  return [...(titulo ? [titulo, ""] : []), blocos.join("\n\n"), ...(urlCentral ? ["", `Central: ${urlCentral}`] : [])].join("\n");
+}
+
+/**
+ * O que o vigia manda agora e o que marca como avisado. Cada job (e cada causa de IA fora, com a
+ * chave `ia:<causa>`) é lembrado no máximo uma vez a cada `repetirAposMs`.
+ *
+ * Um grupo de causa conhecida sai inteiro quando QUALQUER parte dele venceu o prazo — senão o
+ * grupo chegaria picado: 4 rotinas hoje, as outras 2 amanhã, cada vez parecendo um problema novo.
+ */
+export function avisoDoVigia(p: {
+  comProblema: LinhaPainel[];
+  resumos: Record<string, string | null>;
+  ultimoAlerta: ReadonlyMap<string, string | null>;
+  ia: IaFora | null;
+  agora: Date;
+  repetirAposMs: number;
+  urlCentral?: string;
+}): { texto: string | null; marcar: string[] } {
+  const vencido = (chave: string) => {
+    const t = p.ultimoAlerta.get(chave);
+    return !t || p.agora.getTime() - new Date(t).getTime() >= p.repetirAposMs;
+  };
+
+  const porCausa = new Map<ChaveCausa, LinhaPainel[]>();
+  const soltas: LinhaPainel[] = [];
+  for (const l of p.comProblema) {
+    const c = causaDoJob(l, p.resumos);
+    if (c) porCausa.set(c.chave, [...(porCausa.get(c.chave) ?? []), l]);
+    else soltas.push(l);
+  }
+
+  const incluir: LinhaPainel[] = [];
+  const marcar: string[] = [];
+  let ia: IaFora | null = null;
+  const chaves = new Set<ChaveCausa>([...porCausa.keys(), ...(p.ia ? [p.ia.causa.chave] : [])]);
+  for (const chave of chaves) {
+    const linhas = porCausa.get(chave) ?? [];
+    const iaDaqui = p.ia?.causa.chave === chave ? p.ia : null;
+    if (!linhas.some((l) => vencido(l.id)) && !(iaDaqui && vencido(`ia:${chave}`))) continue;
+    incluir.push(...linhas);
+    marcar.push(...linhas.map((l) => l.id));
+    if (iaDaqui) { ia = iaDaqui; marcar.push(`ia:${chave}`); }
+  }
+  for (const l of soltas) if (vencido(l.id)) { incluir.push(l); marcar.push(l.id); }
+
+  if (!incluir.length && !ia) return { texto: null, marcar: [] };
+  return { texto: textoVigia(incluir, p.resumos, p.urlCentral, ia), marcar };
 }

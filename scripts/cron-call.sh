@@ -66,20 +66,36 @@ if command -v python3 > /dev/null 2>&1; then
 import json, os, sys
 corpo = open(sys.argv[1], "rb").read().decode("utf-8", "replace")
 ok = None
+erro = None
 try:
     d = json.loads(corpo)
-    if isinstance(d, dict) and isinstance(d.get("ok"), bool):
-        ok = d["ok"]
+    if isinstance(d, dict):
+        if isinstance(d.get("ok"), bool):
+            ok = d["ok"]
+        # O erro vai à parte: o resumo são os 300 primeiros caracteres, quase sempre contadores, e
+        # o motivo da falha ficava cortado (30/09: seis jobs sem crédito na OpenAI e nenhum dizia).
+        for k in ("erros", "errors"):
+            v = d.get(k)
+            if isinstance(v, list) and v:
+                erro = str(v[0])
+                break
+        if erro is None:
+            for k in ("error", "erro", "message"):
+                if isinstance(d.get(k), str) and d[k]:
+                    erro = d[k]
+                    break
 except Exception:
     pass
 hc = os.environ.get("HC", "0")
 print(json.dumps({"job": os.environ["J"], "started_at": os.environ["INI"], "duration_ms": int(os.environ["DUR"]),
-                  "http_status": int(hc) if hc.isdigit() else 0, "resumo": corpo[:300], "corpo_ok": ok}))
+                  "http_status": int(hc) if hc.isdigit() else 0, "resumo": corpo[:300], "corpo_ok": ok,
+                  "erro": erro[:400] if erro else None}))
 ' "$CORPO" 2>/dev/null)
 elif command -v jq > /dev/null 2>&1; then
   PAYLOAD=$(jq -n --arg job "$JOB" --arg ini "$INICIO_ISO" --argjson dur "$((T1 - T0))" \
     --argjson hc "$(( 10#${HTTP:-0} ))" --rawfile corpo "$CORPO" \
-    '{job:$job, started_at:$ini, duration_ms:$dur, http_status:$hc, resumo:($corpo[0:300])}' 2>/dev/null)
+    '{job:$job, started_at:$ini, duration_ms:$dur, http_status:$hc, resumo:($corpo[0:300]),
+      erro:(try ($corpo | fromjson | ((.erros // .errors // [])[0] // .error // .erro // .message) | tostring | .[0:400]) catch null)}' 2>/dev/null)
 fi
 [ -n "$PAYLOAD" ] && registrar "$PAYLOAD"
 

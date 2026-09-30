@@ -124,6 +124,8 @@ export async function POST(req: NextRequest) {
       model: MODELO_ANALISE, schemaName: "radar_analise", schema: SCHEMA_ANALISE,
       maxTokens: 700, temperature: 0.2, system, user,
       imagens: imagens.length ? imagens : undefined,
+      // Sem origem, a pilha apontava pro "resumo da manhã" e o custo do Radar ia pra conta errada.
+      origem: "radar:analise",
     });
     if (!r.ok || !r.data) { erros.push(`análise ${m.id}: ${r.error ?? "sem retorno"}`); continue; }
 
@@ -278,7 +280,7 @@ export async function POST(req: NextRequest) {
 
       const r = await chatJson<Record<string, unknown>>({
         model: MODELO_PAUTA, schemaName: "radar_pauta", schema: SCHEMA_PAUTA,
-        maxTokens: 900, temperature: 0.6, system, user,
+        maxTokens: 900, temperature: 0.6, system, user, origem: "radar:pauta",
       });
       if (!r.ok || !r.data) { erros.push(`pauta ${nome}: ${r.error ?? "sem retorno"}`); continue; }
 

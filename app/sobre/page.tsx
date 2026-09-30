@@ -839,12 +839,16 @@ const MODULES: Module[] = [
       "RODAR AGORA: dispara o job de verdade, fora do horário. Nos que falam com cliente ou prospect, pede confirmação na linha antes — use o Ensaio primeiro se quiser só conferir o texto. Execução longa (mais de ~80 s) continua no servidor e entra no histórico quando terminar.",
       "Abrir a linha (a seta) mostra o crontab em UTC, o que o servidor chama, em quanto tempo sem sucesso o job vira 'parado', e as 10 últimas execuções com o resumo de cada uma (cron, manual, ensaio ou pulada).",
       "VIGIA: de hora em hora, os jobs falhando ou parados viram UMA mensagem no grupo administrativo, com o erro de cada um e o link da Central. Cada job é lembrado no máximo uma vez a cada 24h; job desligado não gera aviso.",
+      "CAUSA CONHECIDA VIRA UM BLOCO SÓ (30/09): quando vários jobs falham pelo mesmo motivo que o sistema reconhece — OpenAI sem crédito, chave da OpenAI recusada, token da Meta vencido —, o aviso diz o motivo em português, o que fazer (com o link) e lista tudo o que parou por ele, em vez de um 'falhou' com JSON cortado por job. O que não é reconhecido continua saindo job a job, agora com a mensagem de erro em vez dos contadores.",
+      "A IA EM SI TAMBÉM É VIGIADA: o vigia lê o registro de todas as chamadas de IA, não só as rotinas. Se desde o último sucesso as falhas se acumulam (3 ou mais, a última nas últimas 3 horas) com causa conhecida, o aviso sai em até 1 hora e diz desde quando e o que parou — o Loninho lendo os grupos dos clientes, a revisão de arte, a transcrição de áudio. Foi o que faltou em 25/09: o saldo zerou às 7h30 e o agente passou 5 dias sem entender nenhuma mensagem sem que ninguém fosse avisado.",
     ],
     features: [
       "Histórico de cada execução (as 200 últimas por job), com quem rodou à mão",
       "Liga/desliga por job sem editar o crontab — inclusive as mensagens de segunda/quarta/sexta aos clientes e o relatório do mês",
       "Ensaio: roda sem enviar, direto da tela",
       "Vigia avisando no grupo administrativo quando algo falha ou para",
+      "Vigia da IA: saldo zerado ou chave recusada na OpenAI avisa em até 1 hora, com o link de recarga e o que parou",
+      "O motivo da falha é guardado inteiro (antes o resumo cortava em 300 caracteres e o erro ficava de fora)",
     ],
     tips: [
       "Antes de mexer num job que fala com cliente, rode o Ensaio e leia a resposta.",
@@ -853,6 +857,7 @@ const MODULES: Module[] = [
     faq: [
       { q: "Desliguei e o job rodou mesmo assim. Por quê?", a: "Ou ele já estava rodando quando você desligou (vale do próximo horário em diante), ou é 'Sem registro' — esses só param editando o crontab do servidor. Se a Central estiver fora do ar na hora, o job também roda: é de propósito, para nada parar por causa dela." },
       { q: "Um job novo não aparece na lista.", a: "A lista vem de lib/automacoes/registro.ts. Job novo no crontab precisa entrar lá — um teste automático acusa quando falta." },
+      { q: "Chegou 'OpenAI sem crédito'. O que eu faço?", a: "Recarregar o saldo em platform.openai.com/settings/organization/billing (e, de preferência, ligar a recarga automática com um teto mensal). Não precisa mexer em mais nada: as rotinas voltam no próximo horário e o Loninho volta a entender as mensagens na hora. O gasto normal é de cerca de US$ 1,20 por dia." },
       { q: "O vigia avisou de um job que eu sei que está ok.", a: "Abra a linha e veja as últimas execuções: se o job respondeu {\"ok\": false} ou HTTP de erro, a Central conta como falha. Se foi erro passageiro, a próxima execução com sucesso limpa o aviso." },
     ],
   },
