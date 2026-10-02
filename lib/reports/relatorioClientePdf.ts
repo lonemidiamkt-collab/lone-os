@@ -450,12 +450,12 @@ b { font-weight: 600; }
 .kpi-principal { background: linear-gradient(180deg, ${C.marca}24, ${C.marca}08); }
 .kpi-principal .rotulo { color: ${C.marcaClara}; }
 .kpi-principal .kpi-valor { font-size: 25pt; }
-.kpi-linha { display: flex; align-items: center; gap: 6px; margin-top: 6px; min-height: 14px; white-space: nowrap; }
+.kpi-linha { display: flex; flex-wrap: wrap; align-items: center; column-gap: 6px; row-gap: 1px; margin-top: 6px; min-height: 14px; }
 .delta { font-size: 7.4pt; font-weight: 600; font-variant-numeric: tabular-nums; }
 .delta-bom { color: ${C.bom}; }
 .delta-ruim { color: ${C.atencao}; }
 .delta-neutro { color: ${C.suave}; }
-.antes { font-size: 7.2pt; color: ${C.suave}; overflow: hidden; text-overflow: ellipsis; }
+.antes { font-size: 7.2pt; color: ${C.suave}; white-space: nowrap; } /* quebra pra linha de baixo, nunca corta o número */
 .kpi-nota { font-size: 6.6pt; color: ${C.suave}; margin-top: 4px; line-height: 1.3; white-space: normal; }
 
 /* Blocos: separados por uma linha fina e espaço, sem moldura. */

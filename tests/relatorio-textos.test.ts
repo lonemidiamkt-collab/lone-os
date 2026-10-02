@@ -21,6 +21,12 @@ describe("nome do anúncio como o cliente lê", () => {
     expect(nomeLegivel("")).toEqual({ nome: "", formato: null });
   });
 
+  it("nomes reais da Armazém do Ferro: 'CJ' sem número e 'Estáticos' também são código", () => {
+    expect(nomeLegivel("CJ - REGIÃO - 22-65+ - TELHAS")).toEqual({ nome: "Região · 22-65+ · Telhas", formato: null });
+    expect(nomeLegivel("ESTÁTICOS - TELHA PVC")).toEqual({ nome: "Telha PVC", formato: "Imagem" });
+    expect(nomeLegivel("PLACAS DE ACM - IMAGEM").nome).toBe("Placas de ACM");
+  });
+
   it("vários pedaços úteis ficam juntos", () => {
     expect(nomeLegivel("CJ 02 - Cabo Frio - 35 a 54 - Imagem").nome).toBe("Cabo Frio · 35 a 54");
   });

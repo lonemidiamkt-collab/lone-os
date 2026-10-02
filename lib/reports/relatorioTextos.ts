@@ -13,7 +13,7 @@ export type FormatoAnuncio = "Vídeo" | "Imagem" | "Carrossel" | "Reels" | "Stor
 
 const FORMATOS: [RegExp, FormatoAnuncio][] = [
   [/^v[ií]deos?$/i, "Vídeo"],
-  [/^(imagem|imagens|img|foto|fotos|est[áa]tico)$/i, "Imagem"],
+  [/^(imagem|imagens|img|foto|fotos|est[áa]ticos?|est[áa]tica?s?)$/i, "Imagem"],
   [/^carross?[ée]is?$|^carrossel$/i, "Carrossel"],
   [/^reels?$/i, "Reels"],
   [/^stor(y|ies)$/i, "Stories"],
@@ -26,7 +26,7 @@ const FORMATOS: [RegExp, FormatoAnuncio][] = [
  */
 const JARGAO = new RegExp([
   "^(ads?|an[uú]ncios?|criativos?)$",
-  "^(cj|conj(unto)?|c)\\s*\\d+$",
+  "^(cj|conj(unto)?|c)\\s*\\d*$",
   "^\\d{1,3}$",
   "^(whats\\s*app|wpp|zap|direct|messenger|instagram|facebook|ig|fb)$",
   "^(aberto|aberta|fechado|amplo|broad|advantage\\+?|lal.*|lookalike.*|interesses?|remarketing|rmkt)$",
@@ -35,6 +35,9 @@ const JARGAO = new RegExp([
 ].join("|"), "i");
 
 const MINUSCULAS = new Set(["de", "da", "do", "das", "dos", "e", "em", "na", "no", "nas", "nos", "com", "para", "pra", "por", "a", "o", "as", "os"]);
+/** Siglas que ficam em maiúscula ("Placas de ACM", "Telha PVC"), além de palavra curta sem vogal. */
+const SIGLAS = new Set(["acm", "mdf", "pvc", "led", "glp", "cpf", "cnpj", "rj", "sp", "mg", "es", "tv", "ar", "eps", "osb", "wpc", "ups", "pet", "ia"]);
+const ehSigla = (w: string) => SIGLAS.has(w) || (w.length <= 4 && !/[aeiouáéíóúâêôãõà]/i.test(w) && /^\p{L}+$/u.test(w));
 
 /** Nome TODO EM MAIÚSCULA vira título ("PORTA MACIÇA" → "Porta Maciça"); o resto fica como veio. */
 function semGrito(s: string): string {
@@ -43,6 +46,7 @@ function semGrito(s: string): string {
   return s.toLowerCase().split(/(\s+)/).map((p, i) => {
     if (/^\s+$/.test(p) || !p) return p;
     if (i > 0 && MINUSCULAS.has(p)) return p;
+    if (ehSigla(p)) return p.toUpperCase();
     return p.charAt(0).toUpperCase() + p.slice(1);
   }).join("");
 }
