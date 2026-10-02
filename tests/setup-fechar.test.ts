@@ -4,7 +4,7 @@ import { motivoFechamentoSetup, notaDeFechamento, type ClienteDoSetup } from "@/
 // 02/10/2026: 43 das 45 tarefas cobradas às 9h eram checklist de setup de cliente que já estava no
 // ar. "[Setup] Bio do perfil escrita — Veneza Estofados · venceu há 51 dias", com o Veneza postando
 // 8 vezes no mês. E seis de social da JP e do Dr. Júnior, que são só tráfego.
-const NO_AR: ClienteDoSetup = { ativo: true, escopo: "completo", emOnboarding: false, postsIg30d: 8, gastou30d: true };
+const NO_AR: ClienteDoSetup = { ativo: true, escopo: "completo", emOnboarding: false, postsIg30d: 8, gastou30d: true, diasDeCasa: 58 };
 const VENCIDA = { diasVencida: 51 };
 
 describe("fechar setup resolvido", () => {
@@ -36,6 +36,14 @@ describe("fechar setup resolvido", () => {
     expect(motivoFechamentoSetup({ papel: "social", diasVencida: 3 }, novo)).toBeNull();
     // Passou muito do prazo, mesmo em onboarding: o Instagram resolve.
     expect(motivoFechamentoSetup({ papel: "social", diasVencida: 20 }, novo)).toContain("perfil no ar");
+  });
+
+  it("cliente com 10 dias de casa: postar ainda não prova destaques e fixadas — Casas Rio Bahia", () => {
+    const novo = { ...NO_AR, diasDeCasa: 10, postsIg30d: 5 };
+    expect(motivoFechamentoSetup({ papel: "social", diasVencida: 3 }, novo)).toBeNull();
+    expect(motivoFechamentoSetup({ papel: "designer", diasVencida: 3 }, novo)).toBeNull();
+    // Gasto prova anúncio no ar em qualquer idade.
+    expect(motivoFechamentoSetup({ papel: "traffic", diasVencida: 3 }, novo)).toContain("anúncio rodando");
   });
 
   it("sem prova, a tarefa continua — não fecha no escuro", () => {

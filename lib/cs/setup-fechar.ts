@@ -23,6 +23,8 @@ export interface ClienteDoSetup {
   postsIg30d: number;
   /** Houve gasto na conta de anúncio nos últimos 30 dias. */
   gastou30d: boolean;
+  /** Dias desde o cadastro. */
+  diasDeCasa: number;
 }
 
 export interface TarefaDoSetup {
@@ -35,6 +37,12 @@ export interface TarefaDoSetup {
 const POSTS_PERFIL_NO_AR = 4;
 /** Dentro da janela de onboarding quem decide é a cobrança de setup, item a item. */
 const FOLGA_ONBOARDING = 15;
+/**
+ * Postar prova perfil montado só em cliente estabelecido. A Casas Rio Bahia, com 10 dias de casa e
+ * 5 posts, já tinha saído de onboarding pelo resultado do anúncio — mas 5 posts não provam que os
+ * destaques e as 3 fixadas estão prontos num perfil de 10 dias.
+ */
+const DIAS_PARA_PROVA_DO_INSTAGRAM = 30;
 
 /** Por que esta tarefa de setup pode ser fechada — ou null, se ela ainda vale. */
 export function motivoFechamentoSetup(t: TarefaDoSetup, c: ClienteDoSetup | null): string | null {
@@ -49,7 +57,7 @@ export function motivoFechamentoSetup(t: TarefaDoSetup, c: ClienteDoSetup | null
   // ficou pra trás — onboarding vencido há mais de 15 dias, ou cliente que já graduou.
   if (c.emOnboarding && t.diasVencida <= FOLGA_ONBOARDING) return null;
 
-  if (deFeed && c.postsIg30d >= POSTS_PERFIL_NO_AR) {
+  if (deFeed && c.diasDeCasa >= DIAS_PARA_PROVA_DO_INSTAGRAM && c.postsIg30d >= POSTS_PERFIL_NO_AR) {
     return `perfil no ar: ${c.postsIg30d} posts no Instagram nos últimos 30 dias`;
   }
   if (t.papel === "traffic" && c.gastou30d) return "anúncio rodando: houve gasto na conta nos últimos 30 dias";

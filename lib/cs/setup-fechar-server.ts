@@ -24,7 +24,7 @@ export async function fecharSetupResolvido(opts: { aplicar: boolean; agora?: Dat
     const ids = [...new Set(tarefas.map((t) => t.client_id as string).filter(Boolean))];
     const trinta = new Date(agora.getTime() - 30 * 86400_000);
     const [{ data: clientes }, { data: posts }, { data: gastos }] = await Promise.all([
-      supabaseAdmin.from("clients").select("id, name, active, churned_at, status, service_type").in("id", ids),
+      supabaseAdmin.from("clients").select("id, name, active, churned_at, status, service_type, created_at").in("id", ids),
       supabaseAdmin.from("client_ig_posts").select("client_id").in("client_id", ids).gte("posted_at", trinta.toISOString()),
       supabaseAdmin.from("metric_snapshots").select("client_id").in("client_id", ids)
         .gte("metric_date", trinta.toISOString().slice(0, 10)).gt("spend", 0),
@@ -39,6 +39,7 @@ export async function fecharSetupResolvido(opts: { aplicar: boolean; agora?: Dat
       emOnboarding: c.status === "onboarding",
       postsIg30d: postsPor.get(c.id as string) ?? 0,
       gastou30d: gastou.has(c.id as string),
+      diasDeCasa: Math.floor((agora.getTime() - new Date(c.created_at as string).getTime()) / 86400_000),
     }]));
 
     const dataBR = agora.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
