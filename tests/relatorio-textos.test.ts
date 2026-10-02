@@ -27,6 +27,10 @@ describe("nome do anúncio como o cliente lê", () => {
     expect(nomeLegivel("PLACAS DE ACM - IMAGEM").nome).toBe("Placas de ACM");
   });
 
+  it("posicionamento 'Fb/ig' também é código — Veneza Nova Iguaçu", () => {
+    expect(nomeLegivel("COLCHÃO - RUA INÊS 5KM - FB/IG").nome).toBe("Colchão · Rua Inês 5km");
+  });
+
   it("vários pedaços úteis ficam juntos", () => {
     expect(nomeLegivel("CJ 02 - Cabo Frio - 35 a 54 - Imagem").nome).toBe("Cabo Frio · 35 a 54");
   });

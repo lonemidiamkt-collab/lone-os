@@ -99,7 +99,9 @@ function variacaoHtml(k: KpiRelatorio, r: RelatorioAnuncios): string {
   const legAnt = /\s/.test(r.vocab.legendaAnterior.trim()) ? "anterior" : r.vocab.legendaAnterior.toLowerCase();
   if (k.valor == null) return k.chave === "alcance" ? `<span class="antes">não informado pela Meta</span>` : "";
   if (k.anterior == null || k.variacaoPct == null) {
-    return r.anterior ? `<span class="antes">sem base de comparação</span>` : "";
+    // Sem período anterior NENHUM (conta que começou agora), a frase do topo já diz isso uma vez —
+    // repetir "sem base de comparação" nas 4 caixas era ruído (Veneza Nova Iguaçu, 02/10).
+    return r.anterior && r.totalAnterior != null ? `<span class="antes">sem base de comparação</span>` : "";
   }
   const valorAnt = ehDinheiro(k) ? formatarBRL(k.anterior) : inteiro(k.anterior);
   const txt = formatarVariacao(k.variacaoPct).replace(/^[+−-]/, "");
@@ -380,7 +382,11 @@ export function relatorioClienteHtml(o: OpcoesRelatorio): string {
   const folhas: string[] = [];
 
   if (r) {
-    const antes = r.anterior ? `Comparado com ${r.anterior.rotulo}.` : "";
+    // "Comparado com agosto" só quando agosto existe. Conta que começou no período não tem o que
+    // comparar — e o PDF dizia "Comparado com agosto de 2026" em cima de quatro "sem base".
+    const antes = !r.anterior ? ""
+      : r.totalAnterior != null ? `Comparado com ${r.anterior.rotulo}.`
+        : `Sem ${r.anterior.rotulo} pra comparar: os anúncios desta conta começaram neste período.`;
     folhas.push(`${cabecalho(o, titulo)}
       <section class="abertura">
         <div class="olho">Resultado dos anúncios · ${esc(r.janela.rotulo)}</div>

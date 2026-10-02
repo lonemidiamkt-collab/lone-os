@@ -462,3 +462,17 @@ describe("período em fatias quando a Meta recusa o mês inteiro", () => {
   });
 });
 
+describe("conta que começou no período", () => {
+  // Veneza Nova Iguaçu, setembro: anúncios desde 25/09, sem agosto. O PDF dizia "Comparado com
+  // agosto de 2026" e repetia "sem base de comparação" nas quatro caixas.
+  it("diz uma vez que não há com o que comparar, e não repete nas caixas", () => {
+    const r = relatorioHorto();
+    r.totalAnterior = null;
+    r.kpis = r.kpis.map((k) => ({ ...k, anterior: null, variacaoPct: null }));
+    const html = relatorioClienteHtml({ clienteNome: "Veneza Estofados - Nova Iguaçu", logo: "", geradoEm: "2026-10-02", janela: SEMANA, anuncios: r });
+    expect(html).toContain("pra comparar: os anúncios desta conta começaram neste período");
+    expect(html).not.toContain("Comparado com");
+    expect(html).not.toContain("sem base de comparação");
+  });
+});
+

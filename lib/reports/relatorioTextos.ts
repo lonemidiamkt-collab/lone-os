@@ -28,7 +28,7 @@ const JARGAO = new RegExp([
   "^(ads?|an[uú]ncios?|criativos?)$",
   "^(cj|conj(unto)?|c)\\s*\\d*$",
   "^\\d{1,3}$",
-  "^(whats\\s*app|wpp|zap|direct|messenger|instagram|facebook|ig|fb)$",
+  "^(whats\\s*app|wpp|zap|direct|messenger|instagram|facebook|ig|fb|fb\\s*[/+e&]\\s*ig|ig\\s*[/+e&]\\s*fb)$",
   "^(aberto|aberta|fechado|amplo|broad|advantage\\+?|lal.*|lookalike.*|interesses?|remarketing|rmkt)$",
   "^(engajamento|mensage(m|ns)|capta[çc][ãa]o|convers[ãa]o|convers[õo]es|tr[áa]fego|leads?|alcance|reconhecimento|vendas?|cadastro)$",
   "^[fm]$",
