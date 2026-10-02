@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   // Clientes ATIVOS que CONTRATARAM social (o contrato decide, não o nome gravado), fora de pausa.
   const { data: clientsData, error: cErr } = await supabaseAdmin
     .from("clients")
-    .select("id, name, assigned_social, assigned_designer, active, perfil_conteudo, service_type, paused_at, paused_until, ig_business_account_id")
+    .select("id, name, assigned_social, assigned_designer, active, perfil_conteudo, service_type, paused_at, paused_until, ig_business_account_id, created_at")
     .or("active.is.null,active.eq.true")
     .is("churned_at", null);
   if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 });
@@ -99,7 +99,10 @@ export async function POST(req: NextRequest) {
       temPedidoAmanha: !!pedido,
       pedidoEntregue: !!pedido?.entregue,
       instagramConferivel: !!c.ig_business_account_id || posts.size > 0,
-      diasEsperados: diasDePostAnteriores(hojeKey, fazVideo(c) ? [1, 3, 5] : [1, 5], 6),
+      // Só conta dia de post a partir de uma semana depois do cadastro (a semana de setup). A Casas
+      // Rio Bahia, com 10 dias de casa, aparecia "postou 1 de 6" — 4 dos 6 dias eram de antes dela.
+      diasEsperados: diasDePostAnteriores(hojeKey, fazVideo(c) ? [1, 3, 5] : [1, 5], 6)
+        .filter((d) => d >= ymd(addDays(new Date(c.created_at as string), 7))),
       diasComPost: posts,
     });
     if (r.situacao === "pronto") prontos++;

@@ -2,9 +2,15 @@
 // no browserless (lib/traffic/renderPdf.ts). Puro: recebe o relatório pronto (relatorioCliente.ts) e o
 // snapshot do Instagram, devolve a string.
 //
-// Mesmo desenho do portal do cliente e do painel comparativo (tema escuro): cartões, número grande
-// com o selo de variação, gráfico do período (linha cheia) sobre o anterior (tracejado), público com
-// barra de gênero e faixas etárias com percentual.
+// DESENHO (02/10/2026). Roberto, sobre o PDF de setembro da Madeireira D'Aldeia: "está bom de
+// informações mas está bem bagunçado". Eram oito caixas com borda (nada se destacava porque tudo
+// era caixa), um gráfico com duas linhas diárias em zigue-zague sobre grade tracejada, nome de
+// campanha do Gerenciador indo pro cliente ("ADS - VIDEO - …", "CJ 01 - Whatsapp - … - aberto") e
+// um cartão lateral que misturava "conjunto", números soltos e o melhor dia repetido. Agora:
+//   • os números numa FAIXA só, com o resultado em destaque;
+//   • colunas por dia, com a média do período anterior como uma linha de referência;
+//   • nomes limpos (lib/reports/relatorioTextos.ts) com o formato numa etiqueta;
+//   • seções separadas por espaço e uma linha fina — caixa só onde ela significa alguma coisa.
 //
 // Documento impresso: cor literal é permitida aqui (skill designer, exceção de PDF). Os valores são
 // os tokens do tema escuro de app/globals.css, pra o PDF ter a cara do portal.
@@ -17,6 +23,7 @@ import type { IgSnapshot, IgAudiencia } from "@/lib/meta/igSnapshot";
 import { formatarVariacao } from "@/components/ui/painel-comparativo-utils";
 import { formatarBRL } from "@/lib/portal/formatos";
 import { resumoInstagram } from "@/lib/portal/formatDelta";
+import { nomeLegivel, plural, generoQueSoma100, cidadeCurta, type FormatoAnuncio } from "./relatorioTextos";
 import {
   ticksRedondos, diaDaSemana, diaCurto, diaLongo, formatarPctCurto,
   type RelatorioAnuncios, type KpiRelatorio, type Criativo, type Conjunto, type Publico, type Janela,
@@ -63,7 +70,7 @@ function cabecalho(o: OpcoesRelatorio, titulo: string): string {
     : `<span class="marca-nome">LONE MÍDIA</span>`;
   return `<header class="topo">
     <div class="marca">${marca}</div>
-    <div class="topo-dir"><div class="topo-titulo">${esc(titulo)}</div><div class="topo-periodo">${esc(o.janela.rotulo)}</div></div>
+    <div class="topo-dir"><span class="topo-titulo">${esc(titulo)}</span><span class="topo-periodo">${esc(o.janela.rotulo)}</span></div>
   </header>`;
 }
 
@@ -75,105 +82,113 @@ function rodape(o: OpcoesRelatorio, pagina: number, total: number, nota: string)
   </footer>`;
 }
 
+const ehDinheiro = (k: KpiRelatorio) => k.chave === "investimento" || k.chave === "custo";
+
 function valorKpi(k: KpiRelatorio): string {
   if (k.valor == null) return "—";
-  return k.chave === "investimento" || k.chave === "custo" ? formatarBRL(k.valor) : inteiro(k.valor);
-}
-
-function kpiHtml(k: KpiRelatorio, r: RelatorioAnuncios): string {
-  const cor = k.tom === "bom" ? C.bom : k.tom === "ruim" ? C.atencao : C.suave;
-  const selo = k.variacaoPct != null
-    ? `<span class="selo" style="color:${cor};border-color:${cor}55;background:${cor}14">${formatarVariacao(k.variacaoPct)}</span>`
-    : "";
-  // Curto de propósito: "Comparado com 7 a 13 set" já está na frase do topo.
-  const antes = k.valor == null
-    ? (k.chave === "alcance" ? "não informado pela Meta" : "")
-    : k.anterior != null
-      ? `anterior: ${k.chave === "investimento" || k.chave === "custo" ? formatarBRL(k.anterior) : inteiro(k.anterior)}`
-      : r.anterior ? "sem base de comparação" : "";
-  return `<div class="kpi${k.chave === "resultados" ? " kpi-destaque" : ""}">
-    <div class="rotulo">${esc(k.rotulo)}</div>
-    <div class="kpi-valor">${valorKpi(k)}</div>
-    <div class="kpi-linha">${selo}<span class="kpi-antes">${antes}</span></div>
-    ${k.nota ? `<div class="kpi-nota">${esc(k.nota)}</div>` : ""}
-  </div>`;
+  return ehDinheiro(k) ? formatarBRL(k.valor) : inteiro(k.valor);
 }
 
 /**
- * Resultado por dia: o período (linha cheia + área) sobre o anterior (tracejado). Eixo a partir do
- * zero com passos redondos e linha RETA entre os dias — sem curva que passe por valor que não existiu.
- * Desenho em HTML + SVG esticável (viewBox 0–100, stroke que não escala): o gráfico ocupa a altura
- * que sobrar na folha sem distorcer texto nem espessura de linha.
+ * A variação com SETA e cor. A cor diz se foi bom ou ruim PRO CLIENTE (custo que sobe é ruim,
+ * investimento é neutro) e a seta diz a direção — cor nunca sozinha.
+ */
+function variacaoHtml(k: KpiRelatorio, r: RelatorioAnuncios): string {
+  // No mês, o nome do mês ("agosto: 177"); na semana, "anterior" — "semana anterior: R$ 592,05"
+  // não cabia na caixa e saía cortado com reticências.
+  const legAnt = /\s/.test(r.vocab.legendaAnterior.trim()) ? "anterior" : r.vocab.legendaAnterior.toLowerCase();
+  if (k.valor == null) return k.chave === "alcance" ? `<span class="antes">não informado pela Meta</span>` : "";
+  if (k.anterior == null || k.variacaoPct == null) {
+    return r.anterior ? `<span class="antes">sem base de comparação</span>` : "";
+  }
+  const valorAnt = ehDinheiro(k) ? formatarBRL(k.anterior) : inteiro(k.anterior);
+  const txt = formatarVariacao(k.variacaoPct).replace(/^[+−-]/, "");
+  const seta = txt === "0%" ? "" : k.variacaoPct > 0 ? "▲ " : "▼ ";
+  return `<span class="delta delta-${k.tom}">${seta}${txt}</span><span class="antes">${esc(legAnt)}: ${valorAnt}</span>`;
+}
+
+function faixaKpis(r: RelatorioAnuncios): string {
+  // Alcance que a Meta não devolveu some do PDF (é logado no servidor): lacuna não vira "—".
+  const ks = r.kpis.filter((k) => !(k.chave === "alcance" && k.valor == null));
+  const celulas = ks.map((k) => `<div class="kpi${k.chave === "resultados" ? " kpi-principal" : ""}">
+      <div class="rotulo">${esc(k.rotulo)}</div>
+      <div class="kpi-valor">${valorKpi(k)}</div>
+      <div class="kpi-linha">${variacaoHtml(k, r)}</div>
+      ${k.nota ? `<div class="kpi-nota">${esc(k.nota)}</div>` : ""}
+    </div>`).join("");
+  return `<section class="faixa" style="grid-template-columns: 1.25fr repeat(${Math.max(ks.length - 1, 1)}, 1fr)">${celulas}</section>`;
+}
+
+const media = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/**
+ * RESULTADO POR DIA EM COLUNAS. Uma coluna por dia na cor da marca; o período anterior entra como
+ * UMA linha de referência (a média diária dele), não como uma segunda série em zigue-zague — a
+ * comparação total já está na faixa de números. Grade em linha fina contínua, rótulo só onde
+ * importa (o melhor dia; na semana, todos os 7).
  */
 function grafico(r: RelatorioAnuncios): string {
   const s = r.serie;
   const n = s.length;
   if (n === 0) return "";
-  const maximo = Math.max(0, ...s.map((p) => p.atual), ...s.map((p) => p.anterior ?? 0));
+  const diasAnt = r.anterior?.dias ?? 0;
+  const mediaAnt = r.totalAnterior != null && diasAnt > 0 ? r.totalAnterior / diasAnt : null;
+  const mediaAtual = n > 0 ? r.total / n : 0;
+  const maximo = Math.max(0, ...s.map((p) => p.atual), mediaAnt ?? 0);
   const ticks = ticksRedondos(maximo);
   const topo = ticks[ticks.length - 1] || 1;
-  const X = (i: number) => ((i + 0.5) / n) * 100;
-  const Y = (v: number) => (1 - v / topo) * 100;
-  const f = (v: number) => v.toFixed(3);
+  const pct = (v: number) => ((v / topo) * 100).toFixed(2);
 
-  const linhaAtual = s.map((p, i) => `${i ? "L" : "M"}${f(X(i))},${f(Y(p.atual))}`).join(" ");
-  const area = n > 1 ? `${linhaAtual} L${f(X(n - 1))},100 L${f(X(0))},100 Z` : "";
-  let linhaAnt = "";
-  let aberto = false;
-  s.forEach((p, i) => {
-    if (p.anterior == null) { aberto = false; return; }
-    linhaAnt += `${aberto ? "L" : "M"}${f(X(i))},${f(Y(p.anterior))} `;
-    aberto = true;
-  });
-
-  const grade = ticks.map((t) => `<div class="g-linha" style="top:${f(Y(t))}%"></div><div class="g-y" style="top:${f(Y(t))}%">${inteiro(t)}</div>`).join("");
-
-  const pico = r.melhorDia?.dia;
-  const mostraValores = n <= 16;
-  const pontos = s.map((p, i) => {
-    const ehPico = p.dia === pico;
-    if (!mostraValores && !ehPico) return "";
-    const rotulo = mostraValores || ehPico
-      ? `<div class="g-valor${ehPico ? " g-valor-pico" : ""}" style="left:${f(X(i))}%;top:${f(Y(p.atual))}%">${inteiro(p.atual)}</div>`
-      : "";
-    return `<div class="g-ponto${ehPico ? " g-ponto-pico" : ""}" style="left:${f(X(i))}%;top:${f(Y(p.atual))}%"></div>${rotulo}`;
+  // Empate no topo é destaque pra todos os empatados: na Madeireira, 2/9 e 24/9 tiveram 10 conversas
+  // e só o primeiro aparecia em destaque — o outro parecia "não ser o melhor".
+  const melhor = r.melhorDia?.valor ?? 0;
+  const picos = melhor > 0 ? s.filter((p) => p.atual === melhor).map((p) => p.dia) : [];
+  const todosRotulos = n <= 10;
+  const colunas = s.map((p, i) => {
+    const ehPico = picos.includes(p.dia);
+    const rotulo = (todosRotulos && p.atual > 0) || ehPico
+      ? `<span class="c-valor${ehPico ? " c-valor-pico" : ""}">${inteiro(p.atual)}</span>` : "";
+    // No mês, um rótulo por semana (1, 8, 15, 22, 29) e o último dia se estiver longe do anterior.
+    const mostraX = todosRotulos || i % 7 === 0 || (i === n - 1 && (n - 1) % 7 >= 4);
+    const x = mostraX
+      ? `<span class="c-x${ehPico ? " c-x-pico" : ""}">${esc(todosRotulos ? diaDaSemana(p.dia) : diaCurto(p.dia))}</span>` : "";
+    return `<div class="c-dia">
+        <div class="c-barra${ehPico ? " c-pico" : ""}${p.atual === 0 ? " c-zero" : ""}" style="height:${p.atual > 0 ? pct(p.atual) : "0"}%">${rotulo}</div>
+        ${x}
+      </div>`;
   }).join("");
 
-  const passo = n <= 10 ? 1 : Math.ceil(n / 8);
-  const eixoX = s.map((p, i) => (i % passo === 0
-    ? `<div class="g-x${p.dia === pico ? " g-x-pico" : ""}" style="left:${f(X(i))}%">${esc(n <= 10 ? diaDaSemana(p.dia) : diaCurto(p.dia))}</div>`
-    : "")).join("");
+  const grade = ticks.map((t) => `<div class="c-linha" style="bottom:${pct(t)}%"><span>${inteiro(t)}</span></div>`).join("");
+  const referencia = mediaAnt != null
+    ? `<div class="c-ref" style="bottom:${pct(mediaAnt)}%"></div>` : "";
 
-  const temAnterior = s.some((p) => p.anterior != null);
+  const quanto = plural(melhor, r.palavras.um, r.palavras.varios);
+  const sub = !picos.length
+    ? `Nenhum dia com ${esc(r.palavras.varios)} no período`
+    : picos.length === 1
+      ? `Melhor dia: ${esc(diaLongo(picos[0]))}, com ${quanto}`
+      : picos.length <= 3
+        ? `Melhores dias: ${esc(picos.map(diaLongo).join(picos.length === 2 ? " e " : ", "))}, com ${quanto} cada`
+        : `Melhor marca: ${quanto} num dia, alcançada ${picos.length} vezes`;
   const legenda = `<div class="legenda">
-      <span><i class="leg-cheia"></i>${esc(r.vocab.legendaAtual)} · ${inteiro(r.total)}</span>
-      ${temAnterior && r.totalAnterior != null ? `<span><i class="leg-tracejada"></i>${esc(r.vocab.legendaAnterior)} · ${inteiro(r.totalAnterior)}</span>` : ""}
+      <span><i class="leg-coluna"></i>${esc(r.vocab.legendaAtual)} · média ${media(mediaAtual)}/dia</span>
+      ${mediaAnt != null ? `<span><i class="leg-ref"></i>Média ${esc(r.vocab.legendaAnterior.toLowerCase())} · ${media(mediaAnt)}/dia</span>` : ""}
     </div>`;
 
-  const sub = r.melhorDia
-    ? `Melhor dia: ${esc(diaLongo(r.melhorDia.dia))}, com ${inteiro(r.melhorDia.valor)} ${r.melhorDia.valor === 1 ? esc(r.palavras.um) : esc(r.palavras.varios)}`
-    : `Nenhum dia com ${esc(r.palavras.varios)} no período`;
-
-  return `<section class="cartao grafico">
-    <div class="cartao-topo">
+  return `<section class="bloco grafico">
+    <div class="bloco-topo">
       <div><h2>${esc(r.palavras.Varios)} por dia</h2><div class="sub">${sub}</div></div>
       ${legenda}
     </div>
-    <div class="g-area">
+    <div class="c-area">
       ${grade}
-      <svg class="g-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-        <defs><linearGradient id="g-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${C.marca}" stop-opacity="0.28"/><stop offset="100%" stop-color="${C.marca}" stop-opacity="0"/>
-        </linearGradient></defs>
-        ${area ? `<path d="${area}" fill="url(#g-grad)" stroke="none"/>` : ""}
-        ${linhaAnt ? `<path d="${linhaAnt.trim()}" fill="none" stroke="${C.suave}" stroke-width="1.5" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>` : ""}
-        ${n > 1 ? `<path d="${linhaAtual}" fill="none" stroke="${C.marca}" stroke-width="2.4" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>` : ""}
-      </svg>
-      ${pontos}
-      ${eixoX}
+      ${referencia}
+      <div class="c-colunas">${colunas}</div>
     </div>
   </section>`;
 }
+
+const etiqueta = (f: FormatoAnuncio | null) => (f ? `<span class="etiqueta">${esc(f)}</span>` : "");
 
 function miniatura(c: Criativo, i: number): string {
   return c.miniatura
@@ -183,69 +198,78 @@ function miniatura(c: Criativo, i: number): string {
 
 function criativosHtml(r: RelatorioAnuncios): string {
   if (!r.criativos.length) {
-    return `<section class="cartao lista"><h2>Anúncios em destaque</h2>
+    return `<section class="bloco"><h2>Anúncios em destaque</h2>
       <div class="vazio">Nenhum anúncio registrou ${esc(r.palavras.varios)} no período.</div></section>`;
   }
-  const itens = r.criativos.map((c, i) => `<div class="criativo">
+  const linhas = r.criativos.map((c, i) => {
+    const nl = nomeLegivel(c.nome);
+    return `<div class="criativo">
       ${miniatura(c, i)}
-      <div class="criativo-texto">
-        <div class="criativo-nome">${esc(c.nome)}</div>
-        <div class="criativo-meta"><b>${inteiro(c.resultados)} ${c.resultados === 1 ? esc(r.palavras.um) : esc(r.palavras.varios)}</b>${c.custo != null ? ` · ${formatarBRL(c.custo)} ${esc(r.palavras.porUm)}` : ""}</div>
+      <div class="criativo-nome">${esc(nl.nome || c.nome)}${etiqueta(nl.formato)}</div>
+      <div class="criativo-num">
+        <b>${plural(c.resultados, r.palavras.um, r.palavras.varios)}</b>
+        ${c.custo != null ? `<span>${formatarBRL(c.custo)} cada</span>` : ""}
       </div>
-    </div>`).join("");
-  return `<section class="cartao lista">
-    <h2>Anúncios que mais trouxeram ${esc(r.palavras.varios)}</h2>
-    <div class="sub">Os ${r.criativos.length === 1 ? "" : `${r.criativos.length} `}primeiros do período, pelo número de ${esc(r.palavras.varios)}</div>
-    <div class="criativos">${itens}</div>
+    </div>`;
+  }).join("");
+  return `<section class="bloco">
+    <div class="bloco-topo"><div><h2>Anúncios que mais trouxeram ${esc(r.palavras.varios)}</h2>
+      <div class="sub">Pelo número de ${esc(r.palavras.varios)} no período</div></div></div>
+    <div class="criativos">${linhas}</div>
   </section>`;
 }
 
-function conjuntoHtml(c: Conjunto, r: RelatorioAnuncios): string {
-  return `<div class="conjunto">
-    <div class="rotulo">Conjunto com menor ${esc(r.palavras.custo.toLowerCase())}</div>
-    <div class="conjunto-nome">${esc(c.nome)}</div>
-    ${c.campanha ? `<div class="conjunto-camp">Campanha ${esc(c.campanha)}</div>` : ""}
-    <div class="conjunto-valor">${formatarBRL(c.custo)} <span>${esc(r.palavras.porUm)}</span></div>
-    <div class="conjunto-camp">${inteiro(c.resultados)} ${c.resultados === 1 ? esc(r.palavras.um) : esc(r.palavras.varios)} com ${formatarBRL(c.investimento)} investidos</div>
+function maisBaratoHtml(c: Conjunto, r: RelatorioAnuncios): string {
+  const nl = nomeLegivel(c.nome);
+  const barato = r.palavras.feminino ? "barata" : "barato";
+  return `<div class="barato">
+    <h2>Onde ${r.palavras.feminino ? "a" : "o"} ${esc(r.palavras.um)} saiu mais ${barato}</h2>
+    <div class="barato-nome">${esc(nl.nome || c.nome)}${etiqueta(nl.formato)}</div>
+    <div class="barato-valor">${formatarBRL(c.custo)} <span>${esc(r.palavras.porUm)}</span></div>
+    <div class="barato-base">${plural(c.resultados, r.palavras.um, r.palavras.varios)} com ${formatarBRL(c.investimento)} investidos</div>
   </div>`;
 }
 
-function maisNumerosHtml(r: RelatorioAnuncios): string {
+function outrosNumerosHtml(r: RelatorioAnuncios): string {
   const linhas: [string, string][] = [
     ["Cliques no link", inteiro(r.cliquesLink)],
     ["Vezes que os anúncios apareceram", inteiro(r.impressoes)],
   ];
-  if (r.melhorDia) linhas.push(["Melhor dia", `${diaLongo(r.melhorDia.dia)} · ${inteiro(r.melhorDia.valor)}`]);
-  return `<div class="numeros">${linhas.map(([k, v]) => `<div class="numero"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div>`;
+  return `<div class="outros">
+    <div class="rotulo">Outros números do período</div>
+    ${linhas.map(([k, v]) => `<div class="numero"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}
+  </div>`;
 }
 
 function destaquesHtml(r: RelatorioAnuncios): string {
   // "Nenhum anúncio trouxe conversa" só quando o período não teve conversa mesmo. Leitura por anúncio
-  // que falhou — ou que veio vazia enquanto as campanhas somam resultado — omite o cartão.
+  // que falhou — ou que veio vazia enquanto as campanhas somam resultado — omite a lista.
   const mostraCriativos = !r.criativosIndisponiveis && (r.criativos.length > 0 || r.total === 0);
-  return `<div class="linha-cartoes">
+  const lateral = `<section class="bloco lateral">
+      ${r.conjunto ? maisBaratoHtml(r.conjunto, r) : ""}
+      ${outrosNumerosHtml(r)}
+    </section>`;
+  return `<div class="duas${mostraCriativos ? "" : " duas-uma"}">
     ${mostraCriativos ? criativosHtml(r) : ""}
-    <section class="cartao lateral">
-      ${r.conjunto ? conjuntoHtml(r.conjunto, r) : `<div class="rotulo">Mais números do período</div>`}
-      ${maisNumerosHtml(r)}
-    </section>
+    ${lateral}
   </div>`;
 }
 
 function barraGenero(g: { mulheres: number; homens: number }): string {
+  const s = generoQueSoma100(g.mulheres, g.homens);
   return `<div class="genero-barra">
-      <div style="width:${g.mulheres}%;background:${C.mulheres}"></div>
-      <div style="width:${g.homens}%;background:${C.marca}"></div>
+      <div style="width:${s.mulheres}%;background:${C.mulheres}"></div>
+      <div style="width:${s.homens}%;background:${C.marca}"></div>
     </div>
     <div class="genero-legenda">
-      <div><span class="bolinha" style="background:${C.mulheres}"></span>Mulheres<b>${formatarPctCurto(g.mulheres)}</b></div>
-      <div><span class="bolinha" style="background:${C.marca}"></span>Homens<b>${formatarPctCurto(g.homens)}</b></div>
+      <div><span><i class="bolinha" style="background:${C.mulheres}"></i>Mulheres</span><b>${s.mulheres}%</b></div>
+      <div><span><i class="bolinha" style="background:${C.marca}"></i>Homens</span><b>${s.homens}%</b></div>
     </div>`;
 }
 
 function barrasIdade(idades: { faixa: string; pct: number }[]): string {
   const maior = Math.max(1, ...idades.map((i) => i.pct));
-  return idades.map((i) => `<div class="idade${i.pct === maior ? " idade-maior" : ""}">
+  return idades.map((i) => `<div class="idade${i.pct === maior ? " idade-maior" : ""}${i.pct === 0 ? " idade-zero" : ""}">
       <span class="idade-faixa">${esc(i.faixa)}</span>
       <span class="idade-trilho"><span style="width:${i.pct > 0 ? Math.max(2, (i.pct / maior) * 100) : 0}%"></span></span>
       <span class="idade-pct">${formatarPctCurto(i.pct)}</span>
@@ -253,8 +277,8 @@ function barrasIdade(idades: { faixa: string; pct: number }[]): string {
 }
 
 function publicoHtml(p: Publico, leitura: string | null, titulo: string, sub: string): string {
-  return `<section class="cartao publico">
-    <div class="cartao-topo"><div><h2>${esc(titulo)}</h2><div class="sub">${esc(sub)}</div></div></div>
+  return `<section class="bloco publico">
+    <div class="bloco-topo"><div><h2>${esc(titulo)}</h2><div class="sub">${esc(sub)}</div></div></div>
     ${leitura ? `<div class="leitura">${esc(leitura)}</div>` : ""}
     <div class="publico-colunas">
       ${p.genero ? `<div class="publico-genero"><div class="rotulo">Gênero</div>${barraGenero(p.genero)}</div>` : ""}
@@ -269,12 +293,12 @@ function igAudiencia(a: IgAudiencia): string {
   const temGenero = a.generoFemPct != null && a.generoMascPct != null;
   const idades = [...a.idades].sort((x, y) => (parseInt(x.faixa, 10) || 0) - (parseInt(y.faixa, 10) || 0));
   if (!temGenero && !idades.length && !a.cidades.length) return "";
-  return `<section class="cartao publico">
-    <div class="cartao-topo"><div><h2>Quem segue o perfil</h2><div class="sub">Seguidores por gênero, idade e cidade</div></div></div>
+  return `<section class="bloco publico">
+    <div class="bloco-topo"><div><h2>Quem segue o perfil</h2><div class="sub">Seguidores por gênero, idade e cidade</div></div></div>
     <div class="publico-colunas">
       ${temGenero ? `<div class="publico-genero"><div class="rotulo">Gênero</div>${barraGenero({ mulheres: a.generoFemPct!, homens: a.generoMascPct! })}</div>` : ""}
       ${idades.length ? `<div class="publico-idade"><div class="rotulo">Faixa etária</div>${barrasIdade(idades)}</div>` : ""}
-      ${a.cidades.length ? `<div class="publico-cidades"><div class="rotulo">Principais cidades</div>${a.cidades.map((c, i) => `<div class="cidade"><span class="cidade-n">${i + 1}</span><span class="cidade-nome">${esc(c.nome)}</span><b>${formatarPctCurto(c.pct)}</b></div>`).join("")}</div>` : ""}
+      ${a.cidades.length ? `<div class="publico-cidades"><div class="rotulo">Principais cidades</div>${a.cidades.map((c, i) => `<div class="cidade"><span class="cidade-n">${i + 1}</span><span class="cidade-nome">${esc(cidadeCurta(c.nome))}</span><b>${formatarPctCurto(c.pct)}</b></div>`).join("")}</div>` : ""}
     </div>
   </section>`;
 }
@@ -282,17 +306,22 @@ function igAudiencia(a: IgAudiencia): string {
 function igPosts(snap: IgSnapshot): string {
   const posts = (snap.posts ?? []).slice(0, 6);
   if (!posts.length) {
-    return `<section class="cartao"><h2>Posts do período</h2>
+    return `<section class="bloco"><h2>Posts do período</h2>
       <div class="vazio">Nenhum post publicado no período. Os números acima são do perfil como um todo.</div></section>`;
   }
   const quando = (iso: string | null) => (iso ? diaCurto(new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" })) : "");
-  const cartoes = posts.map((p) => `<div class="post">
+  const cartoes = posts.map((p) => {
+    const engaj = [
+      p.curtidas != null ? plural(p.curtidas, "curtida", "curtidas") : "",
+      p.comentarios ? plural(p.comentarios, "comentário", "comentários") : "",
+    ].filter(Boolean).join(" · ");
+    return `<div class="post">
       <div class="post-img">${p.thumb ? `<img src="${esc(p.thumb)}" alt="" onerror="this.remove()">` : ""}</div>
-      <div class="post-meta"><span>${esc(quando(p.data))}</span><span>${p.curtidas != null ? `${inteiro(p.curtidas)} curtidas` : ""}${p.comentarios != null ? ` · ${inteiro(p.comentarios)} coment.` : ""}</span></div>
-    </div>`).join("");
-  return `<section class="cartao posts-cartao${posts.length > 3 ? " estica" : ""}">
-    <h2>Posts no ar no período</h2>
-    <div class="sub">Os que mais engajaram primeiro</div>
+      <div class="post-meta"><span>${esc(quando(p.data))}</span><span>${esc(engaj)}</span></div>
+    </div>`;
+  }).join("");
+  return `<section class="bloco posts-bloco">
+    <div class="bloco-topo"><div><h2>Posts do período</h2><div class="sub">Os que mais engajaram primeiro</div></div></div>
     <div class="posts posts-${posts.length > 3 ? "duas" : "uma"}">${cartoes}</div>
   </section>`;
 }
@@ -300,29 +329,38 @@ function igPosts(snap: IgSnapshot): string {
 function igKpis(snap: IgSnapshot, temAnuncios: boolean): string {
   const r = snap.resumo;
   const publico = snap.fonte === "publico";
-  const k = (rotulo: string, valor: string, nota?: string) =>
-    `<div class="kpi"><div class="rotulo">${esc(rotulo)}</div><div class="kpi-valor">${esc(valor)}</div>${nota ? `<div class="kpi-nota">${esc(nota)}</div>` : ""}</div>`;
   const fmt = (v: number | null | undefined) => (v == null ? "—" : inteiro(v));
   const ganhos = r?.seguidoresGanhos;
-  return `<div class="kpis">
-    ${k("Seguidores", fmt(snap.conta?.seguidores))}
-    ${publico ? "" : k("Seguidores novos", ganhos == null ? "—" : `${ganhos > 0 ? "+" : ""}${inteiro(ganhos)}`)}
-    ${publico ? "" : k("Alcance do perfil", fmt(r?.alcance), r?.alcanceJanelaDias ? `Últimos ${r.alcanceJanelaDias} dias${temAnuncios ? " · inclui quem veio pelos anúncios" : ""}` : undefined)}
-    ${k("Posts no período", fmt(r?.postsNoPeriodo))}
-  </div>`;
+  const cel: { rotulo: string; valor: string; nota?: string; principal?: boolean }[] = [
+    { rotulo: "Seguidores", valor: fmt(snap.conta?.seguidores), principal: true },
+  ];
+  if (!publico) cel.push({ rotulo: "Seguidores novos", valor: ganhos == null ? "—" : `${ganhos > 0 ? "+" : ""}${inteiro(ganhos)}` });
+  if (!publico) cel.push({
+    rotulo: "Alcance do perfil", valor: fmt(r?.alcance),
+    nota: r?.alcanceJanelaDias ? `${r.alcanceJanelaDias} dias${temAnuncios ? " · inclui quem veio pelos anúncios" : ""}` : undefined,
+  });
+  cel.push({ rotulo: "Posts no período", valor: fmt(r?.postsNoPeriodo) });
+  return `<section class="faixa" style="grid-template-columns: 1.25fr repeat(${cel.length - 1}, 1fr)">${cel.map((c) => `<div class="kpi${c.principal ? " kpi-principal" : ""}">
+      <div class="rotulo">${esc(c.rotulo)}</div>
+      <div class="kpi-valor">${esc(c.valor)}</div>
+      ${c.nota ? `<div class="kpi-nota">${esc(c.nota)}</div>` : ""}
+    </div>`).join("")}</section>`;
 }
 
 /** `clienteNome` = relatório só de Instagram: o nome do cliente é o título e o @ vem embaixo. */
-function igConteudo(snap: IgSnapshot, clienteNome?: string): string {
+function igConteudo(snap: IgSnapshot, geradoEm: string, clienteNome?: string): string {
   const dias = snap.periodo === "30d" ? 30 : snap.periodo === "14d" ? 14 : 7;
   const frase = resumoInstagram(dias, snap.resumo ?? null);
+  // A janela do Instagram é "os últimos N dias até a geração", não o mês do relatório — escrito
+  // por extenso pra ninguém achar que é setembro fechado.
+  const [, m, d] = geradoEm.split("-");
   const titulo = clienteNome
-    ? `<h1>${esc(clienteNome)}</h1><div class="sub" style="font-size:9pt;margin-top:2px">@${esc(snap.conta?.username)}</div>`
-    : `<h1 class="h1-menor">@${esc(snap.conta?.username)}</h1>`;
+    ? `<h1>${esc(clienteNome)}</h1><div class="arroba">@${esc(snap.conta?.username)}</div>`
+    : `<h1>@${esc(snap.conta?.username)}</h1>`;
   return `<section class="abertura">
-      <div class="olho" style="color:${C.instagram}">Instagram · últimos ${esc(snap.periodoLabel ?? `${dias} dias`)}</div>
+      <div class="olho olho-ig">Instagram · últimos ${esc(snap.periodoLabel ?? `${dias} dias`)}, até ${d}/${m}</div>
       ${titulo}
-      ${frase ? `<div class="frase frase-ig">${esc(frase)}</div>` : ""}
+      ${frase ? `<p class="frase">${esc(frase)}</p>` : ""}
     </section>
     ${igKpis(snap, !clienteNome)}
     ${igPosts(snap)}
@@ -347,20 +385,18 @@ export function relatorioClienteHtml(o: OpcoesRelatorio): string {
       <section class="abertura">
         <div class="olho">Resultado dos anúncios · ${esc(r.janela.rotulo)}</div>
         <h1>${esc(o.clienteNome)}</h1>
-        <div class="frase">${esc(r.frase)}${antes ? `<div class="frase-sub">${esc(antes)}</div>` : ""}</div>
+        <p class="frase">${esc(r.frase)}</p>
+        ${antes ? `<p class="frase-sub">${esc(antes)}</p>` : ""}
       </section>
-      <div class="kpis">${r.kpis
-        // Alcance que a Meta não devolveu some do PDF (é logado no servidor): lacuna não vira "—".
-        .filter((k) => !(k.chave === "alcance" && k.valor == null))
-        .map((k) => kpiHtml(k, r)).join("")}</div>
+      ${faixaKpis(r)}
       ${grafico(r)}
       ${destaquesHtml(r)}
-      ${r.publico ? publicoHtml(r.publico, r.leituraPublico, "Quem viu seus anúncios", `Pessoas alcançadas, por gênero e idade. Faixa com 0% não foi alcançada no período.`) : ""}
+      ${r.publico ? publicoHtml(r.publico, r.leituraPublico, "Quem viu seus anúncios", "Pessoas alcançadas, por gênero e idade") : ""}
       __RODAPE__`);
   }
   if (ig) {
     folhas.push(`${cabecalho(o, titulo)}
-      ${igConteudo(ig, r ? undefined : o.clienteNome)}
+      ${igConteudo(ig, o.geradoEm, r ? undefined : o.clienteNome)}
       __RODAPE__`);
   }
 
@@ -379,116 +415,132 @@ const CSS = `
 @page { size: A4; margin: 0; }
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 html, body { background: ${C.fundo}; color: ${C.texto}; font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-size: 9.5pt; line-height: 1.4; }
-.folha { width: 210mm; min-height: 296.6mm; padding: 9mm 12mm 7mm; display: flex; flex-direction: column; gap: 2.8mm; }
+.folha { width: 210mm; min-height: 296.6mm; padding: 10mm 13mm 7mm; display: flex; flex-direction: column; gap: 5mm; }
 .folha + .folha { break-before: page; }
 section, .kpi, .criativo, .post { break-inside: avoid; }
-h1 { font-size: 20pt; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; }
-h1.h1-menor { font-size: 17pt; }
-h2 { font-size: 10.5pt; font-weight: 600; letter-spacing: -.01em; }
+h1 { font-size: 22pt; font-weight: 600; letter-spacing: -.025em; line-height: 1.08; }
+h2 { font-size: 10.5pt; font-weight: 600; letter-spacing: -.01em; color: ${C.texto}; }
 b { font-weight: 600; }
-.sub { font-size: 7.8pt; color: ${C.suave}; margin-top: 1px; }
-.rotulo { font-size: 6.8pt; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: ${C.suave}; }
-.olho { font-size: 7pt; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: ${C.marcaClara}; margin-bottom: 4px; }
-.vazio { font-size: 8.5pt; color: ${C.suave}; padding: 10px 0 4px; }
+.sub { font-size: 7.8pt; color: ${C.suave}; margin-top: 2px; }
+.rotulo { font-size: 6.6pt; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: ${C.suave}; }
+.vazio { font-size: 8.5pt; color: ${C.suave}; padding: 8px 0 2px; }
 
-.topo { display: flex; align-items: center; justify-content: space-between; padding-bottom: 2.5mm; border-bottom: 1px solid ${C.linha}; }
+/* Cabeçalho: marca à esquerda, tipo e período à direita, uma linha fina embaixo. */
+.topo { display: flex; align-items: center; justify-content: space-between; padding-bottom: 3mm; border-bottom: 1px solid ${C.linha}; }
 .marca { display: flex; align-items: center; gap: 8px; }
-.logo { width: 26px; height: 26px; object-fit: contain; background: #000; border-radius: 6px; padding: 2px; }
-.marca-nome { font-size: 9.5pt; font-weight: 600; letter-spacing: .04em; }
-.topo-dir { text-align: right; }
-.topo-titulo { font-size: 8.5pt; font-weight: 500; color: ${C.secundario}; }
-.topo-periodo { font-size: 7.5pt; color: ${C.suave}; }
+.logo { width: 24px; height: 24px; object-fit: contain; background: #000; border-radius: 6px; padding: 2px; }
+.marca-nome { font-size: 9pt; font-weight: 600; letter-spacing: .06em; }
+.topo-dir { display: flex; align-items: baseline; gap: 8px; }
+.topo-titulo { font-size: 8.5pt; font-weight: 600; color: ${C.secundario}; }
+.topo-periodo { font-size: 8.5pt; color: ${C.suave}; }
 
-.abertura { padding-top: 1mm; }
-.frase { margin-top: 2.5mm; padding: 9px 14px; background: ${C.cartao}; border: 1px solid ${C.linha}; border-left: 3px solid ${C.marca}; border-radius: 10px; font-size: 10.5pt; line-height: 1.45; color: ${C.texto}; }
-.frase-ig { border-left-color: ${C.instagram}; }
-.frase-sub { font-size: 7.5pt; color: ${C.suave}; margin-top: 3px; }
+/* Abertura: o nome do cliente e a frase do período — sem caixa em volta. */
+.abertura { display: flex; flex-direction: column; }
+.olho { font-size: 7pt; font-weight: 600; letter-spacing: .13em; text-transform: uppercase; color: ${C.marcaClara}; margin-bottom: 5px; }
+.olho-ig { color: ${C.instagram}; }
+.arroba { font-size: 9pt; color: ${C.suave}; margin-top: 3px; }
+.frase { margin-top: 3.5mm; font-size: 11.5pt; line-height: 1.45; color: ${C.secundario}; max-width: 165mm; text-wrap: pretty; }
+.frase-sub { margin-top: 2px; font-size: 7.8pt; color: ${C.suave}; }
 
-.cartao { background: ${C.cartao}; border: 1px solid ${C.linha}; border-radius: 12px; padding: 12px 14px; }
-.cartao-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+/* A FAIXA DE NÚMEROS: uma peça só, divisórias finas. É a única caixa da página. */
+.faixa { display: grid; background: ${C.cartao}; border: 1px solid ${C.linha}; border-radius: 12px; overflow: hidden; }
+.kpi { padding: 11px 14px 12px; min-width: 0; }
+.kpi + .kpi { border-left: 1px solid ${C.linha}; }
+.kpi-valor { font-size: 17pt; font-weight: 600; letter-spacing: -.025em; line-height: 1.1; margin-top: 6px; white-space: nowrap; }
+.kpi-principal { background: linear-gradient(180deg, ${C.marca}24, ${C.marca}08); }
+.kpi-principal .rotulo { color: ${C.marcaClara}; }
+.kpi-principal .kpi-valor { font-size: 25pt; }
+.kpi-linha { display: flex; align-items: center; gap: 6px; margin-top: 6px; min-height: 14px; white-space: nowrap; }
+.delta { font-size: 7.4pt; font-weight: 600; font-variant-numeric: tabular-nums; }
+.delta-bom { color: ${C.bom}; }
+.delta-ruim { color: ${C.atencao}; }
+.delta-neutro { color: ${C.suave}; }
+.antes { font-size: 7.2pt; color: ${C.suave}; overflow: hidden; text-overflow: ellipsis; }
+.kpi-nota { font-size: 6.6pt; color: ${C.suave}; margin-top: 4px; line-height: 1.3; white-space: normal; }
 
-.kpis { display: flex; gap: 3mm; }
-.kpi { flex: 1; min-width: 0; background: ${C.cartao}; border: 1px solid ${C.linha}; border-radius: 12px; padding: 10px 12px; }
-.kpi-destaque { border-color: ${C.marca}88; }
-.kpi-valor { font-size: 18pt; font-weight: 600; letter-spacing: -.02em; line-height: 1.15; margin-top: 4px; white-space: nowrap; }
-.kpi-destaque .kpi-valor { font-size: 21pt; }
-.kpi-linha { display: flex; align-items: center; gap: 5px; margin-top: 5px; min-height: 15px; }
-.selo { font-size: 7.3pt; font-weight: 600; border: 1px solid; border-radius: 999px; padding: 0 6px; line-height: 14px; white-space: nowrap; }
-.kpi-antes { font-size: 7pt; color: ${C.suave}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kpi-nota { font-size: 6.6pt; color: ${C.suave}; margin-top: 4px; line-height: 1.3; }
+/* Blocos: separados por uma linha fina e espaço, sem moldura. */
+.bloco { border-top: 1px solid ${C.linha}; padding-top: 3.2mm; min-width: 0; }
+.bloco-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 
-.grafico { flex: 1 1 0; min-height: 44mm; display: flex; flex-direction: column; }
-.legenda { display: flex; gap: 12px; font-size: 7.5pt; color: ${C.suave}; white-space: nowrap; padding-top: 2px; }
-.legenda span { display: inline-flex; align-items: center; gap: 5px; }
-.leg-cheia { display: inline-block; width: 16px; height: 0; border-top: 2.4px solid ${C.marca}; border-radius: 2px; }
-.leg-tracejada { display: inline-block; width: 16px; height: 0; border-top: 1.5px dashed ${C.suave}; }
-.g-area { position: relative; flex: 1; margin: 20px 4px 18px 26px; min-height: 24mm; }
-.g-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.g-linha { position: absolute; left: 0; right: 0; border-top: 1px dashed ${C.linha}; }
-.g-y { position: absolute; left: -26px; width: 20px; text-align: right; transform: translateY(-50%); font-size: 6.8pt; color: ${C.suave}; }
-.g-x { position: absolute; top: calc(100% + 6px); transform: translateX(-50%); font-size: 7pt; color: ${C.suave}; white-space: nowrap; }
-.g-x-pico { color: ${C.texto}; font-weight: 600; }
-.g-ponto { position: absolute; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: ${C.marca}; border: 1.5px solid ${C.cartao}; }
-.g-ponto-pico { width: 10px; height: 10px; margin: -5px 0 0 -5px; background: ${C.texto}; border: 2.5px solid ${C.marca}; }
-.g-valor { position: absolute; transform: translate(-50%, -100%); margin-top: -6px; padding: 0 3px; border-radius: 3px; background: ${C.cartao}; font-size: 7.3pt; font-weight: 500; color: ${C.secundario}; white-space: nowrap; }
-.g-valor-pico { color: ${C.texto}; font-weight: 600; font-size: 8pt; }
+/* Colunas por dia. */
+.grafico { flex: 1 1 0; min-height: 50mm; display: flex; flex-direction: column; }
+.legenda { display: flex; gap: 14px; font-size: 7.4pt; color: ${C.suave}; white-space: nowrap; padding-top: 2px; }
+.legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.leg-coluna { display: inline-block; width: 8px; height: 10px; border-radius: 2px 2px 0 0; background: ${C.marca}; }
+.leg-ref { display: inline-block; width: 16px; height: 0; border-top: 1.5px dashed ${C.secundario}; }
+.c-area { position: relative; flex: 1; margin: 18px 2px 20px 24px; min-height: 30mm; }
+.c-linha { position: absolute; left: 0; right: 0; border-top: 1px solid ${C.linha}; }
+.c-linha span { position: absolute; left: -24px; width: 18px; text-align: right; transform: translateY(-50%); font-size: 6.8pt; color: ${C.suave}; font-variant-numeric: tabular-nums; }
+.c-ref { position: absolute; left: 0; right: 0; border-top: 1.5px dashed ${C.secundario}; opacity: .75; z-index: 2; }
+.c-colunas { position: absolute; inset: 0; display: flex; align-items: stretch; gap: 2px; z-index: 1; }
+.c-dia { flex: 1; position: relative; display: flex; align-items: flex-end; justify-content: center; min-width: 0; }
+.c-barra { position: relative; width: 64%; max-width: 22px; background: ${C.marca}; border-radius: 3px 3px 0 0; opacity: .6; }
+.c-pico { opacity: 1; }
+.c-valor { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 3px; font-size: 7pt; font-weight: 500; color: ${C.secundario}; white-space: nowrap; }
+.c-valor-pico { font-size: 8pt; font-weight: 700; color: ${C.texto}; }
+.c-x { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); font-size: 6.9pt; color: ${C.suave}; white-space: nowrap; }
+.c-x-pico { color: ${C.texto}; font-weight: 600; }
 
-.linha-cartoes { display: flex; gap: 3mm; }
-.lista { flex: 1.45; min-width: 0; display: flex; flex-direction: column; }
-.lateral { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.criativos { flex: 1; margin-top: 7px; display: flex; flex-direction: column; justify-content: space-evenly; gap: 6px; }
-.criativo { display: flex; align-items: center; gap: 10px; }
-.mini { width: 42px; height: 42px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: ${C.cartao2}; border: 1px solid ${C.linha}; }
+/* Duas colunas: o que funcionou (lista) e onde saiu mais barato. */
+.duas { display: grid; grid-template-columns: 1.5fr 1fr; gap: 8mm; }
+.duas-uma { grid-template-columns: 1fr; }
+.criativos { margin-top: 3mm; display: flex; flex-direction: column; }
+.criativo { display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid ${C.linha}; }
+.criativo:first-child { border-top: 0; padding-top: 0; }
+.mini { width: 38px; height: 38px; border-radius: 7px; object-fit: cover; background: ${C.cartao2}; border: 1px solid ${C.linha}; }
 .mini-vazia { display: flex; align-items: center; justify-content: center; font-size: 8pt; font-weight: 600; color: ${C.suave}; }
-.criativo-texto { flex: 1; min-width: 0; }
-.criativo-nome { font-size: 8.5pt; font-weight: 500; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.criativo-meta { font-size: 7.5pt; color: ${C.suave}; margin-top: 1px; }
-.criativo-meta b { color: ${C.texto}; }
-.conjunto { padding-bottom: 8px; border-bottom: 1px solid ${C.linha}; }
-.conjunto-nome { font-size: 9.5pt; font-weight: 600; margin-top: 4px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.conjunto-camp { font-size: 7.2pt; color: ${C.suave}; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.conjunto-valor { font-size: 15pt; font-weight: 600; letter-spacing: -.02em; margin-top: 6px; }
-.conjunto-valor span { font-size: 8pt; font-weight: 400; color: ${C.suave}; letter-spacing: 0; }
-.numeros { display: flex; flex-direction: column; }
-.numero { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; border-bottom: 1px solid ${C.linha}; font-size: 8pt; color: ${C.suave}; }
-.numero:last-child { border-bottom: 0; }
-.numero b { color: ${C.texto}; white-space: nowrap; }
+.criativo-nome { font-size: 8.6pt; font-weight: 500; line-height: 1.3; min-width: 0; }
+.criativo-num { text-align: right; display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.criativo-num b { font-size: 8.6pt; white-space: nowrap; }
+.criativo-num span { font-size: 7.3pt; color: ${C.suave}; white-space: nowrap; }
+.etiqueta { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid ${C.linha}; border-radius: 4px; font-size: 6.4pt; font-weight: 500; color: ${C.suave}; line-height: 12px; vertical-align: 1px; }
+.lateral { display: flex; flex-direction: column; gap: 4mm; }
+.barato-nome { font-size: 8.8pt; font-weight: 500; margin-top: 3mm; line-height: 1.3; }
+.barato-valor { font-size: 17pt; font-weight: 600; letter-spacing: -.02em; margin-top: 3px; }
+.barato-valor span { font-size: 8pt; font-weight: 400; color: ${C.suave}; letter-spacing: 0; }
+.barato-base { font-size: 7.4pt; color: ${C.suave}; margin-top: 1px; }
+.outros .rotulo { margin-bottom: 3px; }
+.numero { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-top: 1px solid ${C.linha}; font-size: 7.8pt; color: ${C.suave}; }
+.numero b { color: ${C.texto}; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-.leitura { margin-top: 5px; font-size: 9pt; color: ${C.secundario}; }
-.publico-colunas { display: flex; gap: 22px; margin-top: 7px; }
-.publico-genero { flex: 0.8; min-width: 0; }
+/* Público. */
+.leitura { margin-top: 2.5mm; font-size: 9.2pt; color: ${C.secundario}; }
+.publico-colunas { display: flex; gap: 10mm; margin-top: 3.5mm; }
+.publico-genero { flex: 0.75; min-width: 0; }
 .publico-idade { flex: 1.3; min-width: 0; }
 .publico-cidades { flex: 1; min-width: 0; }
-.publico-colunas .rotulo { margin-bottom: 7px; }
-.genero-barra { display: flex; height: 9px; border-radius: 999px; overflow: hidden; background: ${C.cartao2}; }
-.genero-legenda { display: flex; gap: 16px; margin-top: 8px; }
+.publico-colunas .rotulo { margin-bottom: 8px; }
+.genero-barra { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: ${C.cartao2}; gap: 2px; }
+.genero-legenda { display: flex; gap: 18px; margin-top: 9px; }
 .genero-legenda div { display: flex; flex-direction: column; font-size: 7.5pt; color: ${C.suave}; }
-.genero-legenda b { font-size: 14pt; color: ${C.texto}; letter-spacing: -.02em; margin-top: 1px; }
+.genero-legenda span { display: inline-flex; align-items: center; }
+.genero-legenda b { font-size: 15pt; color: ${C.texto}; letter-spacing: -.02em; margin-top: 2px; }
 .bolinha { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
-.idade { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; font-size: 7.5pt; color: ${C.suave}; }
-.idade-faixa { width: 30px; flex-shrink: 0; }
+.idade { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 7.5pt; color: ${C.suave}; }
+.idade-faixa { width: 34px; flex-shrink: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .idade-trilho { flex: 1; height: 6px; background: ${C.cartao2}; border-radius: 999px; overflow: hidden; }
-.idade-trilho span { display: block; height: 100%; background: ${C.marca}99; border-radius: 999px; }
+.idade-trilho span { display: block; height: 100%; background: ${C.marca}a6; border-radius: 999px; }
 .idade-maior .idade-trilho span { background: ${C.marca}; }
-.idade-maior { color: ${C.texto}; }
-.idade-pct { width: 34px; text-align: right; flex-shrink: 0; }
-.cidade { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; font-size: 8pt; }
+.idade-maior { color: ${C.texto}; font-weight: 500; }
+.idade-zero { opacity: .55; }
+.idade-pct { width: 32px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.cidade { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; font-size: 8pt; }
 .cidade-n { width: 16px; height: 16px; border-radius: 50%; background: ${C.cartao2}; color: ${C.suave}; font-size: 7pt; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.cidade-nome { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cidade b { color: ${C.secundario}; font-weight: 500; }
+.cidade-nome { flex: 1; min-width: 0; }
+.cidade b { color: ${C.secundario}; font-weight: 500; font-variant-numeric: tabular-nums; }
 
-.posts-cartao { display: flex; flex-direction: column; }
-.posts-cartao.estica { flex: 1 1 auto; }
-.posts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 9px; }
-.posts-duas { flex: 1; grid-auto-rows: minmax(0, 1fr); }
-.post { background: ${C.cartao2}; border: 1px solid ${C.linha}; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
-.post-img { background: ${C.linha}; position: relative; }
-.posts-uma .post-img { aspect-ratio: 4 / 5; }
-.posts-duas .post-img { flex: 1; min-height: 32mm; }
-.post-img img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
-.post-meta { display: flex; justify-content: space-between; gap: 6px; padding: 6px 8px; font-size: 7pt; color: ${C.suave}; white-space: nowrap; }
+/* Posts do Instagram: a arte INTEIRA (contain), sem cortar o topo nem o preço. */
+.posts-bloco { flex: 1 1 auto; display: flex; flex-direction: column; }
+.posts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin-top: 3mm; flex: 1; }
+.posts-duas { grid-auto-rows: minmax(0, 1fr); }
+.post { display: flex; flex-direction: column; min-height: 0; }
+.post-img { position: relative; flex: 1; min-height: 38mm; background: ${C.cartao}; border: 1px solid ${C.linha}; border-radius: 8px; overflow: hidden; }
+.posts-uma .post-img { aspect-ratio: 4 / 5; flex: none; }
+.post-img img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+.post-meta { display: flex; justify-content: space-between; gap: 6px; padding: 4px 1px 0; font-size: 7pt; color: ${C.suave}; white-space: nowrap; }
+.post-meta span:first-child { color: ${C.secundario}; }
 
-.rodape { margin-top: auto; padding-top: 2.5mm; border-top: 1px solid ${C.linha}; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+.rodape { margin-top: auto; padding-top: 3mm; border-top: 1px solid ${C.linha}; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
 .rodape-nota { font-size: 6.6pt; color: ${C.suave}; line-height: 1.45; max-width: 128mm; }
 .rodape-dir { font-size: 6.8pt; color: ${C.suave}; white-space: nowrap; }
 `;

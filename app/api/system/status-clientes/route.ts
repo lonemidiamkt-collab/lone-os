@@ -80,7 +80,12 @@ export async function POST(req: NextRequest) {
   const porQueParou = (id: string): string => {
     const a = contaDe.get(id);
     const st = a?.account_status != null ? Number(a.account_status) : null;
-    if (st != null && st !== 1) return `sem gasto em 7 dias — conta ${metaAccountStatus(st).label.toLowerCase()} na Meta`;
+    // A frase pronta do mapa ("conta com pagamento pendente (cobrança falhou)"), não o rótulo — com o
+    // rótulo saía "conta pagamento falhou na Meta".
+    if (st != null && st !== 1) {
+      const frase = metaAccountStatus(st).frase;
+      return `sem gasto em 7 dias — conta ${frase}${/meta/i.test(frase) ? "" : " na Meta"}`;
+    }
     if (a?.last_balance != null && Number(a.last_balance) <= 0) return "sem gasto em 7 dias — saldo zerado";
     return "sem gasto em 7 dias — campanhas pausadas ou sem verba programada";
   };

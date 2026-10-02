@@ -321,8 +321,10 @@ describe("HTML do PDF", () => {
     expect(html).not.toContain("Mensagens");
     expect(html).not.toContain("msgs");
     expect(html).toContain("Conversas por dia");
-    expect(html).toContain("Semana anterior · 34");
-    expect(html).toContain("Público quente | engajou nos últimos 90 dias");
+    // O período anterior entra como a MÉDIA por dia (linha de referência), não como 2ª série (02/10).
+    expect(html).toContain("Média semana anterior · 4,9/dia");
+    // Nome de conjunto limpo: o "|" do Gerenciador vira "·" (lib/reports/relatorioTextos.ts).
+    expect(html).toContain("Público quente · engajou nos últimos 90 dias");
     expect(html).toMatch(/18-24<\/span>[\s\S]*?0%/);
     expect(html).not.toMatch(/NaN|undefined|Infinity/);
     // nada interno: sem nome do gestor, sem custo da agência
@@ -404,3 +406,38 @@ describe("lerRelatorioAnuncios — chamadas à Meta", () => {
     await expect(lerRelatorioAnuncios("tk", "act_1", SEMANA)).rejects.toThrow(/190/);
   });
 });
+
+// ── O desenho de 02/10/2026 ("está bom de informações mas está bem bagunçado") ──────────────────
+describe("desenho do PDF de resultados", () => {
+  const base = { clienteNome: "Madereira D´Aldeia", logo: "", geradoEm: "2026-10-01", janela: SEMANA };
+
+  it("os números numa faixa só, e sem o jargão 'conjunto'", () => {
+    const html = relatorioClienteHtml({ ...base, anuncios: relatorioHorto() });
+    expect(html.match(/class="faixa"/g)).toHaveLength(1);
+    expect(html).not.toContain("Conjunto com menor");
+    expect(html).toContain("Onde a conversa saiu mais barata");
+  });
+
+  it("colunas por dia e grade em linha contínua — sem o zigue-zague de duas linhas", () => {
+    const html = relatorioClienteHtml({ ...base, anuncios: relatorioHorto() });
+    expect(html).toContain('class="c-colunas"');
+    expect(html).not.toContain("g-svg");
+    expect(html).toMatch(/\.c-linha \{[^}]*border-top: 1px solid/);
+  });
+
+  it("empate no melhor dia destaca os dois — na Madeireira, 2/9 e 24/9 tiveram 10", () => {
+    const r = relatorioHorto();
+    const max = Math.max(...r.serie.map((p) => p.atual));
+    const outro = r.serie.findIndex((p) => p.atual !== max);
+    r.serie[outro] = { ...r.serie[outro], atual: max };
+    const html = relatorioClienteHtml({ ...base, anuncios: r });
+    expect(html).toContain("Melhores dias:");
+    expect(html.match(/c-barra c-pico/g)!.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("a variação na semana diz 'anterior', não 'semana anterior' (não cabia e saía cortado)", () => {
+    const html = relatorioClienteHtml({ ...base, anuncios: relatorioHorto() });
+    expect(html).not.toMatch(/class="antes">semana anterior:/);
+  });
+});
+
