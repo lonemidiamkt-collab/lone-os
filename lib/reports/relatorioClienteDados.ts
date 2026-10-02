@@ -15,7 +15,7 @@ import { getGraphUrl } from "@/lib/meta/config";
 import { metaJson } from "@/lib/meta/fetch";
 import { fetchAccountReach } from "@/lib/meta/insights-server";
 import {
-  montarRelatorio, janelaAnterior,
+  montarRelatorio, janelaAnterior, fatiasDaJanela,
   type Janela, type LinhaCampanhaDia, type LinhaConjunto, type LinhaAnuncio, type LinhaDemografia,
   type RelatorioAnuncios,
 } from "./relatorioCliente";
@@ -35,17 +35,41 @@ async function lerPaginado<T>(primeira: string, label: string, maxPaginas = 10):
 
 const intervalo = (j: Janela) => JSON.stringify({ since: j.inicio, until: j.fim });
 
-export function lerCampanhasPorDia(token: string, conta: string, j: Janela): Promise<LinhaCampanhaDia[]> {
+function pedirCampanhasPorDia(token: string, conta: string, inicio: string, fim: string): Promise<LinhaCampanhaDia[]> {
   const p = new URLSearchParams({
     access_token: token,
     level: "campaign",
     fields: "campaign_id,campaign_name,objective,date_start,spend,impressions,clicks,inline_link_clicks,actions",
-    time_range: intervalo(j),
+    time_range: JSON.stringify({ since: inicio, until: fim }),
     time_increment: "1",
     action_attribution_windows: ATRIBUICAO,
     limit: "500",
   });
-  return lerPaginado(`${getGraphUrl(`/${conta}/insights`)}?${p}`, `relatório campanhas ${conta} ${j.inicio}→${j.fim}`, 20);
+  return lerPaginado(`${getGraphUrl(`/${conta}/insights`)}?${p}`, `relatório campanhas ${conta} ${inicio}→${fim}`, 20);
+}
+
+/** Erro da Meta que é "pedido grande demais pra agora", não "não pode". */
+const ehSobrecarga = (e: unknown) =>
+  /timeout|aborted|temporarily unavailable|please reduce the amount of data|\b5\d\d\b|unknown error/i.test(e instanceof Error ? e.message : String(e));
+
+/**
+ * Campanha × dia do período. Pede tudo de uma vez; se a Meta recusar por tamanho, pede semana por
+ * semana e junta (as linhas são diárias, então o resultado é o mesmo).
+ *
+ * POR QUE (02/10/2026): o relatório de setembro da Armazém do Ferro não saiu — e na nova tentativa
+ * também não. Medido direto na Meta: a semana responde em ~10 s; o mês inteiro estoura os 30 s e
+ * volta "Service temporarily unavailable". Não era instabilidade, era o tamanho do pedido.
+ */
+export async function lerCampanhasPorDia(token: string, conta: string, j: Janela): Promise<LinhaCampanhaDia[]> {
+  try {
+    return await pedirCampanhasPorDia(token, conta, j.inicio, j.fim);
+  } catch (e) {
+    if (j.dias <= 7 || !ehSobrecarga(e)) throw e;
+    console.warn(`[relatorio] ${conta} ${j.inicio}→${j.fim}: Meta recusou o período inteiro (${e instanceof Error ? e.message.slice(0, 80) : e}); pedindo por semana`);
+    const out: LinhaCampanhaDia[] = [];
+    for (const f of fatiasDaJanela(j.inicio, j.fim, 7)) out.push(...await pedirCampanhasPorDia(token, conta, f.inicio, f.fim));
+    return out;
+  }
 }
 
 export function lerConjuntos(token: string, conta: string, j: Janela): Promise<LinhaConjunto[]> {

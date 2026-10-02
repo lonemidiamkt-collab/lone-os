@@ -441,3 +441,24 @@ describe("desenho do PDF de resultados", () => {
   });
 });
 
+describe("período em fatias quando a Meta recusa o mês inteiro", () => {
+  // Armazém do Ferro, 02/10/2026: o mês estourava 30 s ("Service temporarily unavailable"); a semana
+  // respondia em ~10 s. O relatório pede semana por semana e junta.
+  it("setembro em 5 fatias de até 7 dias, sem buraco nem sobreposição", async () => {
+    const { fatiasDaJanela } = await import("@/lib/reports/relatorioCliente");
+    expect(fatiasDaJanela("2026-09-01", "2026-09-30")).toEqual([
+      { inicio: "2026-09-01", fim: "2026-09-07" },
+      { inicio: "2026-09-08", fim: "2026-09-14" },
+      { inicio: "2026-09-15", fim: "2026-09-21" },
+      { inicio: "2026-09-22", fim: "2026-09-28" },
+      { inicio: "2026-09-29", fim: "2026-09-30" },
+    ]);
+  });
+
+  it("virada de mês e janela de um dia", async () => {
+    const { fatiasDaJanela } = await import("@/lib/reports/relatorioCliente");
+    expect(fatiasDaJanela("2026-08-28", "2026-09-03")).toEqual([{ inicio: "2026-08-28", fim: "2026-09-03" }]);
+    expect(fatiasDaJanela("2026-09-10", "2026-09-10")).toEqual([{ inicio: "2026-09-10", fim: "2026-09-10" }]);
+  });
+});
+

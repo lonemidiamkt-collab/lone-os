@@ -137,6 +137,22 @@ function mesCheio(inicio: string, fim: string): boolean {
 }
 
 /** "14 a 20 set 2026", "28 set a 4 out 2026", "29 dez 2025 a 4 jan 2026". */
+/** Fatias de até `dias` dias cobrindo a janela, em ordem. */
+export function fatiasDaJanela(inicio: string, fim: string, dias = 7): { inicio: string; fim: string }[] {
+  const out: { inicio: string; fim: string }[] = [];
+  let a = inicio;
+  while (a <= fim) {
+    const d = new Date(`${a}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + dias - 1);
+    const b = d.toISOString().slice(0, 10) < fim ? d.toISOString().slice(0, 10) : fim;
+    out.push({ inicio: a, fim: b });
+    const prox = new Date(`${b}T12:00:00Z`);
+    prox.setUTCDate(prox.getUTCDate() + 1);
+    a = prox.toISOString().slice(0, 10);
+  }
+  return out;
+}
+
 export function rotuloIntervaloCurto(inicio: string, fim: string): string {
   const a = partes(inicio), b = partes(fim);
   if (a.ano !== b.ano) return `${a.dia} ${MESES_CURTOS[a.mes]} ${a.ano} a ${b.dia} ${MESES_CURTOS[b.mes]} ${b.ano}`;
