@@ -9,6 +9,8 @@ import { ETAPAS_COMPROMETIDAS, ETAPAS_DE_APROVACAO, ETAPAS_FINAIS, infoEtapa, st
 import { spNow, ymd } from "@/lib/cs/vigilancia";
 import { clientesSemPostNaSemana, semanaAlvo } from "@/lib/cs/lacunas";
 import { proximasDatas, formatDataCurta } from "@/lib/cs/datas";
+import { cumpriuODia, diasDePostAnteriores } from "@/lib/cs/vespera-classificar";
+import { temSocial } from "@/lib/clients/servico";
 
 const DIAS_QUIETO = 7; // igual ao cs-esfriando: cliente que falava e sumiu há >= N dias
 
@@ -49,9 +51,13 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
   const meiaNoiteSP = new Date(`${hojeData}T00:00:00-03:00`).toISOString();
   const limiteFrio = new Date(Date.now() - DIAS_QUIETO * 86400000).toISOString();
 
-  const [clientsRes, demRes, cardsRes, drRes, rejRes] = await Promise.all([
+  // O QUE FOI AO AR DE VERDADE (02/10). O time posta a maioria dos clientes sem card no quadro —
+  // na sexta 25/09, 31 postaram e 9 tinham card. Sem o Instagram, "sem post planejado" e "arte
+  // pronta parada" contavam como pendência quem já estava no ar.
+  const desdePosts = new Date(Date.now() - 35 * 86400000).toISOString();
+  const [clientsRes, demRes, cardsRes, drRes, rejRes, postsRes] = await Promise.all([
     supabaseAdmin.from("clients")
-      .select("id, name, nome_fantasia, last_client_msg_at, agente_ativo, assigned_social, assigned_designer")
+      .select("id, name, nome_fantasia, last_client_msg_at, agente_ativo, assigned_social, assigned_designer, service_type, perfil_conteudo, ig_business_account_id")
       .or("active.is.null,active.eq.true"),
     supabaseAdmin.from("cs_demandas")
       // `responsavel` entrou pro digest conseguir agrupar por QUEM decide — sem ele, as 58
@@ -72,7 +78,15 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       .eq("status", "rejected")
       .order("reviewed_at", { ascending: false })
       .limit(300),
+    supabaseAdmin.from("client_ig_posts").select("client_id, posted_at").gte("posted_at", desdePosts).limit(6000),
   ]);
+  const diasComPost = new Map<string, Set<string>>();
+  for (const p of postsRes.data ?? []) {
+    const set = diasComPost.get(p.client_id as string) ?? new Set<string>();
+    set.add(ymd(spNow(new Date(p.posted_at as string))));
+    diasComPost.set(p.client_id as string, set);
+  }
+  const dataCoberta = (clientId: string, dia: string) => cumpriuODia(dia, diasComPost.get(clientId) ?? new Set());
   const primeiroNome = (n?: string | null) => (n || "").trim().split(/\s+/)[0] || null;
 
   const clients = clientsRes.data ?? [];
@@ -107,7 +121,18 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
   // (arte já entregue, falta confirmar/postar). designer_delivered_at é a fonte de verdade (o status
   // nem sempre acompanha). Fora do "ideas"/"published"/"scheduled".
   const aguardandoDesigner = cards.filter((k) => COMPROMETIDO.includes(k.status as string) && !k.designer_delivered_at).length;
-  const prontas = cards.filter((k) => k.designer_delivered_at && !k.social_confirmed_at && !statusNaEtapa(k.status as string, "pauta", ...ETAPAS_FINAIS));
+  // ARTE PRONTA PARADA = entregue, ainda não no ar, e o dia dela NÃO teve post no feed. Fica de
+  // fora: (a) card cujo dia teve post — a arte foi junto (carrossel, stories); o casamento de
+  // "No ar" é um post pra um card, e 5 artes num carrossel deixavam 4 cards "prontos" pra sempre;
+  // (b) card de mais de 30 dias — já está em "encalhados" e era contado duas vezes.
+  const limite30 = ymd(new Date(agora.getTime() - 30 * 86400000));
+  const prontas = cards.filter((k) => {
+    if (!k.designer_delivered_at || k.social_confirmed_at || statusNaEtapa(k.status as string, "pauta", ...ETAPAS_FINAIS)) return false;
+    const dia = (k.due_date as string | null) ?? ymd(spNow(new Date(k.designer_delivered_at as string)));
+    if (dia < limite30) return false;
+    if (dia < hojeData && dataCoberta(k.client_id as string, dia)) return false;
+    return true;
+  });
   const entreguesAguardandoSocial = prontas.length;
   const prontasPraPostar = prontas
     .map((k) => ({
@@ -140,8 +165,18 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
 
   // Lacuna semanal: cliente de social sem NENHUM card com due_date nesta semana (seg-dom) —
   // "ninguém fica pra trás". Semana em horário de SP (agora já é spNow(), definido no topo).
+  // Só quem contratou social — e quem NÃO está postando em dia. Sem card na semana e postando
+  // normalmente no Instagram é o time trabalhando fora do quadro, não cliente esquecido.
+  const emDiaNoInstagram = (c: (typeof clients)[number]) => {
+    const posts = diasComPost.get(c.id as string);
+    if (!posts?.size) return false; // sem post (ou sem Instagram): não dá pra dizer que está em dia
+    const video = c.perfil_conteudo === "video" || c.perfil_conteudo === "completo";
+    const esperados = diasDePostAnteriores(hojeData, video ? [1, 3, 5] : [1, 5], 6);
+    return esperados.length - esperados.filter((d) => cumpriuODia(d, posts)).length < 2;
+  };
   const elegiveis = clients
-    .filter((c) => c.assigned_social && !testeIds.has(c.id as string))
+    .filter((c) => c.assigned_social && temSocial({ service_type: c.service_type as string | null })
+      && !testeIds.has(c.id as string) && !emDiaNoInstagram(c))
     .map((c) => ({ id: c.id as string, nome: nomeDe.get(c.id as string) || "Cliente", social: (c.assigned_social as string) || null }));
   const semana = semanaAlvo(agora); // seg-qua: essa semana · qui-dom: a que vem (mais acionável)
   const semPostsSemana = clientesSemPostNaSemana(

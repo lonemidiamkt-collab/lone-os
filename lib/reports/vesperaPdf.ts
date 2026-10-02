@@ -32,36 +32,46 @@ export interface ItemVespera {
 export interface DadosVespera {
   /** "sexta 11/09" */
   diaLabel: string;
-  semCard: ItemVespera[];
-  semArte: ItemVespera[];
+  /** Card/demanda de amanhã sem a arte entregue — a pendência de verdade. */
+  artePendente: ItemVespera[];
+  /** Sem card e faltando post nos últimos dias de post (Instagram real). */
+  emRisco: (ItemVespera & { postou: number; de: number })[];
+  /** Sem Instagram que dê pra conferir — não é acusação, é ponto cego. */
+  semInstagram: ItemVespera[];
+  /** Postando em dia, mesmo sem card no quadro. */
+  emDia: string[];
   /** Clientes com vídeo na quarta. */
   video: string[];
+  /** Card/demanda de amanhã com a arte já entregue. */
   prontos: number;
   esperados: number;
 }
 
-function secao(titulo: string, icone: string, itens: ItemVespera[], cor: string): string {
+function secao(titulo: string, icone: string, itens: (ItemVespera & { detalhe?: string })[], cor: string, nota = ""): string {
   if (!itens.length) return "";
   const linhas = itens.map((i) => `
     <tr>
       <td class="cli">${esc(i.nome)}</td>
+      <td class="det">${esc(i.detalhe ?? "")}</td>
       <td class="dono">${esc(i.social)}</td>
     </tr>`).join("");
   return `
   <section>
     <h2 style="color:${cor}">${icone} ${esc(titulo)} <span class="qtd">${itens.length}</span></h2>
+    ${nota ? `<p class="nota">${esc(nota)}</p>` : ""}
     <table><tbody>${linhas}</tbody></table>
   </section>`;
 }
 
 /** O HTML do PDF da véspera. Uma página, sem rolagem lateral. */
 export function vesperaPdfHtml(d: DadosVespera, logo: string, hoje: string): string {
-  const pct = d.esperados > 0 ? Math.round((d.prontos / d.esperados) * 100) : 0;
+  const emDiaTotal = d.prontos + d.emDia.length;
+  const pct = d.esperados > 0 ? Math.round((emDiaTotal / d.esperados) * 100) : 0;
   const videoHtml = d.video.length
     ? `
   <section>
     <h2 style="color:${SUAVE}">🎬 Amanhã é quarta — o roteiro já está pronto? <span class="qtd">${d.video.length}</span></h2>
-    <table><tbody>${d.video.map((n) => `<tr><td class="cli" colspan="2">${esc(n)}</td></tr>`).join("")}</tbody></table>
+    <table><tbody>${d.video.map((n) => `<tr><td class="cli" colspan="3">${esc(n)}</td></tr>`).join("")}</tbody></table>
   </section>`
     : "";
 
@@ -87,6 +97,9 @@ export function vesperaPdfHtml(d: DadosVespera, logo: string, hoje: string): str
   tr:last-child td { border-bottom:0; }
   .cli { font-weight:500; }
   .dono { color:${SUAVE}; text-align:right; white-space:nowrap; font-size:10.5px; }
+  .det { color:${SUAVE}; font-size:10.5px; padding-right:10px; white-space:nowrap; }
+  .nota { color:${SUAVE}; font-size:10px; margin:-4px 0 8px; }
+  .emdia { color:${SUAVE}; font-size:10.5px; line-height:1.55; }
   .placar { display:flex; align-items:center; gap:12px; background:${CARTAO};
             border:1px solid ${LINHA}; border-radius:8px; padding:12px 14px; }
   .placar .n { font-size:22px; font-weight:600; color:${pct >= 70 ? "#63d3a3" : ALERTA}; }
@@ -103,16 +116,23 @@ export function vesperaPdfHtml(d: DadosVespera, logo: string, hoje: string): str
     ${logo ? `<img src="${logo}" alt="Lone Mídia">` : ""}
   </div>
 
-  <p class="intro">Cada linha é um cliente que precisa de alguma coisa antes de amanhã cedo.</p>
+  <p class="intro">Só entra aqui quem precisa de alguma coisa antes de amanhã cedo. Quem posta em dia sem card no quadro conta como em dia — a prova é o Instagram, não o quadro.</p>
 
-  ${secao("Sem pauta/card pra amanhã", "⚠️", d.semCard, ALERTA)}
-  ${secao("Card criado, mas arte ainda não entregue", "🎨", d.semArte, ALERTA)}
+  ${secao("Card de amanhã sem arte entregue", "🎨", d.artePendente, ALERTA)}
+  ${secao("Sem card e faltando post nos últimos dias", "⚠️", d.emRisco.map((x) => ({ ...x, detalhe: `postou ${x.postou} de ${x.de}` })), ALERTA,
+    "Contando os últimos dias de post no Instagram (vale um dia antes ou depois).")}
   ${videoHtml}
+  ${secao("Sem Instagram pra conferir", "👁️", d.semInstagram, SUAVE, "Não dá pra saber se postou — vincular o Instagram no cadastro.")}
+  ${d.emDia.length ? `
+  <section>
+    <h2 style="color:#63d3a3">✅ Em dia, sem card no quadro <span class="qtd">${d.emDia.length}</span></h2>
+    <div class="emdia">${d.emDia.map(esc).join(" · ")}</div>
+  </section>` : ""}
 
   <div class="placar">
     <div>
-      <div class="n">${d.prontos}/${d.esperados}</div>
-      <div class="l">já prontos</div>
+      <div class="n">${emDiaTotal}/${d.esperados}</div>
+      <div class="l">em dia</div>
     </div>
     <div class="barra"><i></i></div>
   </div>
@@ -123,7 +143,11 @@ export function vesperaPdfHtml(d: DadosVespera, logo: string, hoje: string): str
 
 /** A legenda curta que acompanha o PDF no grupo. O número tem que aparecer sem abrir o arquivo. */
 export function legendaVespera(d: DadosVespera): string {
-  const pend = d.semCard.length + d.semArte.length;
-  return `🗓️ *Véspera de ${d.diaLabel}* — ${pend} ${pend === 1 ? "cliente precisa" : "clientes precisam"} de atenção hoje.`
-    + `\nJá prontos: *${d.prontos}/${d.esperados}*. A lista está no PDF.`;
+  const partes: string[] = [];
+  if (d.artePendente.length) partes.push(`${d.artePendente.length} com arte pendente`);
+  if (d.emRisco.length) partes.push(`${d.emRisco.length} em risco`);
+  if (d.video.length) partes.push(`${d.video.length} roteiro${d.video.length === 1 ? "" : "s"} de vídeo`);
+  const emDia = d.prontos + d.emDia.length;
+  return `🗓️ *Véspera de ${d.diaLabel}* — ${partes.join(" · ") || "nada pendente"}.`
+    + `\nEm dia: *${emDia}/${d.esperados}*. O detalhe está no PDF.`;
 }

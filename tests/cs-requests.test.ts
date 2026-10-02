@@ -79,3 +79,20 @@ describe("janela e prazo", () => {
     expect(dentroDoExpediente(new Date("2026-08-25T14:00:00-03:00"))).toBe(true);
   });
 });
+
+describe("link não é pergunta", () => {
+  // 02/10/2026: o Matheus (Contele Energia Solar) compartilhou um post e o time recebeu "pergunta
+  // de cliente sem resposta há 59 min" — o "?" era o da URL do Instagram.
+  it("só o link do Instagram, com ? no endereço", () => {
+    expect(pareceParaResponder("https://www.instagram.com/p/DdcWeIUj9NF/?stkn=MWN3bXc4MzAzZG56")).toBe(false);
+  });
+
+  it("link com um comentário curto também não", () => {
+    expect(pareceParaResponder("olha https://www.instagram.com/p/X/?igsh=abc")).toBe(false);
+  });
+
+  it("pergunta de verdade junto com o link continua sendo pergunta", () => {
+    expect(pareceParaResponder("dá pra fazer uma arte assim? https://www.instagram.com/p/X/?igsh=abc")).toBe(true);
+  });
+});
+

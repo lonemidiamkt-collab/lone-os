@@ -24,13 +24,22 @@ export async function POST(req: NextRequest) {
   const hoje = ymd(now);
   const amanha = ymd(addDays(now, 1));
 
-  const { data: tasks, error } = await supabaseAdmin
+  // O QUE JÁ SE RESOLVEU SAI ANTES DE VIRAR COBRANÇA (02/10). 43 das 45 tarefas cobradas eram
+  // checklist de setup de cliente que já está no ar há meses ("venceu há 51 dias" da bio do Veneza,
+  // que posta 8 vezes por mês). Ver lib/cs/setup-fechar.ts. Ensaio e download não gravam nada.
+  const somenteLeitura = previewOnly || req.nextUrl.searchParams.get("baixar") === "1";
+  const { fecharSetupResolvido } = await import("@/lib/cs/setup-fechar-server");
+  const fechamento = await fecharSetupResolvido({ aplicar: !somenteLeitura });
+  const resolvidas = new Set(fechamento.fechadas.map((f) => f.id));
+
+  const { data: tasksBrutas, error } = await supabaseAdmin
     .from("tasks")
     // client_id entra pra resolver papel genérico → pessoa pelo responsável daquele cliente.
     .select("id, title, assigned_to, client_id, client_name, due_date, priority, status, last_reminded_at")
     .neq("status", "done")
     .not("due_date", "is", null);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const tasks = (tasksBrutas ?? []).filter((t) => !resolvidas.has(t.id as string));
 
   // O dedup diário impede cobrar duas vezes — e também impede CONFERIR o formato depois que a
   // cobrança do dia já saiu. `?forcar=1` só faz sentido junto de `?preview=1`, que não envia nada.
@@ -40,7 +49,7 @@ export async function POST(req: NextRequest) {
   const jaLembradaHoje = (iso: string | null) =>
     !ignorarDedup && !!iso && ymd(spNow(new Date(iso))) === hoje;
 
-  type Item = { id: string; tipo: "atrasada" | "hoje" | "vespera"; task: NonNullable<typeof tasks>[number] };
+  type Item = { id: string; tipo: "atrasada" | "hoje" | "vespera"; task: (typeof tasks)[number] };
   const aCobrar: Item[] = [];
   for (const t of tasks ?? []) {
     const due = (t.due_date as string)?.slice(0, 10);
@@ -121,6 +130,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true, cobrar: aCobrar.length, hora,
       pessoas: blocosPdf.map((b) => ({ pessoa: b.pessoa, tarefas: b.tarefas.length, marcado: mencoes.has(b.pessoa) })),
+      setup_resolvido: fechamento.fechadas.map((f) => `${f.cliente}: ${f.tarefa} — ${f.motivo}`),
       exemplo_legenda: blocosPdf[0] ? legendaPessoa(blocosPdf[0], mencoes.get(blocosPdf[0].pessoa) ?? "") : "",
     });
   }

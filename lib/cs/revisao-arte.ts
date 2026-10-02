@@ -3,6 +3,7 @@
 // palavra proibida, aderência ao tema. Provider: OpenAI gpt-4o (visão + julgamento). Nunca lança.
 
 import { registrarChamadaLlm } from "@/lib/obs/llm";
+import { briefingResumido } from "@/lib/cs/revisao-agrupar";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -12,6 +13,8 @@ export interface RevisaoInput {
   briefing?: string;        // briefing do cliente
   regras?: string[];        // do's & don'ts
   temaEsperado: string;     // título/briefing da arte (o que era pra ser)
+  /** Posição no carrossel. Sem isso a IA comparava TODA arte com o "Slide 1 — Capa" (Atlas, 01/10). */
+  posicao?: { n: number; total: number };
 }
 
 export interface RevisaoOutput {
@@ -57,6 +60,20 @@ O QUE PODE VIRAR UM PROBLEMA (só reporte se estiver VISÍVEL e você tiver CERT
    (ex.: "não usar vermelho", "logo sempre no rodapé", "toda arte fecha com o telefone").
    Cor: só aponte quando a regra nomear a cor E a arte contradisser de forma evidente — "parece
    meio alaranjado" não é violação, "a regra diz para não usar vermelho e a peça é vermelha" é.
+
+NÃO É ERRO (01/10/2026: estes viraram metade dos apontamentos, e aviso que erra ensina o time a
+não ler o aviso):
+- Diferença só de maiúscula/minúscula, pontuação, abreviação ("Av." × "Avenida", "km 90,3" × "Km 90.3")
+  ou complemento a MAIS (ponto de referência, "próximo ao…"). Divergência é número, nome ou valor
+  DIFERENTE — não a mesma informação escrita de outro jeito.
+- CARROSSEL: cada slide tem o próprio texto. O contexto diz qual arte é esta ("arte 2 de 6"). Se o
+  briefing descreve os slides, compare com o slide DESTA posição — nunca exija que um slide repita o
+  texto de outro, nem compare tudo com a capa.
+- "Texto cortado" só vale para texto DENTRO DA IMAGEM. O briefing chega resumido e pode terminar no
+  meio de uma frase — isso é do briefing, não da arte, e nunca vira apontamento.
+- O TEMA DESTA PEÇA vale mais que uma regra geral do cliente: se a peça é um encarte de ofertas, ter
+  preço é o esperado, mesmo que a regra geral diga "sem preço nos posts". Só aponte se o próprio
+  tema/briefing da peça disser o contrário do que a arte mostra.
 
 NÃO FAÇA:
 - NÃO invente divergência quando o briefing não tem o dado pra comparar (ex.: briefing só com link →
@@ -108,8 +125,9 @@ export async function revisarArte(inp: RevisaoInput): Promise<RevisaoResult> {
 
   const contexto =
     `Cliente: ${inp.clienteNome}\n` +
+    (inp.posicao && inp.posicao.total > 1 ? `Esta é a arte ${inp.posicao.n} de ${inp.posicao.total} do carrossel.\n` : "") +
     `Era pra ser: ${inp.temaEsperado}\n` +
-    `Briefing: ${inp.briefing?.slice(0, 1400) || "(sem briefing)"}\n` +
+    `Briefing: ${briefingResumido(inp.briefing, 1400) || "(sem briefing)"}\n` +
     `Do's & don'ts:\n${regras}\n\nRevise a arte anexada.`;
   const t0 = Date.now();
   try {

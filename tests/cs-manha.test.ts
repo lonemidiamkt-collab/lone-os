@@ -117,16 +117,17 @@ describe("seção de pendências", () => {
 });
 
 describe("legenda do PDF da manhã", () => {
-  it("traz as filas, o que tem dentro e de quem é cada pedaço", () => {
+  it("traz as filas e de quem é cada pedaço — sem a linha 'No PDF', que empurrava as marcações pro 'Ler mais'", () => {
     const r = resumoManha({
       panorama: cheio, secoes: ["bom-dia", "postagem", "pendencias", "setup"], blocos,
       rotulo: (d) => (d === "Carlos Augusto" ? "@5522999999999" : `*${d}*`),
     });
-    const [filas, dentro, quem] = r.split("\n");
-    expect(filas).toBe(filasPanorama(cheio));
-    expect(dentro).toBe("No PDF: o de cada um · pauta de hoje · sugestões esperando ok/não · setup de cliente novo");
+    const linhas = r.split("\n");
+    expect(linhas).toHaveLength(2);
+    expect(linhas[0]).toBe(filasPanorama(cheio));
     // Carlos tem 1 item listado + 2 cortados = 3.
-    expect(quem).toBe("👤 @5522999999999 (3) · _sem dono_ (1)");
+    expect(linhas[1]).toBe("👤 @5522999999999 (3) · _sem dono_ (1)");
+    expect(r).not.toContain("No PDF");
   });
 
   it("sem bom-dia (feriado) a legenda não inventa filas nem donos", () => {

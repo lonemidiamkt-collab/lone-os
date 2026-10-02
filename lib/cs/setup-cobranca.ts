@@ -155,9 +155,12 @@ export async function executarCobrancaSetup(opts: {
         feitos.push(item.titulo);
         if (existente && existente.status !== "done" && aplicar) {
           const { error } = await supabaseAdmin.from("tasks")
-            .update({ status: "done", completed_at: new Date().toISOString() })
+            // Sem `completed_at`: a tabela não tem essa coluna, o banco recusava o update e o erro
+            // era ignorado — nenhum item verificado jamais foi fechado aqui (achado em 02/10).
+            .update({ status: "done" })
             .eq("id", existente.id as string).neq("status", "done").select("id");
           if (!error) autoFechadas.push(`${nome}: ${item.titulo} (${auto.prova})`);
+          else console.error("[setup-cobranca] não fechou", existente.id, error.message);
         }
         continue;
       }

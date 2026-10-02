@@ -102,22 +102,30 @@ const WED_SOCIAL: string[] = [
 ];
 
 // ── SEXTA — tráfego: fechamento de semana, disponibilidade ──
+//
+// SEM PEDIR AÇÃO DE ÚLTIMA HORA (02/10/2026). A Ótica Rodrigo recebeu "Vão fazer alguma ação no fim
+// de semana? Me avisa que eu reforço no anúncio" às 8h de sexta e respondeu ao Roberto: "hoje é
+// sexta, como que vou fazer uma ação? (...) quando me pergunta de uma ação de sexta e sábado, que a
+// loja fecha às 13h, eu vou dizer não, se não me contextualizar e não me trouxer a ideia". Ele tem
+// razão: a frase joga no cliente o trabalho de inventar a ação, na hora em que não dá mais tempo.
+// Saíram as três que faziam isso. Ideia de ação vem da gente, com antecedência e com contexto —
+// no planejamento do mês e na reunião, não num sorteio de sexta.
 const FRI_TRAFFIC: string[] = [
   "Oi, pessoal. Fechando a semana por aqui, campanhas rodando normal. Qualquer coisa no fim de semana, é só chamar.",
   "Bom dia. Semana fechando e está tudo sendo acompanhado. Se precisar de algo, me fala.",
   "Oi, gente. Tudo certo com os anúncios. Precisando de alguma coisa, estou por aqui.",
   "Bom dia! Fechando a semana. Se surgir qualquer necessidade, me chama.",
   "Oi, pessoal. Semana encerrando com as campanhas rodando. Qualquer dúvida, é só falar.",
-  "Vão fazer alguma ação no fim de semana? Me avisa que eu reforço no anúncio.",
   "Campanhas seguem no ar durante o fim de semana. Qualquer coisa me chama.",
-  "Oi! Tem promoção de fim de semana? Dá tempo de colocar no anúncio ainda hoje.",
   "Fechando a semana por aqui. Se precisar de mim no sábado, é só mandar mensagem.",
   "Bom dia. Deixo tudo rodando pro fim de semana. Qualquer ajuste, me fala.",
   "E aí, pessoal? Semana fechada de nosso lado, anúncios no ar. Bom fim de semana.",
-  "Oi. Alguma coisa que vocês queiram mudar antes do fim de semana?",
+  "Semana encerrada com os anúncios no ar. Segunda cedo eu mando o resumo de como foi.",
 ];
 
 // ── SEXTA — só-social: fechamento de semana, foco em arte ──
+// Mesma regra do tráfego (02/10): oferecer ajuda e ideia concreta ("vão abrir sábado? faço o post do
+// horário") — não cobrar do cliente uma ação inventada na última hora.
 const FRI_SOCIAL: string[] = [
   "Oi, pessoal. Tem alguma coisa pra postar no fim de semana? Me manda que eu preparo.",
   "Bom dia. Se tiver promoção de fim de semana pra divulgar, é só mandar aqui.",
@@ -125,8 +133,6 @@ const FRI_SOCIAL: string[] = [
   "Bom dia! Alguma novidade pra divulgar antes do fim de semana?",
   "Oi. Se tiver algo pra postar, me fala que eu já cuido.",
   "Vão abrir sábado? Se quiser, eu faço um post avisando o horário.",
-  "Tem alguma ação pro fim de semana que valha divulgar hoje?",
-  "Oi! Última chamada pra post de fim de semana — me manda que dá tempo.",
   "Fechando a semana. Qualquer coisa pra postar, é só mandar aqui.",
   "Bom dia. Se tiver foto ou promoção pro fim de semana, aproveito e já preparo.",
   "E aí, pessoal? Algo pra divulgar antes do fim de semana?",

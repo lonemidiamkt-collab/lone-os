@@ -88,8 +88,12 @@ export function resumoManha(p: {
     p.blocos.length && p.secoes.includes("bom-dia") ? "o de cada um" : "",
     ...p.secoes.filter((k): k is Exclude<ChaveSecao, "bom-dia"> => k !== "bom-dia").map((k) => NO_PDF[k]),
   ].filter(Boolean);
-  if (dentro.length) l.push(`No PDF: ${dentro.join(" · ")}`);
-  if (p.blocos.length && p.secoes.includes("bom-dia")) {
+  const temDonos = p.blocos.length > 0 && p.secoes.includes("bom-dia");
+  // "No PDF: …" só quando é a única coisa a dizer (feriado, sem filas nem donos). Com placar e
+  // marcações, ela só empurrava as marcações pro "Ler mais" — em 01/10 a legenda foi cortada no
+  // meio da lista de quem tinha o que fazer, que é a parte que notifica (02/10).
+  if (dentro.length && !filas && !temDonos) l.push(`No PDF: ${dentro.join(" · ")}`);
+  if (temDonos) {
     const quem = p.blocos.map((b) => `${b.dono === SEM_DONO ? "_sem dono_" : p.rotulo(b.dono)} (${b.itens.length + b.resto})`);
     l.push(`👤 ${quem.join(" · ")}`);
   }

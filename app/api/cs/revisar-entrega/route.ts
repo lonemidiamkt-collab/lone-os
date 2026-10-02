@@ -10,6 +10,7 @@ import { fetchClientCsRules } from "@/lib/supabase/queries";
 import { loadBriefingCombinado } from "@/lib/cs/load-briefing";
 import { revisarArte } from "@/lib/cs/revisao-arte";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { agruparProblemas } from "@/lib/cs/revisao-agrupar";
 
 // POST /api/cs/revisar-entrega { cardId } — REVISÃO AUTOMÁTICA na ENTREGA do designer. Confere as
 // artes contra o briefing (preço/texto/localização/regras). Se achar problema, avisa no grupo de
@@ -44,15 +45,14 @@ export async function POST(req: NextRequest) {
   const regras = (await fetchClientCsRules(card.client_id as string)).filter((r) => r.escopo !== "roteiro").map((r) => `${r.texto} (${r.escopo})`);
   const temaEsperado = `${card.title as string}${card.briefing ? ` — ${(card.briefing as string).slice(0, 300)}` : ""}`;
 
-  // Revisa cada arte; junta os problemas rotulando a slide.
-  const problemas: string[] = [];
+  // Revisa cada arte SABENDO A POSIÇÃO no carrossel (sem isso, toda arte era comparada com o
+  // "Slide 1 — Capa"). O mesmo problema em várias artes vira uma linha só.
+  const porArte: string[][] = [];
   for (let i = 0; i < urls.length; i++) {
-    const r = await revisarArte({ imageUrl: urls[i], clienteNome, briefing, regras, temaEsperado });
-    if (r.ok && r.data && !r.data.ok && r.data.problemas.length) {
-      const rotulo = urls.length > 1 ? `Arte ${i + 1}: ` : "";
-      r.data.problemas.forEach((p) => problemas.push(`${rotulo}${p}`));
-    }
+    const r = await revisarArte({ imageUrl: urls[i], clienteNome, briefing, regras, temaEsperado, posicao: { n: i + 1, total: urls.length } });
+    porArte.push(r.ok && r.data && !r.data.ok ? r.data.problemas : []);
   }
+  const problemas = agruparProblemas(porArte);
 
   const designer = (cli?.assigned_designer as string) || "";
   const social = (cli?.assigned_social as string) || "";
@@ -65,8 +65,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, problemas: [], artes: urls.length });
   }
 
-  // Achou problema → comenta no card, notifica e avisa no grupo de Artes.
-  const lista = problemas.slice(0, 8).map((p) => `• ${p}`).join("\n");
+  // Achou problema → comenta no card, notifica e avisa no grupo de Artes. O card leva a lista INTEIRA
+  // (antes cortava em 8 e a mensagem dizia "achei 16").
+  const lista = problemas.map((p) => `• ${p}`).join("\n");
   await supabaseAdmin.from("card_comments").insert({
     card_id: cardId, author: "🤖 Revisão IA", role: "system", text: `⚠️ Revisão automática encontrou pontos a conferir:\n${lista}`,
   }).then(() => {}, () => {});
@@ -80,7 +81,29 @@ export async function POST(req: NextRequest) {
   if (jid) {
     const quem = [designer && `designer *${designer}*`, social && `social *${social}*`].filter(Boolean).join(" · ");
     const msg = `🔍 *Revisão automática — ${clienteNome}*\nA arte de *${card.title as string}* foi entregue e eu conferi contra o briefing. Achei ${problemas.length} ponto(s) pra revisar${quem ? ` — ${quem}` : ""}:\n\n${lista}\n\n_Dá uma olhada antes de mandar pro cliente (posso estar enganada — confere na fonte)._`;
-    await csSendGroupText(jid, msg).catch(() => {});
+    const meta = { origem: "revisao-arte", destino: "interno" as const, clientId: card.client_id as string };
+    // TEXTO OU PDF SEGUE O VOLUME (lib/cs/formato-aviso.ts), como os outros avisos.
+    const { escolherFormato } = await import("@/lib/cs/formato-aviso");
+    let enviado = false;
+    if (escolherFormato({ itens: problemas.length, texto: msg }) === "pdf") {
+      try {
+        const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
+        const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
+        const { csSendGroupDocument } = await import("@/lib/cs/notify");
+        const { revisaoArtePdfHtml, legendaRevisaoArte } = await import("@/lib/reports/revisaoArtePdf");
+        const dados = { cliente: clienteNome, peca: card.title as string, designer, social, artes: urls.length, problemas };
+        const logo = await loadLoneLogo().catch(() => "");
+        const pdf = await htmlToPdf(revisaoArtePdfHtml(dados, logo, new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })));
+        if (!pdf.ok || !pdf.buffer) throw new Error(pdf.error ?? "render falhou");
+        const nomeArq = `Revisao ${clienteNome} ${(card.title as string)}`.replace(/[^\p{L}\p{N} -]/gu, "").replace(/\s+/g, " ").trim().slice(0, 80);
+        const r = await csSendGroupDocument(jid, pdf.buffer.toString("base64"), `${nomeArq}.pdf`, legendaRevisaoArte(dados), "application/pdf");
+        enviado = r.ok;
+        if (!r.ok) throw new Error(r.error ?? "envio falhou");
+      } catch (e) {
+        console.error("[revisar-entrega] PDF falhou, mandando como texto:", String(e));
+      }
+    }
+    if (!enviado) await csSendGroupText(jid, msg, undefined, meta).catch(() => {});
   }
 
   return NextResponse.json({ ok: true, problemas, artes: urls.length });

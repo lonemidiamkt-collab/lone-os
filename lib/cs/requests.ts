@@ -24,7 +24,10 @@ export function dentroDoExpediente(agora = new Date()): boolean {
 /** Pergunta de verdade — não é saudação nem "ok". Determinístico de propósito: roda em toda
  *  mensagem de cliente e não pode custar uma chamada de IA cada. */
 export function pareceParaResponder(texto: string): boolean {
-  const t = (texto || "").trim();
+  // O LINK SAI ANTES (02/10): "https://www.instagram.com/p/DdcWeIUj9NF/?stkn=…" tem um "?" no
+  // endereço, e o cliente que só compartilhou um post virou "pergunta sem resposta há 59 min" no
+  // grupo do time. O ponto de interrogação que conta é o da frase, não o da URL.
+  const t = (texto || "").replace(/https?:\/\/\S+/gi, " ").replace(/\s+/g, " ").trim();
   if (t.length < 10) return false;
   // Saudação e confirmação não abrem pendência.
   if (/^\s*(bom dia|boa tarde|boa noite|oi|ol[áa]|opa|blz|beleza|ok|obrigad|valeu|show|top|perfeito|👍|🙏|❤️)\W*$/i.test(t)) return false;

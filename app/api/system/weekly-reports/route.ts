@@ -238,9 +238,16 @@ export async function POST(req: NextRequest) {
     const period = periodLabelDays(periodDays);
     let sent = 0, failed = 0;
     const errors: string[] = [];
+    // Quem falhou por erro PASSAGEIRO (a Meta demorou, caiu, recusou rajada) ganha uma segunda
+    // tentativa no fim da rodada. Em 01/10 o relatório de setembro da Armazém do Ferro não saiu por
+    // um timeout da Meta e ficou de fora — o aviso pedia pra "conferir", ninguém reenviou.
+    const passageiro = (msg: string) => /timeout|aborted|ECONNRESET|ETIMEDOUT|socket hang up|fetch failed|\b5\d\d\b|rate limit|too many/i.test(msg);
+    const paraTentarDeNovo: { c: (typeof clients)[number]; erro: string }[] = [];
+    let tentativa = 1;
 
-    for (let i = 0; i < clients.length; i++) {
-      const c = clients[i];
+    const rodar = async (lista: (typeof clients)[number][]) => {
+    for (let i = 0; i < lista.length; i++) {
+      const c = lista[i];
       const clientName = c.nome_fantasia || c.name;
       const clientKey = `${dateKey}:${c.id}`;
       // Dedup POR CLIENTE (nao so por execucao): num retry, quem JA recebeu nao recebe o PDF de novo.
@@ -250,7 +257,11 @@ export async function POST(req: NextRequest) {
       }
       try {
         const pdf = await buildClientPdf(token, c, periodDays, dateFrom, dateTo);
-        if (!pdf.ok || !pdf.buffer) { failed++; errors.push(`${clientName}: ${pdf.error}`); continue; }
+        if (!pdf.ok || !pdf.buffer) {
+          const erro = `${clientName}: ${pdf.error}`;
+          if (tentativa === 1 && passageiro(String(pdf.error))) { paraTentarDeNovo.push({ c, erro }); continue; }
+          failed++; errors.push(erro); continue;
+        }
 
         // A LEGENDA DIZIA DUAS JANELAS DIFERENTES: o título trazia o intervalo pedido e a linha
         // "Período" trazia o rótulo do preset — saiu "Relatório 01/07 a 31/07 / Período: 27/07 a
@@ -272,9 +283,20 @@ export async function POST(req: NextRequest) {
         const res = await sendMediaDocument(destinoJid, pdf.buffer.toString("base64"), fileName, caption);
         if (res.ok) { sent++; await supabaseAdmin.from("weekly_report_log").insert({ week_key: clientKey, status: "sent", message: clientName }).then(() => {}, () => {}); } else { failed++; errors.push(`${clientName}: envio ${res.error}`); }
       } catch (e) {
-        failed++; errors.push(`${clientName}: ${e instanceof Error ? e.message : String(e)}`);
+        const erro = `${clientName}: ${e instanceof Error ? e.message : String(e)}`;
+        if (tentativa === 1 && passageiro(erro)) { paraTentarDeNovo.push({ c, erro }); continue; }
+        failed++; errors.push(erro);
       }
-      if (i < clients.length - 1) await sleep(2000);
+      if (i < lista.length - 1) await sleep(2000);
+    }
+    };
+
+    await rodar(clients);
+    if (paraTentarDeNovo.length) {
+      console.log(`[weekly-reports] ${paraTentarDeNovo.length} falha(s) passageira(s) — nova tentativa em 60 s: ${paraTentarDeNovo.map((x) => x.erro).join(" | ")}`);
+      await sleep(60_000);
+      tentativa = 2;
+      await rodar(paraTentarDeNovo.map((x) => x.c));
     }
 
     const status = sent > 0 ? "sent" : "failed";
@@ -298,7 +320,8 @@ export async function POST(req: NextRequest) {
         await csSendGroupText(jid,
           `⚠️ *Relatório ${escopoLabel} não saiu pra ${failed} de ${clients.length} clientes* — ${dateKey}\n\n${lista}` +
           (errors.length > 8 ? `\n• …e mais ${errors.length - 8}` : "") +
-          `\n\n_Vale conferir antes que o cliente sinta falta._`);
+          // Falha passageira já foi tentada de novo; o que chega aqui precisa de gente.
+          `\n\n_${paraTentarDeNovo.length ? "Já tentei de novo depois de 1 minuto e não foi. " : ""}Pra reenviar só pra quem ficou de fora, é rodar de novo: quem já recebeu não recebe duas vezes._`);
       }
     }
 
