@@ -259,6 +259,11 @@ export const AUTOMACOES: Automacao[] = [
     nome: "Status dos clientes pelo resultado", descricao: "Recalcula o status do kanban de cada cliente de anúncio pelo CPL dos últimos 7 dias.",
     familia: "Tráfego", destino: "grupo de tráfego", cron: "0 12 * * 5", agendaBRT: "sexta, 9h", maxSilencioHoras: 8 * 24, ensaio: "preview=1",
   }),
+  // 05/10/2026, a pedido do Roberto: o comparativo de "quem melhorou e quem piorou" fixo toda segunda.
+  ep("destaques-trafego", {
+    nome: "Destaques do tráfego (PDF)", descricao: "Semana fechada contra a anterior: quem teve mais conversas com custo menor, quem teve menos com custo maior, e quem parou de gastar.",
+    familia: "Tráfego", destino: "grupo de tráfego", cron: "0 14 * * 1", agendaBRT: "segunda, 11h", maxSilencioHoras: 8 * 24, ensaio: "dry=1",
+  }),
   ep("traffic-policy", {
     nome: "Política de tráfego por cliente", descricao: "Deriva a meta de custo de cada cliente da mediana do próprio histórico.",
     familia: "Tráfego", destino: "sistema", cron: "0 9 1 * *", agendaBRT: "dia 1º de cada mês, 6h", maxSilencioHoras: 32 * 24, ensaio: "dry=1",
