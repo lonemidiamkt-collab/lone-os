@@ -8,7 +8,7 @@ import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { cn } from "@/lib/utils";
 import type { AppNotification } from "@/lib/types";
 import { useRole } from "@/lib/context/RoleContext";
-import { FRASE_TETO_ARTE, agruparArte, deveFalar, ehAvisoDeArte, fraseParaFalar, vezDaArte } from "@/lib/avisos/fala";
+import { FRASE_TETO_ARTE, agruparArte, comSaudacao, deveFalar, ehAvisoDeArte, fraseParaFalar, vezDaArte } from "@/lib/avisos/fala";
 import { calar, falar } from "@/lib/avisos/tocar";
 import { candidatarSe, reservarAviso, type Candidatura } from "@/lib/avisos/lider";
 import { useVozAvisosStore } from "@/stores/useVozAvisosStore";
@@ -218,9 +218,8 @@ export default function NotificationToast() {
       const nomeDe = (id: string) => { const c = clientes.find((x) => x.id === id); return c ? (c.nomeFantasia || c.name) : null; };
       for (const g of agruparArte(emOrdem.filter((n) => n.type !== "trafego"), nomeDe)) {
         const vez = vezDaArte();
-        const primeiro = currentUser.trim().split(/\s+/)[0];
-        if (vez === "falar") falar(primeiro ? `${primeiro}, ${g.frase[0].toLowerCase()}${g.frase.slice(1)}` : g.frase);
-        else if (vez === "avisar_teto") falar(FRASE_TETO_ARTE);
+        if (vez === "falar") falar(comSaudacao(g.frase, currentUser));
+        else if (vez === "avisar_teto") falar(comSaudacao(FRASE_TETO_ARTE, currentUser));
       }
     }
 

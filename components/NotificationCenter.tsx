@@ -6,7 +6,7 @@ import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
   AlertOctagon, AlertTriangle, Bell, Check, CheckCheck, ChevronDown, FileImage, MessageCircle, Settings, Sparkles, TrendingDown, Volume2, VolumeX, X,
 } from "lucide-react";
-import { podeOuvir } from "@/lib/avisos/fala";
+import { comSaudacao, podeOuvir } from "@/lib/avisos/fala";
 import { calar, falar } from "@/lib/avisos/tocar";
 import { useVozAvisosStore } from "@/stores/useVozAvisosStore";
 import type { LucideIcon } from "lucide-react";
@@ -235,7 +235,7 @@ export default function NotificationCenter(_props: { semBotao?: boolean }) {
   const clientes = useClientsStore((s) => s.clients);
   const cards = useContentStore((s) => s.contentCards);
   const demandas = useContentStore((s) => s.designRequests);
-  const { profiles, role } = useRole();
+  const { profiles, role, currentUser } = useRole();
   // AVISOS FALADOS (v2, 05/10): o botão liga/desliga a voz DESTA PESSOA (guardado no servidor — vale
   // em qualquer computador). Ao ligar, fala uma frase de teste; o clique também é o que o navegador
   // exige pra deixar a página falar sozinha depois. Sócio vem desligado: liga se quiser ouvir tráfego.
@@ -248,9 +248,9 @@ export default function NotificationCenter(_props: { semBotao?: boolean }) {
   const alternarFala = async () => {
     const nova = !fala;
     setErroVoz(null);
-    if (nova) falar(role === "social" || role === "designer"
+    if (nova) falar(comSaudacao(role === "social" || role === "designer"
       ? "Avisos falados ligados. Eu aviso aqui quando uma arte de um cliente seu for entregue."
-      : "Avisos falados ligados. Eu aviso aqui quando uma conta sua parar de rodar ou o saldo zerar, em dia útil, das oito às dezoito.");
+      : "Avisos falados ligados. Eu aviso aqui quando uma conta sua parar de rodar ou o saldo zerar, em dia útil, das oito às dezoito.", currentUser));
     else calar();
     const erro = await gravarVoz(nova);
     if (erro) setErroVoz(erro);

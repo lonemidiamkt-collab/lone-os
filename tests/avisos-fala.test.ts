@@ -1,14 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { agruparArte, fraseParaFalar, deveFalar, podeOuvir } from "@/lib/avisos/fala";
+import { agruparArte, comSaudacao, fraseParaFalar, deveFalar, podeOuvir, saudacao } from "@/lib/avisos/fala";
 
 describe("o que o painel fala", () => {
-  it("versão C (aprovada): chama a pessoa pelo nome e fala o valor como gente", () => {
-    expect(fraseParaFalar("A conta do Maicon Minerais parou de rodar hoje", "Ela vinha gastando uns 59 reais por dia. Vale conferir o saldo e o pagamento.", "Julio"))
-      .toBe("Julio, a conta do Maicon Minerais parou de rodar hoje. Ela vinha gastando uns 59 reais por dia. Vale conferir o saldo e o pagamento.");
-    const f = fraseParaFalar("Um aviso rápido de tráfego, só de teste", "O custo por conversa da Engetec subiu na semana passada: estava em R$ 3,53, foi pra R$ 5,06.", "Lucas Bueno");
-    expect(f).toContain("Lucas, um aviso rápido de tráfego");
+  it("versão C (aprovada): cumprimenta pelo nome e pela hora e fala o valor como gente", () => {
+    const tarde = new Date("2026-10-07T17:00:00Z"); // 14h em São Paulo
+    expect(fraseParaFalar("A conta do Maicon Minerais parou de rodar hoje", "Ela vinha gastando uns 59 reais por dia. Vale conferir o saldo e o pagamento.", "Julio", 300, tarde))
+      .toBe("Julio, boa tarde. A conta do Maicon Minerais parou de rodar hoje. Ela vinha gastando uns 59 reais por dia. Vale conferir o saldo e o pagamento.");
+    const f = fraseParaFalar("Um aviso rápido de tráfego", "O custo por conversa da Engetec subiu: estava em R$ 3,53, foi pra R$ 5,06.", "Lucas Bueno", 300, tarde);
+    expect(f).toContain("Lucas, boa tarde. Um aviso rápido de tráfego");
     expect(f).toContain("estava em 3 e 53, foi pra 5 e 6.");
-    expect(fraseParaFalar("CPL subiu", "", "Julio")).toBe("Julio, CPL subiu"); // sigla não vira minúscula
+    expect(fraseParaFalar("Sem nome", "", null, 300, tarde)).toBe("Sem nome");
+  });
+
+  it("bom dia até meio-dia, boa tarde até 18h, boa noite depois (horário de São Paulo)", () => {
+    expect(saudacao(new Date("2026-10-07T11:30:00Z"))).toBe("bom dia");   // 8h30
+    expect(saudacao(new Date("2026-10-07T15:00:00Z"))).toBe("boa tarde"); // 12h
+    expect(saudacao(new Date("2026-10-07T21:00:00Z"))).toBe("boa noite"); // 18h
+    expect(comSaudacao("Chegaram 2 artes da Veneza.", "Carlos Augusto", new Date("2026-10-07T12:00:00Z"))).toBe("Carlos, bom dia. Chegaram 2 artes da Veneza.");
   });
 
   it("tira emoji, asterisco e link; lê reais por extenso", () => {

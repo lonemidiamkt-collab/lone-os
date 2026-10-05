@@ -100,13 +100,25 @@ export function vezDaArte(agora: Date = new Date()): VezDaArte {
 
 export const FRASE_TETO_ARTE = `Já são ${TETO_FALAS_DIA} avisos de arte falados hoje. As próximas artes ficam só no sino.`;
 
+/** "bom dia" até 11h59, "boa tarde" até 17h59, depois "boa noite" — sempre no horário de São Paulo. */
+export function saudacao(agora: Date = new Date()): string {
+  const h = relogioSP(agora).hora;
+  return h < 12 ? "bom dia" : h < 18 ? "boa tarde" : "boa noite";
+}
+
+/** "Lucas, boa tarde. <frase>" — Roberto (05/10): "sempre veja o horário e fala Roberto, boa tarde". */
+export function comSaudacao(frase: string, pessoa?: string | null, agora: Date = new Date()): string {
+  const nome = (pessoa ?? "").trim().split(/\s+/)[0];
+  return nome ? `${nome}, ${saudacao(agora)}. ${frase}` : frase;
+}
+
 /**
  * A frase falada. O que fez a amostra aprovada (versão C, 05/10) soar como gente:
- *  - chama a pessoa pelo primeiro nome no começo ("Lucas, ...");
+ *  - chama a pessoa pelo primeiro nome e cumprimenta pela hora ("Lucas, boa tarde. ...");
  *  - valor em reais como se fala: "R$ 3,53" → "3 e 53"; acima de 100 reais, sem centavos;
  *  - sem emoji, sem marcação do WhatsApp (*, _), sem link — "asterisco SALDO asterisco" é ruído.
  */
-export function fraseParaFalar(titulo: string, corpo = "", pessoa?: string | null, max = 300): string {
+export function fraseParaFalar(titulo: string, corpo = "", pessoa?: string | null, max = 300, agora: Date = new Date()): string {
   const limpar = (x: string) => x
     .replace(/https?:\/\/\S+/g, "")
     .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "")
@@ -121,13 +133,7 @@ export function fraseParaFalar(titulo: string, corpo = "", pessoa?: string | nul
   const t = limpar(titulo).replace(/[.:—-]+$/, "");
   const c = limpar(corpo);
   let frase = c ? `${t}. ${c}` : t;
-  const nome = (pessoa ?? "").trim().split(/\s+/)[0];
-  // "A conta..." → "Julio, a conta..." (sigla como "CPL" não vira minúscula)
-  if (nome) {
-    const primeira = frase.split(/\s/)[0] ?? "";
-    const sigla = primeira.length >= 2 && primeira === primeira.toUpperCase();
-    frase = `${nome}, ${sigla ? frase : frase.charAt(0).toLowerCase() + frase.slice(1)}`;
-  }
+  frase = comSaudacao(frase, pessoa, agora);
   if (frase.length > max) {
     const corte = frase.lastIndexOf(".", max);
     frase = corte > max * 0.5 ? frase.slice(0, corte + 1) : `${frase.slice(0, max).replace(/\s+\S*$/, "")}.`;
