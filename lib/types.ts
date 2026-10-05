@@ -506,7 +506,8 @@ export interface SocialPerformanceScore {
 
 // --- Notifications ---
 
-export type NotificationType = "sla" | "status" | "content" | "checkin" | "system";
+/** "trafego" = aviso de tráfego que o painel FALA em voz alta (lib/avisos/fala.ts). */
+export type NotificationType = "sla" | "status" | "content" | "checkin" | "system" | "trafego";
 
 export interface AppNotification {
   id: string;

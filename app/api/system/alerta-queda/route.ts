@@ -129,5 +129,13 @@ export async function POST(req: NextRequest) {
     await supabaseAdmin.from("anomaly_alerts").update({ notified_at: new Date().toISOString() }).in("id", notificados);
   }
 
+  // Só a queda CRÍTICA vira voz: falar todo alerta de CTR transformaria o aviso em barulho de fundo.
+  const criticos = [...porCliente.entries()].filter(([, v]) => v.severidade === "critical");
+  if (criticos.length) {
+    const { avisarTrafego } = await import("@/lib/avisos/trafego-server");
+    await avisarTrafego(criticos.map(([clientId, v]) => ({
+      clientId, titulo: `O resultado do ${v.nome} caiu`, corpo: `${v.sintoma.replace(/\.$/, "")}, comparado com a média dos últimos dias.`,
+    })));
+  }
   return NextResponse.json({ ok: true, alertas: alertas.length, clientes: quedas.length, bons: bons.length, formato, enviado: true });
 }

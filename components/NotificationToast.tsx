@@ -3,10 +3,12 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { X, Bell, AlertTriangle, FileText, Activity, Settings, Zap, ArrowUpRight } from "lucide-react";
+import { X, Bell, AlertTriangle, FileText, Activity, Settings, Zap, ArrowUpRight, TrendingDown } from "lucide-react";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { cn } from "@/lib/utils";
 import type { AppNotification } from "@/lib/types";
+import { useRole } from "@/lib/context/RoleContext";
+import { deveFalar, falaLigada, falar, fraseParaFalar } from "@/lib/avisos/fala";
 
 // Controlador headless: observa a store e dispara no <Toaster> global (components/ui/sonner.tsx).
 // Não renderiza nada próprio — um só sistema de toast no app.
@@ -17,6 +19,7 @@ const TYPE_CONFIG: Record<string, { icon: typeof Bell; color: string; accent: st
   content: { icon: FileText,      color: "text-primary",          accent: "border-l-primary" },
   checkin: { icon: Bell,          color: "text-primary",          accent: "border-l-primary" },
   system:  { icon: Settings,      color: "text-muted-foreground", accent: "border-l-border" },
+  trafego: { icon: TrendingDown,  color: "text-lone-warning",     accent: "border-l-lone-warning" },
 };
 
 const CRITICAL_TYPES = new Set(["sla"]);
@@ -109,6 +112,7 @@ export default function NotificationToast() {
   const router = useRouter();
   const notifications = useNotificationsStore((s) => s.notifications);
   const markNotificationRead = useNotificationsStore((s) => s.markRead);
+  const { role } = useRole();
   const seenRef = useRef<Set<string>>(new Set());
   const initialLoadRef = useRef(true);
 
@@ -171,8 +175,17 @@ export default function NotificationToast() {
       }
     });
 
+    // AVISO FALADO (05/10): aviso de tráfego é dito em voz alta pra quem cuida de tráfego. Um por um,
+    // na ordem em que chegaram — agrupar aqui faria a voz dizer "3 novas notificações", que não
+    // serve pra nada. Ver lib/avisos/fala.ts.
+    const ligada = falaLigada();
+    const falados = newOnes.filter((n) => deveFalar(n, role, ligada));
+    falados.forEach((n) => falar(fraseParaFalar(n.title, n.body)));
+
     // Som: chime de ARTE quando designer entrega / social adiciona arte; ping premium p/ crítico.
-    if (newOnes.some(ehEventoDeArte)) {
+    if (falados.length) {
+      // A voz já avisa — o ping por cima atrapalharia ouvir a frase.
+    } else if (newOnes.some(ehEventoDeArte)) {
       playArtChime();
     } else if (payloads.some((p) => p.isCritical)) {
       playPremiumPing();
@@ -241,7 +254,7 @@ export default function NotificationToast() {
         { id: p.key, duration: p.isCritical ? Infinity : 4000 }
       );
     }
-  }, [notifications, markNotificationRead, router]);
+  }, [notifications, markNotificationRead, router, role]);
 
   return null;
 }

@@ -418,5 +418,16 @@ async function dispatchRealtimeAlerts(
     });
     sent++;
   }
+  // Saldo CRÍTICO também é falado no computador do gestor (lib/avisos/fala.ts). "Saldo baixo" não:
+  // ele chega todo dia em várias contas e viraria barulho.
+  const criticos = pendentes.filter((a) => a.severidade === "critical");
+  if (criticos.length) {
+    const { avisarTrafego } = await import("@/lib/avisos/trafego-server");
+    await avisarTrafego(criticos.map((a) => ({
+      clientId: a.snap.clientId ?? null,
+      titulo: `O saldo do ${a.snap.clientName} está acabando`,
+      corpo: `${a.snap.available != null ? `Sobram ${a.snap.available.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}` : "Saldo zerado"}${a.snap.daysRemaining != null && a.snap.daysRemaining < 3 ? `, dá pra menos de ${Math.max(1, Math.ceil(a.snap.daysRemaining))} dia${Math.ceil(a.snap.daysRemaining) > 1 ? "s" : ""}` : ""}. Precisa de recarga.`,
+    })));
+  }
   return sent;
 }

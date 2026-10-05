@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
-  AlertOctagon, AlertTriangle, Bell, Check, CheckCheck, ChevronDown, FileImage, MessageCircle, Settings, Sparkles, TrendingDown, X,
+  AlertOctagon, AlertTriangle, Bell, Check, CheckCheck, ChevronDown, FileImage, MessageCircle, Settings, Sparkles, TrendingDown, Volume2, VolumeX, X,
 } from "lucide-react";
+import { definirFala, falaLigada, falar, podeOuvir } from "@/lib/avisos/fala";
 import type { LucideIcon } from "lucide-react";
 import { ABRIR_NOTIFICACOES } from "@/components/TopActions";
 import MedievalAvatar, { getUserAvatar, type AvatarType } from "@/components/MedievalAvatars";
@@ -83,13 +84,13 @@ interface Lida extends Base {
 // do ícone e o título fica só com o que importa (o cliente ou o assunto).
 function ler(n: AppNotification): Base {
   let t = (n.title ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
-  let gravidade: Gravidade = n.type === "sla" ? "critico" : "info";
+  let gravidade: Gravidade = n.type === "sla" ? "critico" : n.type === "trafego" ? "alerta" : "info";
   if (/^cr[ií]tico\s*:/i.test(t)) { gravidade = "critico"; t = t.replace(/^cr[ií]tico\s*:\s*/i, ""); }
   else if (/^alerta\s*:/i.test(t)) { gravidade = "alerta"; t = t.replace(/^alerta\s*:\s*/i, ""); }
   else if (/^⚠/.test(n.title ?? "")) gravidade = "alerta";
   const texto = `${n.title} ${n.body}`.toLowerCase();
   const area: Area =
-    /cpl|ctr|impress|verba|saldo|campanha|an[uú]ncio|meta ads|pacing|conta de an/.test(texto) ? "trafego"
+    n.type === "trafego" || /cpl|ctr|impress|verba|saldo|campanha|an[uú]ncio|meta ads|pacing|conta de an/.test(texto) ? "trafego"
     : n.type === "content" || /arte|card|post|design|legenda|conte[uú]do/.test(texto) ? "conteudo"
     : n.type === "checkin" || n.clientId ? "clientes"
     : "sistema";
@@ -232,7 +233,18 @@ export default function NotificationCenter(_props: { semBotao?: boolean }) {
   const clientes = useClientsStore((s) => s.clients);
   const cards = useContentStore((s) => s.contentCards);
   const demandas = useContentStore((s) => s.designRequests);
-  const { profiles } = useRole();
+  const { profiles, role } = useRole();
+  // AVISOS FALADOS (05/10): o botão liga/desliga e, ao ligar, fala uma frase de teste — o clique
+  // também é o que o navegador exige pra deixar a página falar sozinha depois.
+  const ouve = podeOuvir(role);
+  const [fala, setFala] = useState(true);
+  useEffect(() => { setFala(falaLigada()); }, []);
+  const alternarFala = () => {
+    const nova = !fala;
+    definirFala(nova); setFala(nova);
+    if (nova) falar("Avisos falados ligados. Eu aviso aqui quando uma conta parar, o resultado cair ou o saldo estiver acabando.");
+    else if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+  };
   const [open, setOpen] = useState(false);
   const [filtro, setFiltro] = useState<"todas" | "nao_lidas" | Area>("todas");
   const [abertas, setAbertas] = useState<Set<string>>(new Set());
@@ -517,6 +529,14 @@ export default function NotificationCenter(_props: { semBotao?: boolean }) {
                   )}
                 </div>
                 <div className="flex items-center gap-1">
+                  {ouve && (
+                    <button type="button" onClick={alternarFala} aria-pressed={fala}
+                      title={fala ? "Avisos de tráfego são falados em voz alta — clique pra silenciar" : "Ligar os avisos de tráfego em voz alta"}
+                      className={cn("flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium hover:bg-accent",
+                        fala ? "text-foreground" : "text-muted-foreground")}>
+                      {fala ? <Volume2 size={14} /> : <VolumeX size={14} />} {fala ? "Voz ligada" : "Voz desligada"}
+                    </button>
+                  )}
                   {naoLidas > 0 && (
                     <button type="button" onClick={() => markAllRead()}
                       className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
