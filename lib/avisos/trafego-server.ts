@@ -9,6 +9,7 @@
 // Desligar "Avisos falados" na Central de Automações deixa tudo calado (o aviso ainda entra no sino).
 // Nunca lança: aviso falado é extra e não pode derrubar a rotina que o chama.
 
+import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { podeRodarJob } from "@/lib/automacoes/painel";
 import { buscarInsightHoje } from "@/lib/defense/insights-hoje";
@@ -17,7 +18,7 @@ import { carregarVistos } from "@/lib/traffic/hoje/vistos";
 import { estaVisto } from "@/lib/traffic/hoje/visto";
 import {
   FRASE_TETO, bracoDoTeste, decidirFala, dentroDoHorario, inicioDoDiaSP, quemOuve, relogioSP,
-  saldoResolvido, saldoZerado, textoSaldoZerado, type SaldoLido, type TipoAviso,
+  saldoResolvido, saldoZerado, textoLote, textoSaldoZerado, type SaldoLido, type TipoAviso,
 } from "./regras";
 
 export const JOB_AVISOS_FALADOS = "avisos-falados";
@@ -25,6 +26,8 @@ export const JOB_AVISOS_FALADOS = "avisos-falados";
 export interface NovoAviso {
   tipo: TipoAviso;
   clientId: string | null;
+  /** Nome do cliente — vai na frase quando várias ocorrências viram uma só. */
+  nome: string;
   metaAccountId: string;
   titulo: string;
   corpo: string;
@@ -64,59 +67,83 @@ async function faladosHoje(pessoa: string, desde: string): Promise<number> {
   return count ?? 0;
 }
 
-/** Registra a ocorrência e avisa quem ouve. Segunda chamada no mesmo dia (mesma conta e tipo) não repete. */
-export async function registrarAviso(aviso: NovoAviso, agora: Date = new Date()): Promise<{ novo: boolean; falou: string[] }> {
-  let a = aviso;
+/**
+ * Registra as ocorrências de UMA rodada (vigia, sync de saldo) e avisa quem ouve com UMA notificação
+ * por pessoa: 6 saldos zerados viram "6 contas estão com o saldo zerado: …", não 6 falas seguidas.
+ * Ocorrência já registrada hoje (mesma conta e tipo) não repete. Nunca lança.
+ */
+export async function registrarLote(avisos: NovoAviso[], agora: Date = new Date()): Promise<{ novos: number; falou: string[] }> {
   try {
     const { dia } = relogioSP(agora);
-    const braco = bracoDoTeste(a.metaAccountId, dia);
-    const { data: ev, error } = await supabaseAdmin.from("avisos_trafego").insert({
-      tipo: a.tipo, client_id: a.clientId, meta_account_id: a.metaAccountId, dia, titulo: a.titulo,
-      braco, detectado_em: agora.toISOString(),
-    }).select("id").maybeSingle();
-    if (error) {
-      if (error.code !== "23505") console.error("[avisos/trafego] evento:", error.message); // 23505 = já avisado hoje
-      return { novo: false, falou: [] };
-    }
-
-    // Conta que parou porque o SALDO ZEROU (05/10: as 3 contas paradas das 11h estavam com saldo 0
-    // desde as 8h): a causa vai no texto e, se o saldo já foi FALADO hoje, a parada entra calada.
-    let jaFalouACausa = false;
-    if (a.tipo === "conta_parada") {
-      const { data: saldo } = await supabaseAdmin.from("avisos_trafego").select("falado_para")
-        .eq("tipo", "saldo_zerado").eq("meta_account_id", a.metaAccountId).eq("dia", dia).maybeSingle();
-      if (saldo) {
-        a = { ...a, corpo: "O saldo zerou hoje e os anúncios pararam. Vale avisar o cliente pra recarregar." };
-        jaFalouACausa = ((saldo.falado_para as string[] | null) ?? []).length > 0;
+    const lote = randomUUID();
+    interface Ev { id: string; a: NovoAviso; braco: "voz" | "controle"; calado: boolean; porSaldo: boolean; para: string[] }
+    const eventos: Ev[] = [];
+    for (const original of avisos) {
+      let a = original;
+      const braco = bracoDoTeste(a.metaAccountId, dia);
+      const { data: ev, error } = await supabaseAdmin.from("avisos_trafego").insert({
+        tipo: a.tipo, client_id: a.clientId, meta_account_id: a.metaAccountId, dia, titulo: a.titulo,
+        braco, detectado_em: agora.toISOString(), lote,
+      }).select("id").maybeSingle();
+      if (error || !ev?.id) {
+        if (error && error.code !== "23505") console.error("[avisos/trafego] evento:", error.message); // 23505 = já avisado hoje
+        continue;
       }
+      // Conta que parou porque o SALDO ZEROU (05/10: as 3 contas paradas das 11h estavam com saldo 0
+      // desde as 8h): a causa vai no texto e, se o saldo já foi FALADO hoje, a parada entra calada.
+      let calado = false, porSaldo = false;
+      if (a.tipo === "conta_parada") {
+        const { data: saldo } = await supabaseAdmin.from("avisos_trafego").select("falado_para")
+          .eq("tipo", "saldo_zerado").eq("meta_account_id", a.metaAccountId).eq("dia", dia).maybeSingle();
+        if (saldo) {
+          porSaldo = true;
+          a = { ...a, corpo: "O saldo zerou hoje e os anúncios pararam. Vale avisar o cliente pra recarregar." };
+          calado = ((saldo.falado_para as string[] | null) ?? []).length > 0;
+        }
+      }
+      eventos.push({ id: ev.id as string, a, braco, calado, porSaldo, para: await ouvintes(a.gestor?.trim() || await gestorDoCliente(a.clientId)) });
     }
-    const para = await ouvintes(a.gestor?.trim() || await gestorDoCliente(a.clientId));
+    if (!eventos.length) return { novos: 0, falou: [] };
+
     const ligado = await ligadoNaCentral();
     const noHorario = dentroDoHorario(agora);
     const desde = inicioDoDiaSP(agora);
+    const texto = (grupo: Ev[]) => grupo.length === 1
+      ? { title: grupo[0].a.titulo, body: grupo[0].a.corpo, client_id: grupo[0].a.clientId }
+      : (() => { const t = textoLote(grupo[0].a.tipo, grupo.map((e) => e.a.nome), grupo.every((e) => e.porSaldo)); return { title: t.titulo, body: t.corpo, client_id: null }; })();
+
     const linhas: Record<string, unknown>[] = [];
-    const falou: string[] = [];
-    for (const p of para) {
-      const d = jaFalouACausa ? "mudo" : decidirFala({ ligadoNaCentral: ligado, noHorario, braco, jaFaladosHoje: await faladosHoje(p, desde) });
-      if (d === "avisar_teto") {
-        linhas.push({ type: "trafego", title: "Limite de avisos falados de hoje", body: FRASE_TETO, target_user: p, read: false, falar: true });
+    const falouEm = new Map<string, string[]>();
+    for (const p of [...new Set(eventos.flatMap((e) => e.para))]) {
+      const meus = eventos.filter((e) => e.para.includes(p));
+      const falaveis = meus.filter((e) => e.braco === "voz" && !e.calado);
+      const calados = meus.filter((e) => !(e.braco === "voz" && !e.calado));
+      if (falaveis.length) {
+        const d = decidirFala({ ligadoNaCentral: ligado, noHorario, braco: "voz", jaFaladosHoje: await faladosHoje(p, desde) });
+        if (d === "avisar_teto") linhas.push({ type: "trafego", title: "Limite de avisos falados de hoje", body: FRASE_TETO, target_user: p, read: false, falar: true });
+        linhas.push({ type: "trafego", ...texto(falaveis), target_user: p, read: false, falar: d === "falar", aviso_id: falaveis[0].id });
+        if (d === "falar") for (const e of falaveis) falouEm.set(e.id, [...(falouEm.get(e.id) ?? []), p]);
       }
-      linhas.push({
-        type: "trafego", title: a.titulo, body: a.corpo, client_id: a.clientId, target_user: p, read: false,
-        falar: d === "falar", aviso_id: ev?.id ?? null,
-      });
-      if (d === "falar") falou.push(p);
+      if (calados.length) linhas.push({ type: "trafego", ...texto(calados), target_user: p, read: false, falar: false, aviso_id: calados[0].id });
     }
     if (linhas.length) {
       const { error: eIns } = await supabaseAdmin.from("notifications").insert(linhas);
       if (eIns) console.error("[avisos/trafego] notificações:", eIns.message);
     }
-    if (ev?.id) await supabaseAdmin.from("avisos_trafego").update({ destinatarios: para, falado_para: falou }).eq("id", ev.id);
-    return { novo: true, falou };
+    for (const e of eventos) {
+      await supabaseAdmin.from("avisos_trafego").update({ destinatarios: e.para, falado_para: falouEm.get(e.id) ?? [] }).eq("id", e.id);
+    }
+    return { novos: eventos.length, falou: [...new Set([...falouEm.values()].flat())] };
   } catch (e) {
     console.error("[avisos/trafego]", e instanceof Error ? e.message : e);
-    return { novo: false, falou: [] };
+    return { novos: 0, falou: [] };
   }
+}
+
+/** Uma ocorrência só — mesmo caminho do lote. */
+export async function registrarAviso(a: NovoAviso, agora: Date = new Date()): Promise<{ novo: boolean; falou: string[] }> {
+  const r = await registrarLote([a], agora);
+  return { novo: r.novos > 0, falou: r.falou };
 }
 
 // ── Saldo (chamado pelo sync-saldos, de 2 em 2h) ──────────────────────────────
@@ -127,23 +154,21 @@ export interface SnapshotSaldo extends SaldoLido {
   metaAccountId: string;
 }
 
-/** Saldo zerado de verdade vira aviso falado — independente do WhatsApp já ter avisado "crítico" hoje. */
+/** Saldo zerado de verdade vira aviso falado — independente do WhatsApp já ter avisado "crítico" hoje.
+ *  Todos os da rodada numa frase só (registrarLote). */
 export async function avisarSaldosZerados(snaps: SnapshotSaldo[], agora: Date = new Date()): Promise<number> {
   const zerados = snaps.filter(saldoZerado);
   if (!zerados.length) return 0;
-  let n = 0;
   try {
     const { mapa } = await carregarVistos();
-    for (const s of zerados) {
-      if (estaVisto(mapa, s.clientId, "saldo", "critical", agora)) continue; // alguém já está cuidando
-      const t = textoSaldoZerado(s.clientName, s.available, s.daysRemaining);
-      const r = await registrarAviso({ tipo: "saldo_zerado", clientId: s.clientId ?? null, metaAccountId: s.metaAccountId, ...t }, agora);
-      if (r.novo) n++;
-    }
+    const avisos: NovoAviso[] = zerados
+      .filter((s) => !estaVisto(mapa, s.clientId, "saldo", "critical", agora)) // alguém já está cuidando
+      .map((s) => ({ tipo: "saldo_zerado", clientId: s.clientId ?? null, metaAccountId: s.metaAccountId, nome: s.clientName, ...textoSaldoZerado(s.clientName, s.available, s.daysRemaining) }));
+    return (await registrarLote(avisos, agora)).novos;
   } catch (e) {
     console.error("[avisos/saldo]", e instanceof Error ? e.message : e);
+    return 0;
   }
-  return n;
 }
 
 /** Fecha os eventos de saldo cuja conta foi recarregada (a medição do "quanto tempo levou"). */

@@ -34,7 +34,9 @@ export async function montar(p: PedidoLido, ctx: Contexto, agora: Date): Promise
     const { carregarAtencao } = await import("./atencao-dados");
     const { textoAtencao, vazio } = await import("./atencao");
     const gestao = ctx.autor.papel === "admin" || ctx.autor.papel === "manager";
-    const equipe = p.escopo === "equipe" && gestao;
+    // Sócio não é dono de carteira: a atenção dele é a da agência inteira (05/10: o "minha atenção"
+    // do Roberto voltava vazio).
+    const equipe = (p.escopo === "equipe" && gestao) || ctx.autor.papel === "admin";
     const d = await carregarAtencao({ nome: ctx.autor.nome, papel: ctx.autor.papel as Papel }, equipe, agora);
     if (vazio(d) && !d.falhas.length) return { texto: `${primeiro}, nada pedindo ${equipe ? "atenção na equipe" : "a sua atenção"} agora. 🙌 Se aparecer, eu aviso.` };
     const texto = textoAtencao(d, { nome: ctx.autor.nome, equipe, quando: quando(agora) });

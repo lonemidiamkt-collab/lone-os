@@ -134,9 +134,34 @@ export function saldoResolvido(s: Pick<SaldoLido, "available" | "daysRemaining">
 
 // ── Textos (curtos: é a primeira coisa que a pessoa ouve) ─────────────────────
 
+/** Nome como se fala: sem "Ltda/ME/EIRELI" e sem CAIXA ALTA ("MAX CONTABILIDADE" → "Max Contabilidade"). */
+export function nomeFalado(nome: string): string {
+  const limpo = String(nome ?? "").replace(/\s*[-–,]?\s*\b(ltda|me|eireli|epp|s\/?a)\b\.?\s*$/i, "").replace(/\s+/g, " ").trim();
+  return limpo.split(" ").map((w) => (w.length > 2 && w === w.toUpperCase() && /\p{L}/u.test(w) ? w.charAt(0) + w.slice(1).toLowerCase() : w)).join(" ");
+}
+
+/** "A, B e C" — no máximo `max` nomes, o resto vira "e mais N". */
+export function juntarNomes(nomes: string[], max = 6): string {
+  const n = nomes.map(nomeFalado);
+  if (n.length <= 1) return n[0] ?? "";
+  if (n.length > max) return `${n.slice(0, max).join(", ")} e mais ${n.length - max}`;
+  return `${n.slice(0, -1).join(", ")} e ${n[n.length - 1]}`;
+}
+
+/**
+ * Várias ocorrências na MESMA rodada viram UMA frase (05/10: o sync das 14h achou 6 saldos zerados de
+ * uma vez e a voz falou 5 seguidas + o aviso de teto). Uma frase gasta 1 do teto, não 6.
+ */
+export function textoLote(tipo: TipoAviso, nomes: string[], porSaldo = false): { titulo: string; corpo: string } {
+  const n = nomes.length;
+  if (tipo === "saldo_zerado") return { titulo: `${n} contas estão com o saldo zerado`, corpo: `${juntarNomes(nomes)}. Os anúncios param até recarregar. Vale avisar os clientes hoje.` };
+  if (porSaldo) return { titulo: `${n} contas pararam porque o saldo zerou`, corpo: `${juntarNomes(nomes)}. Vale avisar os clientes pra recarregar.` };
+  return { titulo: `${n} contas pararam de rodar hoje`, corpo: `${juntarNomes(nomes)}. Vale conferir o saldo e o pagamento.` };
+}
+
 export function textoContaParada(nome: string, _hora: string, media3d: number | null): { titulo: string; corpo: string } {
   return {
-    titulo: `A conta do ${nome} parou de rodar hoje`,
+    titulo: `A conta do ${nomeFalado(nome)} parou de rodar hoje`,
     corpo: `${media3d && media3d >= 1 ? `Ela vinha gastando uns ${Math.round(media3d)} reais por dia. ` : ""}Vale conferir o saldo e o pagamento.`,
   };
 }
@@ -144,7 +169,7 @@ export function textoContaParada(nome: string, _hora: string, media3d: number | 
 export function textoSaldoZerado(nome: string, available: number | null, _daysRemaining: number | null): { titulo: string; corpo: string } {
   const zerado = available === null || available <= 0;
   return {
-    titulo: zerado ? `O saldo do ${nome} zerou` : `O saldo do ${nome} não dura até amanhã`,
+    titulo: zerado ? `O saldo do ${nomeFalado(nome)} zerou` : `O saldo do ${nomeFalado(nome)} não dura até amanhã`,
     corpo: zerado
       ? "Os anúncios param até o cliente recarregar. Vale avisar o cliente hoje."
       : `Sobram uns ${Math.max(1, Math.round(available))} reais, menos de um dia de anúncio. Vale pedir a recarga hoje.`,

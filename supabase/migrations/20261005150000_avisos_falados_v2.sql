@@ -46,3 +46,9 @@ create table if not exists public.avisos_audio (
 alter table public.avisos_audio enable row level security; -- sem policy: só o servidor
 
 notify pgrst, 'reload schema';
+
+-- Lote (05/10, tarde): as ocorrências de uma mesma rodada viram UMA frase; ouvir a frase marca todas.
+alter table public.avisos_trafego add column if not exists lote uuid;
+create index if not exists idx_avisos_trafego_lote on public.avisos_trafego (lote);
+
+notify pgrst, 'reload schema';

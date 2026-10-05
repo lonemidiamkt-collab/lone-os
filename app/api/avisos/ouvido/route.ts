@@ -19,14 +19,20 @@ export async function POST(req: NextRequest) {
   const avisoId = (n as { aviso_id?: string | null } | null)?.aviso_id;
   if (!avisoId) return NextResponse.json({ ok: true, registrado: false }); // teste ou aviso de arte
 
-  const { data: ev } = await supabaseAdmin.from("avisos_trafego").select("ouvido_em, ouvido_por").eq("id", avisoId).maybeSingle();
-  if (!ev) return NextResponse.json({ ok: true, registrado: false });
+  // Uma frase pode cobrir várias contas (lote da mesma rodada): ouvir a frase = ouvir todas.
+  const { data: base } = await supabaseAdmin.from("avisos_trafego").select("lote").eq("id", avisoId).maybeSingle();
+  if (!base) return NextResponse.json({ ok: true, registrado: false });
+  let q = supabaseAdmin.from("avisos_trafego").select("id, ouvido_em, ouvido_por");
+  q = base.lote ? q.eq("lote", base.lote as string) : q.eq("id", avisoId);
+  const { data: evs } = await q;
   const quem = ((n as { target_user?: string | null }).target_user ?? user.email) as string;
-  const por = (ev.ouvido_por as string[] | null) ?? [];
-  const { error } = await supabaseAdmin.from("avisos_trafego").update({
-    ouvido_em: ev.ouvido_em ?? new Date().toISOString(),
-    ouvido_por: por.includes(quem) ? por : [...por, quem],
-  }).eq("id", avisoId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, registrado: true });
+  for (const ev of evs ?? []) {
+    const por = (ev.ouvido_por as string[] | null) ?? [];
+    const { error } = await supabaseAdmin.from("avisos_trafego").update({
+      ouvido_em: ev.ouvido_em ?? new Date().toISOString(),
+      ouvido_por: por.includes(quem) ? por : [...por, quem],
+    }).eq("id", ev.id as string);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, registrado: true, eventos: (evs ?? []).length });
 }

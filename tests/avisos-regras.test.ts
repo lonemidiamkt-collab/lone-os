@@ -106,3 +106,27 @@ describe("textos falados", () => {
     expect(textoSaldoZerado("Paradise", 12, 0.4).titulo).toBe("O saldo do Paradise não dura até amanhã");
   });
 });
+
+import { juntarNomes, nomeFalado, textoLote } from "@/lib/avisos/regras";
+
+describe("uma rodada, uma frase", () => {
+  it("nome como se fala", () => {
+    expect(nomeFalado("Léo carros comércio de veículos Ltda")).toBe("Léo carros comércio de veículos");
+    expect(nomeFalado("MAX CONTABILIDADE")).toBe("Max Contabilidade");
+    expect(nomeFalado("Óticas Raki")).toBe("Óticas Raki");
+  });
+  it("junta os nomes com 'e' e corta em 6", () => {
+    expect(juntarNomes(["A1", "B2"])).toBe("A1 e B2");
+    expect(juntarNomes(["Aa", "Bb", "Cc"])).toBe("Aa, Bb e Cc");
+    expect(juntarNomes(["a", "b", "c", "d", "e", "f", "g", "h"])).toBe("a, b, c, d, e, f e mais 2");
+  });
+  it("6 saldos zerados viram uma frase (o caso das 14h de 05/10)", () => {
+    const t = textoLote("saldo_zerado", ["Léo carros comércio de veículos Ltda", "MAX CONTABILIDADE", "Império Material de Construção", "Maicon minerais", "Veterinaria Regional", "Paradise Suplementos"]);
+    expect(t.titulo).toBe("6 contas estão com o saldo zerado");
+    expect(t.corpo).toBe("Léo carros comércio de veículos, Max Contabilidade, Império Material de Construção, Maicon minerais, Veterinaria Regional e Paradise Suplementos. Os anúncios param até recarregar. Vale avisar os clientes hoje.");
+  });
+  it("contas paradas: com e sem a causa do saldo", () => {
+    expect(textoLote("conta_parada", ["X", "Y"]).titulo).toBe("2 contas pararam de rodar hoje");
+    expect(textoLote("conta_parada", ["X", "Y"], true).titulo).toBe("2 contas pararam porque o saldo zerou");
+  });
+});
