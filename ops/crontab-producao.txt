@@ -84,3 +84,4 @@
 # Leva 7A (25/09/2026): vigia de entrega às 11h05 (nasce desligado na Central) e o retrato diário das campanhas às 0h10
 5 14 * * * /opt/loneos/scripts/cron-call.sh vigia-entrega POST >> /var/log/loneos-vigia-entrega.log 2>&1
 10 3 * * * /opt/loneos/scripts/cron-call.sh estado-campanhas POST >> /var/log/loneos-estado-campanhas.log 2>&1
+*/15 11-20 * * 1-5 /opt/loneos/scripts/cron-call.sh avisos-falados POST >> /var/log/loneos-avisos-falados.log 2>&1

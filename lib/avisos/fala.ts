@@ -1,29 +1,25 @@
-// lib/avisos/fala.ts — O PAINEL FALA OS AVISOS DE TRÁFEGO.
+// lib/avisos/fala.ts — O PAINEL FALA OS AVISOS (o lado do navegador). Regras do servidor: ./regras.ts.
 //
-// Roberto (05/10/2026): "a gente já conversou sobre colocar um áudio, como se o sistema falasse com
-// a gente, fizesse alguns avisos ... ela avisar, por exemplo, o cliente Bruno Tintas caiu o
-// resultado, no computador do Júlio, de quem tem acesso a tráfego". Nunca tinha sido construído.
+// Roberto (05/10/2026): "como se o sistema falasse com a gente ... o cliente Bruno Tintas caiu o
+// resultado, no computador do Júlio". v1 (dc24181) falava demais; a v2 (mesmo dia) fala só o que
+// exige ação em minutos, só pra quem age, com teto e horário — ver o porquê em ./regras.ts.
 //
-// Como funciona: os avisos de tráfego (conta parada, queda forte de resultado, saldo zerando) viram
-// notificação do tipo "trafego" para o gestor do cliente e para a gestão (lib/avisos/trafego-server.ts).
-// O painel já busca as notificações a cada 45 s; quando chega uma dessas, além do toast, ele FALA
-// a frase em voz alta com a voz do próprio navegador (Web Speech) — sem custo e sem serviço novo.
+//  - TRÁFEGO (gestor do cliente; sócio só se ligar a voz): o SERVIDOR decide e marca `falar` na
+//    notificação (conta parada, saldo zerado, teto, horário, grupo de controle do teste). O painel
+//    só obedece.
+//  - ARTE (social e designer, debddc9): arte entregue/adicionada, só do cliente da própria pessoa
+//    (ou aviso dirigido a ela) e só no horário comercial.
 //
-// Limites do navegador, que não dá pra contornar: o painel precisa estar aberto (em qualquer aba) e
-// a pessoa precisa ter clicado nele pelo menos uma vez desde que abriu — sem esse clique o Chrome
-// não deixa a página falar sozinha.
+// Limites do navegador: o painel precisa estar aberto e a pessoa precisa ter clicado nele desde que
+// abriu (sem isso o Chrome bloqueia a fala). Com várias abas, só uma fala (./lider.ts).
 
 import type { AppNotification } from "@/lib/types";
 
-export const CHAVE_PREFERENCIA = "lone:avisos-falados";
+import { TETO_FALAS_DIA, dentroDoHorario, relogioSP } from "./regras";
 
-/**
- * O que cada papel ouve. Tráfego e gestão: os avisos de tráfego. Social e designer: os avisos de
- * ARTE (arte entregue / adicionada) — os mesmos que já tocavam o som de três notas (Roberto,
- * 05/10: "rodar na máquina do Carlos um aviso de arte"). O resto continua só no sino e no toast.
- */
-const OUVE_TRAFEGO = new Set(["traffic", "admin", "manager"]);
-const OUVE_ARTE = new Set(["social", "designer", "admin", "manager"]);
+/** Tráfego: quem cuida de conta e os sócios (esses só se ligarem). Arte: quem produz e publica. */
+const OUVE_TRAFEGO = new Set(["traffic", "manager", "admin"]);
+const OUVE_ARTE = new Set(["social", "designer"]);
 
 export function podeOuvir(papel: string | null | undefined): boolean {
   const p = String(papel ?? "");
@@ -37,13 +33,72 @@ export function ehAvisoDeArte(n: Pick<AppNotification, "type" | "title" | "body"
   return /arte (entregue|pronta|adicionad|nova)|entregou a arte|nova arte|arte do designer|designer entregou/.test(t);
 }
 
-export function deveFalar(n: Pick<AppNotification, "type" | "title" | "body">, papel: string | null | undefined, ligado: boolean): boolean {
-  if (!ligado) return false;
-  const p = String(papel ?? "");
-  if (n.type === "trafego") return OUVE_TRAFEGO.has(p);
-  if (ehAvisoDeArte(n)) return OUVE_ARTE.has(p);
+export interface ContextoFala {
+  papel: string | null | undefined;
+  /** A pessoa deixou a voz ligada (preferência guardada no servidor). */
+  ligada: boolean;
+  /** Nome de quem está no painel — o mesmo de clients.assigned_*. */
+  eu: string;
+  /** Dono do cliente do aviso (só importa pra arte). null = cliente não encontrado. */
+  dono?: { social?: string | null; designer?: string | null } | null;
+  agora?: Date;
+}
+
+type Falavel = Pick<AppNotification, "type" | "title" | "body"> & Partial<Pick<AppNotification, "falar" | "paraMim">>;
+
+export function deveFalar(n: Falavel, c: ContextoFala): boolean {
+  if (!c.ligada || !dentroDoHorario(c.agora ?? new Date())) return false;
+  const p = String(c.papel ?? "");
+  if (n.type === "trafego") return OUVE_TRAFEGO.has(p) && n.falar === true;
+  if (ehAvisoDeArte(n) && OUVE_ARTE.has(p)) {
+    if (n.paraMim) return true;
+    const dono = p === "social" ? c.dono?.social : c.dono?.designer;
+    return !!dono && dono.trim() === c.eu.trim(); // arte do cliente de OUTRA pessoa não fala aqui
+  }
   return false;
 }
+
+// ── Arte: agrupar e limitar (o servidor não decide a arte, então a disciplina mora aqui) ─────────
+//
+// Avisos de arte no banco (14 dias até 05/10): 4 a 126 por dia — 126 em 23/09. Falar um por um
+// transformaria a voz em barulho de fundo no primeiro dia. Então: as artes do mesmo cliente que
+// chegam juntas viram UMA frase, e vale o mesmo teto diário do tráfego.
+
+export interface GrupoArte { chave: string; frase: string; ids: string[] }
+
+/** Junta os avisos de arte por cliente: "3 artes da Veneza Estofados chegaram." */
+export function agruparArte(avisos: Pick<AppNotification, "id" | "title" | "body" | "clientId">[], nomeDoCliente: (id: string) => string | null): GrupoArte[] {
+  const porCliente = new Map<string, Pick<AppNotification, "id" | "title" | "body" | "clientId">[]>();
+  for (const a of avisos) {
+    const k = a.clientId ?? `sem-cliente:${a.id}`;
+    porCliente.set(k, [...(porCliente.get(k) ?? []), a]);
+  }
+  return [...porCliente.entries()].map(([chave, lista]) => {
+    const nome = lista[0].clientId ? nomeDoCliente(lista[0].clientId) : null;
+    const frase = lista.length === 1
+      ? fraseParaFalar(lista[0].title, lista[0].body)
+      : `${lista.length} artes ${nome ? `da ${nome} ` : ""}chegaram.`;
+    return { chave, frase, ids: lista.map((a) => a.id) };
+  });
+}
+
+export type VezDaArte = "falar" | "avisar_teto" | "mudo";
+
+/** Contador de falas de arte do dia, por navegador (só a aba eleita fala, então ele não duplica). */
+export function vezDaArte(agora: Date = new Date()): VezDaArte {
+  try {
+    const chave = `lone:falas-arte:${relogioSP(agora).dia}`;
+    const n = Number(localStorage.getItem(chave) ?? "0") || 0;
+    localStorage.setItem(chave, String(n + 1));
+    if (n < TETO_FALAS_DIA) return "falar";
+    if (n === TETO_FALAS_DIA) return "avisar_teto";
+    return "mudo";
+  } catch {
+    return "falar";
+  }
+}
+
+export const FRASE_TETO_ARTE = `Já são ${TETO_FALAS_DIA} avisos de arte falados hoje. As próximas artes ficam só no sino.`;
 
 /**
  * A frase falada: título e corpo, sem emoji, sem marcação do WhatsApp (*, _), sem link, com "R$"
@@ -71,33 +126,5 @@ export function fraseParaFalar(titulo: string, corpo = "", max = 220): string {
 
 // ── Navegador ────────────────────────────────────────────────────────────────
 
-/** Ligado por padrão pra quem pode ouvir; a pessoa desliga no sino. */
-export function falaLigada(): boolean {
-  try { return localStorage.getItem(CHAVE_PREFERENCIA) !== "off"; } catch { return true; }
-}
-
-export function definirFala(ligada: boolean): void {
-  try { localStorage.setItem(CHAVE_PREFERENCIA, ligada ? "on" : "off"); } catch { /* sem armazenamento: vale só na sessão */ }
-}
-
-function vozPtBr(): SpeechSynthesisVoice | null {
-  const vozes = window.speechSynthesis.getVoices().filter((v) => /^pt(-|_)?BR/i.test(v.lang) || /portugu[eê]s do brasil/i.test(v.name));
-  // A do Google (Chrome) soa mais natural que a do sistema; depois Luciana (Mac) e Maria (Windows).
-  return vozes.find((v) => /google/i.test(v.name)) ?? vozes.find((v) => /luciana|francisca|maria/i.test(v.name)) ?? vozes[0] ?? null;
-}
-
-/** Fala a frase. Nunca lança: navegador sem voz (ou sem o clique inicial) simplesmente não fala. */
-export function falar(frase: string): boolean {
-  try {
-    if (typeof window === "undefined" || !("speechSynthesis" in window) || !frase) return false;
-    const u = new SpeechSynthesisUtterance(frase);
-    u.lang = "pt-BR";
-    const voz = vozPtBr();
-    if (voz) u.voice = voz;
-    u.rate = 1.02;
-    window.speechSynthesis.speak(u); // entra na fila: dois avisos seguidos são falados um depois do outro
-    return true;
-  } catch {
-    return false;
-  }
-}
+// A parte que TOCA (voz natural + reserva do navegador) mora em ./tocar.ts — este arquivo também
+// é lido pelo servidor e não pode depender do navegador.

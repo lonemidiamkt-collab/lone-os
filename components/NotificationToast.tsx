@@ -8,7 +8,12 @@ import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { cn } from "@/lib/utils";
 import type { AppNotification } from "@/lib/types";
 import { useRole } from "@/lib/context/RoleContext";
-import { deveFalar, ehAvisoDeArte, falaLigada, falar, fraseParaFalar } from "@/lib/avisos/fala";
+import { FRASE_TETO_ARTE, agruparArte, deveFalar, ehAvisoDeArte, fraseParaFalar, vezDaArte } from "@/lib/avisos/fala";
+import { falar } from "@/lib/avisos/tocar";
+import { candidatarSe, reservarAviso, type Candidatura } from "@/lib/avisos/lider";
+import { useVozAvisosStore } from "@/stores/useVozAvisosStore";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 // Controlador headless: observa a store e dispara no <Toaster> global (components/ui/sonner.tsx).
 // Não renderiza nada próprio — um só sistema de toast no app.
@@ -109,7 +114,17 @@ export default function NotificationToast() {
   const router = useRouter();
   const notifications = useNotificationsStore((s) => s.notifications);
   const markNotificationRead = useNotificationsStore((s) => s.markRead);
-  const { role } = useRole();
+  const { role, currentUser } = useRole();
+  // Voz (lib/avisos/fala.ts): preferência do servidor + eleição da aba que fala (uma só).
+  const vozLigada = useVozAvisosStore((s) => s.ligada);
+  const carregarVoz = useVozAvisosStore((s) => s.carregar);
+  const clientes = useClientsStore((s) => s.clients);
+  const candidaturaRef = useRef<Candidatura | null>(null);
+  useEffect(() => { carregarVoz(); }, [carregarVoz]);
+  useEffect(() => {
+    candidaturaRef.current = candidatarSe();
+    return () => { candidaturaRef.current?.encerrar(); candidaturaRef.current = null; };
+  }, []);
   const seenRef = useRef<Set<string>>(new Set());
   const initialLoadRef = useRef(true);
 
@@ -172,12 +187,36 @@ export default function NotificationToast() {
       }
     });
 
-    // AVISO FALADO (05/10): aviso de tráfego é dito em voz alta pra quem cuida de tráfego. Um por um,
-    // na ordem em que chegaram — agrupar aqui faria a voz dizer "3 novas notificações", que não
-    // serve pra nada. Ver lib/avisos/fala.ts.
-    const ligada = falaLigada();
-    const falados = newOnes.filter((n) => deveFalar(n, role, ligada));
-    falados.forEach((n) => falar(fraseParaFalar(n.title, n.body)));
+    // AVISO FALADO (v2, 05/10): o servidor decide o que é falável (tráfego) e a regra de arte olha o
+    // dono do cliente — lib/avisos/fala.ts. Um por um, na ordem em que chegaram: agrupar faria a voz
+    // dizer "3 novas notificações", que não serve pra nada. Só a aba eleita fala (lib/avisos/lider.ts).
+    const falados = newOnes.filter((n) => {
+      const c = n.clientId ? clientes.find((x) => x.id === n.clientId) : undefined;
+      return deveFalar(n, {
+        papel: role, ligada: vozLigada, eu: currentUser,
+        dono: c ? { social: c.assignedSocial, designer: c.assignedDesigner } : null,
+      });
+    });
+    const souAFalante = candidaturaRef.current?.souLider() ?? false;
+    if (souAFalante) {
+      const emOrdem = [...falados].reverse().filter((n) => reservarAviso(n.id)); // a lista vem do mais novo pro mais velho
+      // Tráfego: um por um (o servidor já aplicou teto e horário).
+      emOrdem.filter((n) => n.type === "trafego").forEach((n) => {
+        falar(fraseParaFalar(n.title, n.body), n.avisoId ? () => {
+          // Prova de que a voz tocou — vira "ouvido" na medição. Falhar aqui não importa pra quem ouviu.
+          authedFetch("/api/avisos/ouvido", {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notificationId: n.id }),
+          }).catch(() => {});
+        } : undefined);
+      });
+      // Arte: agrupada por cliente e com o mesmo teto diário (lib/avisos/fala.ts).
+      const nomeDe = (id: string) => { const c = clientes.find((x) => x.id === id); return c ? (c.nomeFantasia || c.name) : null; };
+      for (const g of agruparArte(emOrdem.filter((n) => n.type !== "trafego"), nomeDe)) {
+        const vez = vezDaArte();
+        if (vez === "falar") falar(g.frase);
+        else if (vez === "avisar_teto") falar(FRASE_TETO_ARTE);
+      }
+    }
 
     // Som: chime de ARTE quando designer entrega / social adiciona arte; ping premium p/ crítico.
     if (falados.length) {
@@ -251,7 +290,7 @@ export default function NotificationToast() {
         { id: p.key, duration: p.isCritical ? Infinity : 4000 }
       );
     }
-  }, [notifications, markNotificationRead, router, role]);
+  }, [notifications, markNotificationRead, router, role, currentUser, vozLigada, clientes]);
 
   return null;
 }

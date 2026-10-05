@@ -134,13 +134,14 @@ export async function POST(req: NextRequest) {
   if (idsAlerta.length) {
     await supabaseAdmin.from("anomaly_alerts").update({ notified_at: new Date().toISOString() }).in("id", idsAlerta);
   }
-  // A voz no computador do gestor e da gestão (lib/avisos/fala.ts) — o WhatsApp acima continua igual.
-  const { avisarTrafego } = await import("@/lib/avisos/trafego-server");
-  const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  await avisarTrafego(avisar.map((p) => ({
-    clientId: p.clientId,
-    titulo: `A conta do ${p.nome} parou de rodar`,
-    corpo: `Nenhum gasto hoje até as ${hora}. Ela vinha gastando cerca de ${brl(p.media3d ?? 0)} por dia.`,
-  })));
+  // A voz no computador de quem cuida da conta (lib/avisos/regras.ts) — o WhatsApp acima continua igual.
+  const { registrarAviso } = await import("@/lib/avisos/trafego-server");
+  const { textoContaParada } = await import("@/lib/avisos/regras");
+  for (const p of avisar) {
+    await registrarAviso({
+      tipo: "conta_parada", clientId: p.clientId, metaAccountId: p.metaAccountId, gestor: p.gestor,
+      ...textoContaParada(p.nome, hora, p.media3d),
+    }, agora);
+  }
   return NextResponse.json({ ok: true, enviado: true, ...resumo, clientes: lista.map((l) => l.nome) });
 }

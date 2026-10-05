@@ -89,6 +89,9 @@ export const useNotificationsStore = create<NotificationsState>()(
               cardId: row.card_id as string | undefined,
               read: Boolean(row.read),
               createdAt: row.created_at as string,
+              falar: row.falar === true,
+              avisoId: (row.aviso_id as string | null) ?? undefined,
+              paraMim: row.target_user != null,
             };
             set((s) => ({
               notifications: s.notifications.some((n) => n.id === notif.id)

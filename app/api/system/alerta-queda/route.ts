@@ -129,13 +129,7 @@ export async function POST(req: NextRequest) {
     await supabaseAdmin.from("anomaly_alerts").update({ notified_at: new Date().toISOString() }).in("id", notificados);
   }
 
-  // Só a queda CRÍTICA vira voz: falar todo alerta de CTR transformaria o aviso em barulho de fundo.
-  const criticos = [...porCliente.entries()].filter(([, v]) => v.severidade === "critical");
-  if (criticos.length) {
-    const { avisarTrafego } = await import("@/lib/avisos/trafego-server");
-    await avisarTrafego(criticos.map(([clientId, v]) => ({
-      clientId, titulo: `O resultado do ${v.nome} caiu`, corpo: `${v.sintoma.replace(/\.$/, "")}, comparado com a média dos últimos dias.`,
-    })));
-  }
+  // Queda de resultado NÃO é falada (v2, 05/10): 81 de 109 quedas críticas do mês eram impressão,
+  // não conversa, e nenhuma pede ação em minutos. Fica no PDF das 9h30. Ver lib/avisos/regras.ts.
   return NextResponse.json({ ok: true, alertas: alertas.length, clientes: quedas.length, bons: bons.length, formato, enviado: true });
 }

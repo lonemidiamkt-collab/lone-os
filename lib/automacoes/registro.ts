@@ -269,6 +269,12 @@ export const AUTOMACOES: Automacao[] = [
     familia: "Tráfego", destino: "sistema", cron: "0 9 1 * *", agendaBRT: "dia 1º de cada mês, 6h", maxSilencioHoras: 32 * 24, ensaio: "dry=1",
   }),
   // Leva 7A (N1). NASCE DESLIGADO (migração 20260925120000 grava enabled=false): manda no grupo de tráfego.
+  // Avisos falados v2 (05/10/2026): acompanha as contas paradas e mede quanto tempo levam pra voltar.
+  // Desligar aqui também CALA a voz dos avisos de tráfego (lib/avisos/trafego-server.ts).
+  ep("avisos-falados", {
+    nome: "Avisos falados de tráfego", descricao: "De 15 em 15 min em dia útil: confere se as contas que pararam voltaram a rodar (a medição da voz). Desligado = a voz dos avisos de tráfego fica calada; o aviso continua no sino.",
+    familia: "Tráfego", destino: "sistema", cron: "*/15 11-20 * * 1-5", agendaBRT: "dia útil, de 15 em 15 min, das 8h às 18h", maxSilencioHoras: 66,
+  }),
   ep("vigia-entrega", {
     nome: "Vigia de entrega da conta", descricao: "Às 11h: conta ativa que vinha gastando e não gastou nada hoje — uma mensagem no grupo de tráfego marcando o gestor de cada conta.",
     familia: "Tráfego", destino: "grupo de tráfego", cron: "5 14 * * *", agendaBRT: "todo dia, 11h05", maxSilencioHoras: 26, ensaio: "dry=1",

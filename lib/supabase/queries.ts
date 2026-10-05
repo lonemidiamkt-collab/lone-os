@@ -614,6 +614,9 @@ export async function fetchNotifications(forUser?: string): Promise<AppNotificat
     cardId: (row.card_id as string) ?? undefined,
     read: (row.read as boolean) ?? false,
     createdAt: row.created_at as string,
+    falar: row.falar === true,
+    avisoId: (row.aviso_id as string) ?? undefined,
+    paraMim: row.target_user != null,
   }));
 }
 

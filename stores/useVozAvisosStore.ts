@@ -1,0 +1,33 @@
+// stores/useVozAvisosStore.ts — a voz dos avisos está ligada pra mim? (lib/avisos/fala.ts)
+//
+// A preferência mora no servidor (team_members.ouvir_avisos), não no navegador: é ela que decide
+// se o sócio RECEBE os avisos de tráfego, e vale em qualquer computador. Padrão: quem cuida de conta
+// ouve; sócio não (lib/avisos/regras.ts → vozPadraoDoPapel).
+
+import { create } from "zustand";
+import { chamar } from "@/lib/api/chamar";
+
+interface EstadoVoz {
+  carregado: boolean;
+  ligada: boolean;
+  carregar: () => Promise<void>;
+  /** Devolve a frase de erro (ou null quando gravou). */
+  alternar: (ligada: boolean) => Promise<string | null>;
+}
+
+export const useVozAvisosStore = create<EstadoVoz>((set, get) => ({
+  carregado: false,
+  ligada: false,
+  carregar: async () => {
+    if (get().carregado) return;
+    const r = await chamar<{ ligada: boolean }>("/api/avisos/voz");
+    if (r.ok && r.data) set({ carregado: true, ligada: !!r.data.ligada });
+  },
+  alternar: async (ligada) => {
+    const antes = get().ligada;
+    set({ ligada }); // otimista: o botão responde na hora
+    const r = await chamar("/api/avisos/voz", { ligada });
+    if (!r.ok) { set({ ligada: antes }); return r.erro; }
+    return null;
+  },
+}));

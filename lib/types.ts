@@ -518,6 +518,12 @@ export interface AppNotification {
   cardId?: string; // se a notificação é sobre um card, o clique abre /social?card=<cardId>
   read: boolean;
   createdAt: string; // ISO
+  /** Aviso de tráfego: o servidor decidiu que a voz toca (lib/avisos/regras.ts). */
+  falar?: boolean;
+  /** Evento de avisos_trafego — o painel confirma por ele quando a voz tocou. */
+  avisoId?: string;
+  /** Dirigido a esta pessoa (target_user preenchido), não ao time todo. */
+  paraMim?: boolean;
 }
 
 // --- Ad Analytics (Meta Ads mock — Phase 1) ---

@@ -20,12 +20,14 @@ export async function POST(req: NextRequest) {
   if (!validos.length) return NextResponse.json({ error: "nenhum nome bate com o time ativo", para }, { status: 400 });
   // ?tipo=arte → aviso de arte entregue (quem ouve: social e designer); padrão → aviso de tráfego.
   const arte = q.get("tipo") === "arte";
-  const titulo = q.get("titulo") ?? (arte ? "Teste de aviso falado: arte entregue" : "Teste de aviso falado: o resultado do Bruno Tintas Iguaba caiu");
+  const titulo = q.get("titulo") ?? (arte ? "Teste de aviso falado: arte entregue" : "Teste de aviso falado: a conta do Bruno Tintas Iguaba parou de rodar");
   const corpo = q.get("corpo") ?? (arte
     ? "O designer entregou a arte de exemplo da Veneza Estofados. Isto é só um teste."
-    : "Na semana passada o custo por conversa subiu 26 por cento, de R$ 6,79 para R$ 8,59. Isto é só um teste.");
+    : "Nenhum gasto hoje até as 11h. Ela vinha gastando cerca de R$ 25,00 por dia. Isto é só um teste.");
   const { error } = await supabaseAdmin.from("notifications").insert(
-    validos.map((p) => ({ type: arte ? "content" : "trafego", title: titulo, body: corpo, target_user: p, read: false })),
+    // falar: true — no aviso de tráfego quem decide a voz é o servidor (lib/avisos/regras.ts); o teste
+    // pula teto e horário de propósito. Arte dirigida à pessoa fala pra ela (lib/avisos/fala.ts).
+    validos.map((p) => ({ type: arte ? "content" : "trafego", title: titulo, body: corpo, target_user: p, read: false, falar: !arte })),
   );
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, para: validos, titulo, aviso: "o painel de cada um busca avisos a cada 45 s; com a aba aberta e um clique feito, ele fala" });

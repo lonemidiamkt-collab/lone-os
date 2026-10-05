@@ -30,7 +30,8 @@ function origemDaPilha(): string | null {
 }
 
 /** Custo por chamada de modelos cobrados por unidade, não por token (US$). Estimativa. */
-const CUSTO_FIXO: Record<string, number> = { "gpt-image-1": 0.063, "gpt-image-1:high": 0.25, "whisper-1": 0.006 };
+// gpt-4o-mini-tts: ~US$ 0,015 por minuto de áudio; um aviso falado tem 5–10 s (lib/avisos/audio-server.ts).
+const CUSTO_FIXO: Record<string, number> = { "gpt-image-1": 0.063, "gpt-image-1:high": 0.25, "whisper-1": 0.006, "gpt-4o-mini-tts": 0.002 };
 
 export function registrarChamadaLlm(c: ChamadaLlm): void {
   const e = execucaoAtual();

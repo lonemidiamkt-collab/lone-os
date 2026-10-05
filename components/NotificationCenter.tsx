@@ -6,7 +6,9 @@ import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
   AlertOctagon, AlertTriangle, Bell, Check, CheckCheck, ChevronDown, FileImage, MessageCircle, Settings, Sparkles, TrendingDown, Volume2, VolumeX, X,
 } from "lucide-react";
-import { definirFala, falaLigada, falar, podeOuvir } from "@/lib/avisos/fala";
+import { podeOuvir } from "@/lib/avisos/fala";
+import { calar, falar } from "@/lib/avisos/tocar";
+import { useVozAvisosStore } from "@/stores/useVozAvisosStore";
 import type { LucideIcon } from "lucide-react";
 import { ABRIR_NOTIFICACOES } from "@/components/TopActions";
 import MedievalAvatar, { getUserAvatar, type AvatarType } from "@/components/MedievalAvatars";
@@ -234,18 +236,24 @@ export default function NotificationCenter(_props: { semBotao?: boolean }) {
   const cards = useContentStore((s) => s.contentCards);
   const demandas = useContentStore((s) => s.designRequests);
   const { profiles, role } = useRole();
-  // AVISOS FALADOS (05/10): o botão liga/desliga e, ao ligar, fala uma frase de teste — o clique
-  // também é o que o navegador exige pra deixar a página falar sozinha depois.
+  // AVISOS FALADOS (v2, 05/10): o botão liga/desliga a voz DESTA PESSOA (guardado no servidor — vale
+  // em qualquer computador). Ao ligar, fala uma frase de teste; o clique também é o que o navegador
+  // exige pra deixar a página falar sozinha depois. Sócio vem desligado: liga se quiser ouvir tráfego.
   const ouve = podeOuvir(role);
-  const [fala, setFala] = useState(true);
-  useEffect(() => { setFala(falaLigada()); }, []);
-  const alternarFala = () => {
+  const fala = useVozAvisosStore((s) => s.ligada);
+  const carregarVoz = useVozAvisosStore((s) => s.carregar);
+  const gravarVoz = useVozAvisosStore((s) => s.alternar);
+  const [erroVoz, setErroVoz] = useState<string | null>(null);
+  useEffect(() => { if (ouve) carregarVoz(); }, [ouve, carregarVoz]);
+  const alternarFala = async () => {
     const nova = !fala;
-    definirFala(nova); setFala(nova);
+    setErroVoz(null);
     if (nova) falar(role === "social" || role === "designer"
-      ? "Avisos falados ligados. Eu aviso aqui quando uma arte for entregue."
-      : "Avisos falados ligados. Eu aviso aqui quando uma conta parar, o resultado cair ou o saldo estiver acabando.");
-    else if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+      ? "Avisos falados ligados. Eu aviso aqui quando uma arte de um cliente seu for entregue."
+      : "Avisos falados ligados. Eu aviso aqui quando uma conta sua parar de rodar ou o saldo zerar, em dia útil, das oito às dezoito.");
+    else calar();
+    const erro = await gravarVoz(nova);
+    if (erro) setErroVoz(erro);
   };
   const [open, setOpen] = useState(false);
   const [filtro, setFiltro] = useState<"todas" | "nao_lidas" | Area>("todas");
@@ -533,10 +541,10 @@ export default function NotificationCenter(_props: { semBotao?: boolean }) {
                 <div className="flex items-center gap-1">
                   {ouve && (
                     <button type="button" onClick={alternarFala} aria-pressed={fala}
-                      title={fala ? "Os avisos importantes são falados em voz alta — clique pra silenciar" : "Ligar os avisos em voz alta"}
+                      title={erroVoz ?? (fala ? "Os avisos que pedem ação agora são falados em voz alta — clique pra silenciar" : "Ligar os avisos em voz alta")}
                       className={cn("flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium hover:bg-accent",
                         fala ? "text-foreground" : "text-muted-foreground")}>
-                      {fala ? <Volume2 size={14} /> : <VolumeX size={14} />} {fala ? "Voz ligada" : "Voz desligada"}
+                      {fala ? <Volume2 size={14} /> : <VolumeX size={14} />} {erroVoz ? "Não gravou — tente de novo" : fala ? "Voz ligada" : "Voz desligada"}
                     </button>
                   )}
                   {naoLidas > 0 && (
