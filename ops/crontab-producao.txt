@@ -53,7 +53,6 @@
 40 9 * * * /opt/loneos/scripts/cron-call.sh warmup-snapshots POST >> /var/log/loneos-warmup-snapshots.log 2>&1
 50 10 * * 1-5 /opt/loneos/scripts/cron-call.sh whatsapp-health POST >> /var/log/loneos-whatsapp-health.log 2>&1
 0 12 * * 5 /opt/loneos/scripts/cron-call.sh status-clientes POST >> /var/log/loneos-status-clientes.log 2>&1
-0 14 * * 1 /opt/loneos/scripts/cron-call.sh destaques-trafego POST >> /var/log/loneos-destaques-trafego.log 2>&1
 10 10-23 * * * /opt/loneos/scripts/cron-call.sh priority-recalcular POST >> /var/log/loneos-priority.log 2>&1
 20 10 * * 1-5 /opt/loneos/scripts/cron-call.sh creative-health POST >> /var/log/loneos-creative-health.log 2>&1
 40 10 * * 1-5 /opt/loneos/scripts/cron-call.sh creative-vencedores POST >> /var/log/loneos-creative-vencedores.log 2>&1
@@ -84,4 +83,5 @@
 # Leva 7A (25/09/2026): vigia de entrega às 11h05 (nasce desligado na Central) e o retrato diário das campanhas às 0h10
 5 14 * * * /opt/loneos/scripts/cron-call.sh vigia-entrega POST >> /var/log/loneos-vigia-entrega.log 2>&1
 10 3 * * * /opt/loneos/scripts/cron-call.sh estado-campanhas POST >> /var/log/loneos-estado-campanhas.log 2>&1
+0 14 * * 1 /opt/loneos/scripts/cron-call.sh destaques-trafego POST >> /var/log/loneos-destaques-trafego.log 2>&1
 */15 11-20 * * 1-5 /opt/loneos/scripts/cron-call.sh avisos-falados POST >> /var/log/loneos-avisos-falados.log 2>&1

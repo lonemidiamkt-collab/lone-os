@@ -99,7 +99,7 @@ describe("teste com grupo de controle", () => {
 
 describe("textos falados", () => {
   it("curtos, com o número que importa", () => {
-    expect(textoContaParada("Maicon Minerais", "11:05", 59.22).titulo).toBe("A conta do Maicon Minerais parou de rodar");
+    expect(textoContaParada("Maicon Minerais", "11:05", 59.22).titulo).toBe("A conta do Maicon Minerais parou de rodar hoje");
     expect(textoSaldoZerado("Paradise", 0, null).titulo).toBe("O saldo do Paradise zerou");
     expect(textoSaldoZerado("Paradise", 12, 0.4).titulo).toBe("O saldo do Paradise não dura até amanhã");
   });

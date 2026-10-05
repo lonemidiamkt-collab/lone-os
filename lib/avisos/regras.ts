@@ -130,22 +130,20 @@ export function saldoResolvido(s: Pick<SaldoLido, "available" | "daysRemaining">
 
 // ── Textos (curtos: é a primeira coisa que a pessoa ouve) ─────────────────────
 
-const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-export function textoContaParada(nome: string, hora: string, media3d: number | null): { titulo: string; corpo: string } {
+export function textoContaParada(nome: string, _hora: string, media3d: number | null): { titulo: string; corpo: string } {
   return {
-    titulo: `A conta do ${nome} parou de rodar`,
-    corpo: `Nenhum gasto hoje até as ${hora}.${media3d ? ` Ela vinha gastando cerca de ${brl(media3d)} por dia.` : ""}`,
+    titulo: `A conta do ${nome} parou de rodar hoje`,
+    corpo: `${media3d && media3d >= 1 ? `Ela vinha gastando uns ${Math.round(media3d)} reais por dia. ` : ""}Vale conferir o saldo e o pagamento.`,
   };
 }
 
-export function textoSaldoZerado(nome: string, available: number | null, daysRemaining: number | null): { titulo: string; corpo: string } {
+export function textoSaldoZerado(nome: string, available: number | null, _daysRemaining: number | null): { titulo: string; corpo: string } {
   const zerado = available === null || available <= 0;
   return {
     titulo: zerado ? `O saldo do ${nome} zerou` : `O saldo do ${nome} não dura até amanhã`,
     corpo: zerado
-      ? "Os anúncios param até o cliente recarregar."
-      : `Sobram ${brl(available)}${daysRemaining !== null ? `, menos de um dia de anúncio` : ""}. Precisa de recarga hoje.`,
+      ? "Os anúncios param até o cliente recarregar. Vale avisar o cliente hoje."
+      : `Sobram uns ${Math.max(1, Math.round(available))} reais, menos de um dia de anúncio. Vale pedir a recarga hoje.`,
   };
 }
 

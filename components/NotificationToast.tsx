@@ -202,7 +202,7 @@ export default function NotificationToast() {
       const emOrdem = [...falados].reverse().filter((n) => reservarAviso(n.id)); // a lista vem do mais novo pro mais velho
       // Tráfego: um por um (o servidor já aplicou teto e horário).
       emOrdem.filter((n) => n.type === "trafego").forEach((n) => {
-        falar(fraseParaFalar(n.title, n.body), n.avisoId ? () => {
+        falar(fraseParaFalar(n.title, n.body, currentUser), n.avisoId ? () => {
           // Prova de que a voz tocou — vira "ouvido" na medição. Falhar aqui não importa pra quem ouviu.
           authedFetch("/api/avisos/ouvido", {
             method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notificationId: n.id }),
@@ -213,7 +213,8 @@ export default function NotificationToast() {
       const nomeDe = (id: string) => { const c = clientes.find((x) => x.id === id); return c ? (c.nomeFantasia || c.name) : null; };
       for (const g of agruparArte(emOrdem.filter((n) => n.type !== "trafego"), nomeDe)) {
         const vez = vezDaArte();
-        if (vez === "falar") falar(g.frase);
+        const primeiro = currentUser.trim().split(/\s+/)[0];
+        if (vez === "falar") falar(primeiro ? `${primeiro}, ${g.frase[0].toLowerCase()}${g.frase.slice(1)}` : g.frase);
         else if (vez === "avisar_teto") falar(FRASE_TETO_ARTE);
       }
     }

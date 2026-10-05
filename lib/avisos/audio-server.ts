@@ -2,7 +2,7 @@
 // "bem feia"; quer "uma voz como a do ChatGPT"). OpenAI gpt-4o-mini-tts, mp3, em português do Brasil.
 //
 // Cache por (voz + instruções + texto) em avisos_audio: o mesmo aviso não paga duas vezes. A voz
-// escolhida mora em agency_settings.voz_avisos (troca sem deploy). Custo registrado em llm_calls.
+// escolhida mora em agency_settings.voz_avisos e as instruções em voz_avisos_instrucoes (trocam sem deploy). Custo registrado em llm_calls.
 // Se a OpenAI falhar, quem chamou recebe null e o painel cai na voz do navegador.
 
 import { createHash } from "node:crypto";
@@ -12,24 +12,29 @@ import { registrarChamadaLlm } from "@/lib/obs/llm";
 export const MODELO_VOZ = "gpt-4o-mini-tts";
 export const VOZ_PADRAO = "nova"; // escolhida pelo Roberto em 05/10, depois de ouvir 6 amostras
 const VOZES = new Set(["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"]);
-// As instruções exatas da amostra que o Roberto aprovou (05/10). Mudar o texto muda a chave do cache.
-const INSTRUCOES =
-  "Fale em português do Brasil, com sotaque brasileiro natural. Tom calmo, claro e profissional, como uma " +
-  "assistente avisando a equipe de uma agência. Ritmo levemente acelerado, sem soar robótico.";
+// Versão C, a que o Roberto aprovou (05/10) entre amostras A/B/C. Troca sem deploy gravando outro texto
+// em agency_settings.voz_avisos_instrucoes. Mudar o texto muda a chave do cache (gera de novo).
+export const INSTRUCOES_PADRAO =
+  "Você é a assistente da Lone Mídia, uma agência de marketing do Rio de Janeiro. Fale em português do Brasil " +
+  "com sotaque carioca leve e natural, como numa mensagem de voz de WhatsApp para um colega de trabalho: " +
+  "próxima, tranquila e segura, sem tom de locutora de rádio nem de robô. Faça pausas curtas entre as frases. " +
+  "Dê uma ênfase leve nos números e no nome do cliente. Termine a última frase com entonação de sugestão, não de ordem.";
 export const TEXTO_MAX = 300;
 
-async function vozEscolhida(): Promise<string> {
-  const { data } = await supabaseAdmin.from("agency_settings").select("value").eq("key", "voz_avisos").maybeSingle();
-  const v = String((data?.value as string | undefined) ?? "").trim().toLowerCase();
-  return VOZES.has(v) ? v : VOZ_PADRAO;
+async function vozEscolhida(): Promise<{ voz: string; instrucoes: string }> {
+  const { data } = await supabaseAdmin.from("agency_settings").select("key, value").in("key", ["voz_avisos", "voz_avisos_instrucoes"]);
+  const val = (k: string) => String((data ?? []).find((r) => r.key === k)?.value ?? "").trim();
+  const v = val("voz_avisos").toLowerCase();
+  const i = val("voz_avisos_instrucoes");
+  return { voz: VOZES.has(v) ? v : VOZ_PADRAO, instrucoes: i.length >= 20 ? i : INSTRUCOES_PADRAO };
 }
 
 /** mp3 da frase, do cache ou gerado agora. null = não deu (sem chave, OpenAI fora, sem crédito). */
 export async function audioDoAviso(texto: string): Promise<Buffer | null> {
   const frase = texto.trim().slice(0, TEXTO_MAX);
   if (!frase) return null;
-  const voz = await vozEscolhida();
-  const chave = createHash("sha256").update(`${MODELO_VOZ}|${voz}|${INSTRUCOES}|${frase}`).digest("hex");
+  const { voz, instrucoes } = await vozEscolhida();
+  const chave = createHash("sha256").update(`${MODELO_VOZ}|${voz}|${instrucoes}|${frase}`).digest("hex");
 
   const { data: cache } = await supabaseAdmin.from("avisos_audio").select("mp3_base64").eq("chave", chave).maybeSingle();
   if (cache?.mp3_base64) return Buffer.from(cache.mp3_base64 as string, "base64");
@@ -43,7 +48,7 @@ export async function audioDoAviso(texto: string): Promise<Buffer | null> {
     const res = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST", signal: ctl.signal,
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: MODELO_VOZ, voice: voz, input: frase, instructions: INSTRUCOES, response_format: "mp3" }),
+      body: JSON.stringify({ model: MODELO_VOZ, voice: voz, input: frase, instructions: instrucoes, response_format: "mp3" }),
     });
     if (!res.ok) {
       const erro = (await res.text().catch(() => "")).slice(0, 200);

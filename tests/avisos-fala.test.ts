@@ -2,16 +2,25 @@ import { describe, it, expect } from "vitest";
 import { agruparArte, fraseParaFalar, deveFalar, podeOuvir } from "@/lib/avisos/fala";
 
 describe("o que o painel fala", () => {
+  it("versão C (aprovada): chama a pessoa pelo nome e fala o valor como gente", () => {
+    expect(fraseParaFalar("A conta do Maicon Minerais parou de rodar hoje", "Ela vinha gastando uns 59 reais por dia. Vale conferir o saldo e o pagamento.", "Julio"))
+      .toBe("Julio, a conta do Maicon Minerais parou de rodar hoje. Ela vinha gastando uns 59 reais por dia. Vale conferir o saldo e o pagamento.");
+    const f = fraseParaFalar("Um aviso rápido de tráfego, só de teste", "O custo por conversa da Engetec subiu na semana passada: estava em R$ 3,53, foi pra R$ 5,06.", "Lucas Bueno");
+    expect(f).toContain("Lucas, um aviso rápido de tráfego");
+    expect(f).toContain("estava em 3 e 53, foi pra 5 e 6.");
+    expect(fraseParaFalar("CPL subiu", "", "Julio")).toBe("Julio, CPL subiu"); // sigla não vira minúscula
+  });
+
   it("tira emoji, asterisco e link; lê reais por extenso", () => {
     expect(fraseParaFalar("🚨 *Saldo acabando* — Paradise Suplementos", "Saldo R$ 5,01. Veja https://painel.lonemidia.com/traffic"))
-      .toBe("Saldo acabando — Paradise Suplementos. Saldo 5 reais e 1 centavo. Veja");
-    expect(fraseParaFalar("Conta parada: Maicon minerais", "Vinha gastando R$ 59,22/dia")).toContain("59 reais e 22 centavos/dia");
+      .toBe("Saldo acabando — Paradise Suplementos. Saldo 5 e 1. Veja");
+    expect(fraseParaFalar("Conta parada: Maicon minerais", "Vinha gastando R$ 59,22/dia")).toContain("59 e 22/dia");
     expect(fraseParaFalar("Verba", "R$ 1.200,00 no mês")).toBe("Verba. 1200 reais no mês");
   });
 
   it("frase longa é cortada no fim de uma frase, não no meio da palavra", () => {
     const corpo = "Primeira frase do aviso. " + "Segunda frase bem comprida que continua ".repeat(10);
-    const f = fraseParaFalar("Aviso", corpo, 120);
+    const f = fraseParaFalar("Aviso", corpo, null, 120);
     expect(f.length).toBeLessThanOrEqual(121);
     expect(f.endsWith(".")).toBe(true);
   });
@@ -66,7 +75,7 @@ describe("arte agrupada por cliente", () => {
       { id: "3", title: "Arte entregue", body: "O Gabriel entregou a arte de SEX", clientId: "c2" },
     ], nome);
     expect(grupos).toHaveLength(2);
-    expect(grupos[0].frase).toBe("2 artes da Veneza Estofados chegaram.");
-    expect(grupos[1].frase).toBe("Arte entregue. O Gabriel entregou a arte de SEX");
+    expect(grupos[0].frase).toBe("Chegaram 2 artes da Veneza Estofados. Vale dar uma olhada.");
+    expect(grupos[1].frase).toBe("Chegou uma arte da Bruno Tintas. Vale dar uma olhada.");
   });
 });

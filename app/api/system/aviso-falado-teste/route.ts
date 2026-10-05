@@ -20,10 +20,10 @@ export async function POST(req: NextRequest) {
   if (!validos.length) return NextResponse.json({ error: "nenhum nome bate com o time ativo", para }, { status: 400 });
   // ?tipo=arte → aviso de arte entregue (quem ouve: social e designer); padrão → aviso de tráfego.
   const arte = q.get("tipo") === "arte";
-  const titulo = q.get("titulo") ?? (arte ? "Teste de aviso falado: arte entregue" : "Teste de aviso falado: a conta do Bruno Tintas Iguaba parou de rodar");
+  const titulo = q.get("titulo") ?? (arte ? "Teste de aviso falado: arte entregue" : "Um aviso rápido de tráfego, só de teste");
   const corpo = q.get("corpo") ?? (arte
     ? "O designer entregou a arte de exemplo da Veneza Estofados. Isto é só um teste."
-    : "Nenhum gasto hoje até as 11h. Ela vinha gastando cerca de R$ 25,00 por dia. Isto é só um teste.");
+    : "O custo por conversa da Engetec subiu na semana passada: estava em R$ 3,53, foi pra R$ 5,06. E as conversas caíram, de 69 pra 50. Vale dar uma olhada nos anúncios dela hoje.");
   const { error } = await supabaseAdmin.from("notifications").insert(
     // falar: true — no aviso de tráfego quem decide a voz é o servidor (lib/avisos/regras.ts); o teste
     // pula teto e horário de propósito. Arte dirigida à pessoa fala pra ela (lib/avisos/fala.ts).

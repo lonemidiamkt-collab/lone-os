@@ -76,8 +76,8 @@ export function agruparArte(avisos: Pick<AppNotification, "id" | "title" | "body
   return [...porCliente.entries()].map(([chave, lista]) => {
     const nome = lista[0].clientId ? nomeDoCliente(lista[0].clientId) : null;
     const frase = lista.length === 1
-      ? fraseParaFalar(lista[0].title, lista[0].body)
-      : `${lista.length} artes ${nome ? `da ${nome} ` : ""}chegaram.`;
+      ? (nome ? `Chegou uma arte da ${nome}. Vale dar uma olhada.` : fraseParaFalar(lista[0].title, lista[0].body))
+      : `Chegaram ${lista.length} artes ${nome ? `da ${nome}` : "novas"}. Vale dar uma olhada.`;
     return { chave, frase, ids: lista.map((a) => a.id) };
   });
 }
@@ -101,22 +101,33 @@ export function vezDaArte(agora: Date = new Date()): VezDaArte {
 export const FRASE_TETO_ARTE = `Já são ${TETO_FALAS_DIA} avisos de arte falados hoje. As próximas artes ficam só no sino.`;
 
 /**
- * A frase falada: título e corpo, sem emoji, sem marcação do WhatsApp (*, _), sem link, com "R$"
- * lido como "reais" e cortada no fim de uma frase. Falar "asterisco SALDO CRÍTICO asterisco" ou um
- * link inteiro é o que faz aviso falado virar ruído.
+ * A frase falada. O que fez a amostra aprovada (versão C, 05/10) soar como gente:
+ *  - chama a pessoa pelo primeiro nome no começo ("Lucas, ...");
+ *  - valor em reais como se fala: "R$ 3,53" → "3 e 53"; acima de 100 reais, sem centavos;
+ *  - sem emoji, sem marcação do WhatsApp (*, _), sem link — "asterisco SALDO asterisco" é ruído.
  */
-export function fraseParaFalar(titulo: string, corpo = "", max = 220): string {
-  const limpar = (s: string) => s
+export function fraseParaFalar(titulo: string, corpo = "", pessoa?: string | null, max = 300): string {
+  const limpar = (x: string) => x
     .replace(/https?:\/\/\S+/g, "")
     .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "")
     .replace(/[*_~`]/g, "")
-    .replace(/R\$\s?([\d.]+),(\d{2})/g, (_, r, c) => `${r.replace(/\./g, "")} reais${c !== "00" ? ` e ${Number(c)} ${Number(c) === 1 ? "centavo" : "centavos"}` : ""}`)
+    .replace(/R\$\s?([\d.]+),(\d{2})/g, (_, r, c) => {
+      const reais = Number(r.replace(/\./g, ""));
+      return reais < 100 && c !== "00" ? `${reais} e ${Number(c)}` : `${reais} reais`;
+    })
     .replace(/R\$\s?([\d.]+)/g, (_, r) => `${r.replace(/\./g, "")} reais`)
     .replace(/\s+/g, " ")
     .trim();
   const t = limpar(titulo).replace(/[.:—-]+$/, "");
   const c = limpar(corpo);
   let frase = c ? `${t}. ${c}` : t;
+  const nome = (pessoa ?? "").trim().split(/\s+/)[0];
+  // "A conta..." → "Julio, a conta..." (sigla como "CPL" não vira minúscula)
+  if (nome) {
+    const primeira = frase.split(/\s/)[0] ?? "";
+    const sigla = primeira.length >= 2 && primeira === primeira.toUpperCase();
+    frase = `${nome}, ${sigla ? frase : frase.charAt(0).toLowerCase() + frase.slice(1)}`;
+  }
   if (frase.length > max) {
     const corte = frase.lastIndexOf(".", max);
     frase = corte > max * 0.5 ? frase.slice(0, corte + 1) : `${frase.slice(0, max).replace(/\s+\S*$/, "")}.`;
