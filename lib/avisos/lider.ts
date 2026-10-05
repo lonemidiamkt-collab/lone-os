@@ -34,19 +34,24 @@ export function candidatarSe(): Candidatura {
     })).catch(() => { /* aba fechando */ });
   };
 
-  const jaClicou = typeof navigator !== "undefined" && (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive;
-  const aoInteragir = () => { window.removeEventListener("pointerdown", aoInteragir); window.removeEventListener("keydown", aoInteragir); disputar(); };
-  if (jaClicou) disputar();
-  else if (typeof window !== "undefined") {
-    window.addEventListener("pointerdown", aoInteragir);
-    window.addEventListener("keydown", aoInteragir);
-  }
+  // Fase de CAPTURA: nenhum stopPropagation de componente impede a aba de perceber o clique.
+  const EVENTOS = ["pointerdown", "keydown", "touchstart"] as const;
+  let disputando = false;
+  const entrar = () => { if (disputando) return; disputando = true; tirar(); disputar(); };
+  const aoInteragir = () => entrar();
+  const tirar = () => { if (typeof window !== "undefined") for (const e of EVENTOS) window.removeEventListener(e, aoInteragir, true); };
+  const jaClicou = () => typeof navigator !== "undefined" && !!(navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive;
+  if (jaClicou()) entrar();
+  else if (typeof window !== "undefined") for (const e of EVENTOS) window.addEventListener(e, aoInteragir, true);
 
   return {
-    souLider: () => (temLocks ? lider : true),
+    souLider: () => {
+      if (!disputando && jaClicou()) entrar(); // clique que escapou dos ouvintes: entra na próxima
+      return temLocks ? lider : true;
+    },
     encerrar: () => {
       encerrado = true;
-      if (typeof window !== "undefined") { window.removeEventListener("pointerdown", aoInteragir); window.removeEventListener("keydown", aoInteragir); }
+      tirar();
       soltar?.();
     },
   };

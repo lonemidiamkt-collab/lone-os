@@ -3,13 +3,13 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { X, Bell, AlertTriangle, FileText, Activity, Settings, Zap, ArrowUpRight, TrendingDown } from "lucide-react";
+import { X, Bell, AlertTriangle, FileText, Activity, Settings, Zap, ArrowUpRight, TrendingDown, Volume2 } from "lucide-react";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { cn } from "@/lib/utils";
 import type { AppNotification } from "@/lib/types";
 import { useRole } from "@/lib/context/RoleContext";
 import { FRASE_TETO_ARTE, agruparArte, deveFalar, ehAvisoDeArte, fraseParaFalar, vezDaArte } from "@/lib/avisos/fala";
-import { falar } from "@/lib/avisos/tocar";
+import { calar, falar } from "@/lib/avisos/tocar";
 import { candidatarSe, reservarAviso, type Candidatura } from "@/lib/avisos/lider";
 import { useVozAvisosStore } from "@/stores/useVozAvisosStore";
 import { useClientsStore } from "@/stores/useClientsStore";
@@ -197,6 +197,11 @@ export default function NotificationToast() {
         dono: c ? { social: c.assignedSocial, designer: c.assignedDesigner } : null,
       });
     });
+    // "Ouvir" no toast: se esta aba não pode tocar som sozinha (sem clique desde que abriu) ou não é a
+    // falante, o aviso NÃO se perde — quem vê o toast clica e ouve. O clique também a deixa apta a falar.
+    const fraseDe = (n: AppNotification) => fraseParaFalar(n.title, n.body, currentUser);
+    const frasesPorTipo = new Map<string, string[]>();
+    for (const n of falados) frasesPorTipo.set(n.type, [...(frasesPorTipo.get(n.type) ?? []), fraseDe(n)]);
     const souAFalante = candidaturaRef.current?.souLider() ?? false;
     if (souAFalante) {
       const emOrdem = [...falados].reverse().filter((n) => reservarAviso(n.id)); // a lista vem do mais novo pro mais velho
@@ -268,6 +273,15 @@ export default function NotificationToast() {
                 )}
               </p>
               <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">{p.body}</p>
+              {(frasesPorTipo.get(p.type)?.length ?? 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { calar(); for (const f of frasesPorTipo.get(p.type) ?? []) falar(f); }}
+                  className="mr-3 mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                >
+                  <Volume2 size={11} /> Ouvir
+                </button>
+              )}
               {p.href && (
                 <button
                   type="button"

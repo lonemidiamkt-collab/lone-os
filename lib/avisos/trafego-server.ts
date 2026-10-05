@@ -65,7 +65,8 @@ async function faladosHoje(pessoa: string, desde: string): Promise<number> {
 }
 
 /** Registra a ocorrência e avisa quem ouve. Segunda chamada no mesmo dia (mesma conta e tipo) não repete. */
-export async function registrarAviso(a: NovoAviso, agora: Date = new Date()): Promise<{ novo: boolean; falou: string[] }> {
+export async function registrarAviso(aviso: NovoAviso, agora: Date = new Date()): Promise<{ novo: boolean; falou: string[] }> {
+  let a = aviso;
   try {
     const { dia } = relogioSP(agora);
     const braco = bracoDoTeste(a.metaAccountId, dia);
@@ -78,6 +79,17 @@ export async function registrarAviso(a: NovoAviso, agora: Date = new Date()): Pr
       return { novo: false, falou: [] };
     }
 
+    // Conta que parou porque o SALDO ZEROU (05/10: as 3 contas paradas das 11h estavam com saldo 0
+    // desde as 8h): a causa vai no texto e, se o saldo já foi FALADO hoje, a parada entra calada.
+    let jaFalouACausa = false;
+    if (a.tipo === "conta_parada") {
+      const { data: saldo } = await supabaseAdmin.from("avisos_trafego").select("falado_para")
+        .eq("tipo", "saldo_zerado").eq("meta_account_id", a.metaAccountId).eq("dia", dia).maybeSingle();
+      if (saldo) {
+        a = { ...a, corpo: "O saldo zerou hoje e os anúncios pararam. Vale avisar o cliente pra recarregar." };
+        jaFalouACausa = ((saldo.falado_para as string[] | null) ?? []).length > 0;
+      }
+    }
     const para = await ouvintes(a.gestor?.trim() || await gestorDoCliente(a.clientId));
     const ligado = await ligadoNaCentral();
     const noHorario = dentroDoHorario(agora);
@@ -85,7 +97,7 @@ export async function registrarAviso(a: NovoAviso, agora: Date = new Date()): Pr
     const linhas: Record<string, unknown>[] = [];
     const falou: string[] = [];
     for (const p of para) {
-      const d = decidirFala({ ligadoNaCentral: ligado, noHorario, braco, jaFaladosHoje: await faladosHoje(p, desde) });
+      const d = jaFalouACausa ? "mudo" : decidirFala({ ligadoNaCentral: ligado, noHorario, braco, jaFaladosHoje: await faladosHoje(p, desde) });
       if (d === "avisar_teto") {
         linhas.push({ type: "trafego", title: "Limite de avisos falados de hoje", body: FRASE_TETO, target_user: p, read: false, falar: true });
       }
