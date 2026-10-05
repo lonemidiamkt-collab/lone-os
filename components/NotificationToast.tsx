@@ -8,7 +8,7 @@ import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { cn } from "@/lib/utils";
 import type { AppNotification } from "@/lib/types";
 import { useRole } from "@/lib/context/RoleContext";
-import { deveFalar, falaLigada, falar, fraseParaFalar } from "@/lib/avisos/fala";
+import { deveFalar, ehAvisoDeArte, falaLigada, falar, fraseParaFalar } from "@/lib/avisos/fala";
 
 // Controlador headless: observa a store e dispara no <Toaster> global (components/ui/sonner.tsx).
 // Não renderiza nada próprio — um só sistema de toast no app.
@@ -82,12 +82,9 @@ function showOsNotification(id: string, title: string, body: string) {
   } catch { /* Notification pode falhar em contexto não seguro */ }
 }
 
-// Notificação é sobre ARTE entrando (entrega do designer / arte adicionada pelo social)?
-function ehEventoDeArte(n: AppNotification): boolean {
-  if (n.type !== "content") return false;
-  const t = `${n.title} ${n.body}`.toLowerCase();
-  return /arte (entregue|pronta|adicionad|nova)|entregou a arte|nova arte|arte do designer|designer entregou/.test(t);
-}
+// Notificação é sobre ARTE entrando (entrega do designer / arte adicionada pelo social)? A regra
+// mora em lib/avisos/fala.ts porque a voz usa a mesma.
+const ehEventoDeArte = (n: AppNotification) => ehAvisoDeArte(n);
 
 // Card → abre o card no Social; senão cliente → ficha do cliente.
 function linkDe(n: AppNotification): string | null {

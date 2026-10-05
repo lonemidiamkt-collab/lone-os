@@ -242,7 +242,9 @@ export default function NotificationCenter(_props: { semBotao?: boolean }) {
   const alternarFala = () => {
     const nova = !fala;
     definirFala(nova); setFala(nova);
-    if (nova) falar("Avisos falados ligados. Eu aviso aqui quando uma conta parar, o resultado cair ou o saldo estiver acabando.");
+    if (nova) falar(role === "social" || role === "designer"
+      ? "Avisos falados ligados. Eu aviso aqui quando uma arte for entregue."
+      : "Avisos falados ligados. Eu aviso aqui quando uma conta parar, o resultado cair ou o saldo estiver acabando.");
     else if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
   };
   const [open, setOpen] = useState(false);
@@ -531,7 +533,7 @@ export default function NotificationCenter(_props: { semBotao?: boolean }) {
                 <div className="flex items-center gap-1">
                   {ouve && (
                     <button type="button" onClick={alternarFala} aria-pressed={fala}
-                      title={fala ? "Avisos de tráfego são falados em voz alta — clique pra silenciar" : "Ligar os avisos de tráfego em voz alta"}
+                      title={fala ? "Os avisos importantes são falados em voz alta — clique pra silenciar" : "Ligar os avisos em voz alta"}
                       className={cn("flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium hover:bg-accent",
                         fala ? "text-foreground" : "text-muted-foreground")}>
                       {fala ? <Volume2 size={14} /> : <VolumeX size={14} />} {fala ? "Voz ligada" : "Voz desligada"}

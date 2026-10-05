@@ -16,16 +16,33 @@
 import type { AppNotification } from "@/lib/types";
 
 export const CHAVE_PREFERENCIA = "lone:avisos-falados";
-/** Quem ouve: quem trabalha com tráfego e a gestão. */
-export const PAPEIS_QUE_OUVEM = new Set(["traffic", "admin", "manager"]);
+
+/**
+ * O que cada papel ouve. Tráfego e gestão: os avisos de tráfego. Social e designer: os avisos de
+ * ARTE (arte entregue / adicionada) — os mesmos que já tocavam o som de três notas (Roberto,
+ * 05/10: "rodar na máquina do Carlos um aviso de arte"). O resto continua só no sino e no toast.
+ */
+const OUVE_TRAFEGO = new Set(["traffic", "admin", "manager"]);
+const OUVE_ARTE = new Set(["social", "designer", "admin", "manager"]);
 
 export function podeOuvir(papel: string | null | undefined): boolean {
-  return PAPEIS_QUE_OUVEM.has(String(papel ?? ""));
+  const p = String(papel ?? "");
+  return OUVE_TRAFEGO.has(p) || OUVE_ARTE.has(p);
 }
 
-/** Só aviso de tráfego fala — o resto continua só no sino e no toast. */
-export function deveFalar(n: Pick<AppNotification, "type">, papel: string | null | undefined, ligado: boolean): boolean {
-  return ligado && podeOuvir(papel) && n.type === "trafego";
+/** Aviso sobre ARTE entrando — designer entregou ou o social adicionou. */
+export function ehAvisoDeArte(n: Pick<AppNotification, "type" | "title" | "body">): boolean {
+  if (n.type !== "content") return false;
+  const t = `${n.title} ${n.body}`.toLowerCase();
+  return /arte (entregue|pronta|adicionad|nova)|entregou a arte|nova arte|arte do designer|designer entregou/.test(t);
+}
+
+export function deveFalar(n: Pick<AppNotification, "type" | "title" | "body">, papel: string | null | undefined, ligado: boolean): boolean {
+  if (!ligado) return false;
+  const p = String(papel ?? "");
+  if (n.type === "trafego") return OUVE_TRAFEGO.has(p);
+  if (ehAvisoDeArte(n)) return OUVE_ARTE.has(p);
+  return false;
 }
 
 /**

@@ -19,15 +19,24 @@ describe("o que o painel fala", () => {
 
 describe("quem ouve", () => {
   it("só aviso de tráfego fala, e só pra tráfego e gestão", () => {
-    expect(deveFalar({ type: "trafego" }, "traffic", true)).toBe(true);
-    expect(deveFalar({ type: "trafego" }, "admin", true)).toBe(true);
-    expect(deveFalar({ type: "trafego" }, "designer", true)).toBe(false);
-    expect(deveFalar({ type: "content" }, "traffic", true)).toBe(false);
-    expect(deveFalar({ type: "trafego" }, "traffic", false)).toBe(false);
+    expect(deveFalar({ type: "trafego", title: "t", body: "" }, "traffic", true)).toBe(true);
+    expect(deveFalar({ type: "trafego", title: "t", body: "" }, "admin", true)).toBe(true);
+    expect(deveFalar({ type: "trafego", title: "t", body: "" }, "designer", true)).toBe(false);
+    expect(deveFalar({ type: "content", title: "t", body: "" }, "traffic", true)).toBe(false);
+    expect(deveFalar({ type: "trafego", title: "t", body: "" }, "traffic", false)).toBe(false);
+  });
+
+  it("aviso de arte fala pro social e pro designer — a máquina do Carlos", () => {
+    const arte = { type: "content" as const, title: "Arte entregue", body: "O Rodrigo entregou a arte de SEX 9 da Veneza" };
+    expect(deveFalar(arte, "social", true)).toBe(true);
+    expect(deveFalar(arte, "designer", true)).toBe(true);
+    expect(deveFalar(arte, "traffic", true)).toBe(false);
+    // conteúdo que não é arte entrando não fala
+    expect(deveFalar({ type: "content", title: "Conteúdo reprovado", body: "voltou pra pauta" }, "social", true)).toBe(false);
   });
 
   it("papel desconhecido não ouve", () => {
     expect(podeOuvir(undefined)).toBe(false);
-    expect(podeOuvir("social")).toBe(false);
+    expect(podeOuvir("comercial")).toBe(false);
   });
 });

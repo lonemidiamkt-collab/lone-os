@@ -18,10 +18,14 @@ export async function POST(req: NextRequest) {
   const { data: time } = await supabaseAdmin.from("team_members").select("name").in("name", para).eq("is_active", true);
   const validos = (time ?? []).map((t) => t.name as string);
   if (!validos.length) return NextResponse.json({ error: "nenhum nome bate com o time ativo", para }, { status: 400 });
-  const titulo = q.get("titulo") ?? "Teste de aviso falado: o resultado do Bruno Tintas Iguaba caiu";
-  const corpo = q.get("corpo") ?? "Na semana passada o custo por conversa subiu 26 por cento, de R$ 6,79 para R$ 8,59. Isto é só um teste.";
+  // ?tipo=arte → aviso de arte entregue (quem ouve: social e designer); padrão → aviso de tráfego.
+  const arte = q.get("tipo") === "arte";
+  const titulo = q.get("titulo") ?? (arte ? "Teste de aviso falado: arte entregue" : "Teste de aviso falado: o resultado do Bruno Tintas Iguaba caiu");
+  const corpo = q.get("corpo") ?? (arte
+    ? "O designer entregou a arte de exemplo da Veneza Estofados. Isto é só um teste."
+    : "Na semana passada o custo por conversa subiu 26 por cento, de R$ 6,79 para R$ 8,59. Isto é só um teste.");
   const { error } = await supabaseAdmin.from("notifications").insert(
-    validos.map((p) => ({ type: "trafego", title: titulo, body: corpo, target_user: p, read: false })),
+    validos.map((p) => ({ type: arte ? "content" : "trafego", title: titulo, body: corpo, target_user: p, read: false })),
   );
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, para: validos, titulo, aviso: "o painel de cada um busca avisos a cada 45 s; com a aba aberta e um clique feito, ele fala" });
