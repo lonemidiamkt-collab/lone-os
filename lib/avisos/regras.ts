@@ -102,9 +102,13 @@ export function quemOuve(p: { gestor: string | null; prefs: Map<string, boolean 
   return [...new Set(out)];
 }
 
-/** Padrão quando a pessoa nunca mexeu no botão: quem cuida de conta ouve, sócio não. */
+/**
+ * Padrão quando a pessoa nunca mexeu no botão: só quem cuida de CONTA DE ANÚNCIO ouve (tráfego e
+ * gestão). Social, designer e sócio vêm desligados e ligam no sino se quiserem — Roberto (05/10):
+ * "quem ouve: só o Julio"; e a voz de arte não era pra ficar ligada pro Carlos.
+ */
 export function vozPadraoDoPapel(papel: string | null | undefined): boolean {
-  return papel !== "admin";
+  return papel === "traffic" || papel === "manager";
 }
 
 // ── Saldo ─────────────────────────────────────────────────────────────────────

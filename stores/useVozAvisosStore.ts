@@ -10,7 +10,9 @@ import { chamar } from "@/lib/api/chamar";
 interface EstadoVoz {
   carregado: boolean;
   ligada: boolean;
-  carregar: () => Promise<void>;
+  lidoEm: number;
+  /** `forcar` relê do servidor mesmo já carregado — a aba aberta obedece quem desligou sem F5. */
+  carregar: (forcar?: boolean) => Promise<void>;
   /** Devolve a frase de erro (ou null quando gravou). */
   alternar: (ligada: boolean) => Promise<string | null>;
 }
@@ -18,10 +20,11 @@ interface EstadoVoz {
 export const useVozAvisosStore = create<EstadoVoz>((set, get) => ({
   carregado: false,
   ligada: false,
-  carregar: async () => {
-    if (get().carregado) return;
+  lidoEm: 0,
+  carregar: async (forcar = false) => {
+    if (get().carregado && !forcar) return;
     const r = await chamar<{ ligada: boolean }>("/api/avisos/voz");
-    if (r.ok && r.data) set({ carregado: true, ligada: !!r.data.ligada });
+    if (r.ok && r.data) set({ carregado: true, ligada: !!r.data.ligada, lidoEm: Date.now() });
   },
   alternar: async (ligada) => {
     const antes = get().ligada;

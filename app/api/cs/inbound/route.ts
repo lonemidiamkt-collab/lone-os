@@ -1257,6 +1257,22 @@ async function processarInbound(req: NextRequest) {
     demandaDaSugestao = await acharDemandaPorTexto(msg.quotedText);
   }
 
+  // ─── PEDIDOS DO LONINHO (lib/loninho/pedidos): "Loninho, me manda os clientes que precisam da minha
+  // atenção hoje" / "quem foi bem essa semana?" / "diagnóstico do tráfego" / "me manda o manual".
+  // Vem ANTES do PDF genérico abaixo, que engolia "manda em PDF" sem texto e respondia "manda o
+  // texto junto". Só grupo nosso e só quem está cadastrado no time: o relatório tem dado de outros
+  // clientes e nunca pode sair num grupo de cliente. Texto ou áudio (o áudio já foi transcrito acima).
+  if (grupoNosso && autoridade.autor && !demandaDaSugestao) {
+    const { lerPedidoDoTime } = await import("@/lib/loninho/pedidos/detectar");
+    const pedidoTime = lerPedidoDoTime(msg.text);
+    if (pedidoTime) {
+      const { atenderPedido } = await import("@/lib/loninho/pedidos/atender");
+      await atenderPedido(pedidoTime, { groupJid: msg.groupJid, autor: { nome: autoridade.autor.nome, papel: autoridade.autor.papel } });
+      console.log(`[CS/inbound] pedido do time: ${pedidoTime.id} (${pedidoTime.escopo}/${pedidoTime.foco}) por ${autoridade.autor.nome}`);
+      return NextResponse.json({ ok: true, acao: `pedido_${pedidoTime.id}` });
+    }
+  }
+
   // ─── "loninho, transforma esse roteiro em pdf pro varejão" ───
   // Vem cedo porque a mensagem carrega um TEXTO GRANDE com nome de cliente dentro. Se caísse no
   // classificador de demanda, o roteiro inteiro viraria briefing de arte.

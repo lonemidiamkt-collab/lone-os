@@ -18,7 +18,10 @@ function extFromMime(mime?: string): string {
 // cliente/nicho, quando conhecido). Sem isso ele erra termo técnico e nome próprio ("card", "story",
 // "reels", "carrossel", "tráfego", "Império dos Pisos"…). Cap ~200 chars (o prompt não é transcrito).
 function promptDominio(contexto?: string): string {
-  const base = "Conversa de agência de marketing digital no WhatsApp. Termos comuns: post, arte, card, story, stories, reels, feed, carrossel, legenda, briefing, tráfego, campanha, criativo, panfleto, orçamento, agendar, publicar.";
+  // "Loninho"/"Lone" no começo: é como o time chama o agente por áudio ("Loninho, me manda os clientes
+  // que precisam da minha atenção hoje") — sem isso o Whisper escreve "Lonildo", "o Neno" e o pedido
+  // não é reconhecido.
+  const base = "Loninho e Lone, assistente da Lone Mídia. Agência de marketing no WhatsApp: post, arte, card, story, reels, feed, carrossel, legenda, briefing, tráfego, campanha, criativo, orçamento.";
   const ctx = (contexto || "").trim().slice(0, 90);
   return (ctx ? `${ctx}. ${base}` : base).slice(0, 200);
 }

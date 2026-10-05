@@ -43,10 +43,12 @@ describe("quem ouve", () => {
     expect(quemOuve({ gestor: "Julio", prefs: new Map([["Julio", false]]), admins: [] })).toEqual([]);
     expect(quemOuve({ gestor: "Fulano Saiu", prefs, admins: [] })).toEqual([]);
   });
-  it("padrão do botão: sócio desligado, quem cuida de conta ligado", () => {
-    expect(vozPadraoDoPapel("admin")).toBe(false);
+  it("padrão do botão: só quem cuida de conta de anúncio vem ligado", () => {
     expect(vozPadraoDoPapel("manager")).toBe(true);
-    expect(vozPadraoDoPapel("social")).toBe(true);
+    expect(vozPadraoDoPapel("traffic")).toBe(true);
+    expect(vozPadraoDoPapel("admin")).toBe(false);
+    expect(vozPadraoDoPapel("social")).toBe(false);   // Carlos: não era pra ficar ligada
+    expect(vozPadraoDoPapel("designer")).toBe(false);
   });
 });
 

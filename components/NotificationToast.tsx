@@ -120,7 +120,13 @@ export default function NotificationToast() {
   const carregarVoz = useVozAvisosStore((s) => s.carregar);
   const clientes = useClientsStore((s) => s.clients);
   const candidaturaRef = useRef<Candidatura | null>(null);
-  useEffect(() => { carregarVoz(); }, [carregarVoz]);
+  useEffect(() => {
+    carregarVoz();
+    // Relê a preferência a cada 5 min: quem desligou a voz (ou teve a voz desligada) para de ouvir
+    // sem precisar de F5.
+    const t = setInterval(() => { carregarVoz(true); }, 5 * 60_000);
+    return () => clearInterval(t);
+  }, [carregarVoz]);
   useEffect(() => {
     candidaturaRef.current = candidatarSe();
     return () => { candidaturaRef.current?.encerrar(); candidaturaRef.current = null; };

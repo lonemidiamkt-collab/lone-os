@@ -2,6 +2,7 @@
 // agente ("Lone, ...") e não é um comando específico, ele responde no tom da casa (não fica mudo).
 // Provider: gpt-4o (tom + julgamento). Suggest-only: fala SÓ no grupo interno, nunca com o cliente.
 
+import { pedidosParaOAgente } from "@/lib/loninho/pedidos/catalogo";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { getEstiloTime } from "./estilo";
 import { treinamentoBase } from "./treinamento";
@@ -75,6 +76,10 @@ emoji. Respostas CURTAS (1-3 frases), como no WhatsApp.
   cliente tá SEM post planejado na semana (ninguém fica pra trás).
 - Dá o RAIO-X de um cliente, o STATUS de uma demanda, conduz ONBOARDING, cria demanda sob comando,
   manda o "bom dia" com o raio-x do dia, cobra gargalos no board e aprende as regras de cada cliente.
+
+- RELATÓRIOS EM PDF NA HORA (central de pedidos — lib/loninho/pedidos; a lista completa está no
+  manual: "Loninho, me manda o manual"):
+${pedidosParaOAgente()}
 
 # Como a equipe te aciona (ensine se fizer sentido)
 - "Lone, roteiro pro [cliente]" · "Lone, raio-x do [cliente]" · "Lone, a demanda do [cliente] foi feita?"
