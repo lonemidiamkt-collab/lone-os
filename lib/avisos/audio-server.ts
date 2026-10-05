@@ -10,12 +10,12 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { registrarChamadaLlm } from "@/lib/obs/llm";
 
 export const MODELO_VOZ = "gpt-4o-mini-tts";
-export const VOZ_PADRAO = "coral";
+export const VOZ_PADRAO = "nova"; // escolhida pelo Roberto em 05/10, depois de ouvir 6 amostras
 const VOZES = new Set(["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"]);
+// As instruções exatas da amostra que o Roberto aprovou (05/10). Mudar o texto muda a chave do cache.
 const INSTRUCOES =
   "Fale em português do Brasil, com sotaque brasileiro natural. Tom calmo, claro e profissional, como uma " +
-  "assistente avisando a equipe de uma agência. Ritmo levemente acelerado, sem soar robótico. Leia valores " +
-  "em reais por extenso e nomes de lojas com naturalidade.";
+  "assistente avisando a equipe de uma agência. Ritmo levemente acelerado, sem soar robótico.";
 export const TEXTO_MAX = 300;
 
 async function vozEscolhida(): Promise<string> {
