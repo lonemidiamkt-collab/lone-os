@@ -66,7 +66,9 @@ services:
   # ─── PostgREST (API) ───────────────────────────────────
   rest:
     image: postgrest/postgrest:v12.2.3
-    restart: unless-stopped
+    # always, não unless-stopped: no desligamento de 16/10/2026 o PostgREST caiu com código 255 quando o
+    # banco encerrou as conexões, o Docker o tratou como parado e ele NÃO voltou no boot — o resto subiu.
+    restart: always
     depends_on:
       db:
         condition: service_healthy
@@ -118,9 +120,18 @@ services:
         condition: service_started
       storage:
         condition: service_started
+    # O Kong 2.8 NÃO troca ${SUPABASE_ANON_KEY}/${SUPABASE_SERVICE_KEY} do kong.yml pelas chaves: lê o
+    # texto literal e passa a recusar toda chave ("Invalid authentication credentials"). Em 16/10/2026
+    # a Hostinger desligou a VPS numa manutenção; na volta o Kong releu o arquivo e o painel inteiro e
+    # os links dos clientes ficaram sem dado. Agora, a cada partida, o kong.yml (modelo, sem segredo,
+    # versionado) vira ~/kong.yml com as chaves do ambiente — o mesmo jeito do compose oficial do Supabase.
+    entrypoint: >-
+      sh -c 'sed -e "s|\$${SUPABASE_ANON_KEY}|$$SUPABASE_ANON_KEY|g"
+      -e "s|\$${SUPABASE_SERVICE_KEY}|$$SUPABASE_SERVICE_KEY|g"
+      /home/kong/temp.yml > /home/kong/kong.yml && exec /docker-entrypoint.sh kong docker-start'
     environment:
       KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
       KONG_DNS_ORDER: LAST,A,CNAME
       KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
       KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
@@ -128,7 +139,7 @@ services:
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
     volumes:
-      - ./kong.yml:/var/lib/kong/kong.yml:ro
+      - ./kong.yml:/home/kong/temp.yml:ro
 
   # ─── Studio (Dashboard) ────────────────────────────────
   studio:
