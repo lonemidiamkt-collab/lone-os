@@ -2,6 +2,7 @@
 // período). Um caminho só: a página pegava "o último snapshot gravado", de qualquer idade, enquanto
 // a rota respeitava 6h — o cliente abria o link e lia número de semanas atrás como se fosse de hoje.
 
+import { after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { buildSnapshot } from "./buildSnapshot";
 import type { PeriodKind, SnapshotData } from "./types";
@@ -19,6 +20,38 @@ export function cacheValido(generatedAt: string | null | undefined, agora: numbe
   return idade >= 0 && idade < ttl;
 }
 
+export type DecisaoCache = "fresco" | "do-dia" | "buscar";
+
+/**
+ * O que fazer com o snapshot guardado. Pura (testada).
+ *  - fresco (< 6h): entrega;
+ *  - do-dia (6h a 24h): entrega NA HORA e atualiza por trás, para a próxima visita;
+ *  - buscar (sem cache ou > 24h): busca na Meta com o cliente esperando.
+ *
+ * POR QUE (16/10/2026). O aquecimento roda 1x por dia (06:40) e o cache vale 6h: de 12:40 em diante,
+ * todo cliente que abria o link esperava a Meta responder AO VIVO — 2 a 6 s, às vezes mais. O nginx
+ * registrou 3 desistências (499) em 14 dias: Armazém do Ferro, Reformar e Óticas Rhodrigo, sempre à
+ * tarde/noite. Para o cliente, isso era "o link está caindo". Número de até 24h, para semana/mês, é
+ * o mesmo que ele veria; esperar por ele não é.
+ */
+export function decidirCache(generatedAt: string | null | undefined, agora: number): DecisaoCache {
+  if (cacheValido(generatedAt, agora)) return "fresco";
+  if (cacheValido(generatedAt, agora, STALE_MAX_MS)) return "do-dia";
+  return "buscar";
+}
+
+// Uma atualização por trás por cliente+período de cada vez — dez abas abertas não viram dez buscas.
+const EM_ATUALIZACAO = new Set<string>();
+
+/** Roda depois da resposta (after do Next); fora de uma requisição (teste, script), roda solto. */
+function depoisDaResposta(tarefa: () => Promise<unknown>) {
+  try {
+    after(tarefa);
+  } catch {
+    void tarefa();
+  }
+}
+
 export async function obterSnapshot(clientId: string, periodKind: PeriodKind, now = new Date()): Promise<SnapshotData> {
   const { data: cached } = await supabaseAdmin
     .from("client_report_snapshots")
@@ -30,15 +63,37 @@ export async function obterSnapshot(clientId: string, periodKind: PeriodKind, no
     .maybeSingle();
 
   const geradoEm = (cached?.generated_at as string | undefined) ?? null;
-  if (cached && cacheValido(geradoEm, now.getTime())) return cached.data as SnapshotData;
+  const decisao = cached ? decidirCache(geradoEm, now.getTime()) : "buscar";
+  if (decisao === "fresco") return cached!.data as SnapshotData;
 
+  if (decisao === "do-dia") {
+    const chave = `${clientId}:${periodKind}`;
+    if (!EM_ATUALIZACAO.has(chave)) {
+      EM_ATUALIZACAO.add(chave);
+      depoisDaResposta(() =>
+        reconstruir(clientId, periodKind, new Date(), null, null)
+          .catch((e) => console.error("[portal] atualização por trás falhou:", clientId, periodKind, String(e)))
+          .finally(() => EM_ATUALIZACAO.delete(chave)),
+      );
+    }
+    return cached!.data as SnapshotData;
+  }
+
+  return reconstruir(clientId, periodKind, now, (cached?.data as SnapshotData | undefined) ?? null, geradoEm);
+}
+
+/** Busca na Meta e grava o cache. `cached`/`geradoEm` = último dado bom, para quando a Meta não responde. */
+async function reconstruir(
+  clientId: string, periodKind: PeriodKind, now: Date,
+  cached: SnapshotData | null, geradoEm: string | null,
+): Promise<SnapshotData> {
   const data = await buildSnapshot({ clientId, periodKind, now });
 
   // A Meta não respondeu o essencial: nunca vira cache. Último dado bom (e recente) com aviso; senão
   // o próprio "indisponível", que a tela mostra como "atualizando" — nunca como zero.
   if (data.ads_status === "indisponivel") {
     if (cached && cacheValido(geradoEm, now.getTime(), STALE_MAX_MS)) {
-      return { ...(cached.data as SnapshotData), stale_since: geradoEm };
+      return { ...cached, stale_since: geradoEm };
     }
     return data;
   }

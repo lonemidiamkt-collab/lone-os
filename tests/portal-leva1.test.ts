@@ -6,7 +6,7 @@ vi.mock("@/lib/meta/insights-server", () => ({}));
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn(), captureMessage: vi.fn() }));
 
 const { calcPeriod } = await import("@/lib/portal/buildSnapshot");
-const { cacheValido, CACHE_TTL_MS } = await import("@/lib/portal/snapshotCache");
+const { cacheValido, CACHE_TTL_MS, decidirCache, STALE_MAX_MS } = await import("@/lib/portal/snapshotCache");
 const { formatDelta, resumoConversas, fraseDelta, periodoAnterior } = await import("@/lib/portal/formatDelta");
 const { criarLimite, criarTrava } = await import("@/lib/portal/limite");
 const { mesesPermitidosCliente, inicioJanelaMeses } = await import("@/lib/portal/mesesCliente");
@@ -116,5 +116,25 @@ describe("meses que o cliente pode lançar", () => {
   it("janela de 6 meses do 'Semestre'", () => {
     expect(inicioJanelaMeses(6, em("2026-09-23T15:00:00Z"))).toBe("2026-04");
     expect(inicioJanelaMeses(6, em("2026-03-10T15:00:00Z"))).toBe("2025-10");
+  });
+});
+
+describe("decidirCache — o link do cliente não espera a Meta por número do mesmo dia", () => {
+  const agora = Date.parse("2026-10-16T22:00:00Z");
+  const haHoras = (h: number) => new Date(agora - h * 3600_000).toISOString();
+  it("até 6h entrega o guardado", () => {
+    expect(decidirCache(haHoras(1), agora)).toBe("fresco");
+    expect(decidirCache(new Date(agora - CACHE_TTL_MS + 1000).toISOString(), agora)).toBe("fresco");
+  });
+  it("de 6h a 24h entrega na hora e atualiza por trás (o aquecimento é às 06:40; à noite o cache tem ~15h)", () => {
+    expect(decidirCache(haHoras(7), agora)).toBe("do-dia");
+    expect(decidirCache(haHoras(15), agora)).toBe("do-dia");
+    expect(decidirCache(new Date(agora - STALE_MAX_MS + 1000).toISOString(), agora)).toBe("do-dia");
+  });
+  it("sem cache, cache velho ou data inválida: busca com o cliente esperando", () => {
+    expect(decidirCache(haHoras(25), agora)).toBe("buscar");
+    expect(decidirCache(null, agora)).toBe("buscar");
+    expect(decidirCache("lixo", agora)).toBe("buscar");
+    expect(decidirCache(new Date(agora + 3600_000).toISOString(), agora)).toBe("buscar");
   });
 });

@@ -315,8 +315,8 @@ export const AUTOMACOES: Automacao[] = [
     familia: "Criativos", destino: "sistema", cron: "55 10 * * 1-5", agendaBRT: "seg a sex, 7h55", maxSilencioHoras: 74,
   }),
   ep("radar-coleta", {
-    nome: "Trend Radar — coleta", descricao: "Lê os perfis monitorados de cada nicho e separa o conteúdo que performou acima do normal.",
-    familia: "Criativos", destino: "sistema", cron: "0 9 * * 1", agendaBRT: "segunda, 6h", maxSilencioHoras: 8 * 24, ensaio: "dry=1",
+    nome: "Trend Radar — coleta", descricao: "Lê os perfis monitorados de cada nicho (os lidos há mais tempo primeiro, até o limite da Meta) e separa o conteúdo que performou acima do normal.",
+    familia: "Criativos", destino: "sistema", cron: "0 9 * * *", agendaBRT: "todo dia, 6h (cerca de 30 perfis por dia, até o limite da Meta)", maxSilencioHoras: 2 * 24, ensaio: "dry=1",
   }),
   ep("radar-inteligencia", {
     nome: "Trend Radar — pautas", descricao: "Entende os destaques com IA, agrupa o que virou tendência e transforma em pauta por nicho.",

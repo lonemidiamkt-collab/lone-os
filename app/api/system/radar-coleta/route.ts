@@ -39,7 +39,10 @@ export async function POST(req: NextRequest) {
 
   const provider = metaProvider(token, igBase);
 
-  let q = supabaseAdmin.from("radar_profiles").select("id, username, nicho, followers").eq("ativo", true);
+  // Quem foi lido há mais tempo vem primeiro: quando a Meta corta pelo limite, a próxima rodada continua
+  // de onde esta parou, em vez de reler sempre os mesmos 30 do começo da lista.
+  let q = supabaseAdmin.from("radar_profiles").select("id, username, nicho, followers").eq("ativo", true)
+    .order("ultima_coleta", { ascending: true, nullsFirst: true });
   if (soNicho) q = q.eq("nicho", soNicho);
   const { data: perfis, error: erroPerfis } = await q;
   if (erroPerfis) return NextResponse.json({ error: erroPerfis.message }, { status: 500 });
@@ -47,6 +50,7 @@ export async function POST(req: NextRequest) {
 
   const erros: string[] = [];
   let midiasNovas = 0, perfisLidos = 0, desativados = 0;
+  let parouNoLimite: string | null = null;
   const destaques: { perfil: string; nicho: string; score: number; outlier: number | null; permalink?: string }[] = [];
 
   for (const p of perfis) {
@@ -137,6 +141,10 @@ export async function POST(req: NextRequest) {
       }
     } catch (e) {
       const msg = e instanceof PerfilInacessivel ? `@${username}: ${e.message}` : `@${username}: ${String(e)}`;
+      // Limite de chamadas do app na Meta (12/10: parou no 30º de 158 e seguiu tentando os outros 128,
+      // gastando a cota que o aquecimento do portal e os relatórios usam no mesmo horário). Para aqui;
+      // a próxima rodada começa pelos que ficaram.
+      if (ehLimiteDaMeta(msg)) { parouNoLimite = username; break; }
       erros.push(msg.slice(0, 160));
     }
   }
@@ -155,9 +163,16 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: erros.length === 0, dry,
     perfis_monitorados: perfis.length, perfis_lidos: perfisLidos, desativados,
+    // Parar no limite é o combinado, não falha: os perfis que faltaram vêm primeiro amanhã.
+    parou_no_limite: parouNoLimite ? `@${parouNoLimite} — o resto fica para a próxima rodada` : null,
     midias_novas: midiasNovas,
     // Só o topo: é isso que vai virar análise de IA na próxima etapa.
     destaques: destaques.slice(0, 15),
     erros, duracao_ms: duracao,
   });
+}
+
+/** Erro de limite de chamadas da Meta (#4 do app, #17 da conta, #32 da página, #613). */
+function ehLimiteDaMeta(msg: string): boolean {
+  return /\(#(4|17|32|613)\)|request limit|rate limit|too many calls/i.test(msg);
 }

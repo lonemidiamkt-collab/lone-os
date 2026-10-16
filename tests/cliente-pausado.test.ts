@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { estaPausado, podeReceber, apareceParaEquipe, rotuloPausa } from "@/lib/clients/pausa";
 
 // Pausado = não recebe nada, mas continua na carteira do time (Roberto, 23/09).
@@ -27,8 +27,16 @@ describe("cliente pausado", () => {
     expect(apareceParaEquipe({ ...ativo, churned_at: "2026-08-01" })).toBe(false);
   });
   it("rótulo diz até quando e por quê", () => {
-    expect(rotuloPausa({ ...ativo, paused_at: "2026-09-20T10:00:00Z", paused_until: "2026-10-15", paused_reason: "férias do cliente" }))
-      .toBe("Pausado até 15/10/2026 — férias do cliente");
-    expect(rotuloPausa(ativo)).toBeNull();
+    // rotuloPausa olha o relógio de verdade: sem fixar o dia, o teste vencia junto com a pausa
+    // (passou a falhar em 16/10/2026, um dia depois do "até 15/10").
+    vi.useFakeTimers();
+    vi.setSystemTime(agora);
+    try {
+      expect(rotuloPausa({ ...ativo, paused_at: "2026-09-20T10:00:00Z", paused_until: "2026-10-15", paused_reason: "férias do cliente" }))
+        .toBe("Pausado até 15/10/2026 — férias do cliente");
+      expect(rotuloPausa(ativo)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
