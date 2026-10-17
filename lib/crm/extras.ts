@@ -4,7 +4,7 @@
 // 20260926100000, a nota vem vazia e o resto funciona.
 
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { TIPOS_TOQUE } from "./cadencia";
+import { TIPOS_AVANCO, TIPOS_TOQUE } from "./cadencia";
 import type { Classe } from "@/lib/prospeccao/tipos";
 
 export interface ExtrasLead {
@@ -16,22 +16,25 @@ export interface ExtrasLead {
   qualificacao: Record<string, unknown> | null;
   cadenciaInicio: string | null;
   prospectId: string | null;
-  /** Datas (ISO) das atividades de contato — a cadência conta por aqui. */
+  /** Datas (ISO) das atividades de CONTATO (ligação, WhatsApp, e-mail, reunião, visita): esforço,
+   *  "esfriando" e tempo de resposta contam por aqui. */
   toques: string[];
+  /** Contatos + "pulado" — é o que faz a régua da cadência andar (lib/crm/cadencia.ts). */
+  avancos: string[];
 }
 
 export const EXTRAS_VAZIOS: ExtrasLead = {
-  clienteId: null, nota: null, notaScore: null, notaOrigem: null, qualificacao: null, cadenciaInicio: null, prospectId: null, toques: [],
+  clienteId: null, nota: null, notaScore: null, notaOrigem: null, qualificacao: null, cadenciaInicio: null, prospectId: null, toques: [], avancos: [],
 };
 
 export async function carregarExtras(leadIds: string[]): Promise<Map<string, ExtrasLead>> {
-  const out = new Map<string, ExtrasLead>(leadIds.map((id) => [id, { ...EXTRAS_VAZIOS, toques: [] }]));
+  const out = new Map<string, ExtrasLead>(leadIds.map((id) => [id, { ...EXTRAS_VAZIOS, toques: [], avancos: [] }]));
   if (!leadIds.length) return out;
 
   const [colsQ, cliQ, atvQ] = await Promise.all([
     supabaseAdmin.from("crm_leads").select("id, nota, nota_score, qualificacao, cadencia_inicio, prospect_id").in("id", leadIds),
     supabaseAdmin.from("clients").select("id, source_lead_id").in("source_lead_id", leadIds),
-    supabaseAdmin.from("crm_lead_activities").select("lead_id, tipo, created_at").in("lead_id", leadIds).in("tipo", [...TIPOS_TOQUE]).limit(5000),
+    supabaseAdmin.from("crm_lead_activities").select("lead_id, tipo, created_at").in("lead_id", leadIds).in("tipo", [...TIPOS_AVANCO]).limit(10000),
   ]);
 
   // Sem a migration as colunas novas não existem: tenta só o elo com a prospecção (que já existia).
@@ -64,6 +67,11 @@ export async function carregarExtras(leadIds: string[]): Promise<Map<string, Ext
     const e = out.get(c.source_lead_id as string);
     if (e) e.clienteId = c.id as string;
   }
-  for (const a of atvQ.data ?? []) out.get(a.lead_id as string)?.toques.push(a.created_at as string);
+  for (const a of atvQ.data ?? []) {
+    const e = out.get(a.lead_id as string);
+    if (!e) continue;
+    e.avancos.push(a.created_at as string);
+    if (TIPOS_TOQUE.has(a.tipo as string)) e.toques.push(a.created_at as string);
+  }
   return out;
 }

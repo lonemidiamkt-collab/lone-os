@@ -5,7 +5,7 @@ import { describe, it, expect } from "vitest";
 import {
   itensOnboardingPara, nichoValido, pacoteValido, prazoEm, tarefasDaConversao, ITENS_ONBOARDING,
 } from "@/lib/clients/conversao";
-import { CADENCIA, proximoToque, rotuloToque } from "@/lib/crm/cadencia";
+import { CADENCIAS, fimDaCadencia, proximoToque, rotuloToque } from "@/lib/crm/cadencia";
 import { camposRespondidos, normalizarQualificacao, notaDoLead } from "@/lib/crm/nota";
 import { CONFIG_PADRAO } from "@/lib/prospeccao/config";
 import {
@@ -38,30 +38,50 @@ describe("N27 — ganho vira o cliente certo", () => {
   });
 });
 
-describe("N28 — cadência dia 2 / 5 / 12", () => {
-  const base = { estagio: "lead", inicio: "2026-09-20T13:00:00Z", hoje: "2026-09-21" };
+describe("Cadência por etapa (Leva 2 do comercial, out/2026 — substituiu a régua 2/5/12)", () => {
+  // Contato feito: dia 0 (WhatsApp), 2, 5 (ligação), 9, 14 (visita), 21 (encerramento).
+  const base = { estagio: "contato", inicio: "2026-09-21T13:00:00Z", hoje: "2026-09-21" };
 
-  it("sem toque: o do dia 2 (futuro, hoje, atrasado)", () => {
-    expect(proximoToque({ ...base, toques: [] })).toMatchObject({ dia: 2, data: "2026-09-22", situacao: "futuro", feitos: 0 });
-    expect(proximoToque({ ...base, toques: [], hoje: "2026-09-22" })).toMatchObject({ situacao: "hoje" });
-    expect(proximoToque({ ...base, toques: [], hoje: "2026-09-24" })).toMatchObject({ situacao: "atrasado", diasAtraso: 2 });
+  it("sem toque: o passo do dia 0 é para hoje, por WhatsApp", () => {
+    expect(proximoToque({ ...base, toques: [] })).toMatchObject({ dia: 0, data: "2026-09-21", situacao: "hoje", feitos: 0, total: 6 });
+    expect(proximoToque({ ...base, toques: [] })!.passo.canal).toBe("whatsapp");
+    expect(proximoToque({ ...base, toques: [], hoje: "2026-09-24" })).toMatchObject({ situacao: "atrasado", diasAtraso: 3 });
   });
 
-  it("toque no dia zero é o primeiro contato; dois toques no mesmo dia contam um", () => {
-    const t = proximoToque({ ...base, hoje: "2026-09-23", toques: ["2026-09-20T15:00:00Z", "2026-09-22T12:00:00Z", "2026-09-22T18:00:00Z"] });
-    expect(t).toMatchObject({ dia: 5, data: "2026-09-25", feitos: 1 });
+  it("um toque por dia conta um passo; o próximo é a ligação do dia 5", () => {
+    const t = proximoToque({ ...base, hoje: "2026-09-23", toques: ["2026-09-21T15:00:00Z", "2026-09-23T12:00:00Z", "2026-09-23T18:00:00Z"] });
+    expect(t).toMatchObject({ dia: 5, data: "2026-09-26", feitos: 2 });
+    expect(t!.passo.canal).toBe("ligacao");
   });
 
-  it("três toques ou lead fechado: sem cadência; três semanas depois, acabou", () => {
-    expect(proximoToque({ ...base, toques: ["2026-09-22T12:00:00Z", "2026-09-25T12:00:00Z", "2026-10-02T12:00:00Z"] })).toBeNull();
+  it("toque antes do dia zero (outra etapa) não conta", () => {
+    expect(proximoToque({ ...base, toques: ["2026-09-20T12:00:00Z"] })).toMatchObject({ feitos: 0, dia: 0 });
+  });
+
+  it("régua completa, lead fechado ou prazo vencido: sem toque — e vira 'fim da cadência'", () => {
+    const seis = ["2026-09-21", "2026-09-23", "2026-09-26", "2026-09-30", "2026-10-05", "2026-10-12"].map((d) => `${d}T12:00:00Z`);
+    expect(proximoToque({ ...base, toques: seis, hoje: "2026-10-12" })).toBeNull();
+    expect(fimDaCadencia({ ...base, toques: seis, hoje: "2026-10-12" })).toEqual({ desde: "2026-10-12" });
     expect(proximoToque({ ...base, estagio: "ganho", toques: [] })).toBeNull();
-    expect(proximoToque({ ...base, toques: [], hoje: "2026-10-20" })).toBeNull();
-    expect(CADENCIA).toEqual([2, 5, 12]);
+    expect(proximoToque({ ...base, toques: [], hoje: "2026-10-30" })).toBeNull(); // dia 21 + 7 de folga passou
+    expect(fimDaCadencia({ ...base, toques: [], hoje: "2026-10-30" })).toEqual({ desde: "2026-10-12" });
+    expect(CADENCIAS.contato!.map((p) => p.dia)).toEqual([0, 2, 5, 9, 14, 21]);
+  });
+
+  it("negociação: um toque a cada 3 dias depois do último", () => {
+    const t = proximoToque({ estagio: "negociacao", inicio: "2026-09-21", toques: ["2026-09-24T12:00:00Z"], hoje: "2026-09-27" });
+    expect(t).toMatchObject({ data: "2026-09-27", situacao: "hoje", total: null });
+  });
+
+  it("etapas antigas são lidas como as novas (reuniao → diagnóstico: dia 1 e 3)", () => {
+    expect(proximoToque({ estagio: "reuniao", inicio: "2026-09-21", toques: [], hoje: "2026-09-21" })).toMatchObject({ dia: 1, etapa: "diagnostico" });
   });
 
   it("rótulo do card", () => {
-    expect(rotuloToque({ dia: 5, data: "2026-09-25", feitos: 1, situacao: "futuro", diasAtraso: 0 })).toBe("Toque do dia 5 · 25/09");
-    expect(rotuloToque({ dia: 2, data: "2026-09-22", feitos: 0, situacao: "atrasado", diasAtraso: 3 })).toBe("Toque do dia 2 atrasado 3d");
+    const t = proximoToque({ ...base, hoje: "2026-09-28", toques: ["2026-09-21T15:00:00Z", "2026-09-23T12:00:00Z"] })!;
+    expect(rotuloToque(t)).toBe("Ligação do dia 5 · atrasado 2d");
+    const novo = proximoToque({ estagio: "novo", inicio: "2026-09-21T13:00:00Z", toques: [], hoje: "2026-09-21" })!;
+    expect(rotuloToque(novo)).toBe("Primeiro contato · hoje");
   });
 });
 

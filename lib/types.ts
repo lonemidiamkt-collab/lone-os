@@ -43,7 +43,7 @@ export interface CrmLead {
 
 // Atividade/histórico de um lead (timeline): ligação, mensagem, nota, e-mail, reunião, visita
 // presencial, ou mudança de etapa (auto-registrada). Ver migration 066_crm_lead_activities.
-export type CrmAtividadeTipo = "nota" | "ligacao" | "whatsapp" | "email" | "reuniao" | "visita" | "etapa";
+export type CrmAtividadeTipo = "nota" | "ligacao" | "whatsapp" | "email" | "reuniao" | "visita" | "pulado" | "etapa";
 export interface CrmLeadActivity {
   id: string;
   leadId: string;

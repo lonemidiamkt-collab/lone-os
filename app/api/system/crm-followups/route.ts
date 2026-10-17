@@ -9,6 +9,7 @@ import { spNow, ymd } from "@/lib/cs/vigilancia";
 import { carregarExtras } from "@/lib/crm/extras";
 import { proximoToque } from "@/lib/crm/cadencia";
 import { ehAberta } from "@/lib/crm/etapas";
+import { inicioDaCadencia } from "@/lib/crm/hoje";
 import { DESTINO_AVISOS_COMERCIAL } from "@/lib/crm/acesso";
 
 // POST /api/system/crm-followups — lembrete de follow-up do comercial: leads com "próximo contato"
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
   const dataDoFollow = (l: (typeof leads)[number]): string | null => {
     if (l.retomarEm && l.retomarEm > hoje) return null; // estacionado de propósito
     const e = extras.get(l.id);
-    const t = proximoToque({ estagio: l.estagio, inicio: e?.cadenciaInicio ?? l.createdAt, toques: e?.toques ?? [], hoje, retomarEm: l.retomarEm });
+    const t = proximoToque({ estagio: l.estagio, inicio: inicioDaCadencia({ ...l, cadenciaInicio: e?.cadenciaInicio ?? null }), toques: e?.avancos ?? [], hoje, retomarEm: l.retomarEm });
     const manual = l.proximoContato && l.proximoContato <= hoje ? l.proximoContato : null;
     const retomada = l.retomarEm && l.retomarEm <= hoje ? l.retomarEm : null;
     const cadencia = t && t.situacao !== "futuro" ? t.data : null;

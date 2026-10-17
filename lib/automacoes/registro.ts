@@ -361,8 +361,16 @@ export const AUTOMACOES: Automacao[] = [
     familia: "Prospecção", destino: "admin", cron: "10 3 * * *", agendaBRT: "todo dia, 0h10", maxSilencioHoras: 26,
   }),
   ep("crm-followups", {
-    nome: "Follow-up do comercial", descricao: "Leads com próximo contato vencido ou pra hoje viram notificação no sino do comercial.",
+    nome: "Follow-up do comercial", descricao: "Leads com toque da cadência, retomada ou próximo contato vencidos viram uma notificação no sino de quem cuida do comercial.",
     familia: "Prospecção", destino: "sistema", cron: "0 11 * * 1-5", agendaBRT: "seg a sex, 8h", maxSilencioHoras: 74, ensaio: "dry=1",
+  }),
+  ep("crm-lead-novo", {
+    nome: "Lead do site sem resposta", descricao: "Lead que chegou pelo formulário do site e ficou 1 hora sem resposta vira um lembrete (sino + WhatsApp do dono, sem valor). Uma vez por lead.",
+    familia: "Prospecção", destino: "admin", cron: "*/15 11-23 * * 1-6", agendaBRT: "seg a sáb, a cada 15 min das 8h às 20h45", maxSilencioHoras: 50, ensaio: "dry=1",
+  }),
+  ep("crm-meta", {
+    nome: "Cobrança da meta do comercial", descricao: "No máximo 1 aviso por dia: segunda (resumo da semana), ritmo abaixo do necessário por 3 dias úteis ou projeção abaixo de 80% no dia 10/20. Números no sino; WhatsApp do dono sem valor.",
+    familia: "Prospecção", destino: "admin", cron: "5 11 * * 1-5", agendaBRT: "seg a sex, 8h05", maxSilencioHoras: 74, ensaio: "dry=1",
   }),
 
   // ── Dados e sync ────────────────────────────────────────────────────────────────────────────

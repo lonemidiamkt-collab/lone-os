@@ -10,10 +10,12 @@ import KanbanBoard, { type KanbanColumn } from "@/components/KanbanBoard";
 import { Button } from "@/components/ui/button";
 import { CRM_ESTAGIOS, type CrmEstagio, type CrmLead, type CrmLeadActivity, type CrmAtividadeTipo } from "@/lib/types";
 import Link from "next/link";
-import { Plus, X, Search, TrendingUp, Trophy, Percent, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3, Sun, FileText, Download, MapPin, Upload, Target, Timer, Inbox } from "lucide-react";
+import { Plus, X, Search, TrendingUp, Trophy, Percent, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3, Sun, FileText, Download, MapPin, Upload, Target, Timer, SkipForward } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ExtrasLead } from "@/lib/crm/extras";
-import { proximoToque, rotuloToque, type ProximoToque } from "@/lib/crm/cadencia";
+import { proximoToque, rotuloToque, TIPOS_TOQUE, type ProximoToque } from "@/lib/crm/cadencia";
+import { montarFilaHoje, inicioDaCadencia, ORDEM_GRUPOS, ROTULO_GRUPO } from "@/lib/crm/hoje";
+import { waComTexto } from "@/lib/crm/modelos";
 import { PORTES, type QualificacaoLead } from "@/lib/crm/nota";
 import { PACOTES_VENDA } from "@/lib/clients/conversao";
 import { ROTULO_NICHO } from "@/lib/cs/nicho";
@@ -43,8 +45,9 @@ const diasDesde = (iso: string) => Math.floor((Date.now() - new Date(iso).getTim
 const iniciais = (nome: string) => nome.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
 
 // Cadência de follow-up (Leva 7C, N28): o toque do dia 2/5/12 contado pelas atividades do lead.
-const toqueDo = (l: Partial<ExtrasLead> & { estagio: string; createdAt: string; retomarEm?: string | null }, hoje: string): ProximoToque | null =>
-  l.createdAt ? proximoToque({ estagio: l.estagio, inicio: l.cadenciaInicio ?? l.createdAt, toques: l.toques ?? [], hoje, retomarEm: l.retomarEm }) : null;
+const toqueDo = (l: Partial<ExtrasLead> & { estagio: string; createdAt: string; retomarEm?: string | null; etapaDesde?: string | null }, hoje: string): ProximoToque | null =>
+  l.createdAt ? proximoToque({ estagio: l.estagio, inicio: inicioDaCadencia({ ...l, id: "", contatoNome: "", empresa: null, telefone: null, origem: null }), toques: l.avancos ?? l.toques ?? [], hoje, retomarEm: l.retomarEm }) : null;
+const somaDias = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 /** "Retomar em" no futuro: o lead está estacionado de propósito — fora do Hoje até a data. */
 const estacionado = (l: { retomarEm?: string | null }, hoje: string) => !!l.retomarEm && l.retomarEm > hoje;
 /** A data do follow-up que vale: a marcada à mão, ou a do toque da cadência. */
@@ -88,6 +91,7 @@ const ATIVIDADE_META: Record<CrmAtividadeTipo, { label: string; icon: LucideIcon
   email:    { label: "E-mail",   icon: Mail },
   reuniao:  { label: "Reunião",  icon: CalendarClock },
   visita:   { label: "Visita",   icon: MapPin },
+  pulado:   { label: "Pulado",   icon: SkipForward },
   etapa:    { label: "Etapa",    icon: ArrowRight },
 };
 
@@ -195,6 +199,10 @@ export default function CrmPage() {
   const [meta, setMeta] = useState<CrmMeta | null>(null);
   const [editMeta, setEditMeta] = useState<{ metaValor: string; metaContatosSemana: string; metaPropostasMes: string } | null>(null);
   const [salvandoMeta, setSalvandoMeta] = useState(false);
+  // Lista de trabalho do Hoje: texto editado antes de enviar e qual item está ocupado.
+  const [textoEditado, setTextoEditado] = useState<Record<string, string>>({});
+  const [editando, setEditando] = useState<string | null>(null);
+  const [acaoBusy, setAcaoBusy] = useState<string | null>(null);
 
   const podeVer = podeVerComercial(role);
 
@@ -329,31 +337,8 @@ export default function CrmPage() {
     return { proximos, atrasados, porDia };
   }, [leads]);
 
-  // ─── Meus leads de hoje (a "home" do SDR) ──────────────────────────
-  const hojeData = useMemo(() => {
-    const hj = hojeYmd();
-    // Leads novos sem nenhum contato (formulário do site, anúncio, cadastro à mão): primeiro da fila.
-    const novosSemContato = leads
-      .filter((l) => l.estagio === "novo" && !l.primeiroContatoEm && !estacionado(l, hj))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    const reunioesHoje = leads.filter((l) => l.reuniaoData === hj);
-    // Follow-up = o "próximo contato" marcado à mão OU o toque da cadência (dia 2/5/12) que venceu.
-    const followsPendentes = leads
-      .filter((l) => {
-        if (!ABERTOS.includes(l.estagio) || estacionado(l, hj)) return false;
-        if (l.estagio === "novo" && !l.primeiroContatoEm) return false; // já está em "Leads novos"
-        if (l.retomarEm && l.retomarEm <= hj) return true;
-        if (l.proximoContato && l.proximoContato <= hj) return true;
-        const t = toqueDo(l, hj);
-        return !!t && t.situacao !== "futuro";
-      })
-      .sort((a, b) => (dataFollow(a, hj) || "").localeCompare(dataFollow(b, hj) || ""));
-    // Parados: em etapa aberta e sem atualização há 5+ dias.
-    const parados = leads
-      .filter((l) => ABERTOS.includes(l.estagio) && !estacionado(l, hj) && diasDesde(l.updatedAt) >= 5)
-      .sort((a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
-    return { novosSemContato, reunioesHoje, followsPendentes, parados };
-  }, [leads]);
+  // ─── Lista de trabalho do Hoje (lib/crm/hoje.ts) ───────────────────
+  const fila = useMemo(() => montarFilaHoje(leads, hojeYmd()), [leads]);
 
   // ─── Funil filtrado ────────────────────────────────────────────────
   const responsaveis = useMemo(() => [...new Set(leads.map((l) => l.responsavel).filter(Boolean))] as string[], [leads]);
@@ -582,6 +567,42 @@ export default function CrmPage() {
     else toast.success("Proposta registrada como enviada.");
   }
 
+  // ─── Ações da lista do Hoje ─────────────────────────────────────────
+  async function registrarToque(l: Lead, tipo: CrmAtividadeTipo, texto: string): Promise<boolean> {
+    setAcaoBusy(l.id);
+    const r = await chamar<{ atividade: CrmLeadActivity; lead: Lead | null }>("/api/crm/activities", { leadId: l.id, tipo, texto, autor: currentUser ?? null });
+    setAcaoBusy(null);
+    if (!r.ok || !r.data) { toast.error(r.erro ?? "Não consegui registrar."); return false; }
+    const quando = r.data.atividade?.createdAt || new Date().toISOString();
+    const contato = TIPOS_TOQUE.has(tipo);
+    const movido = r.data.lead;
+    setLeads((prev) => prev.map((x) => x.id !== l.id ? x : {
+      ...x, ...(movido ?? {}),
+      toques: contato ? [...(x.toques ?? []), quando] : x.toques,
+      avancos: [...(x.avancos ?? []), quando],
+      primeiroContatoEm: x.primeiroContatoEm ?? (contato ? quando : null),
+    }));
+    setEditando(null);
+    toast.success(tipo === "pulado" ? "Toque pulado — a régua seguiu." : movido?.estagio === "contato" && l.estagio === "novo" ? "Registrado. O lead foi para Contato feito." : "Registrado.");
+    return true;
+  }
+
+  async function enviarWhatsApp(l: Lead, texto: string) {
+    const link = waComTexto(l.telefone, texto);
+    if (!link) { toast.error("Este lead não tem WhatsApp no cadastro."); return; }
+    window.open(link, "_blank");
+    await registrarToque(l, "whatsapp", `WhatsApp enviado pelo Hoje: “${texto.length > 160 ? `${texto.slice(0, 157)}…` : texto}”`);
+  }
+
+  async function patchLead(l: Lead, patch: Record<string, unknown>, ok: string) {
+    setAcaoBusy(l.id);
+    const r = await chamar<{ lead: Lead; aviso?: string | null }>("/api/crm/leads", { id: l.id, ...patch }, { method: "PATCH" });
+    setAcaoBusy(null);
+    if (!r.ok || !r.data?.lead) { toast.error(r.erro ?? "Não consegui salvar."); return; }
+    setLeads((prev) => prev.map((x) => (x.id === l.id ? { ...x, ...r.data!.lead } : x)));
+    if (r.data.aviso) toast.warning(r.data.aviso); else toast.success(ok);
+  }
+
   async function salvarMeta() {
     if (!editMeta) return;
     setSalvandoMeta(true);
@@ -639,59 +660,88 @@ export default function CrmPage() {
           </div>
 
       {tab === "hoje" && (() => {
-        const leadRow = (l: Lead, meta: string) => (
-          <button key={l.id} onClick={() => setDraft({ ...l })} className="card-interactive flex w-full items-center gap-3 rounded-lg border border-border bg-background p-3 text-left hover:border-primary/40">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lone-caption font-semibold text-primary">{iniciais(l.contatoNome)}</span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-lone-body font-medium text-foreground">{l.contatoNome}</span>
-              <span className="block truncate text-lone-caption text-muted-foreground">{[l.empresa, meta].filter(Boolean).join(" · ")}</span>
-            </span>
-            {waLink(l.telefone) && (
-              <span role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); abrirWhatsApp(l.telefone, l.id); }} className="inline-flex shrink-0 items-center gap-1 rounded bg-lone-success-bg px-2 py-1 text-lone-caption font-medium text-lone-success transition-opacity hover:opacity-80">
-                <MessageCircle size={12} /> WhatsApp
-              </span>
-            )}
-          </button>
-        );
-        const cols: { titulo: string; lista: Lead[]; vazio: string; tone: string; meta: (l: Lead) => string }[] = [
-          { titulo: "Reuniões de hoje", lista: hojeData.reunioesHoje, vazio: "Nenhuma reunião marcada pra hoje.", tone: "bg-primary/10 text-primary", meta: () => "Reunião hoje" },
-          { titulo: "Follow-ups pra fazer", lista: hojeData.followsPendentes, vazio: "Nada pendente por agora.", tone: "bg-lone-warning-bg text-lone-warning", meta: (l) => {
-            if (l.retomarEm && l.retomarEm <= hojeYmd()) return `Retomar (marcado para ${fmtData(l.retomarEm)})`;
-            const t = toqueDo(l, hojeYmd());
-            return l.proximoContato && l.proximoContato <= hojeYmd() ? `Contato ${fmtData(l.proximoContato)}` : t ? rotuloToque(t) : `Contato ${fmtData(l.proximoContato)}`;
-          } },
-          { titulo: "Leads parados", lista: hojeData.parados, vazio: "Nada parado — fluxo em dia.", tone: "bg-lone-danger-bg text-lone-danger", meta: (l) => `parado há ${diasDesde(l.updatedAt)}d` },
-        ];
-        const novos = hojeData.novosSemContato;
+        const porGrupo = ORDEM_GRUPOS.map((g) => ({ g, itens: fila.filter((i) => i.grupo === g) })).filter((x) => x.itens.length);
+        const btn = "inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-lone-caption text-foreground transition-colors hover:bg-accent disabled:opacity-50";
+        const btnForte = "inline-flex items-center gap-1 rounded-md bg-lone-success-bg px-2.5 py-1 text-lone-caption font-medium text-lone-success transition-opacity hover:opacity-80 disabled:opacity-50";
         return (
           <div className="space-y-4">
-          <BarraMeta r={resumoMeta} esforco={esforco} meta={meta} onDefinir={abrirMetas} />
-          {novos.length > 0 && (
-            <section className="rounded-xl border border-lone-warning-border bg-card p-5">
-              <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="flex items-center gap-2 text-lone-h2 text-foreground"><Inbox size={16} className="text-lone-warning" /> Leads novos sem contato</h2>
-                <span className="text-lone-caption text-muted-foreground">Responder em até 1 h faz o lead ~7× mais propenso a avançar</span>
-              </div>
-              <div className="grid gap-2 lg:grid-cols-2">
-                {novos.map((l) => {
-                  const h = Math.floor((Date.now() - new Date(l.createdAt).getTime()) / 3_600_000);
-                  const quando = h < 1 ? "agora há pouco" : h < 48 ? `há ${h} h` : `há ${Math.floor(h / 24)} dias`;
-                  return leadRow(l, [l.origem, quando, waLink(l.telefone) ? null : "telefone a conferir"].filter(Boolean).join(" · "));
-                })}
-              </div>
-            </section>
-          )}
-          <div className="grid gap-4 lg:grid-cols-3">
-            {cols.map((c) => (
-              <section key={c.titulo} className="rounded-xl border border-border bg-card p-5">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lone-h2 text-foreground">{c.titulo}</h2>
-                  {c.lista.length > 0 && <span className={`rounded-full px-2 py-0.5 text-lone-eyebrow font-semibold ${c.tone}`}>{c.lista.length}</span>}
+            <BarraMeta r={resumoMeta} esforco={esforco} meta={meta} onDefinir={abrirMetas} />
+            {porGrupo.length === 0 && (
+              <section className="rounded-xl border border-border bg-card p-5 text-lone-body text-muted-foreground">Nada para fazer agora: nenhum lead novo, toque vencido ou negócio esfriando.</section>
+            )}
+            {porGrupo.map(({ g, itens }) => (
+              <section key={g} className={`rounded-xl border bg-card p-5 ${g === "responder" ? "border-lone-warning-border" : "border-border"}`}>
+                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                  <h2 className="flex items-center gap-2 text-lone-h2 text-foreground">
+                    {ROTULO_GRUPO[g].titulo}
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-lone-eyebrow font-semibold text-muted-foreground">{itens.length}</span>
+                  </h2>
+                  <span className="text-lone-caption text-muted-foreground">{ROTULO_GRUPO[g].dica}</span>
                 </div>
-                {c.lista.length === 0 ? <p className="text-lone-caption text-muted-foreground">{c.vazio}</p> : <div className="space-y-2">{c.lista.map((l) => leadRow(l, c.meta(l)))}</div>}
+                <div className="space-y-2">
+                  {itens.map((item) => {
+                    const l = item.lead;
+                    const ocupado = acaoBusy === l.id;
+                    const texto = textoEditado[l.id] ?? item.mensagem?.texto ?? "";
+                    const ehMensagem = item.mensagem?.tipo === "mensagem";
+                    const canal = item.passo?.canal ?? (ehMensagem ? "whatsapp" : null);
+                    const temZap = !!waLink(l.telefone);
+                    return (
+                      <article key={`${g}-${l.id}`} className="rounded-lg border border-border bg-background p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <button onClick={() => setDraft({ ...l })} className="min-w-0 text-left">
+                            <span className="block truncate text-lone-body font-medium text-foreground">{l.empresa || l.contatoNome}</span>
+                            <span className="block truncate text-lone-caption text-muted-foreground">
+                              {[l.empresa ? l.contatoNome : null, ROTULO_ETAPA[l.estagio], item.motivo].filter(Boolean).join(" · ")}
+                            </span>
+                          </button>
+                          {l.valorOrcamento != null && l.valorOrcamento > 0 && <span className="shrink-0 text-lone-caption text-muted-foreground">{brl(l.valorOrcamento)}/mês</span>}
+                        </div>
+                        {item.passo && <p className="mt-2 text-lone-caption text-muted-foreground">{item.passo.objetivo}</p>}
+                        {item.mensagem && (
+                          editando === l.id ? (
+                            <textarea className={`${inputCls} mt-2`} rows={4} value={texto} onChange={(e) => setTextoEditado({ ...textoEditado, [l.id]: e.target.value })} />
+                          ) : (
+                            <p className={`mt-2 whitespace-pre-wrap rounded-md border border-border bg-card px-3 py-2 text-lone-caption ${ehMensagem ? "text-foreground" : "italic text-muted-foreground"}`}>{texto}</p>
+                          )
+                        )}
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          {ehMensagem && temZap && (
+                            <button className={btnForte} disabled={ocupado} onClick={() => enviarWhatsApp(l, texto)}><MessageCircle size={12} /> Enviar no WhatsApp</button>
+                          )}
+                          {ehMensagem && !temZap && (
+                            <button className={btn} disabled={ocupado} onClick={() => { navigator.clipboard?.writeText(texto).catch(() => {}); toast.success("Texto copiado — sem WhatsApp no cadastro."); }}><StickyNote size={12} /> Copiar texto</button>
+                          )}
+                          {item.mensagem && <button className={btn} onClick={() => setEditando(editando === l.id ? null : l.id)}>{editando === l.id ? "Pronto" : "Editar texto"}</button>}
+                          {canal === "ligacao" && l.telefone && <a className={btn} href={`tel:${l.telefone.replace(/\D/g, "")}`}><Phone size={12} /> Ligar</a>}
+                          {canal === "ligacao" && <button className={btn} disabled={ocupado} onClick={() => registrarToque(l, "ligacao", `Ligação (${item.passo?.objetivo ?? "follow-up"})`)}>Registrar ligação</button>}
+                          {canal === "visita" && <button className={btn} disabled={ocupado} onClick={() => registrarToque(l, "visita", `Visita (${item.passo?.objetivo ?? "follow-up"})`)}><MapPin size={12} /> Registrar visita</button>}
+                          {ehMensagem && <button className={btn} disabled={ocupado} onClick={() => registrarToque(l, "whatsapp", "Contato feito por outro caminho (registrado no Hoje)")} title="Já falou com a pessoa por outro caminho">Feito</button>}
+                          {g === "fim" && (
+                            <>
+                              <button className={btn} disabled={ocupado} onClick={() => patchLead(l, { estagio: "perdido", motivoPerdaCodigo: "sem_resposta" }, "Marcado como perdido (sem resposta).")}>Perdido: sem resposta</button>
+                              <button className={btn} disabled={ocupado} onClick={() => patchLead(l, { retomarEm: somaDias(hoje, 30) }, "Volta para o Hoje em 30 dias.")}>Retomar em 30 dias</button>
+                            </>
+                          )}
+                          {g !== "fim" && g !== "reuniao" && (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="text-lone-caption text-muted-foreground">Adiar:</span>
+                              {[1, 3, 7].map((d) => (
+                                <button key={d} className={btn} disabled={ocupado} onClick={() => patchLead(l, { retomarEm: somaDias(hoje, d) }, `Volta para o Hoje em ${d === 1 ? "1 dia" : `${d} dias`}.`)}>{d}d</button>
+                              ))}
+                            </span>
+                          )}
+                          {item.passo && item.toque && item.toque.total != null && (
+                            <button className={btn} disabled={ocupado} onClick={() => registrarToque(l, "pulado", `Toque pulado: ${item.passo!.objetivo}`)} title="Não fazer este passo; a régua segue para o próximo">Pular</button>
+                          )}
+                          <button className={btn} onClick={() => setDraft({ ...l })}>Abrir</button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
               </section>
             ))}
-          </div>
           </div>
         );
       })()}
