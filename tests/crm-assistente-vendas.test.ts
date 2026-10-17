@@ -1,7 +1,7 @@
 // Loninho no grupo de vendas (out/2026): a IA interpreta, o código decide. Dados INVENTADOS.
 import { describe, it, expect } from "vitest";
 import {
-  chamaOLoninho, chamadaDireta, montarPedido, leadsDoPedido, planejarPassos, resolverLead, dataValida, diaPorExtenso,
+  chamaOLoninho, chamadaDireta, dataPorFrase, montarPedido, leadsDoPedido, planejarPassos, resolverLead, dataValida, diaPorExtenso,
   textoAgendado, textoRegistrado, textoConsulta, textoCadastrado, SCHEMA_ASSISTENTE, AJUDA, type AcaoIA, type LeadAssistente,
 } from "@/lib/crm/assistente";
 
@@ -69,6 +69,15 @@ describe("qual lead", () => {
 });
 
 describe("datas", () => {
+  it("'semana que vem' sem dia é a próxima segunda, decidido no código (a IA errou no ensaio)", () => {
+    expect(dataPorFrase("visitei a loja, pediu mensagem semana que vem", "2026-10-17")).toBe("2026-10-19");
+    expect(dataPorFrase("volta na próxima semana", "2026-10-20")).toBe("2026-10-26");
+    expect(dataPorFrase("semana que vem na quinta", "2026-10-17")).toBeNull();
+    expect(dataPorFrase("semana que vem, dia 21", "2026-10-17")).toBeNull();
+    expect(dataPorFrase("marca pra quinta", "2026-10-17")).toBeNull();
+    const p = planejarPassos({ resposta: { acoes: [A({ tipo: "agendar", lead_num: num("Telhas Exemplo"), lead_texto: "Telhas", data: "2026-10-24" })] }, lista, todos, clientes: [], hoje: "2026-10-17", texto: "Loninho, volta na Telhas semana que vem" });
+    expect(p[0]).toMatchObject({ tipo: "agendar", data: "2026-10-19" });
+  });
   it("só de hoje até 1 ano, e data que existe", () => {
     expect(dataValida("2026-10-20", hoje)).toBe(true);
     expect(dataValida("2026-10-19", hoje)).toBe(false);

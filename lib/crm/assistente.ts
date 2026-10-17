@@ -106,8 +106,7 @@ export function montarPedido(p: { texto: string; autor: string; hoje: string; le
     return `${d} = ${diaDaSemana(d)}${i === 0 ? " (HOJE)" : i === 1 ? " (amanhã)" : ""}`;
   }).join("\n");
   // Datas relativas já resolvidas: no ensaio de 17/10 (sábado) a IA leu "semana que vem" como 26/10, não 19/10.
-  const proximaSegunda = Array.from({ length: 7 }, (_, i) => somaDias(p.hoje, i + 1)).find((d) => diaDaSemana(d) === "segunda")!;
-  const atalhos = [`amanhã = ${somaDias(p.hoje, 1)}`, `depois de amanhã = ${somaDias(p.hoje, 2)}`, `semana que vem (sem dia) = ${proximaSegunda}`, `daqui a uma semana = ${somaDias(p.hoje, 7)}`, `daqui a 15 dias = ${somaDias(p.hoje, 15)}`].join("\n");
+  const atalhos = [`amanhã = ${somaDias(p.hoje, 1)}`, `depois de amanhã = ${somaDias(p.hoje, 2)}`, `semana que vem (sem dia) = ${proximaSegunda(p.hoje)}`, `daqui a 15 dias = ${somaDias(p.hoje, 15)}`].join("\n");
   const lista = p.leads.map((l, i) => `${i + 1}. ${l.empresa || l.contatoNome}${l.empresa && l.contatoNome !== l.empresa ? ` — ${l.contatoNome}` : ""} (${ROTULO_ETAPA[normalizarEtapa(l.estagio)]})`).join("\n");
   const system = `Você interpreta pedidos do time comercial da Lone Mídia, feitos no grupo de vendas do WhatsApp, e devolve AÇÕES em JSON. Você não conversa: só preenche o JSON.
 
@@ -160,6 +159,22 @@ export const AJUDA = [
   "• \"Loninho, cadastra a Loja Exemplo, Ana, (22) 99999-9999\"",
 ].join("\n");
 
+/** Próxima segunda DEPOIS de hoje. */
+export function proximaSegunda(hoje: string): string {
+  return Array.from({ length: 7 }, (_, i) => somaDias(hoje, i + 1)).find((d) => diaDaSemana(d) === "segunda")!;
+}
+
+/**
+ * "semana que vem" / "próxima semana" SEM dia da semana nem "dia N" = a próxima segunda, decidido aqui.
+ * A IA errou isso duas vezes no ensaio de 17/10 (sábado): 26/10 e depois 24/10 — o certo era 19/10.
+ */
+export function dataPorFrase(texto: string, hoje: string): string | null {
+  const t = (texto ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (!/\b(semana que vem|proxima semana)\b/.test(t)) return null;
+  if (/\b(segunda|terca|quarta|quinta|sexta|sabado|domingo)\b|\bdia \d{1,2}\b|\d{1,2}\/\d{1,2}/.test(t)) return null;
+  return proximaSegunda(hoje);
+}
+
 export function dataValida(data: string | null, hoje: string): boolean {
   if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return false;
   const t = Date.parse(`${data}T12:00:00Z`);
@@ -206,7 +221,9 @@ export function planejarPassos<L extends LeadAssistente>(p: {
   todos: L[];          // todos os leads (para conferir duplicado no cadastro)
   clientes: { nome: string; telefones: (string | null)[] }[];
   hoje: string;
+  texto?: string;      // a frase original: algumas datas o código resolve sozinho (dataPorFrase)
 }): Passo<L>[] {
+  const dataFixa = p.texto ? dataPorFrase(p.texto, p.hoje) : null;
   const acoes = (p.resposta?.acoes ?? []).filter((a) => a && a.tipo !== "nada").slice(0, 3);
   if (!acoes.length) return []; // quem chama decide: ajuda se foi chamado direto, silêncio se só citou o nome
   const ordem: Record<TipoAcao, number> = { registrar: 0, agendar: 1, consultar_lead: 2, consultar_hoje: 3, cadastrar: 4, nada: 9 };
@@ -244,6 +261,7 @@ export function planejarPassos<L extends LeadAssistente>(p: {
       continue;
     }
     if (a.tipo === "agendar") {
+      if (dataFixa) a.data = dataFixa;
       if (!dataValida(a.data, p.hoje)) {
         passos.push({ tipo: "responder", texto: `Para quando marco o follow-up com *${nomeDe(lead)}*? Diga o dia (ex.: "quinta" ou "dia 3").` });
         continue;

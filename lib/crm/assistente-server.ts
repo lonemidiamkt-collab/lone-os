@@ -111,7 +111,7 @@ export async function interpretar(texto: string, autorNome: string, hoje: string
   });
   if (!ia.ok) return { ok: false, erro: ia.error ?? "IA sem resposta" };
   const passos = planejarPassos({
-    resposta: ia.data, lista, todos, hoje,
+    resposta: ia.data, lista, todos, hoje, texto,
     clientes: (clientesQ.data ?? []).map((c) => ({ nome: c.name as string, telefones: [c.phone, c.contact_phone, c.company_phone, c.whatsapp_team_phone] as (string | null)[] })),
   });
   return { ok: true, passos, todos };
