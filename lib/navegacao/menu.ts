@@ -240,7 +240,9 @@ export const MENU: readonly GrupoMenu[] = [
             { id: "crm-relatorios", rotulo: "Relatórios", icone: BarChart2, href: "/crm", aba: "relatorios" },
           ] },
         ] },
-      { id: "prospeccao", rotulo: "Prospecção", icone: Radar, href: "/prospeccao", papeis: GESTAO,
+      // Prospecção (Piloto SDR Rafaela) DESLIGADA em 17/10/2026: fora do menu para todos. A página e os
+      // dados (prospects) continuam; religar = voltar papeis para GESTAO.
+      { id: "prospeccao", rotulo: "Prospecção", icone: Radar, href: "/prospeccao", papeis: [],
         descricao: "Piloto SDR e fila do dia", termos: ["sdr", "prospect"],
         secoes: [
           { titulo: "Piloto", itens: [

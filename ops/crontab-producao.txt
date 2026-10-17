@@ -11,6 +11,7 @@
 0 11 * * 1-5 /opt/loneos/scripts/cron-call.sh crm-followups POST >> /var/log/loneos-crm-followups.log 2>&1
 */15 11-23 * * 1-6 /opt/loneos/scripts/cron-call.sh crm-lead-novo POST >> /var/log/loneos-crm-lead-novo.log 2>&1
 5 11 * * 1-5 /opt/loneos/scripts/cron-call.sh crm-meta POST >> /var/log/loneos-crm-meta.log 2>&1
+*/30 11-23 * * * /opt/loneos/scripts/cron-call.sh crm-rota POST >> /var/log/loneos-crm-rota.log 2>&1
 0 11 * * 1-5 /opt/loneos/scripts/cron-call.sh traffic-diagnostico POST >> /var/log/loneos-traffic-diag.log 2>&1
 0 11 * * 2,4 /opt/loneos/scripts/cron-call.sh urgent-alerts POST >> /var/log/loneos-urgent-alerts.log 2>&1
 0 11 * * 3 /opt/loneos/scripts/client-messages.sh wed >> /var/log/loneos-client-msgs.log 2>&1
@@ -64,15 +65,7 @@
 50 10 * * 1-5 /opt/loneos/scripts/cron-call.sh creative-social POST >> /var/log/loneos-creative-social.log 2>&1
 5 11 * * 1 /opt/loneos/scripts/cron-call.sh traffic-brief-segunda POST >> /var/log/loneos-traffic-brief.log 2>&1
 55 10 * * 1-5 /opt/loneos/scripts/cron-call.sh creative-estilo POST >> /var/log/loneos-creative-estilo.log 2>&1
-# Piloto SDR Lone (BRT = UTC-3) — ver docs/prospeccao.md
-30 9 * * 1-5 /opt/loneos/scripts/cron-call.sh prospect-descobrir POST >> /var/log/loneos-prospect.log 2>&1
-0,15,30,45 10 * * 1-5 /opt/loneos/scripts/cron-call.sh prospect-enriquecer POST >> /var/log/loneos-prospect.log 2>&1
-0,15,30 11 * * 1-5 /opt/loneos/scripts/cron-call.sh prospect-enriquecer POST >> /var/log/loneos-prospect.log 2>&1
-35 11 * * 1-5 /opt/loneos/scripts/cron-call.sh prospect-ranking POST >> /var/log/loneos-prospect.log 2>&1
-*/5 12-13 * * 1-5 /opt/loneos/scripts/cron-call.sh prospect-outbound POST >> /var/log/loneos-prospect.log 2>&1
-*/15 12-20 * * 1-5 /opt/loneos/scripts/cron-call.sh prospect-tick POST >> /var/log/loneos-prospect.log 2>&1
-30 21 * * 1-5 /opt/loneos/scripts/cron-call.sh prospect-relatorio POST >> /var/log/loneos-prospect.log 2>&1
-10 3 * * * /opt/loneos/scripts/cron-call.sh prospect-piloto POST >> /var/log/loneos-prospect.log 2>&1
+# Piloto SDR Lone: DESLIGADO em 17/10/2026 (decisão do Roberto) — as 8 linhas prospect-* saíram.
 # Leva 2 (24/09/2026): resumo matinal único, risco semanal por dono, saldo a cada 2h, vigia da Central
 0 11 * * 1-5 /opt/loneos/scripts/cron-call.sh cs-manha POST >> /var/log/loneos-cs-manha.log 2>&1
 30 12 * * 1 /opt/loneos/scripts/cron-call.sh cs-risco-semanal POST >> /var/log/loneos-cs-risco-semanal.log 2>&1

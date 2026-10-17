@@ -55,6 +55,7 @@ services:
       CS_INTERNAL_GROUP_JID: ${CS_INTERNAL_GROUP_JID}
       CS_CADASTRO_GROUP_JID: ${CS_CADASTRO_GROUP_JID}
       CS_OWNER_JID: ${CS_OWNER_JID}
+      CS_VENDAS_GROUP_JID: ${CS_VENDAS_GROUP_JID:-}
       CS_TRAFFIC_GROUP_JID: ${CS_TRAFFIC_GROUP_JID}
       CS_TEAM_GROUP_JID: ${CS_TEAM_GROUP_JID}
       # Grupo administrativo (só o Roberto). Recebe o relatório do time e o resumo do CEO —

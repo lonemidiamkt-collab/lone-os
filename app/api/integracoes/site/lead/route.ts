@@ -8,6 +8,8 @@ import { avaliarLead, ROTULO_DESCARTE } from "@/lib/crm/filtro-lead";
 import { atividadeDoCadastro, conferirAssinatura, leadDoPacote, validarPacote } from "@/lib/crm/site-lead";
 import { DESTINO_AVISOS_COMERCIAL } from "@/lib/crm/acesso";
 import { mesmoWhatsapp, formatarWhatsapp } from "@/lib/team/whatsapp";
+import { cadastroDoPacote, textoCadastroGrupo, textoClienteGrupo, textoVoltouGrupo } from "@/lib/crm/grupo-vendas";
+import { mandarNoGrupoVendas } from "@/lib/crm/grupo-vendas-envio";
 
 // POST /api/integracoes/site/lead — o cadastro do formulário do site (lonemidia.com, direto ou vindo
 // de anúncio) entra no comercial como lead NOVO, com o WhatsApp pronto para um clique.
@@ -18,7 +20,9 @@ import { mesmoWhatsapp, formatarWhatsapp } from "@/lib/team/whatsapp";
 //
 // Caminho: assinatura → idempotência (crm_recebidos, pelo id do cadastro) → filtro de lixo por regra
 // (lib/crm/filtro-lead.ts; lixo vai para crm_leads_descartados, nunca para o funil) → já é cliente?
-// → já é lead aberto? → cria o lead → aviso no sino de quem cuida do comercial.
+// → já é lead aberto? → cria o lead → aviso no sino de quem cuida do comercial E no grupo de vendas
+// do WhatsApp (CS_VENDAS_GROUP_JID, out/2026: "mandar os cadastros certinhos com o número do cliente").
+// O grupo vem depois de gravar: se o WhatsApp falhar, o lead já está no funil e o sino já avisou.
 // Erro de banco devolve 500 de propósito: o site tenta de novo (3 vezes) e a planilha guarda a cópia.
 
 type Resultado = "criado" | "duplicado" | "cliente" | "descartado";
@@ -90,6 +94,7 @@ export async function POST(req: NextRequest) {
         const ex = cliente.churned_at ? "Ex-cliente" : "Cliente";
         await avisar(`${ex} preencheu o formulário do site: ${cliente.name}`, `Desafio: ${(p.lead.maiorDesafio ?? "—").slice(0, 160)} · WhatsApp ${formatarWhatsapp(tel)}`);
         await fecharRecebido(p.id, "cliente", null);
+        await mandarNoGrupoVendas(textoClienteGrupo(cliente.name as string, !!cliente.churned_at, { telefone: tel, desafio: p.lead.maiorDesafio }), "site-lead:cliente");
         return NextResponse.json({ ok: true, cliente: true });
       }
       // Já é lead aberto com esse WhatsApp? Junta: registra e sobe no Hoje, sem criar outro.
@@ -98,8 +103,9 @@ export async function POST(req: NextRequest) {
       if (existente) {
         await db.insertLeadActivity({ leadId: existente.id as string, tipo: "nota", texto: `Preencheu o formulário do site de novo. ${p.lead.maiorDesafio ? `Desafio: ${p.lead.maiorDesafio.slice(0, 300)}` : ""}`.trim(), autor: "Site" });
         await supabaseAdmin.from("crm_leads").update({ updated_at: new Date().toISOString() }).eq("id", existente.id);
-        await avisar(`Voltou pelo site: ${(existente.empresa as string) || (existente.contato_nome as string)}`, `Já estava no funil. Responda em até 5 min — WhatsApp ${formatarWhatsapp(tel)}`);
+        await avisar(`Voltou pelo site: ${(existente.empresa as string) || (existente.contato_nome as string)}`, `Já estava no funil. Responda em até 1 hora — WhatsApp ${formatarWhatsapp(tel)}`);
         await fecharRecebido(p.id, "duplicado", existente.id as string);
+        await mandarNoGrupoVendas(textoVoltouGrupo({ empresa: (existente.empresa as string) ?? null, contatoNome: existente.contato_nome as string, telefone: tel, desafio: p.lead.maiorDesafio }), "site-lead:voltou");
         return NextResponse.json({ ok: true, duplicado: true, leadId: existente.id });
       }
     }
@@ -109,9 +115,10 @@ export async function POST(req: NextRequest) {
     await db.insertLeadActivity({ leadId: lead.id, tipo: "nota", texto: atividadeDoCadastro(p, agora), autor: "Site" }).catch(() => {});
     await avisar(
       `Lead novo do site: ${nomeEmpresa}${p.lead.segmento ? ` (${p.lead.segmento})` : ""}`,
-      tel ? `${lead.origem}. Responda em até 5 min — WhatsApp ${formatarWhatsapp(tel)}` : `${lead.origem}. O telefone veio errado: confira pelo e-mail ${p.lead.emailCorporativo ?? ""}.`,
+      tel ? `${lead.origem}. Responda em até 1 hora — WhatsApp ${formatarWhatsapp(tel)}` : `${lead.origem}. O telefone veio errado: confira pelo e-mail ${p.lead.emailCorporativo ?? ""}.`,
     );
     await fecharRecebido(p.id, "criado", lead.id);
+    await mandarNoGrupoVendas(textoCadastroGrupo(cadastroDoPacote(p, veredito, String(lead.origem ?? "Site"))), "site-lead:novo");
     return NextResponse.json({ ok: true, criado: true, leadId: lead.id });
   } catch (e) {
     console.error("[site/lead] falhou:", e instanceof Error ? e.message : e);

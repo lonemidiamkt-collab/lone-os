@@ -917,6 +917,10 @@ async function processarInbound(req: NextRequest) {
   // ─── DM (não é grupo): é o Piloto SDR. O prospect responde no privado do mesmo número; o
   // parseUpsert abaixo descartaria. Só entra quem já é prospect — DM de desconhecido é ignorada lá.
   if (ehDm(payload)) {
+    // SDR DESLIGADO (17/10/2026, decisão do Roberto): a Rafaela não responde mais prospect. Só volta
+    // com PROSPECCAO_SDR=on no ambiente. A mensagem continua no celular do número; ninguém responde
+    // automático por ele.
+    if (process.env.PROSPECCAO_SDR !== "on") return NextResponse.json({ ok: true, skip: "SDR desligado" });
     definirAtor("sdr");
     try {
       return NextResponse.json(await tratarDmProspeccao(payload));

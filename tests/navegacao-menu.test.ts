@@ -32,7 +32,7 @@ const ANTIGO_PRIMARIO: { href: string; roles: Role[] }[] = [
   { href: "/clients",       roles: ["admin", "manager"] },
   // Out/2026: o comercial ficou só com os sócios (guarda mensalidade e meta) — lib/crm/acesso.ts.
   { href: "/crm",           roles: ["admin"] },
-  { href: "/prospeccao",    roles: ["admin", "manager"] },
+  // /prospeccao saiu do menu em 17/10/2026 (SDR desligado) — ver o teste "prospecção fora do menu".
   { href: "/contratos",     roles: ["admin", "manager"] },
   { href: "/churn",         roles: ["admin", "manager"] },
   { href: "/jornada",       roles: ["admin", "manager", "social"] },
@@ -49,7 +49,6 @@ const ANTIGO_SECUNDARIO: Record<string, { rotas: string[]; abas: string[] }> = {
   "/social":     { rotas: [], abas: ["carteira", "kanban", "aprovacao", "metricas", "entregas", "onboarding", "acessos"] },
   "/design":     { rotas: [], abas: ["kanbans", "requests", "clientes", "performance", "history"] },
   "/clients":    { rotas: ["/clients", "/clients?filter=at_risk", "/clients?filter=goals"], abas: [] },
-  "/prospeccao": { rotas: [], abas: ["visao", "fila", "prospects", "conversas", "agenda", "configuracao", "relatorios"] },
   "/crm":        { rotas: [], abas: ["hoje", "dashboard", "funil", "agenda", "relatorios"] },
 };
 // Abas que mudaram de nome sem sumir: o pedido antigo cai na nova (a tela aceita os dois nomes).
@@ -226,11 +225,11 @@ describe("menu — ninguém ganha nem perde tela", () => {
     expect(telasParaBusca("manager").some((t) => t.href === "/mapa-postagem" && t.texto.includes("contratado"))).toBe(true);
   });
 
-  it("Área CEO continua só do admin; Prospecção só da gestão", () => {
+  it("Área CEO continua só do admin; Prospecção fora do menu (SDR desligado)", () => {
     expect(papelVe("admin", "/ceo")).toBe(true);
     expect(papelVe("manager", "/ceo")).toBe(false);
     expect(papelVe("comercial", "/prospeccao")).toBe(false);
-    expect(papelVe("manager", "/prospeccao")).toBe(true);
+    expect(papelVe("manager", "/prospeccao")).toBe(false);
   });
 
   it("Leva 5a: Social com Resultados no lugar de Métricas/Entregas; Carteira e Clientes do Quadro viram a lista única", () => {
@@ -432,5 +431,11 @@ describe("barra inferior do celular", () => {
     expect(atalhosMobile("social").map((i) => i.href)).toContain("/social");
     expect(atalhosMobile("designer").map((i) => i.href)).toContain("/design");
     expect(atalhosMobile("admin").map((i) => i.href)).toEqual(["/", "/traffic", "/social", "/clients"]);
+  });
+});
+
+describe("prospecção fora do menu (SDR desligado em 17/10/2026)", () => {
+  it("nenhum papel vê /prospeccao", () => {
+    for (const r of ["admin", "manager", "traffic", "social", "designer", "comercial"] as Role[]) expect(papelVe(r, "/prospeccao")).toBe(false);
   });
 });

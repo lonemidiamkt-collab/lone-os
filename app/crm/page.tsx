@@ -23,6 +23,7 @@ import { PACOTES_PROPOSTA } from "@/lib/crm/proposta";
 import { ETAPAS_ABERTAS, MOTIVOS_PERDA, ROTULO_ETAPA, CRITERIO_SAIDA, chanceDe, rotuloMotivo } from "@/lib/crm/etapas";
 import { brl, calcularEsforco, calcularMeta, hojeSP, mesSP, type ResumoMeta } from "@/lib/crm/meta";
 import { podeVerComercial } from "@/lib/crm/acesso";
+import { resumirPipeline } from "@/lib/crm/pipeline";
 import type { CrmMeta } from "@/lib/types";
 
 // ─── Metadados do funil ──────────────────────────────────────────────
@@ -301,23 +302,12 @@ export default function CrmPage() {
     };
   }, [leads]);
 
-  // ─── Dashboard ─────────────────────────────────────────────────────
-  const dashboard = useMemo(() => {
-    const funil = CRM_ESTAGIOS.map((e) => ({ estagio: e, n: leads.filter((l) => l.estagio === e).length }));
-    const maxFunil = Math.max(1, ...funil.map((f) => f.n));
-    const origemMap = new Map<string, number>();
-    for (const l of leads) { const k = (l.origem || "").trim() || "Sem origem"; origemMap.set(k, (origemMap.get(k) ?? 0) + 1); }
-    const origem = [...origemMap.entries()].map(([k, n]) => ({ k, n })).sort((a, b) => b.n - a.n);
-    // Leads por dia (últimos 14 dias).
-    const dias: { d: string; n: number }[] = [];
-    const base = new Date();
-    for (let i = 13; i >= 0; i--) {
-      const dt = new Date(base.getFullYear(), base.getMonth(), base.getDate() - i);
-      const ymd = dt.toLocaleDateString("en-CA");
-      dias.push({ d: ymd, n: leads.filter((l) => (l.createdAt || "").slice(0, 10) === ymd).length });
-    }
-    const maxDia = Math.max(1, ...dias.map((d) => d.n));
-    return { funil, maxFunil, origem, dias, maxDia, totalLeads: leads.length };
+  // ─── Dashboard (lib/crm/pipeline.ts) ───────────────────────────────
+  const pipeline = useMemo(() => resumirPipeline(leads, hojeYmd().slice(0, 7)), [leads]);
+  const origemLeads = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const l of leads) { const k = (l.origem || "").trim() || "Sem origem"; m.set(k, (m.get(k) ?? 0) + 1); }
+    return [...m.entries()].map(([k, n]) => ({ k, n })).sort((x, y) => y.n - x.n);
   }, [leads]);
 
   // ─── Agenda (reuniões + follow-ups) ────────────────────────────────
@@ -746,101 +736,188 @@ export default function CrmPage() {
         );
       })()}
 
-      {tab === "dashboard" && (
-        <div className="space-y-5">
-          <BarraMeta r={resumoMeta} esforco={esforco} meta={meta} onDefinir={abrirMetas} />
-          {/* KPIs */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-            <Kpi icon={TrendingUp} label="Leads ativos" value={String(kpis.abertos)} sub="no funil agora" />
-            <Kpi icon={CalendarClock} label="Reuniões no mês" value={String(kpis.reunioesMes)} sub="marcadas neste mês" />
-            <Kpi icon={Trophy} label="Ganhos no mês" value={String(kpis.vendasMes)} sub={kpis.vendasMes === 1 ? "lead fechado" : "leads fechados"} tone="good" />
-            <Kpi icon={Percent} label="Conversão" value={kpis.conversao == null ? "—" : `${kpis.conversao}%`} sub="dos leads fechados" />
-            <Kpi icon={FileText} label="Propostas no mês" value={String(kpis.propostasMes)} sub={kpis.propostasMes === 1 ? "proposta enviada" : "propostas enviadas"} />
-            <Kpi icon={Timer} label="1º contato" value={kpis.tempoContato == null ? "—" : kpis.tempoContato < 1 ? `${Math.round(kpis.tempoContato * 60)} min` : kpis.tempoContato < 48 ? `${kpis.tempoContato.toFixed(1).replace(".", ",")} h` : `${Math.round(kpis.tempoContato / 24)} dias`} sub={kpis.tempoContatoN ? `mediana de ${kpis.tempoContatoN} lead(s) do mês` : "sem leads com contato no mês"} />
-          </div>
+      {tab === "dashboard" && (() => {
+        const p = pipeline;
+        const pctMeta = (v: number) => (resumoMeta.meta ? ` · ${Math.round((v / resumoMeta.meta) * 100)}% da meta` : "");
+        const maxEtapa = Math.max(1, ...p.porEtapa.map((e) => e.n));
+        const proximoPasso = (l: Lead): { texto: string; alerta: boolean } => {
+          if (l.reuniaoData && l.reuniaoData >= hoje) return { texto: `Reunião ${fmtData(l.reuniaoData)}`, alerta: false };
+          if (estacionado(l, hoje)) return { texto: `Retomar ${fmtData(l.retomarEm)}`, alerta: false };
+          const t = toqueDo(l, hoje);
+          if (t) return { texto: rotuloToque(t), alerta: t.situacao !== "futuro" };
+          if (l.proximoContato) return { texto: `Contato ${fmtData(l.proximoContato)}`, alerta: l.proximoContato <= hoje };
+          return { texto: "Definir próximo passo", alerta: true };
+        };
+        const th = "px-3 py-2 text-left text-lone-eyebrow font-semibold uppercase text-muted-foreground";
+        const td = "px-3 py-2.5 text-lone-body";
+        return (
+          <div className="space-y-5">
+            <BarraMeta r={resumoMeta} esforco={esforco} meta={meta} onDefinir={abrirMetas} />
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            {/* Funil de conversão */}
-            <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
-              <h2 className="text-lone-h2 text-foreground">Funil de conversão</h2>
-              <p className="text-lone-caption text-muted-foreground">Distribuição dos {dashboard.totalLeads} leads pelas etapas</p>
-              <div className="mt-5 space-y-3">
-                {dashboard.funil.map((f) => (
-                  <div key={f.estagio} className="flex items-center gap-3">
-                    <span className="flex w-24 shrink-0 items-center gap-2 text-lone-caption text-muted-foreground">
-                      <span className={`h-2 w-2 shrink-0 rounded-full ${ESTAGIO_META[f.estagio].color}`} />
-                      <span className="truncate">{ESTAGIO_META[f.estagio].title}</span>
-                    </span>
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div className={`h-full rounded-full ${ESTAGIO_META[f.estagio].color}`} style={{ width: `${Math.max(2, (f.n / dashboard.maxFunil) * 100)}%` }} />
-                    </div>
-                    <span className="w-6 shrink-0 text-right text-lone-body font-medium text-foreground">{f.n}</span>
+            {/* Pipeline em dinheiro: o que está na mesa, quanto vale no ano, o que deve virar. */}
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <Kpi icon={TrendingUp} label="MRR potencial" value={brl(p.mrrPotencial)} sub={`${p.oportunidades.length} ${p.oportunidades.length === 1 ? "oportunidade" : "oportunidades"} com valor`} />
+              <Kpi icon={BarChart3} label="Receita anualizada" value={brl(p.anualizado)} sub="MRR potencial × 12 meses" />
+              <Kpi icon={Percent} label="Ponderado pela chance" value={brl(p.ponderado)} sub={`o que deve virar${pctMeta(p.ponderado)}`} tone="accent" />
+              <Kpi icon={Target} label="Ticket médio" value={p.ticketMedio == null ? "—" : brl(p.ticketMedio)} sub="mensalidade por oportunidade" />
+            </div>
+
+            {/* Atividade do mês, numa faixa só. */}
+            <div className="grid grid-cols-2 divide-border overflow-hidden rounded-xl border border-border bg-card sm:grid-cols-3 lg:grid-cols-6 lg:divide-x">
+              {([
+                ["Leads ativos", String(kpis.abertos), "no funil agora"],
+                ["Ganhos no mês", String(p.ganhosNoMes.n), p.ganhosNoMes.valor ? `${brl(p.ganhosNoMes.valor)}/mês` : "nenhum ainda"],
+                ["Propostas no mês", String(kpis.propostasMes), "enviadas"],
+                ["Reuniões no mês", String(kpis.reunioesMes), "marcadas"],
+                ["Conversão", kpis.conversao == null ? "—" : `${kpis.conversao}%`, "dos fechados"],
+                ["1º contato", kpis.tempoContato == null ? "—" : kpis.tempoContato < 1 ? `${Math.round(kpis.tempoContato * 60)} min` : kpis.tempoContato < 48 ? `${kpis.tempoContato.toFixed(1).replace(".", ",")} h` : `${Math.round(kpis.tempoContato / 24)} dias`, "mediana do mês"],
+              ] as const).map(([rot, val, sub]) => (
+                <div key={rot} className="px-4 py-3">
+                  <div className="text-lone-caption text-muted-foreground">{rot}</div>
+                  <div className="mt-0.5 text-lone-h2 text-foreground">{val}</div>
+                  <div className="text-lone-caption text-muted-foreground">{sub}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-3">
+              {/* Tabela de oportunidades */}
+              <section className="overflow-hidden rounded-xl border border-border bg-card xl:col-span-2">
+                <div className="flex flex-wrap items-baseline justify-between gap-2 p-5 pb-3">
+                  <div>
+                    <h2 className="text-lone-h2 text-foreground">Oportunidades</h2>
+                    <p className="text-lone-caption text-muted-foreground">Negócios abertos com mensalidade estimada, do mais perto de fechar ao mais longe</p>
                   </div>
-                ))}
-              </div>
-            </section>
+                  <button onClick={() => setTab("funil")} className="text-lone-caption text-primary hover:underline">Ver funil completo</button>
+                </div>
+                {p.oportunidades.length === 0 ? (
+                  <p className="px-5 pb-5 text-lone-body text-muted-foreground">Nenhuma oportunidade com valor ainda. Coloque a mensalidade estimada no lead quando a conversa chegar no diagnóstico.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[640px] border-t border-border">
+                      <thead className="bg-muted/40">
+                        <tr>
+                          <th className={th}>Empresa</th>
+                          <th className={th}>Etapa</th>
+                          <th className={`${th} text-right`}>Mensalidade</th>
+                          <th className={`${th} text-right`}>Chance</th>
+                          <th className={`${th} text-right`}>Ponderado</th>
+                          <th className={th}>Próximo passo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {p.oportunidades.map((o) => {
+                          const passo = proximoPasso(o.lead);
+                          return (
+                            <tr key={o.lead.id} onClick={() => setDraft({ ...o.lead })} className="cursor-pointer transition-colors hover:bg-accent/50">
+                              <td className={td}>
+                                <span className="block max-w-[220px] truncate font-medium text-foreground">{o.lead.empresa || o.lead.contatoNome}</span>
+                                {o.lead.empresa && o.lead.contatoNome !== o.lead.empresa && <span className="block max-w-[220px] truncate text-lone-caption text-muted-foreground">{o.lead.contatoNome}</span>}
+                              </td>
+                              <td className={td}>
+                                <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-foreground">
+                                  <span className={`h-2 w-2 shrink-0 rounded-full ${ESTAGIO_META[o.etapa].color}`} />{ESTAGIO_META[o.etapa].title}
+                                </span>
+                              </td>
+                              <td className={`${td} whitespace-nowrap text-right font-medium text-foreground`}>{brl(o.mensalidade)}</td>
+                              <td className={`${td} text-right text-muted-foreground`}>{Math.round(o.chance * 100)}%</td>
+                              <td className={`${td} whitespace-nowrap text-right text-foreground`}>{brl(o.ponderado)}</td>
+                              <td className={td}>
+                                <span className={`whitespace-nowrap text-lone-caption ${passo.alerta ? "font-medium text-lone-warning" : "text-muted-foreground"}`}>{passo.texto}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot className="border-t border-border bg-muted/40">
+                        <tr>
+                          <td className={`${td} font-semibold text-foreground`} colSpan={2}>Total · {p.oportunidades.length}</td>
+                          <td className={`${td} whitespace-nowrap text-right font-semibold text-foreground`}>{brl(p.mrrPotencial)}</td>
+                          <td className={`${td} text-right text-muted-foreground`}>{p.mrrPotencial ? `${Math.round((p.ponderado / p.mrrPotencial) * 100)}%` : "—"}</td>
+                          <td className={`${td} whitespace-nowrap text-right font-semibold text-foreground`}>{brl(p.ponderado)}</td>
+                          <td className={td} />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+                {p.semValor > 0 && (
+                  <p className="border-t border-border px-5 py-3 text-lone-caption text-muted-foreground">
+                    Mais {p.semValor} {p.semValor === 1 ? "lead aberto" : "leads abertos"} ainda sem mensalidade estimada (lojas da rota e contatos novos) — estão no funil e na lista do Hoje.
+                  </p>
+                )}
+              </section>
 
-            {/* Origem dos leads */}
-            <section className="rounded-xl border border-border bg-card p-5">
-              <h2 className="text-lone-h2 text-foreground">Origem dos leads</h2>
-              <p className="text-lone-caption text-muted-foreground">De onde vieram</p>
-              <div className="mt-5 space-y-3">
-                {dashboard.origem.length === 0 ? <p className="text-lone-caption text-muted-foreground">Sem leads ainda.</p> :
-                  dashboard.origem.slice(0, 6).map((o, i) => {
-                    const pct = dashboard.totalLeads ? Math.round((o.n / dashboard.totalLeads) * 100) : 0;
-                    const op = [1, 0.72, 0.54, 0.4, 0.3, 0.22][i] ?? 0.22;
-                    return (
-                      <div key={o.k}>
-                        <div className="mb-1 flex items-center justify-between text-lone-caption">
-                          <span className="min-w-0 truncate text-foreground">{o.k}</span>
-                          <span className="shrink-0 text-muted-foreground">{o.n} · {pct}%</span>
-                        </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${pct}%`, opacity: op }} /></div>
+              {/* Simulação de conversão */}
+              <section className="rounded-xl border border-border bg-card p-5">
+                <h2 className="text-lone-h2 text-foreground">Simulação de conversão</h2>
+                <p className="text-lone-caption text-muted-foreground">Quanto entra por mês se fechar esta parte do MRR potencial</p>
+                <div className="mt-4 space-y-3">
+                  {p.simulacao.map((s) => (
+                    <div key={s.taxa}>
+                      <div className="mb-1 flex items-baseline justify-between gap-2">
+                        <span className="text-lone-caption text-muted-foreground">Fechar {Math.round(s.taxa * 100)}%</span>
+                        <span className="text-lone-body font-medium text-foreground">{brl(s.mrr)}<span className="text-lone-caption font-normal text-muted-foreground">/mês</span></span>
                       </div>
-                    );
-                  })}
-              </div>
-            </section>
-          </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${s.taxa * 100}%`, opacity: 0.4 + s.taxa * 0.6 }} /></div>
+                      <div className="mt-0.5 text-right text-lone-caption text-muted-foreground">{brl(s.anual)} no ano</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 rounded-lg border border-border bg-background p-3">
+                  <div className="text-lone-caption text-muted-foreground">Pela chance de cada negócio</div>
+                  <div className="mt-0.5 text-lone-h2 text-foreground">{brl(p.ponderado)}<span className="text-lone-caption font-normal text-muted-foreground">/mês</span></div>
+                  <div className="text-lone-caption text-muted-foreground">{brl(p.ponderado * 12)} no ano{pctMeta(p.ponderado)}</div>
+                </div>
+              </section>
+            </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            {/* Leads por dia */}
-            <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
-              <h2 className="text-lone-h2 text-foreground">Leads por dia</h2>
-              <p className="text-lone-caption text-muted-foreground">Últimos 14 dias</p>
-              <div className="mt-5 flex h-28 items-end gap-1.5">
-                {dashboard.dias.map((d) => (
-                  <div key={d.d} className="flex flex-1 flex-col items-center justify-end" title={`${fmtData(d.d)} — ${d.n} lead(s)`}>
-                    <div className={`w-full rounded-t ${d.n > 0 ? "bg-primary" : "bg-muted"}`} style={{ height: d.n > 0 ? `${Math.max(8, (d.n / dashboard.maxDia) * 100)}%` : "3px" }} />
-                  </div>
-                ))}
-              </div>
-              <div className="mt-1.5 flex justify-between text-lone-caption text-muted-foreground"><span>{fmtData(dashboard.dias[0].d)}</span><span>hoje</span></div>
-            </section>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {/* Funil por etapa: quantidade e dinheiro */}
+              <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
+                <h2 className="text-lone-h2 text-foreground">Funil por etapa</h2>
+                <p className="text-lone-caption text-muted-foreground">Leads abertos em cada etapa e a mensalidade que já está estimada nelas</p>
+                <div className="mt-5 space-y-3">
+                  {p.porEtapa.map((e) => (
+                    <div key={e.etapa} className="flex items-center gap-3">
+                      <span className="flex w-28 shrink-0 items-center gap-2 text-lone-caption text-muted-foreground">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${ESTAGIO_META[e.etapa].color}`} />
+                        <span className="truncate">{ESTAGIO_META[e.etapa].title}</span>
+                      </span>
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div className={`h-full rounded-full ${ESTAGIO_META[e.etapa].color}`} style={{ width: `${e.n ? Math.max(3, (e.n / maxEtapa) * 100) : 0}%` }} />
+                      </div>
+                      <span className="w-8 shrink-0 text-right text-lone-body font-medium text-foreground">{e.n}</span>
+                      <span className="hidden w-28 shrink-0 text-right text-lone-caption text-muted-foreground sm:block">{e.valor ? `${brl(e.valor)}/mês` : "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
 
-            {/* Próximas reuniões */}
-            <section className="rounded-xl border border-border bg-card p-5">
-              <h2 className="text-lone-h2 text-foreground">Próximas reuniões</h2>
-              <div className="mt-4 space-y-2">
-                {agenda.proximos.filter((e) => e.tipo === "reuniao").length === 0 ? (
-                  <p className="text-lone-caption text-muted-foreground">Nenhuma reunião marcada.</p>
-                ) : agenda.proximos.filter((e) => e.tipo === "reuniao").slice(0, 5).map((e) => (
-                  <button key={e.lead.id} onClick={() => setDraft({ ...e.lead })} className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-background p-2 text-left transition-colors hover:border-primary/40">
-                    <span className="flex flex-col items-center rounded-md bg-primary/10 px-2 py-1 text-primary">
-                      <span className="text-lone-body font-semibold leading-none">{e.data.slice(8, 10)}</span>
-                      <span className="text-lone-eyebrow uppercase">{mesLabel(e.data.slice(0, 7))}</span>
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-lone-body font-medium text-foreground">{e.lead.contatoNome}</span>
-                      {e.lead.empresa && <span className="block truncate text-lone-caption text-muted-foreground">{e.lead.empresa}</span>}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
+              {/* Origem dos leads */}
+              <section className="rounded-xl border border-border bg-card p-5">
+                <h2 className="text-lone-h2 text-foreground">Origem dos leads</h2>
+                <p className="text-lone-caption text-muted-foreground">De onde vieram os {leads.length}</p>
+                <div className="mt-5 space-y-3">
+                  {origemLeads.length === 0 ? <p className="text-lone-caption text-muted-foreground">Sem leads ainda.</p> :
+                    origemLeads.slice(0, 6).map((o) => {
+                      const pct = leads.length ? Math.round((o.n / leads.length) * 100) : 0;
+                      return (
+                        <div key={o.k}>
+                          <div className="mb-1 flex items-center justify-between text-lone-caption">
+                            <span className="min-w-0 truncate text-foreground">{o.k}</span>
+                            <span className="shrink-0 text-muted-foreground">{o.n} · {pct}%</span>
+                          </div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} /></div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </section>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {tab === "funil" && (
         <>

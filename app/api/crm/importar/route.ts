@@ -8,6 +8,7 @@ import { planejarImportacao, type DadosIniciais } from "@/lib/crm/importar";
 import { hojeSP } from "@/lib/crm/meta";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import * as db from "@/lib/supabase/queries";
+import { gravarPlano } from "@/lib/crm/gravar-plano";
 
 // POST /api/crm/importar — importa lojas da rota, oportunidades (com mensalidade) e a planilha de
 // leads do site. Só quem entra no comercial. Os valores chegam aqui pelo arquivo que o Roberto
@@ -15,8 +16,6 @@ import * as db from "@/lib/supabase/queries";
 //   { dados?: DadosIniciais, csv?: string }                  → { plano } (prévia, não grava nada)
 //   { dados?, csv?, confirmar: true }                        → { plano, resultado } (grava)
 // Idempotente: rodar de novo não duplica (lib/crm/importar.ts casa loja, cadastro, empresa e WhatsApp).
-
-const CAMPOS_DE_NEGOCIACAO = ["valorOrcamento", "estagio", "probabilidade", "retomarEm", "etapaDesde"];
 
 export async function POST(req: NextRequest) {
   const gate = await requireRole(req, PAPEIS_COMERCIAL);
@@ -38,34 +37,7 @@ export async function POST(req: NextRequest) {
   });
   if (!body.confirmar) return NextResponse.json({ plano });
 
-  const resultado = { criados: 0, atualizados: 0, erros: [] as { titulo: string; erro: string }[] };
-  for (const linha of plano.linhas) {
-    if (linha.acao === "ignorar") continue;
-    try {
-      let leadId = linha.leadId;
-      if (linha.acao === "criar") {
-        const lead = await db.insertCrmLead(linha.campos);
-        leadId = lead.id;
-        resultado.criados++;
-      } else if (leadId) {
-        const patch = Object.fromEntries(Object.entries(linha.campos).filter(([k]) => CAMPOS_DE_NEGOCIACAO.includes(k)));
-        await db.updateCrmLead(leadId, patch);
-        resultado.atualizados++;
-      }
-      if (leadId && linha.atividades.length) {
-        await supabaseAdmin.from("crm_lead_activities").insert(linha.atividades.map((a) => ({
-          lead_id: leadId, tipo: a.tipo, texto: a.texto, autor: a.autor, ...(a.quando ? { created_at: a.quando } : {}),
-        })));
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "erro";
-      resultado.erros.push({
-        titulo: linha.titulo,
-        erro: /column|schema cache/i.test(msg) ? "Falta aplicar a atualização do banco do comercial (migration 20261017100000)." : msg,
-      });
-      // Coluna faltando vale para todas as linhas: para na primeira em vez de repetir o mesmo erro 48 vezes.
-      if (/column|schema cache/i.test(msg)) break;
-    }
-  }
+  const { criados, atualizados, erros } = await gravarPlano(plano.linhas);
+  const resultado = { criados, atualizados, erros };
   return NextResponse.json({ plano, resultado });
 }

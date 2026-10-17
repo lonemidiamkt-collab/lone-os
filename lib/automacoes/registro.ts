@@ -23,6 +23,7 @@ export type Destino =
   | "grupos dos clientes"
   | "grupo do time"
   | "grupo de tráfego"
+  | "grupo de vendas"
   | "admin"
   | "sistema"
   | "prospects";
@@ -329,48 +330,23 @@ export const AUTOMACOES: Automacao[] = [
   }),
 
   // ── Prospecção ──────────────────────────────────────────────────────────────────────────────
-  ep("prospect-descobrir", {
-    nome: "SDR — descobrir empresas", descricao: "Pesquisa segmento × cidade em rodízio e grava as empresas novas como descobertas.",
-    familia: "Prospecção", destino: "sistema", cron: "30 9 * * 1-5", agendaBRT: "seg a sex, 6h30", maxSilencioHoras: 74, ensaio: "dry=1",
-  }),
-  ep("prospect-enriquecer", {
-    nome: "SDR — enriquecer", descricao: "Pesquisa a fundo um lote de empresas descobertas, dá score e separa quem é do perfil.",
-    familia: "Prospecção", destino: "sistema", cron: "0,15,30,45 10 * * 1-5", cronExtra: ["0,15,30 11 * * 1-5"],
-    agendaBRT: "seg a sex, a cada 15 min das 7h às 8h30", maxSilencioHoras: 73,
-  }),
-  ep("prospect-ranking", {
-    nome: "SDR — fila do dia", descricao: "Passa o quality gate e monta a fila de abordagem do dia pelos melhores scores.",
-    familia: "Prospecção", destino: "sistema", cron: "35 11 * * 1-5", agendaBRT: "seg a sex, 8h35", maxSilencioHoras: 74, ensaio: "dry=1",
-  }),
-  ep("prospect-outbound", {
-    nome: "SDR — abordagem", descricao: "Manda a primeira abordagem da fila e os follow-ups vencidos no WhatsApp dos prospects.",
-    familia: "Prospecção", destino: "prospects", cron: "*/5 12-13 * * 1-5",
-    agendaBRT: "seg a sex, a cada 5 min das 9h às 10h55", maxSilencioHoras: 73, ensaio: "dry=1", enviaParaCliente: true,
-  }),
-  ep("prospect-tick", {
-    nome: "SDR — conversas e lembretes", descricao: "Responde os prospects pendentes, lembra reuniões (24h/1h) e espelha na planilha.",
-    familia: "Prospecção", destino: "prospects", cron: "*/15 12-20 * * 1-5",
-    agendaBRT: "seg a sex, a cada 15 min das 9h às 17h45", maxSilencioHoras: 66, ensaio: "dry=1", enviaParaCliente: true,
-  }),
-  ep("prospect-relatorio", {
-    nome: "SDR — relatório do dia", descricao: "Grava as métricas do dia e manda o relatório do piloto no grupo administrativo.",
-    familia: "Prospecção", destino: "admin", cron: "30 21 * * 1-5", agendaBRT: "seg a sex, 18h30", maxSilencioHoras: 74, ensaio: "dry=1",
-  }),
-  ep("prospect-piloto", {
-    nome: "SDR — fim do piloto", descricao: "Encerra o piloto quando vence o prazo e manda o relatório final ao grupo administrativo.",
-    familia: "Prospecção", destino: "admin", cron: "10 3 * * *", agendaBRT: "todo dia, 0h10", maxSilencioHoras: 26,
-  }),
+  // SDR (Piloto Rafaela) DESLIGADO em 17/10/2026 por decisão do Roberto: as 7 rotinas prospect-* saíram
+  // do crontab e daqui. As rotas continuam no código (app/api/system/prospect-*) para religar, se um dia.
   ep("crm-followups", {
-    nome: "Follow-up do comercial", descricao: "Leads com toque da cadência, retomada ou próximo contato vencidos viram uma notificação no sino de quem cuida do comercial.",
-    familia: "Prospecção", destino: "sistema", cron: "0 11 * * 1-5", agendaBRT: "seg a sex, 8h", maxSilencioHoras: 74, ensaio: "dry=1",
+    nome: "Follow-up do comercial", descricao: "A lista do Comercial → Hoje (toque da régua, retomada, contato marcado, negociação esfriando) vira uma mensagem no grupo de vendas e uma notificação no sino. Sem valor.",
+    familia: "Prospecção", destino: "grupo de vendas", cron: "0 11 * * 1-5", agendaBRT: "seg a sex, 8h", maxSilencioHoras: 74, ensaio: "dry=1",
   }),
   ep("crm-lead-novo", {
-    nome: "Lead do site sem resposta", descricao: "Lead que chegou pelo formulário do site e ficou 1 hora sem resposta vira um lembrete (sino + WhatsApp do dono, sem valor). Uma vez por lead.",
-    familia: "Prospecção", destino: "admin", cron: "*/15 11-23 * * 1-6", agendaBRT: "seg a sáb, a cada 15 min das 8h às 20h45", maxSilencioHoras: 50, ensaio: "dry=1",
+    nome: "Lead do site sem resposta", descricao: "Lead que chegou pelo formulário do site e ficou 1 hora sem resposta vira um lembrete (sino + grupo de vendas, sem valor). Uma vez por lead.",
+    familia: "Prospecção", destino: "grupo de vendas", cron: "*/15 11-23 * * 1-6", agendaBRT: "seg a sáb, a cada 15 min das 8h às 20h45", maxSilencioHoras: 50, ensaio: "dry=1",
   }),
   ep("crm-meta", {
     nome: "Cobrança da meta do comercial", descricao: "No máximo 1 aviso por dia: segunda (resumo da semana), ritmo abaixo do necessário por 3 dias úteis ou projeção abaixo de 80% no dia 10/20. Números no sino; WhatsApp do dono sem valor.",
     familia: "Prospecção", destino: "admin", cron: "5 11 * * 1-5", agendaBRT: "seg a sex, 8h05", maxSilencioHoras: 74, ensaio: "dry=1",
+  }),
+  ep("crm-rota", {
+    nome: "Visitas da rota no funil", descricao: "Loja marcada como visitada no app da Rota de Prospecção vira lead em Contato feito (régua contando do dia da visita) e vai para o grupo de vendas com o WhatsApp. Revisita entra no histórico.",
+    familia: "Prospecção", destino: "grupo de vendas", cron: "*/30 11-23 * * *", agendaBRT: "todo dia, a cada 30 min das 8h às 20h30", maxSilencioHoras: 26, ensaio: "dry=1",
   }),
 
   // ── Dados e sync ────────────────────────────────────────────────────────────────────────────
