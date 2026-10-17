@@ -164,15 +164,46 @@ export function proximaSegunda(hoje: string): string {
   return Array.from({ length: 7 }, (_, i) => somaDias(hoje, i + 1)).find((d) => diaDaSemana(d) === "segunda")!;
 }
 
+const DIA_NUM: Record<string, number> = { segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6, domingo: 0 };
+
 /**
- * "semana que vem" / "próxima semana" SEM dia da semana nem "dia N" = a próxima segunda, decidido aqui.
- * A IA errou isso duas vezes no ensaio de 17/10 (sábado): 26/10 e depois 24/10 — o certo era 19/10.
+ * A DATA DO FOLLOW-UP, decidida no código para as formas comuns de falar. A IA errou "semana que vem"
+ * (26/10 e 24/10 num sábado, o certo era 19/10) e "semana que vem na quarta" (26/10, o certo era 21/10)
+ * no ensaio de 17/10. Ordem: "DD/MM" → "dia N" → "semana que vem na X" → dia da semana → "semana que vem"
+ * → "depois de amanhã"/"amanhã". "Hoje" fica de fora de propósito: em "visitei hoje, volta quinta" ele é
+ * o dia da visita, não do follow-up. Mais de um dia da semana na frase = ambíguo → null (fica com a IA).
  */
 export function dataPorFrase(texto: string, hoje: string): string | null {
   const t = (texto ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (!/\b(semana que vem|proxima semana)\b/.test(t)) return null;
-  if (/\b(segunda|terca|quarta|quinta|sexta|sabado|domingo)\b|\bdia \d{1,2}\b|\d{1,2}\/\d{1,2}/.test(t)) return null;
-  return proximaSegunda(hoje);
+  const [ano, mes, dia] = hoje.split("-").map(Number);
+  const ymd = (y: number, m: number, d: number) => {
+    const dt = new Date(Date.UTC(y, m - 1, d, 12));
+    return dt.getUTCDate() === d && dt.getUTCMonth() === m - 1 ? dt.toISOString().slice(0, 10) : null; // 31/11 não existe
+  };
+  const dm = /\b(\d{1,2})\/(\d{1,2})\b/.exec(t);
+  if (dm) {
+    const d = Number(dm[1]), m = Number(dm[2]);
+    const este = ymd(ano, m, d);
+    return este && este >= hoje ? este : ymd(ano + 1, m, d);
+  }
+  const dn = /\bdia (\d{1,2})\b/.exec(t);
+  if (dn) {
+    const d = Number(dn[1]);
+    return d >= dia ? ymd(ano, mes, d) : mes === 12 ? ymd(ano + 1, 1, d) : ymd(ano, mes + 1, d);
+  }
+  const semanas = [...t.matchAll(/\b(segunda|terca|quarta|quinta|sexta|sabado|domingo)\b/g)].map((x) => x[1]);
+  const unicos = [...new Set(semanas)];
+  if (unicos.length > 1) return null;
+  const proxima = /\b(semana que vem|proxima semana)\b/.test(t);
+  if (unicos.length === 1) {
+    const alvo = DIA_NUM[unicos[0]];
+    if (proxima) return somaDias(proximaSegunda(hoje), (alvo + 6) % 7); // segunda +0 … domingo +6
+    for (let i = 1; i <= 7; i++) { const d = somaDias(hoje, i); if (new Date(`${d}T12:00:00Z`).getUTCDay() === alvo) return d; }
+  }
+  if (proxima) return proximaSegunda(hoje);
+  if (/\bdepois de amanha\b/.test(t)) return somaDias(hoje, 2);
+  if (/\bamanha\b/.test(t)) return somaDias(hoje, 1);
+  return null;
 }
 
 export function dataValida(data: string | null, hoje: string): boolean {
@@ -223,7 +254,8 @@ export function planejarPassos<L extends LeadAssistente>(p: {
   hoje: string;
   texto?: string;      // a frase original: algumas datas o código resolve sozinho (dataPorFrase)
 }): Passo<L>[] {
-  const dataFixa = p.texto ? dataPorFrase(p.texto, p.hoje) : null;
+  // Só com UM agendamento na frase: com dois (leads e dias diferentes) não dá para saber qual data é de quem.
+  const dataFixa = p.texto && (p.resposta?.acoes ?? []).filter((a) => a?.tipo === "agendar").length === 1 ? dataPorFrase(p.texto, p.hoje) : null;
   const acoes = (p.resposta?.acoes ?? []).filter((a) => a && a.tipo !== "nada").slice(0, 3);
   if (!acoes.length) return []; // quem chama decide: ajuda se foi chamado direto, silêncio se só citou o nome
   const ordem: Record<TipoAcao, number> = { registrar: 0, agendar: 1, consultar_lead: 2, consultar_hoje: 3, cadastrar: 4, nada: 9 };

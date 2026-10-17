@@ -72,11 +72,29 @@ describe("datas", () => {
   it("'semana que vem' sem dia é a próxima segunda, decidido no código (a IA errou no ensaio)", () => {
     expect(dataPorFrase("visitei a loja, pediu mensagem semana que vem", "2026-10-17")).toBe("2026-10-19");
     expect(dataPorFrase("volta na próxima semana", "2026-10-20")).toBe("2026-10-26");
-    expect(dataPorFrase("semana que vem na quinta", "2026-10-17")).toBeNull();
-    expect(dataPorFrase("semana que vem, dia 21", "2026-10-17")).toBeNull();
-    expect(dataPorFrase("marca pra quinta", "2026-10-17")).toBeNull();
+    // sábado 17/10
+    expect(dataPorFrase("marca a Lumafer pra semana que vem na quarta", "2026-10-17")).toBe("2026-10-21");
+    expect(dataPorFrase("marca pra quinta", "2026-10-17")).toBe("2026-10-22");
+    expect(dataPorFrase("marca pra sábado", "2026-10-17")).toBe("2026-10-24"); // o mesmo dia da semana = a próxima
+    expect(dataPorFrase("volta dia 3", "2026-10-17")).toBe("2026-11-03");
+    expect(dataPorFrase("volta dia 25", "2026-10-17")).toBe("2026-10-25");
+    expect(dataPorFrase("volta dia 31", "2026-11-05")).toBeNull();                // 31/11 não existe → fica com a IA
+    expect(dataPorFrase("dia 5", "2026-12-20")).toBe("2027-01-05");
+    expect(dataPorFrase("liga em 03/11", "2026-10-17")).toBe("2026-11-03");
+    expect(dataPorFrase("liga em 10/01", "2026-10-17")).toBe("2027-01-10");
+    expect(dataPorFrase("fala com ele amanhã", "2026-10-17")).toBe("2026-10-18");
+    expect(dataPorFrase("depois de amanhã", "2026-10-17")).toBe("2026-10-19");
+    expect(dataPorFrase("visitei hoje, volta quinta", "2026-10-17")).toBe("2026-10-22"); // "hoje" é a visita
+    expect(dataPorFrase("quinta ou sexta", "2026-10-17")).toBeNull();                  // ambíguo
+    expect(dataPorFrase("fim do mês", "2026-10-17")).toBeNull();                       // fica com a IA
     const p = planejarPassos({ resposta: { acoes: [A({ tipo: "agendar", lead_num: num("Telhas Exemplo"), lead_texto: "Telhas", data: "2026-10-24" })] }, lista, todos, clientes: [], hoje: "2026-10-17", texto: "Loninho, volta na Telhas semana que vem" });
     expect(p[0]).toMatchObject({ tipo: "agendar", data: "2026-10-19" });
+    // Dois agendamentos na mesma frase: o código não arrisca, fica a data de cada um que a IA mandou.
+    const dois = planejarPassos({ resposta: { acoes: [
+      A({ tipo: "agendar", lead_num: num("Telhas Exemplo"), lead_texto: "Telhas", data: "2026-10-22" }),
+      A({ tipo: "agendar", lead_num: num("Madeireira Exemplo"), lead_texto: "Madeireira Exemplo", data: "2026-10-23" }),
+    ] }, lista, todos, clientes: [], hoje: "2026-10-17", texto: "Loninho, Telhas quinta e Madeireira sexta" });
+    expect(dois.map((x) => "data" in x && x.data)).toEqual(["2026-10-22", "2026-10-23"]);
   });
   it("só de hoje até 1 ano, e data que existe", () => {
     expect(dataValida("2026-10-20", hoje)).toBe(true);
