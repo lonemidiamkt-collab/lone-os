@@ -1,9 +1,11 @@
 export type Role = "admin" | "manager" | "traffic" | "social" | "designer" | "comercial";
 
-// ── CRM comercial (SDR) ──────────────────────────────────────────────
-// Funil: Lead → Orçamento → Proposta → Reunião → Ganho/Perdido.
-export type CrmEstagio = "lead" | "orcamento" | "proposta" | "reuniao" | "ganho" | "perdido";
-export const CRM_ESTAGIOS: CrmEstagio[] = ["lead", "orcamento", "proposta", "reuniao", "ganho", "perdido"];
+// ── CRM comercial ────────────────────────────────────────────────────
+// Funil (out/2026, venda por visita): Novo → Contato feito → Diagnóstico → Proposta → Negociação →
+// Ganho/Perdido. As etapas antigas (lead/orcamento/reuniao) são lidas por normalizarEtapa
+// (lib/crm/etapas.ts) — a fonte única de rótulo, ordem, etapas abertas e chance de cada uma.
+export type CrmEstagio = "novo" | "contato" | "diagnostico" | "proposta" | "negociacao" | "ganho" | "perdido";
+export const CRM_ESTAGIOS: CrmEstagio[] = ["novo", "contato", "diagnostico", "proposta", "negociacao", "ganho", "perdido"];
 
 export interface CrmLead {
   id: string;
@@ -11,23 +13,37 @@ export interface CrmLead {
   empresa: string | null;
   telefone: string | null;
   email: string | null;
-  valorOrcamento: number | null;    // valor do orçamento em aberto (R$)
+  valorOrcamento: number | null;    // MENSALIDADE negociada (R$/mês) — base da meta de MRR novo
+  valorImplantacao: number | null;  // taxa única, se houver (não entra na meta mensal)
   estagio: CrmEstagio;
-  origem: string | null;            // indicação, tráfego, prospecção…
-  responsavel: string | null;       // o SDR dono do lead
+  probabilidade: number | null;     // 0–1; nula = padrão da etapa
+  origem: string | null;            // indicação, site, anúncio → site, visita, prospecção…
+  responsavel: string | null;       // quem cuida (ou quem visitou)
   reuniaoData: string | null;       // YYYY-MM-DD (dia da reunião marcada)
   propostaEnviadaEm: string | null; // YYYY-MM-DD
-  proximoContato: string | null;    // YYYY-MM-DD (follow-up do SDR)
+  proximoContato: string | null;    // YYYY-MM-DD (follow-up marcado à mão)
+  retomarEm: string | null;         // YYYY-MM-DD — some do Hoje e da cadência até essa data
+  previsaoFechamento: string | null;// YYYY-MM-DD — entra no ponderado do mês dessa data
   fechadoEm: string | null;         // ISO — quando foi ganho/perdido (base do relatório mensal)
-  motivoPerda: string | null;       // quando estagio = perdido
+  motivoPerda: string | null;       // texto livre do porquê
+  motivoPerdaCodigo: string | null; // lista fixa (lib/crm/etapas.ts → MOTIVOS_PERDA)
+  segmento: string | null;
+  cidade: string | null;
+  endereco: string | null;
+  instagram: string | null;
+  rotaLojaId: number | null;        // loja do app da rota (rota_visitas.loja), quando veio de visita
+  temperatura: "quente" | "morno" | "frio" | null;
+  etapaDesde: string | null;        // ISO — entrada na etapa atual (dia zero da cadência da etapa)
+  primeiroContatoEm: string | null; // ISO — 1º toque registrado (mede o tempo de resposta)
+  externoId: string | null;         // id do formulário do site (idempotência)
   observacoes: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-// Atividade/histórico de um lead (timeline do SDR): ligação, mensagem, nota, e-mail, reunião,
-// ou mudança de etapa (auto-registrada). Ver migration 066_crm_lead_activities.
-export type CrmAtividadeTipo = "nota" | "ligacao" | "whatsapp" | "email" | "reuniao" | "etapa";
+// Atividade/histórico de um lead (timeline): ligação, mensagem, nota, e-mail, reunião, visita
+// presencial, ou mudança de etapa (auto-registrada). Ver migration 066_crm_lead_activities.
+export type CrmAtividadeTipo = "nota" | "ligacao" | "whatsapp" | "email" | "reuniao" | "visita" | "etapa";
 export interface CrmLeadActivity {
   id: string;
   leadId: string;
@@ -37,11 +53,13 @@ export interface CrmLeadActivity {
   createdAt: string;
 }
 
-// Meta mensal do comercial (SDR) — norte + progresso no dashboard. Ver migration 067.
+// Meta mensal do comercial — a barra de "falta X%" no Dashboard e no Hoje. Ver migration 067.
 export interface CrmMeta {
-  mes: string;              // YYYY-MM
-  metaValor: number | null; // meta de vendas (R$)
-  metaLeads: number | null; // meta de leads novos
+  mes: string;                       // YYYY-MM
+  metaValor: number | null;          // meta de MRR novo vendido no mês (R$/mês)
+  metaLeads: number | null;          // meta de leads novos
+  metaContatosSemana: number | null; // esforço: contatos/visitas por semana
+  metaPropostasMes: number | null;   // esforço: propostas enviadas no mês
   updatedAt: string;
 }
 

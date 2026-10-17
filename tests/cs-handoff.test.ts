@@ -7,15 +7,14 @@ const lead = {
   contato_nome: "José Silva",
   telefone: "22999990000",
   email: "ze@padaria.com",
-  valor_orcamento: 1500,
   origem: "Indicação",
   responsavel: "Rodrigo (SDR)",
-  observacoes: "Quer atrair mais clientes no fim de semana. Prometido: 12 posts/mês + tráfego.",
+  observacoes: "Quer atrair mais clientes no fim de semana. Prometido: 12 posts/mês + tráfego. Fechou por R$ 1.500, desconto de 200 no 1º mês.",
 };
 
 const atividades = [
   { tipo: "reuniao", texto: "Reunião de fechamento — topou o plano growth." },
-  { tipo: "ligacao", texto: "Ligou pedindo referências." },
+  { tipo: "ligacao", texto: "Ligou pedindo referências. Topou 1.345/mês." },
   { tipo: "etapa", texto: "Movido para Ganho ✅" }, // ruído — não deve entrar
   { tipo: "nota", texto: "  " }, // vazio — não deve entrar
 ];
@@ -30,11 +29,14 @@ describe("nomeDoLead", () => {
 
 describe("montarNotaHandoff", () => {
   const nota = montarNotaHandoff(lead, atividades);
-  it("traz SDR, origem, valor formatado em BRL e observações", () => {
+  it("traz SDR, origem e observações — SEM dinheiro (a ficha é lida pela equipe e pelo agente)", () => {
     expect(nota).toContain("Fechado por: Rodrigo (SDR)");
     expect(nota).toContain("Origem: Indicação");
-    expect(nota).toMatch(/Valor negociado: R\$\s?1\.500/);
     expect(nota).toContain("12 posts/mês + tráfego");
+    expect(nota).not.toContain("Valor negociado");
+    expect(nota).not.toMatch(/1\.500|1\.497|\b200\b/);
+    expect(nota).toContain("Fechou por [valor], desconto de [valor]");
+    expect(nota).toContain("Topou [valor]");
   });
   it("inclui só histórico com conteúdo (ignora 'etapa' e texto vazio)", () => {
     expect(nota).toContain("Reunião de fechamento");
@@ -42,7 +44,7 @@ describe("montarNotaHandoff", () => {
     expect(nota).not.toContain("Movido para Ganho");
   });
   it("não quebra sem atividades nem valor", () => {
-    const n = montarNotaHandoff({ empresa: "X", valor_orcamento: 0 });
+    const n = montarNotaHandoff({ empresa: "X" });
     expect(n).toContain("🤝 Handoff do comercial");
     expect(n).not.toContain("Valor negociado");
   });
@@ -54,5 +56,9 @@ describe("montarMensagemGrupoHandoff", () => {
     expect(msg).toContain("*Cliente novo fechado pelo comercial: Padaria do Zé*");
     expect(msg).toContain("Rodrigo (SDR)");
     expect(msg).toContain("Lone, entrou o cliente Padaria do Zé no grupo");
+  });
+  it("não leva valor para o grupo interno, nem escrito nas observações", () => {
+    expect(msg).not.toMatch(/1\.500|\b200\b/);
+    expect(msg).toContain("[valor]");
   });
 });

@@ -21,6 +21,7 @@ import { evaluateAccount } from "@/lib/budgets/alert-engine";
 import { metaAccountStatus } from "@/lib/budgets/account-status";
 import type { Client } from "@/lib/types";
 import type { ItemInterno, Problema, Severidade, Area, Acao } from "./tipos";
+import { ROTULO_ETAPA, ehAberta, normalizarEtapa } from "@/lib/crm/etapas";
 import {
   type ClienteRow, type CardRow, type ContaRow, type Contexto, type Dados,
   ddmm, diasDesde, diasEntre, nomeDoCliente, plural,
@@ -42,7 +43,8 @@ export const CONTRATO_CRITICO = 15;
 /** lib/cs/snapshot.ts eventosClientes: datas marcadas pelo cliente nos próximos 14 dias. */
 export const DIAS_EVENTO = 14;
 /** app/api/system/crm-followups: etapas abertas do CRM. */
-export const ETAPAS_ABERTAS = ["lead", "orcamento", "proposta", "reuniao"];
+// Etapas abertas do funil comercial: fonte única em lib/crm/etapas.ts (lê também as antigas).
+export { ETAPAS_ABERTAS } from "@/lib/crm/etapas";
 /** app/api/system/alerta-queda: pior sintoma primeiro. */
 const SINTOMA: Record<string, { ordem: number; texto: (p: number) => string }> = {
   spend:       { ordem: 0, texto: () => "Parou de gastar" },
@@ -524,11 +526,10 @@ export function regraContratos(d: Dados, ctx: Contexto): ItemInterno[] {
 
 // ── 15. Follow-up de lead (comercial) ───────────────────────────────────────
 // Fonte: app/api/system/crm-followups (próximo contato ≤ hoje em etapa aberta).
-const ROTULO_ETAPA: Record<string, string> = { lead: "Lead", orcamento: "Orçamento", proposta: "Proposta", reuniao: "Reunião" };
 
 export function regraFollowups(d: Dados, ctx: Contexto): ItemInterno[] {
   return d.leads
-    .filter((l) => l.proximo_contato && ETAPAS_ABERTAS.includes(l.estagio ?? "") && diasEntre(l.proximo_contato.slice(0, 10), ctx.hoje) >= 0)
+    .filter((l) => l.proximo_contato && ehAberta(l.estagio) && diasEntre(l.proximo_contato.slice(0, 10), ctx.hoje) >= 0)
     .map((l) => {
       const n = diasEntre(l.proximo_contato!, ctx.hoje);
       return item(ctx, {
@@ -536,7 +537,7 @@ export function regraFollowups(d: Dados, ctx: Contexto): ItemInterno[] {
         sujeito: (l.empresa || l.contato_nome || "Lead").trim(),
         severidade: n > 0 ? "warning" : "info",
         titulo: n > 0 ? `Follow-up atrasado há ${dias(n)}` : "Follow-up para hoje",
-        motivo: `${ROTULO_ETAPA[l.estagio ?? ""] ?? "Lead"}${l.contato_nome ? ` · ${l.contato_nome}` : ""}`,
+        motivo: `${ROTULO_ETAPA[normalizarEtapa(l.estagio)]}${l.contato_nome ? ` · ${l.contato_nome}` : ""}`,
         acao: { label: "Abrir no Comercial", href: "/crm" },
         donos: [l.responsavel], papeis: ["comercial"], doPapel: !l.responsavel, peso: n,
       });

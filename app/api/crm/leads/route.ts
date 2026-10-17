@@ -2,26 +2,68 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireRole, type Papel } from "@/lib/api/require-role";
+import { requireRole } from "@/lib/api/require-role";
 import * as db from "@/lib/supabase/queries";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { carregarExtras, EXTRAS_VAZIOS } from "@/lib/crm/extras";
 import { normalizarQualificacao, notaDoLead } from "@/lib/crm/nota";
 import { carregarConfig } from "@/lib/prospeccao/config";
+import { PAPEIS_COMERCIAL } from "@/lib/crm/acesso";
+import { DIAS_REATIVACAO_SEM_VERBA, ROTULO_ETAPA, motivoValido, normalizarEtapa } from "@/lib/crm/etapas";
+import { hojeSP } from "@/lib/crm/meta";
 
-// CRM comercial (SDR) — CRUD dos leads.
-// ESCOPO POR PAPEL: só comercial + gestão. Antes bastava estar logado e o escopo era "feito no menu"
-// — mas esconder o item no Sidebar não impede chamar a rota: o designer lia o funil inteiro
-// (contatos, valores negociados, motivo de perda).
+// CRM comercial — CRUD dos leads.
+// ESCOPO: só quem entra no comercial (lib/crm/acesso.ts → admin). O comercial guarda a mensalidade
+// negociada e alimenta a meta de MRR novo: dinheiro da agência. Esconder o item no menu não é
+// proteção — a rota confere o papel a cada request.
 //   GET                       → lista os leads
 //   POST   { ...campos }      → cria um lead (contatoNome obrigatório)
-//   PATCH  { id, ...campos }  → atualiza (ex.: mover de estágio, marcar reunião)
+//   PATCH  { id, ...campos }  → atualiza (ex.: mover de etapa, marcar reunião)
 //   DELETE ?id=…              → apaga
 
-const CRM_ROLES: Papel[] = ["admin", "manager", "comercial"];
+const somaDias = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+/** Campos do corpo que o cliente pode mandar, já saneados. Etapa sempre normalizada. */
+function sanear(body: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...body };
+  if ("estagio" in out) out.estagio = normalizarEtapa(out.estagio);
+  if ("probabilidade" in out) {
+    const p = out.probabilidade === "" || out.probabilidade == null ? null : Number(out.probabilidade);
+    // Aceita 0–1 e também 0–100 (o campo da tela é em %).
+    out.probabilidade = p == null || !Number.isFinite(p) ? null : p > 1 ? Math.min(100, p) / 100 : Math.max(0, p);
+  }
+  for (const k of ["valorOrcamento", "valorImplantacao"]) {
+    if (k in out) {
+      const v = out[k] === "" || out[k] == null ? null : Number(out[k]);
+      out[k] = v == null || !Number.isFinite(v) || v < 0 ? null : v;
+    }
+  }
+  if ("motivoPerdaCodigo" in out && out.motivoPerdaCodigo != null && !motivoValido(out.motivoPerdaCodigo)) out.motivoPerdaCodigo = null;
+  if ("temperatura" in out && !["quente", "morno", "frio", null, ""].includes(out.temperatura as string)) out.temperatura = null;
+  for (const k of ["retomarEm", "previsaoFechamento", "proximoContato", "reuniaoData"]) {
+    if (k in out && out[k] != null && out[k] !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(String(out[k]))) out[k] = null;
+  }
+  // Campos que só o servidor carimba.
+  delete out.etapaDesde; delete out.primeiroContatoEm; delete out.externoId; delete out.fechadoEm;
+  return out;
+}
+
+/** Sem a migration 20261017100000, as colunas novas não existem: tira elas e salva o resto. */
+async function comFallbackDeColunas<T>(fn: (patch: Record<string, unknown>) => Promise<T>, patch: Record<string, unknown>): Promise<{ r: T; aviso: string | null }> {
+  try {
+    return { r: await fn(patch), aviso: null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (!/column|schema cache/i.test(msg)) throw e;
+    const COLS_CAMEL = ["valorImplantacao", "probabilidade", "retomarEm", "previsaoFechamento", "motivoPerdaCodigo", "segmento", "cidade",
+      "endereco", "instagram", "rotaLojaId", "temperatura", "etapaDesde", "primeiroContatoEm", "externoId"];
+    const enxuto = Object.fromEntries(Object.entries(patch).filter(([k]) => !COLS_CAMEL.includes(k)));
+    return { r: await fn(enxuto), aviso: "Parte dos campos novos não foi salva: falta aplicar a atualização do banco do comercial." };
+  }
+}
 
 export async function GET(req: NextRequest) {
-  const gate = await requireRole(req, CRM_ROLES);
+  const gate = await requireRole(req, PAPEIS_COMERCIAL);
   if (gate instanceof NextResponse) return gate;
   const leads = await db.fetchCrmLeads();
   // Leva 7C (N27/N28): nota A/B/C, toques da cadência e se já virou cliente — e os segmentos do ICP
@@ -34,46 +76,53 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const gate = await requireRole(req, CRM_ROLES);
+  const gate = await requireRole(req, PAPEIS_COMERCIAL);
   if (gate instanceof NextResponse) return gate;
   const body = await req.json().catch(() => null);
   if (!body?.contatoNome?.trim()) return NextResponse.json({ error: "Nome do contato é obrigatório" }, { status: 400 });
   try {
-    const lead = await db.insertCrmLead(body);
-    return NextResponse.json({ lead });
+    const patch = sanear(body);
+    patch.estagio = normalizarEtapa(patch.estagio);
+    patch.etapaDesde = new Date().toISOString();
+    if (patch.estagio === "ganho" || patch.estagio === "perdido") patch.fechadoEm = hojeSP();
+    const { r: lead, aviso } = await comFallbackDeColunas((p) => db.insertCrmLead(p), patch);
+    return NextResponse.json({ lead, aviso });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "erro" }, { status: 500 });
   }
 }
 
 export async function PATCH(req: NextRequest) {
-  const gate = await requireRole(req, CRM_ROLES);
+  const gate = await requireRole(req, PAPEIS_COMERCIAL);
   if (gate instanceof NextResponse) return gate;
   const body = await req.json().catch(() => null);
-  const { id, ...patch } = body ?? {};
+  const { id, ...bruto } = body ?? {};
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
   try {
-    // Transições automáticas (no servidor, pra valer também no drag do Kanban):
-    // → ganho/perdido: carimba fechado_em (data REAL da venda — é a base do relatório mensal);
-    // → volta pra etapa aberta: limpa fechado_em (e motivo de perda, se saiu de perdido);
-    // → proposta: marca proposta_enviada_em (1ª vez).
+    const patch = sanear(bruto as Record<string, unknown>);
+    // Transições automáticas (no servidor, pra valer também no arrastar do Kanban):
+    // → ganho/perdido: carimba fechado_em (data REAL da venda — base do relatório e da meta do mês);
+    // → volta pra etapa aberta: limpa fechado_em (e o motivo de perda, se saiu de perdido);
+    // → proposta: marca proposta_enviada_em (1ª vez);
+    // → qualquer mudança: etapa_desde = agora (dia zero da cadência da etapa).
     let etapaMudou: string | null = null;
+    const hoje = hojeSP();
     if (typeof patch.estagio === "string") {
       const atual = await db.fetchCrmLeadById(id);
-      // Data em São Paulo (não UTC): o relatório agrupa por mês de fechado_em; à noite no fim do mês,
-      // o ISO UTC (UTC-3 → +3h) jogava a venda pro mês seguinte e ela sumia do "Vendas no mês".
-      const hojeSP = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // "YYYY-MM-DD"
       const fechado = patch.estagio === "ganho" || patch.estagio === "perdido";
-      if (fechado && atual?.estagio !== patch.estagio) patch.fechadoEm = hojeSP;
+      if (fechado && atual?.estagio !== patch.estagio) patch.fechadoEm = hoje;
       if (!fechado) {
         patch.fechadoEm = null;
-        if (atual?.estagio === "perdido" && patch.motivoPerda === undefined) patch.motivoPerda = null;
+        if (atual?.estagio === "perdido" && patch.motivoPerda === undefined) { patch.motivoPerda = null; patch.motivoPerdaCodigo = null; }
       }
       if (patch.estagio === "proposta" && !atual?.propostaEnviadaEm && patch.propostaEnviadaEm === undefined) {
-        patch.propostaEnviadaEm = hojeSP;
+        patch.propostaEnviadaEm = hoje;
       }
-      if (atual && atual.estagio !== patch.estagio) etapaMudou = patch.estagio;
+      if (atual && atual.estagio !== patch.estagio) { etapaMudou = patch.estagio; patch.etapaDesde = new Date().toISOString(); }
     }
+    // "Sem verba agora" volta sozinho: marca a retomada em 90 dias se ninguém marcou outra.
+    if (patch.motivoPerdaCodigo === "sem_verba" && patch.retomarEm === undefined) patch.retomarEm = somaDias(hoje, DIAS_REATIVACAO_SEM_VERBA);
+
     // Qualificação → nota pela régua da prospecção (lib/crm/nota.ts). Colunas da migration
     // 20260926100000: sem ela, o resto do lead salva e a nota volta com aviso.
     const { qualificacao, cadenciaInicio, ...resto } = patch as Record<string, unknown>;
@@ -89,25 +138,21 @@ export async function PATCH(req: NextRequest) {
       const { error } = await supabaseAdmin.from("crm_leads").update(extra).eq("id", id);
       if (error) avisoNota = /column|schema cache/i.test(error.message) ? "A nota não foi salva: falta aplicar a migration 20260926100000." : error.message;
     }
-    for (const k of Object.keys(patch)) if (!(k in resto)) delete (patch as Record<string, unknown>)[k];
-    const lead = await db.updateCrmLead(id, patch);
+    const { r: lead, aviso } = await comFallbackDeColunas((p) => db.updateCrmLead(id, p), resto);
     // Auto-registra a mudança de etapa na timeline (best-effort — não derruba o update).
     if (etapaMudou) {
-      const LABEL: Record<string, string> = {
-        lead: "Novo lead", orcamento: "Orçamento", proposta: "Proposta",
-        reuniao: "Reunião", ganho: "Ganho ✅", perdido: "Perdido ❌",
-      };
-      db.insertLeadActivity({ leadId: id, tipo: "etapa", texto: `Movido para ${LABEL[etapaMudou] ?? etapaMudou}`, autor: (patch.responsavel as string) ?? null }).catch(() => {});
+      const rotulo = ROTULO_ETAPA[normalizarEtapa(etapaMudou)];
+      db.insertLeadActivity({ leadId: id, tipo: "etapa", texto: `Movido para ${rotulo}`, autor: (resto.responsavel as string) ?? lead.responsavel ?? null }).catch(() => {});
     }
     const extras = (await carregarExtras([lead.id])).get(lead.id) ?? EXTRAS_VAZIOS;
-    return NextResponse.json({ lead: { ...lead, ...extras }, avisoNota });
+    return NextResponse.json({ lead: { ...lead, ...extras }, avisoNota, aviso });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "erro" }, { status: 500 });
   }
 }
 
 export async function DELETE(req: NextRequest) {
-  const gate = await requireRole(req, CRM_ROLES);
+  const gate = await requireRole(req, PAPEIS_COMERCIAL);
   if (gate instanceof NextResponse) return gate;
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });

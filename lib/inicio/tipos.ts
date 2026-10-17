@@ -118,7 +118,7 @@ export interface ResumoTrafego {
 }
 
 export interface ResumoComercial {
-  etapas: { lead: number; orcamento: number; proposta: number; reuniao: number };
+  etapas: { novo: number; contato: number; diagnostico: number; proposta: number; negociacao: number };
   ganhosMes: number;
   followupsHoje: number;
   followupsVencidos: number;

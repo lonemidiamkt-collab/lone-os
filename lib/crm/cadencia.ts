@@ -6,6 +6,8 @@
 // do lead (abrir o WhatsApp pelo card já registra). Três toques feitos, a cadência acaba — daí em
 // diante vale o "próximo contato" que a pessoa marcar à mão.
 
+import { ehAberta } from "@/lib/crm/etapas";
+
 export const CADENCIA = [2, 5, 12] as const;
 /**
  * A cadência é um sprint de três semanas: passou uma semana do último toque previsto (dia 12 + 7),
@@ -13,8 +15,7 @@ export const CADENCIA = [2, 5, 12] as const;
  * parado, e isso o "Leads parados" já mostra.
  */
 export const FIM_DA_CADENCIA = CADENCIA[CADENCIA.length - 1] + 7;
-export const TIPOS_TOQUE = new Set(["ligacao", "whatsapp", "email", "reuniao"]);
-const ABERTOS = new Set(["lead", "orcamento", "proposta", "reuniao"]);
+export const TIPOS_TOQUE = new Set(["ligacao", "whatsapp", "email", "reuniao", "visita"]);
 
 export interface ProximoToque {
   /** Dia da cadência (2, 5 ou 12). */
@@ -36,8 +37,10 @@ const diff = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00Z`) 
  * @param inicio dia zero (cadencia_inicio ou a data de criação — ISO ou YYYY-MM-DD)
  * @param toques datas (ISO) das atividades de contato do lead
  */
-export function proximoToque(p: { estagio: string; inicio: string; toques: string[]; hoje: string }): ProximoToque | null {
-  if (!ABERTOS.has(p.estagio)) return null;
+export function proximoToque(p: { estagio: string; inicio: string; toques: string[]; hoje: string; retomarEm?: string | null }): ProximoToque | null {
+  if (!ehAberta(p.estagio)) return null; // etapas antigas (lead/orcamento/reuniao) são lidas como as novas
+  // "Retomar em" no futuro: o lead está estacionado de propósito — nada de toque atrasado até lá.
+  if (p.retomarEm && p.retomarEm > p.hoje) return null;
   const dia0 = /^\d{4}-\d{2}-\d{2}$/.test(p.inicio) ? p.inicio : diaSP(p.inicio);
   if (diff(dia0, p.hoje) > FIM_DA_CADENCIA) return null;
   // Um toque por dia conta uma vez; o do próprio dia zero é o primeiro contato, não follow-up.

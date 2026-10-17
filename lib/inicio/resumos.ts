@@ -12,7 +12,8 @@ import type {
   ItemInterno, PedidoArte, Resumo, ResumoCarteira, ResumoComercial, ResumoDesigner, ResumoSocial, ResumoTrafego, Viewer,
 } from "./tipos";
 import { type CardRow, type Contexto, type Dados, diasEntre, mesmaPessoa, nomeDoCliente } from "./dados";
-import { cardsComAlteracao, comoClient, ETAPAS_ABERTAS, HORAS_PARADO, prazoDoPedido } from "./regras";
+import { cardsComAlteracao, comoClient, HORAS_PARADO, prazoDoPedido } from "./regras";
+import { ehAberta, normalizarEtapa } from "@/lib/crm/etapas";
 
 const NIVEIS: NivelSaude[] = ["saudavel", "atencao", "risco", "sem_dado"];
 
@@ -132,13 +133,13 @@ export function resumoTrafego(d: Dados, ctx: Contexto, v: Viewer, meus: ItemInte
 const diaSP = (s: string) => (/^\d{4}-\d{2}-\d{2}$/.test(s) ? s : spDateStr(s));
 
 export function resumoComercial(d: Dados, ctx: Contexto): ResumoComercial {
-  const abertos = d.leads.filter((l) => ETAPAS_ABERTAS.includes(l.estagio ?? ""));
-  const etapa = (e: string) => abertos.filter((l) => l.estagio === e).length;
+  const abertos = d.leads.filter((l) => ehAberta(l.estagio));
+  const etapa = (e: string) => abertos.filter((l) => normalizarEtapa(l.estagio) === e).length;
   const fu = abertos.filter((l) => l.proximo_contato).map((l) => diasEntre(diaSP(l.proximo_contato!), ctx.hoje));
   const emAte7 = (s: string) => { const n = diasEntre(ctx.hoje, diaSP(s)); return n >= 0 && n <= 7; };
   return {
-    etapas: { lead: etapa("lead"), orcamento: etapa("orcamento"), proposta: etapa("proposta"), reuniao: etapa("reuniao") },
-    ganhosMes: d.leads.filter((l) => l.estagio === "ganho" && l.fechado_em && diaSP(l.fechado_em).slice(0, 7) === ctx.hoje.slice(0, 7)).length,
+    etapas: { novo: etapa("novo"), contato: etapa("contato"), diagnostico: etapa("diagnostico"), proposta: etapa("proposta"), negociacao: etapa("negociacao") },
+    ganhosMes: d.leads.filter((l) => normalizarEtapa(l.estagio) === "ganho" && l.fechado_em && diaSP(l.fechado_em).slice(0, 7) === ctx.hoje.slice(0, 7)).length,
     followupsHoje: fu.filter((n) => n === 0).length,
     followupsVencidos: fu.filter((n) => n > 0).length,
     reunioes: abertos

@@ -4,7 +4,8 @@ export const maxDuration = 120;
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { requireRole, type Papel } from "@/lib/api/require-role";
+import { GESTAO, requireRole } from "@/lib/api/require-role";
+import { PAPEIS_COMERCIAL } from "@/lib/crm/acesso";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import * as db from "@/lib/supabase/queries";
@@ -20,7 +21,9 @@ import type { ProspectRow } from "@/lib/prospeccao/tipos";
 //                                                             etapa Proposta no funil e no piloto
 // SEM R$ — nem no PDF, nem no registro. O que conta é a proposta ENVIADA (a data), não o valor.
 
-const PAPEIS: Papel[] = ["admin", "manager", "comercial"];
+// Pedido que toca um lead do comercial → só quem entra no comercial (lib/crm/acesso.ts). Pedido só do
+// prospect (página da prospecção) → gestão, como antes: o PDF não tem valor.
+const papeisDo = (leadId: string | null | undefined) => (leadId ? PAPEIS_COMERCIAL : GESTAO);
 
 /** Lead do CRM → o prospect de onde ele veio (a proposta nasce do diagnóstico). */
 async function prospectDoPedido(prospectId: string | null, leadId: string | null): Promise<{ prospect: ProspectRow | null; leadId: string | null }> {
@@ -37,7 +40,7 @@ async function prospectDoPedido(prospectId: string | null, leadId: string | null
 }
 
 export async function GET(req: NextRequest) {
-  const gate = await requireRole(req, PAPEIS);
+  const gate = await requireRole(req, papeisDo(req.nextUrl.searchParams.get("leadId")));
   if (gate instanceof NextResponse) return gate;
   const sp = req.nextUrl.searchParams;
   const { prospect: p } = await prospectDoPedido(sp.get("prospectId"), sp.get("leadId"));
@@ -67,9 +70,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const gate = await requireRole(req, PAPEIS);
-  if (gate instanceof NextResponse) return gate;
   const body = await req.json().catch(() => null) as { prospectId?: string; leadId?: string } | null;
+  const gate = await requireRole(req, papeisDo(body?.leadId));
+  if (gate instanceof NextResponse) return gate;
   const { prospect, leadId } = await prospectDoPedido(body?.prospectId ?? null, body?.leadId ?? null);
   if (!prospect && !leadId) return NextResponse.json({ error: "prospectId ou leadId obrigatório" }, { status: 400 });
 
@@ -84,7 +87,7 @@ export async function POST(req: NextRequest) {
     if (lead) {
       const patch: Record<string, unknown> = {};
       if (!lead.propostaEnviadaEm) patch.propostaEnviadaEm = hojeSP;
-      if (["lead", "orcamento", "reuniao"].includes(lead.estagio)) patch.estagio = "proposta";
+      if (["novo", "contato", "diagnostico"].includes(lead.estagio)) { patch.estagio = "proposta"; patch.etapaDesde = new Date().toISOString(); }
       if (Object.keys(patch).length) {
         try { await db.updateCrmLead(leadId, patch); } catch (e) { avisos.push(`lead: ${e instanceof Error ? e.message : "erro"}`); }
       }

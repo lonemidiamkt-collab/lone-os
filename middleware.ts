@@ -10,7 +10,9 @@ import type { NextRequest } from "next/server";
 // "/api/trafego/vendas/portal" e NÃO "/api/trafego/vendas": as vendas que o CLIENTE registra no portal
 // (link público, sem login — a rota valida o token do portal como as de /api/portal). O resto de
 // /api/trafego segue exigindo sessão.
-const PUBLIC_PATHS = ["/api/auth", "/api/team/roster", "/api/trafego/vendas/portal", "/api/meta", "/api/ai", "/api/system", "/api/sync", "/api/onboarding", "/api/cs", "/api/emails", "/api/broadcasts", "/api/platform-updates", "/api/holidays", "/api/portal", "/api/ficha", "/onboarding", "/portal", "/ficha", "/monitoring", "/_next", "/favicon.ico", "/logo.png", "/icon-192.png", "/icon-512.png", "/manifest.json", "/sw.js", "/public"];
+// "/api/integracoes/site/lead": o formulário do site (servidor da Vercel, sem sessão) — a rota exige a
+// assinatura HMAC do site e recusa sem ela. Só esse caminho; o resto de /api/integracoes exige sessão.
+const PUBLIC_PATHS = ["/api/integracoes/site/lead", "/api/auth", "/api/team/roster", "/api/trafego/vendas/portal", "/api/meta", "/api/ai", "/api/system", "/api/sync", "/api/onboarding", "/api/cs", "/api/emails", "/api/broadcasts", "/api/platform-updates", "/api/holidays", "/api/portal", "/api/ficha", "/onboarding", "/portal", "/ficha", "/monitoring", "/_next", "/favicon.ico", "/logo.png", "/icon-192.png", "/icon-512.png", "/manifest.json", "/sw.js", "/public"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

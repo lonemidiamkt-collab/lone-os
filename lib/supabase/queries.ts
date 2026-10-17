@@ -22,6 +22,7 @@
  */
 import { supabase } from "./client";
 import { supabaseAdmin } from "./server";
+import { normalizarEtapa } from "@/lib/crm/etapas";
 import type {
   Client, Task, ContentCard, DesignRequest, AppNotification,
   TimelineEntry, ChatMessage, OnboardingItem,
@@ -1051,21 +1052,39 @@ export async function insertCardComment(cardId: string, author: string, text: st
 // CRM COMERCIAL (SDR)
 // ═══════════════════════════════════════════════════════════
 function snakeToCrmLead(r: Record<string, unknown>): CrmLead {
+  const num = (v: unknown) => (v != null && v !== "" && Number.isFinite(Number(v)) ? Number(v) : null);
+  const txt = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
+  const temp = txt(r.temperatura);
   return {
     id: r.id as string,
     contatoNome: (r.contato_nome as string) ?? "",
     empresa: (r.empresa as string) ?? null,
     telefone: (r.telefone as string) ?? null,
     email: (r.email as string) ?? null,
-    valorOrcamento: r.valor_orcamento != null ? Number(r.valor_orcamento) : null,
-    estagio: (r.estagio as CrmEstagio) ?? "lead",
+    valorOrcamento: num(r.valor_orcamento),
+    valorImplantacao: num(r.valor_implantacao),
+    // Etapas do funil antigo (lead/orcamento/reuniao) viram as novas na leitura — lib/crm/etapas.ts.
+    estagio: normalizarEtapa(r.estagio),
+    probabilidade: num(r.probabilidade),
     origem: (r.origem as string) ?? null,
     responsavel: (r.responsavel as string) ?? null,
     reuniaoData: (r.reuniao_data as string) ?? null,
     propostaEnviadaEm: (r.proposta_enviada_em as string) ?? null,
     proximoContato: (r.proximo_contato as string) ?? null,
+    retomarEm: txt(r.retomar_em),
+    previsaoFechamento: txt(r.previsao_fechamento),
     fechadoEm: (r.fechado_em as string) ?? null,
     motivoPerda: (r.motivo_perda as string) ?? null,
+    motivoPerdaCodigo: txt(r.motivo_perda_codigo),
+    segmento: txt(r.segmento),
+    cidade: txt(r.cidade),
+    endereco: txt(r.endereco),
+    instagram: txt(r.instagram),
+    rotaLojaId: num(r.rota_loja_id),
+    temperatura: temp === "quente" || temp === "morno" || temp === "frio" ? temp : null,
+    etapaDesde: txt(r.etapa_desde),
+    primeiroContatoEm: txt(r.primeiro_contato_em),
+    externoId: txt(r.externo_id),
     observacoes: (r.observacoes as string) ?? null,
     createdAt: (r.created_at as string) ?? "",
     updatedAt: (r.updated_at as string) ?? "",
@@ -1073,12 +1092,25 @@ function snakeToCrmLead(r: Record<string, unknown>): CrmLead {
 }
 
 // Campos editáveis → coluna do banco (camel→snake), pra insert/update sem repetição.
+// As colunas da Leva 1 do comercial (out/2026) só existem depois da migration
+// 20261017100000_comercial_leva1 — `CRM_COLUNAS_LEVA1` deixa a rota tirar elas e salvar o resto
+// se a migration ainda não foi aplicada.
 const CRM_FIELD_MAP: Record<string, string> = {
   contatoNome: "contato_nome", empresa: "empresa", telefone: "telefone", email: "email",
   valorOrcamento: "valor_orcamento", estagio: "estagio", origem: "origem", responsavel: "responsavel",
   reuniaoData: "reuniao_data", propostaEnviadaEm: "proposta_enviada_em", motivoPerda: "motivo_perda",
   observacoes: "observacoes", proximoContato: "proximo_contato", fechadoEm: "fechado_em",
+  valorImplantacao: "valor_implantacao", probabilidade: "probabilidade", retomarEm: "retomar_em",
+  previsaoFechamento: "previsao_fechamento", motivoPerdaCodigo: "motivo_perda_codigo",
+  segmento: "segmento", cidade: "cidade", endereco: "endereco", instagram: "instagram",
+  rotaLojaId: "rota_loja_id", temperatura: "temperatura", etapaDesde: "etapa_desde",
+  primeiroContatoEm: "primeiro_contato_em", externoId: "externo_id", cadenciaInicio: "cadencia_inicio",
 };
+export const CRM_COLUNAS_LEVA1 = [
+  "valor_implantacao", "probabilidade", "retomar_em", "previsao_fechamento", "motivo_perda_codigo",
+  "segmento", "cidade", "endereco", "instagram", "rota_loja_id", "temperatura", "etapa_desde",
+  "primeiro_contato_em", "externo_id",
+];
 
 export async function fetchCrmLeadById(id: string): Promise<CrmLead | null> {
   const { data, error } = await db.from("crm_leads").select("*").eq("id", id).maybeSingle();
@@ -1150,10 +1182,13 @@ export async function insertLeadActivity(a: { leadId: string; tipo: string; text
 
 // ── Meta mensal do comercial ──
 function snakeToCrmMeta(r: Record<string, unknown>): CrmMeta {
+  const num = (v: unknown) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
   return {
     mes: r.mes as string,
-    metaValor: (r.meta_valor as number) ?? null,
-    metaLeads: (r.meta_leads as number) ?? null,
+    metaValor: num(r.meta_valor),
+    metaLeads: num(r.meta_leads),
+    metaContatosSemana: num(r.meta_contatos_semana),
+    metaPropostasMes: num(r.meta_propostas_mes),
     updatedAt: (r.updated_at as string) ?? "",
   };
 }
@@ -1164,10 +1199,16 @@ export async function fetchCrmMeta(mes: string): Promise<CrmMeta | null> {
   return snakeToCrmMeta(data);
 }
 
-export async function upsertCrmMeta(mes: string, metaValor: number | null, metaLeads: number | null): Promise<CrmMeta> {
-  const { data, error } = await db.from("crm_metas")
-    .upsert({ mes, meta_valor: metaValor, meta_leads: metaLeads, updated_at: new Date().toISOString() }, { onConflict: "mes" })
-    .select("*").single();
+export async function upsertCrmMeta(
+  mes: string,
+  campos: { metaValor?: number | null; metaLeads?: number | null; metaContatosSemana?: number | null; metaPropostasMes?: number | null },
+): Promise<CrmMeta> {
+  const row: Record<string, unknown> = { mes, updated_at: new Date().toISOString() };
+  if (campos.metaValor !== undefined) row.meta_valor = campos.metaValor;
+  if (campos.metaLeads !== undefined) row.meta_leads = campos.metaLeads;
+  if (campos.metaContatosSemana !== undefined) row.meta_contatos_semana = campos.metaContatosSemana;
+  if (campos.metaPropostasMes !== undefined) row.meta_propostas_mes = campos.metaPropostasMes;
+  const { data, error } = await db.from("crm_metas").upsert(row, { onConflict: "mes" }).select("*").single();
   if (error) { console.error("[DB] upsertCrmMeta falhou:", error.message); throw new Error(error.message); }
   return snakeToCrmMeta(data);
 }

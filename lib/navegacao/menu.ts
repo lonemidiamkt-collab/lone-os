@@ -224,7 +224,8 @@ export const MENU: readonly GrupoMenu[] = [
   {
     id: "comercial", rotulo: "Comercial", icone: Handshake,
     itens: [
-      { id: "crm", rotulo: "Comercial", icone: Handshake, href: "/crm", papeis: ["admin", "manager", "comercial"],
+      // Só quem entra no comercial (lib/crm/acesso.ts): guarda mensalidade e meta de MRR novo.
+      { id: "crm", rotulo: "Comercial", icone: Handshake, href: "/crm", papeis: ["admin"],
         descricao: "Funil de vendas, agenda e relatórios", termos: ["crm", "leads", "vendas"],
         secoes: [
           { titulo: "Resultados", itens: [

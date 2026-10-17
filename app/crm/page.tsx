@@ -9,7 +9,8 @@ import { useNav } from "@/lib/context/NavContext";
 import KanbanBoard, { type KanbanColumn } from "@/components/KanbanBoard";
 import { Button } from "@/components/ui/button";
 import { CRM_ESTAGIOS, type CrmEstagio, type CrmLead, type CrmLeadActivity, type CrmAtividadeTipo } from "@/lib/types";
-import { Plus, X, Search, TrendingUp, Trophy, Percent, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3, Sun, FileText, Download } from "lucide-react";
+import Link from "next/link";
+import { Plus, X, Search, TrendingUp, Trophy, Percent, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3, Sun, FileText, Download, MapPin, Upload, Target, Timer, Inbox } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ExtrasLead } from "@/lib/crm/extras";
 import { proximoToque, rotuloToque, type ProximoToque } from "@/lib/crm/cadencia";
@@ -17,33 +18,38 @@ import { PORTES, type QualificacaoLead } from "@/lib/crm/nota";
 import { PACOTES_VENDA } from "@/lib/clients/conversao";
 import { ROTULO_NICHO } from "@/lib/cs/nicho";
 import { PACOTES_PROPOSTA } from "@/lib/crm/proposta";
+import { ETAPAS_ABERTAS, MOTIVOS_PERDA, ROTULO_ETAPA, CRITERIO_SAIDA, chanceDe, rotuloMotivo } from "@/lib/crm/etapas";
+import { brl, calcularEsforco, calcularMeta, hojeSP, mesSP, type ResumoMeta } from "@/lib/crm/meta";
+import { podeVerComercial } from "@/lib/crm/acesso";
+import type { CrmMeta } from "@/lib/types";
 
 // ─── Metadados do funil ──────────────────────────────────────────────
 // Cores = tokens do design system (sóbrio, sem neon). Sem emoji.
-const ESTAGIO_META: Record<CrmEstagio, { title: string; color: string }> = {
-  lead:      { title: "Novo lead", color: "bg-muted-foreground" },
-  orcamento: { title: "Orçamento", color: "bg-lone-warning" },
-  proposta:  { title: "Proposta",  color: "bg-lone-info" },
-  reuniao:   { title: "Reunião",   color: "bg-primary" },
-  ganho:     { title: "Ganho",     color: "bg-lone-success" },
-  perdido:   { title: "Perdido",   color: "bg-lone-danger" },
+// Rótulos e etapas abertas: fonte única em lib/crm/etapas.ts.
+const COR_ETAPA: Record<CrmEstagio, string> = {
+  novo: "bg-muted-foreground", contato: "bg-chart-2", diagnostico: "bg-lone-warning",
+  proposta: "bg-lone-info", negociacao: "bg-primary", ganho: "bg-lone-success", perdido: "bg-lone-danger",
 };
-const ABERTOS: CrmEstagio[] = ["lead", "orcamento", "proposta", "reuniao"];
+const ESTAGIO_META = Object.fromEntries(CRM_ESTAGIOS.map((e) => [e, { title: ROTULO_ETAPA[e], color: COR_ETAPA[e] }])) as Record<CrmEstagio, { title: string; color: string }>;
+const ABERTOS: readonly CrmEstagio[] = ETAPAS_ABERTAS;
 
 // Canais de venda (origem do lead) — padroniza o campo pra relatórios limpos por canal.
-const CANAIS = ["Indicação", "Tráfego pago", "Instagram", "Prospecção ativa", "Site / formulário", "WhatsApp", "Evento / networking", "Parceria", "Outro"];
+const CANAIS = ["Site", "Anúncio → site", "Visita — Rota Lagos", "Indicação", "Tráfego pago", "Instagram", "Prospecção ativa", "WhatsApp", "Evento / networking", "Parceria", "Pipeline de outubro", "Outro"];
 
 // ─── Formatação ──────────────────────────────────────────────────────
 const fmtData = (d: string | null) => (d ? new Date(d.length === 10 ? `${d}T12:00:00` : d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : null);
-const hojeYmd = () => new Date().toLocaleDateString("en-CA");
+const hojeYmd = () => hojeSP();
 const diasDesde = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 const iniciais = (nome: string) => nome.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
 
 // Cadência de follow-up (Leva 7C, N28): o toque do dia 2/5/12 contado pelas atividades do lead.
-const toqueDo = (l: Partial<ExtrasLead> & { estagio: string; createdAt: string }, hoje: string): ProximoToque | null =>
-  l.createdAt ? proximoToque({ estagio: l.estagio, inicio: l.cadenciaInicio ?? l.createdAt, toques: l.toques ?? [], hoje }) : null;
+const toqueDo = (l: Partial<ExtrasLead> & { estagio: string; createdAt: string; retomarEm?: string | null }, hoje: string): ProximoToque | null =>
+  l.createdAt ? proximoToque({ estagio: l.estagio, inicio: l.cadenciaInicio ?? l.createdAt, toques: l.toques ?? [], hoje, retomarEm: l.retomarEm }) : null;
+/** "Retomar em" no futuro: o lead está estacionado de propósito — fora do Hoje até a data. */
+const estacionado = (l: { retomarEm?: string | null }, hoje: string) => !!l.retomarEm && l.retomarEm > hoje;
 /** A data do follow-up que vale: a marcada à mão, ou a do toque da cadência. */
-const dataFollow = (l: { proximoContato: string | null; estagio: string; createdAt: string } & Partial<ExtrasLead>, hoje: string): string | null => {
+const dataFollow = (l: { proximoContato: string | null; estagio: string; createdAt: string; retomarEm?: string | null } & Partial<ExtrasLead>, hoje: string): string | null => {
+  if (l.retomarEm && l.retomarEm <= hoje) return l.retomarEm;
   const t = toqueDo(l, hoje);
   if (l.proximoContato && (!t || l.proximoContato <= t.data)) return l.proximoContato;
   return t?.data ?? l.proximoContato;
@@ -81,6 +87,7 @@ const ATIVIDADE_META: Record<CrmAtividadeTipo, { label: string; icon: LucideIcon
   whatsapp: { label: "WhatsApp", icon: MessageCircle },
   email:    { label: "E-mail",   icon: Mail },
   reuniao:  { label: "Reunião",  icon: CalendarClock },
+  visita:   { label: "Visita",   icon: MapPin },
   etapa:    { label: "Etapa",    icon: ArrowRight },
 };
 
@@ -111,6 +118,55 @@ function Kpi({ icon: Icon, label, value, sub, tone }: {
   );
 }
 
+// ─── Barra da meta (Hoje e Dashboard) ───────────────────────────────────
+// Contas em lib/crm/meta.ts (código, fuso de SP). Projeção sempre ao lado do ponderado: sozinha ela
+// engana quando as vendas se concentram no fim do mês.
+function BarraMeta({ r, esforco, meta, onDefinir }: {
+  r: ResumoMeta; esforco: { contatosSemana: number; propostasMes: number }; meta: CrmMeta | null; onDefinir: () => void;
+}) {
+  const nomeMes = new Date(`${r.mes}-15T12:00:00`).toLocaleDateString("pt-BR", { month: "long" });
+  if (r.meta == null) {
+    return (
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-border bg-card p-5">
+        <div>
+          <div className="flex items-center gap-1.5 text-lone-eyebrow uppercase text-muted-foreground"><Target size={13} /> Meta de {nomeMes}</div>
+          <p className="mt-1 text-lone-body text-foreground">Sem meta definida. Vendido no mês: {brl(r.vendido)} · pipeline ponderado: {brl(r.ponderado)}.</p>
+        </div>
+        <Button size="sm" onClick={onDefinir}>Definir meta</Button>
+      </section>
+    );
+  }
+  const pct = Math.min(100, Math.round((r.progresso ?? 0) * 100));
+  const corCobertura = r.nivelCobertura === "verde" ? "text-lone-success" : r.nivelCobertura === "amarelo" ? "text-lone-warning" : "text-lone-danger";
+  const forte = "font-medium text-foreground";
+  return (
+    <section className="rounded-xl border border-border bg-card p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-lone-eyebrow uppercase text-muted-foreground"><Target size={13} /> Meta de {nomeMes}: {brl(r.meta)} de MRR novo</div>
+        <button onClick={onDefinir} className="text-lone-caption text-primary hover:underline">Editar metas</button>
+      </div>
+      <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="text-lone-hero tracking-tight text-foreground">{brl(r.vendido)}</span>
+        <span className="text-lone-body text-muted-foreground">{pct}% vendido · {r.ganhos} {r.ganhos === 1 ? "contrato" : "contratos"}</span>
+        {r.bateu
+          ? <span className="text-lone-body font-medium text-lone-success">Meta batida</span>
+          : <span className="text-lone-body font-medium text-foreground">faltam {brl(r.falta ?? 0)} ({100 - pct}%)</span>}
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Progresso da meta do mês">
+        <div className={`h-full rounded-full ${r.bateu ? "bg-lone-success" : "bg-primary"}`} style={{ width: `${Math.max(2, pct)}%` }} />
+      </div>
+      <div className="mt-3 grid gap-2 text-lone-caption text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+        <span>{r.ritmoNecessario != null
+          ? <>Precisa de <span className={forte}>{brl(r.ritmoNecessario)}</span> por dia útil ({r.restantes} {r.restantes === 1 ? "restante" : "restantes"})</>
+          : r.bateu ? "Ritmo: meta já batida" : "Sem dias úteis restantes no mês"}</span>
+        <span>{r.projecao != null ? <>No ritmo atual: <span className={forte}>{brl(r.projecao)}</span></> : "Cedo para projetar (antes do 3º dia útil)"}</span>
+        <span>Pipeline ponderado: <span className={forte}>{brl(r.ponderado)}</span>{r.cobertura != null && <> · <span className={`font-medium ${corCobertura}`}>cobre {r.cobertura.toFixed(1).replace(".", ",")}×</span> o que falta</>}</span>
+        <span>Esforço: <span className={forte}>{esforco.contatosSemana}{meta?.metaContatosSemana ? `/${meta.metaContatosSemana}` : ""}</span> contatos na semana · <span className={forte}>{esforco.propostasMes}{meta?.metaPropostasMes ? `/${meta.metaPropostasMes}` : ""}</span> propostas no mês</span>
+      </div>
+    </section>
+  );
+}
+
 export default function CrmPage() {
   const { role, currentUser } = useRole();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -135,11 +191,16 @@ export default function CrmPage() {
   const [salvandoNota, setSalvandoNota] = useState(false);
   const [pacoteProposta, setPacoteProposta] = useState("lone_growth");
   const [propostaBusy, setPropostaBusy] = useState<"pdf" | "enviada" | null>(null);
+  // Meta do mês (MRR novo) e a janela de editar metas.
+  const [meta, setMeta] = useState<CrmMeta | null>(null);
+  const [editMeta, setEditMeta] = useState<{ metaValor: string; metaContatosSemana: string; metaPropostasMes: string } | null>(null);
+  const [salvandoMeta, setSalvandoMeta] = useState(false);
 
-  const podeVer = role === "admin" || role === "manager" || role === "comercial";
+  const podeVer = podeVerComercial(role);
 
   useEffect(() => {
     if (!podeVer) { setLoading(false); return; }
+    chamar<{ meta: CrmMeta | null }>(`/api/crm/metas?mes=${mesSP()}`).then((r) => { if (r.ok) setMeta(r.data?.meta ?? null); });
     chamar<{ leads?: Lead[]; segmentosIcp?: string[] }>("/api/crm/leads").then((r) => {
       // Falha não vira funil vazio: mostra o erro no lugar dos números.
       if (!r.ok) { setErroCarga(r.erro); toast.error(r.erro ?? "Não consegui carregar os leads."); }
@@ -172,8 +233,21 @@ export default function CrmPage() {
     const conversao = fechados ? Math.round((ganhos.length / fechados) * 100) : null;
     // Proposta conta pela DATA de envio — nunca pelo valor (Leva 7C, N29).
     const propostasMes = leads.filter((l) => l.propostaEnviadaEm && mesDe(l.propostaEnviadaEm) === mesAtual).length;
-    return { abertos: abertos.length, vendasMes: vendasMes.length, reunioesMes: reunioesMes.length, conversao, propostasMes };
+    // Tempo até o 1º contato (mediana, em horas) dos leads que entraram no mês — quem responde em
+    // até 1 h tem ~7× mais chance de qualificar (HBR 2011). Visita da rota conta como contato na hora.
+    const horas = leads
+      .filter((l) => (l.createdAt || "").slice(0, 7) === mesAtual && l.primeiroContatoEm)
+      .map((l) => Math.max(0, (new Date(l.primeiroContatoEm!).getTime() - new Date(l.createdAt).getTime()) / 3_600_000))
+      .sort((a, b) => a - b);
+    const tempoContato = horas.length ? horas[Math.floor(horas.length / 2)] : null;
+    return { abertos: abertos.length, vendasMes: vendasMes.length, reunioesMes: reunioesMes.length, conversao, propostasMes, tempoContato, tempoContatoN: horas.length };
   }, [leads]);
+
+  // ─── Meta do mês ───────────────────────────────────────────────────
+  const resumoMeta = useMemo(() => calcularMeta({ leads, metaValor: meta?.metaValor ?? null, hoje: hojeYmd() }), [leads, meta]);
+  const esforco = useMemo(() => calcularEsforco({
+    toques: leads.flatMap((l) => l.toques ?? []), propostasEnviadasEm: leads.map((l) => l.propostaEnviadaEm), hoje: hojeYmd(),
+  }), [leads]);
 
   // ─── Relatórios ────────────────────────────────────────────────────
   const relatorio = useMemo(() => {
@@ -208,7 +282,7 @@ export default function CrmPage() {
     };
     const motivos = new Map<string, number>();
     for (const l of leads.filter((x) => x.estagio === "perdido")) {
-      const m = (l.motivoPerda || "").trim() || "(não informado)";
+      const m = rotuloMotivo(l.motivoPerdaCodigo) ?? ((l.motivoPerda || "").trim() || "(não informado)");
       motivos.set(m, (motivos.get(m) ?? 0) + 1);
     }
     return {
@@ -258,11 +332,17 @@ export default function CrmPage() {
   // ─── Meus leads de hoje (a "home" do SDR) ──────────────────────────
   const hojeData = useMemo(() => {
     const hj = hojeYmd();
+    // Leads novos sem nenhum contato (formulário do site, anúncio, cadastro à mão): primeiro da fila.
+    const novosSemContato = leads
+      .filter((l) => l.estagio === "novo" && !l.primeiroContatoEm && !estacionado(l, hj))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const reunioesHoje = leads.filter((l) => l.reuniaoData === hj);
     // Follow-up = o "próximo contato" marcado à mão OU o toque da cadência (dia 2/5/12) que venceu.
     const followsPendentes = leads
       .filter((l) => {
-        if (!ABERTOS.includes(l.estagio)) return false;
+        if (!ABERTOS.includes(l.estagio) || estacionado(l, hj)) return false;
+        if (l.estagio === "novo" && !l.primeiroContatoEm) return false; // já está em "Leads novos"
+        if (l.retomarEm && l.retomarEm <= hj) return true;
         if (l.proximoContato && l.proximoContato <= hj) return true;
         const t = toqueDo(l, hj);
         return !!t && t.situacao !== "futuro";
@@ -270,9 +350,9 @@ export default function CrmPage() {
       .sort((a, b) => (dataFollow(a, hj) || "").localeCompare(dataFollow(b, hj) || ""));
     // Parados: em etapa aberta e sem atualização há 5+ dias.
     const parados = leads
-      .filter((l) => ABERTOS.includes(l.estagio) && diasDesde(l.updatedAt) >= 5)
+      .filter((l) => ABERTOS.includes(l.estagio) && !estacionado(l, hj) && diasDesde(l.updatedAt) >= 5)
       .sort((a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
-    return { reunioesHoje, followsPendentes, parados };
+    return { novosSemContato, reunioesHoje, followsPendentes, parados };
   }, [leads]);
 
   // ─── Funil filtrado ────────────────────────────────────────────────
@@ -368,7 +448,7 @@ export default function CrmPage() {
   async function salvar() {
     if (!draft?.contatoNome?.trim()) { toast.error("Informe o nome do contato."); return; }
     // Motivo da perda é obrigatório ao fechar como perdido (senão o relatório de perda esvazia).
-    if (draft.estagio === "perdido" && !draft.motivoPerda?.trim()) {
+    if (draft.estagio === "perdido" && !draft.motivoPerdaCodigo && !draft.motivoPerda?.trim()) {
       toast.error("Informe o motivo da perda antes de salvar.");
       return;
     }
@@ -381,6 +461,10 @@ export default function CrmPage() {
       origem: draft.origem ?? null, responsavel: draft.responsavel ?? currentUser ?? null,
       reuniaoData: draft.reuniaoData ?? null, proximoContato: draft.proximoContato ?? null,
       observacoes: draft.observacoes ?? null, motivoPerda: draft.motivoPerda ?? null,
+      motivoPerdaCodigo: draft.motivoPerdaCodigo ?? null, valorImplantacao: draft.valorImplantacao ?? null,
+      probabilidade: draft.probabilidade ?? null, previsaoFechamento: draft.previsaoFechamento ?? null,
+      retomarEm: draft.retomarEm ?? null, segmento: draft.segmento ?? null, cidade: draft.cidade ?? null,
+      instagram: draft.instagram ?? null,
     };
     try {
       const r = await authedFetch("/api/crm/leads", {
@@ -388,10 +472,11 @@ export default function CrmPage() {
         body: JSON.stringify(payload),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const { lead } = await r.json();
+      const { lead, aviso } = await r.json();
       setLeads((prev) => (editando ? prev.map((l) => (l.id === lead.id ? lead : l)) : [lead, ...prev]));
       setDraft(null);
-      toast.success(editando ? "Lead atualizado." : "Lead criado.");
+      if (aviso) toast.warning(aviso);
+      else toast.success(editando ? "Lead atualizado." : "Lead criado.");
     } catch {
       toast.error("Não foi possível salvar o lead. Tente de novo.");
     } finally {
@@ -490,12 +575,30 @@ export default function CrmPage() {
     setPropostaBusy(null);
     if (!r.ok || !r.data) { toast.error(r.erro ?? "Não consegui registrar."); return; }
     const em = r.data.propostaEnviadaEm;
-    const estagio: CrmEstagio = ["lead", "orcamento", "reuniao"].includes(draft.estagio) ? "proposta" : draft.estagio;
+    const estagio: CrmEstagio = ["novo", "contato", "diagnostico"].includes(draft.estagio) ? "proposta" : draft.estagio;
     setLeads((prev) => prev.map((l) => (l.id === draft.id ? { ...l, propostaEnviadaEm: l.propostaEnviadaEm ?? em, estagio } : l)));
     setDraft({ ...draft, propostaEnviadaEm: draft.propostaEnviadaEm ?? em, estagio });
     if (r.data.avisos.length) toast.warning(r.data.avisos.join(" · "));
     else toast.success("Proposta registrada como enviada.");
   }
+
+  async function salvarMeta() {
+    if (!editMeta) return;
+    setSalvandoMeta(true);
+    const r = await chamar<{ meta: CrmMeta }>("/api/crm/metas", {
+      mes: mesSP(), metaValor: editMeta.metaValor, metaContatosSemana: editMeta.metaContatosSemana, metaPropostasMes: editMeta.metaPropostasMes,
+    }, { method: "PUT" });
+    setSalvandoMeta(false);
+    if (!r.ok || !r.data) { toast.error(r.erro ?? "Não consegui salvar a meta."); return; }
+    setMeta(r.data.meta);
+    setEditMeta(null);
+    toast.success("Metas do mês salvas.");
+  }
+  const abrirMetas = () => setEditMeta({
+    metaValor: meta?.metaValor != null ? String(meta.metaValor) : "",
+    metaContatosSemana: meta?.metaContatosSemana != null ? String(meta.metaContatosSemana) : "",
+    metaPropostasMes: meta?.metaPropostasMes != null ? String(meta.metaPropostasMes) : "",
+  });
 
   // Trocar de lead fecha os painéis do anterior.
   useEffect(() => { setQualificando(null); setConversao(null); }, [draft?.id]);
@@ -512,11 +615,16 @@ export default function CrmPage() {
       <header className="flex flex-wrap items-center justify-between gap-4 pr-12">
         <div>
           <h1 className="text-lone-h1 tracking-tight text-foreground">Comercial</h1>
-          <p className="text-lone-caption text-muted-foreground">Prospecção, agenda e vendas</p>
+          <p className="text-lone-caption text-muted-foreground">Funil, metas e follow-up — só para quem cuida das vendas</p>
         </div>
-        <Button onClick={() => setDraft({ estagio: "lead", responsavel: currentUser ?? undefined })}>
-          <Plus size={16} className="mr-1" /> Novo lead
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link href="/crm/importar" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-foreground hover:bg-accent">
+            <Upload size={15} /> Importar
+          </Link>
+          <Button onClick={() => setDraft({ estagio: "novo", responsavel: currentUser ?? undefined })}>
+            <Plus size={16} className="mr-1" /> Novo lead
+          </Button>
+        </div>
       </header>
 
       {/* No desktop, a sidebar secundária NATIVA (Sidebar.tsx → SECONDARY_NAV["/crm"]) cuida da
@@ -548,12 +656,31 @@ export default function CrmPage() {
         const cols: { titulo: string; lista: Lead[]; vazio: string; tone: string; meta: (l: Lead) => string }[] = [
           { titulo: "Reuniões de hoje", lista: hojeData.reunioesHoje, vazio: "Nenhuma reunião marcada pra hoje.", tone: "bg-primary/10 text-primary", meta: () => "Reunião hoje" },
           { titulo: "Follow-ups pra fazer", lista: hojeData.followsPendentes, vazio: "Nada pendente por agora.", tone: "bg-lone-warning-bg text-lone-warning", meta: (l) => {
+            if (l.retomarEm && l.retomarEm <= hojeYmd()) return `Retomar (marcado para ${fmtData(l.retomarEm)})`;
             const t = toqueDo(l, hojeYmd());
             return l.proximoContato && l.proximoContato <= hojeYmd() ? `Contato ${fmtData(l.proximoContato)}` : t ? rotuloToque(t) : `Contato ${fmtData(l.proximoContato)}`;
           } },
           { titulo: "Leads parados", lista: hojeData.parados, vazio: "Nada parado — fluxo em dia.", tone: "bg-lone-danger-bg text-lone-danger", meta: (l) => `parado há ${diasDesde(l.updatedAt)}d` },
         ];
+        const novos = hojeData.novosSemContato;
         return (
+          <div className="space-y-4">
+          <BarraMeta r={resumoMeta} esforco={esforco} meta={meta} onDefinir={abrirMetas} />
+          {novos.length > 0 && (
+            <section className="rounded-xl border border-lone-warning-border bg-card p-5">
+              <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="flex items-center gap-2 text-lone-h2 text-foreground"><Inbox size={16} className="text-lone-warning" /> Leads novos sem contato</h2>
+                <span className="text-lone-caption text-muted-foreground">Responder em até 1 h faz o lead ~7× mais propenso a avançar</span>
+              </div>
+              <div className="grid gap-2 lg:grid-cols-2">
+                {novos.map((l) => {
+                  const h = Math.floor((Date.now() - new Date(l.createdAt).getTime()) / 3_600_000);
+                  const quando = h < 1 ? "agora há pouco" : h < 48 ? `há ${h} h` : `há ${Math.floor(h / 24)} dias`;
+                  return leadRow(l, [l.origem, quando, waLink(l.telefone) ? null : "telefone a conferir"].filter(Boolean).join(" · "));
+                })}
+              </div>
+            </section>
+          )}
           <div className="grid gap-4 lg:grid-cols-3">
             {cols.map((c) => (
               <section key={c.titulo} className="rounded-xl border border-border bg-card p-5">
@@ -565,18 +692,21 @@ export default function CrmPage() {
               </section>
             ))}
           </div>
+          </div>
         );
       })()}
 
       {tab === "dashboard" && (
         <div className="space-y-5">
+          <BarraMeta r={resumoMeta} esforco={esforco} meta={meta} onDefinir={abrirMetas} />
           {/* KPIs */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
             <Kpi icon={TrendingUp} label="Leads ativos" value={String(kpis.abertos)} sub="no funil agora" />
             <Kpi icon={CalendarClock} label="Reuniões no mês" value={String(kpis.reunioesMes)} sub="marcadas neste mês" />
             <Kpi icon={Trophy} label="Ganhos no mês" value={String(kpis.vendasMes)} sub={kpis.vendasMes === 1 ? "lead fechado" : "leads fechados"} tone="good" />
             <Kpi icon={Percent} label="Conversão" value={kpis.conversao == null ? "—" : `${kpis.conversao}%`} sub="dos leads fechados" />
             <Kpi icon={FileText} label="Propostas no mês" value={String(kpis.propostasMes)} sub={kpis.propostasMes === 1 ? "proposta enviada" : "propostas enviadas"} />
+            <Kpi icon={Timer} label="1º contato" value={kpis.tempoContato == null ? "—" : kpis.tempoContato < 1 ? `${Math.round(kpis.tempoContato * 60)} min` : kpis.tempoContato < 48 ? `${kpis.tempoContato.toFixed(1).replace(".", ",")} h` : `${Math.round(kpis.tempoContato / 24)} dias`} sub={kpis.tempoContatoN ? `mediana de ${kpis.tempoContatoN} lead(s) do mês` : "sem leads com contato no mês"} />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
@@ -709,6 +839,17 @@ export default function CrmPage() {
                       <Phone size={10} aria-hidden="true" /> {rotuloToque(toque)}
                     </div>
                   )}
+                  {l.valorOrcamento != null && l.valorOrcamento > 0 && (
+                    <div className="mt-2 text-lone-caption text-foreground">
+                      {brl(l.valorOrcamento)}/mês
+                      {ABERTOS.includes(l.estagio) && <span className="text-muted-foreground"> · {Math.round(chanceDe(l) * 100)}% de chance</span>}
+                    </div>
+                  )}
+                  {estacionado(l, hoje) && (
+                    <div className="mt-2 inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-lone-caption text-muted-foreground">
+                      <CalendarClock size={10} aria-hidden="true" /> Retomar {fmtData(l.retomarEm)}
+                    </div>
+                  )}
                   {l.clienteId && l.estagio === "ganho" && (
                     <div className="mt-2 text-lone-caption text-lone-success">Já é cliente</div>
                   )}
@@ -746,8 +887,8 @@ export default function CrmPage() {
                       <span className="text-lone-caption text-muted-foreground" title="dias desde a última atualização">há {diasDesde(l.updatedAt)}d</span>
                     </div>
                   </div>
-                  {l.estagio === "perdido" && l.motivoPerda && (
-                    <div className="mt-1.5 truncate text-lone-caption italic text-lone-danger">✕ {l.motivoPerda}</div>
+                  {l.estagio === "perdido" && (l.motivoPerdaCodigo || l.motivoPerda) && (
+                    <div className="mt-1.5 truncate text-lone-caption italic text-lone-danger">Perdido: {rotuloMotivo(l.motivoPerdaCodigo) ?? l.motivoPerda}</div>
                   )}
                 </div>
               );
@@ -911,6 +1052,39 @@ export default function CrmPage() {
         </div>
       )}
 
+      {/* Metas do mês */}
+      {editMeta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4" onClick={() => setEditMeta(null)}>
+          <div className="w-full max-w-sm rounded-xl border border-border bg-card p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lone-h2 text-foreground">Metas de {new Date(`${mesSP()}-15T12:00:00`).toLocaleDateString("pt-BR", { month: "long" })}</h2>
+              <button onClick={() => setEditMeta(null)} className="text-muted-foreground hover:text-foreground" aria-label="Fechar"><X size={18} /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">MRR novo a vender no mês (R$/mês)</label>
+                <input type="number" min={0} step="100" className={inputCls} value={editMeta.metaValor} onChange={(e) => setEditMeta({ ...editMeta, metaValor: e.target.value })} placeholder="soma das mensalidades fechadas" autoFocus />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Contatos por semana</label>
+                  <input type="number" min={0} className={inputCls} value={editMeta.metaContatosSemana} onChange={(e) => setEditMeta({ ...editMeta, metaContatosSemana: e.target.value })} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Propostas no mês</label>
+                  <input type="number" min={0} className={inputCls} value={editMeta.metaPropostasMes} onChange={(e) => setEditMeta({ ...editMeta, metaPropostasMes: e.target.value })} />
+                </div>
+              </div>
+              <p className="text-lone-caption text-muted-foreground">Só você vê. A barra conta as mensalidades dos negócios marcados como Ganho neste mês.</p>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setEditMeta(null)}>Cancelar</Button>
+              <Button onClick={salvarMeta} disabled={salvandoMeta}>{salvandoMeta ? "Salvando…" : "Salvar metas"}</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal add/editar */}
       {draft && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4" onClick={() => setDraft(null)}>
@@ -940,6 +1114,30 @@ export default function CrmPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Mensalidade (R$/mês)</label>
+                  <input type="number" min={0} step="1" className={inputCls} value={draft.valorOrcamento ?? ""} placeholder="valor por mês"
+                    onChange={(e) => setDraft({ ...draft, valorOrcamento: e.target.value === "" ? null : Number(e.target.value) })} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Chance de fechar (%)</label>
+                  <input type="number" min={0} max={100} step="5" className={inputCls}
+                    value={draft.probabilidade != null ? Math.round(draft.probabilidade * 100) : ""}
+                    placeholder={`padrão da etapa: ${Math.round(chanceDe({ estagio: draft.estagio }) * 100)}%`}
+                    onChange={(e) => setDraft({ ...draft, probabilidade: e.target.value === "" ? null : Math.min(100, Math.max(0, Number(e.target.value))) / 100 })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Previsão de fechamento</label>
+                  <input type="date" className={inputCls} value={draft.previsaoFechamento ?? ""} onChange={(e) => setDraft({ ...draft, previsaoFechamento: e.target.value || null })} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Retomar em (some do Hoje até lá)</label>
+                  <input type="date" className={inputCls} value={draft.retomarEm ?? ""} onChange={(e) => setDraft({ ...draft, retomarEm: e.target.value || null })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="mb-1 block text-xs text-muted-foreground">Etapa</label>
                   <select className={inputCls} value={draft.estagio} onChange={(e) => setDraft({ ...draft, estagio: e.target.value as CrmEstagio })}>
                     {CRM_ESTAGIOS.map((e) => <option key={e} value={e}>{ESTAGIO_META[e].title}</option>)}
@@ -964,14 +1162,44 @@ export default function CrmPage() {
                   <input type="date" className={inputCls} value={draft.proximoContato ?? ""} onChange={(e) => setDraft({ ...draft, proximoContato: e.target.value || null })} />
                 </div>
               </div>
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Responsável</label>
-                <input className={inputCls} value={draft.responsavel ?? ""} onChange={(e) => setDraft({ ...draft, responsavel: e.target.value })} />
-              </div>
-              {draft.estagio === "perdido" && (
+              {CRITERIO_SAIDA[draft.estagio] && <p className="-mt-1 text-lone-caption text-muted-foreground">{CRITERIO_SAIDA[draft.estagio]}</p>}
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Motivo da perda *</label>
-                  <input className={inputCls} value={draft.motivoPerda ?? ""} onChange={(e) => setDraft({ ...draft, motivoPerda: e.target.value })} placeholder="preço, timing, concorrente…" />
+                  <label className="mb-1 block text-xs text-muted-foreground">Segmento</label>
+                  <input className={inputCls} value={draft.segmento ?? ""} onChange={(e) => setDraft({ ...draft, segmento: e.target.value || null })} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Cidade</label>
+                  <input className={inputCls} value={draft.cidade ?? ""} onChange={(e) => setDraft({ ...draft, cidade: e.target.value || null })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Instagram</label>
+                  <input className={inputCls} value={draft.instagram ?? ""} placeholder="@perfil" onChange={(e) => setDraft({ ...draft, instagram: e.target.value.replace(/^@/, "") || null })} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Responsável</label>
+                  <input className={inputCls} value={draft.responsavel ?? ""} onChange={(e) => setDraft({ ...draft, responsavel: e.target.value })} />
+                </div>
+              </div>
+              {draft.endereco && (
+                <p className="flex items-start gap-1.5 text-lone-caption text-muted-foreground"><MapPin size={12} className="mt-0.5 shrink-0" /> {draft.endereco}</p>
+              )}
+              {draft.estagio === "perdido" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-xs text-muted-foreground">Motivo da perda *</label>
+                    <select className={inputCls} value={draft.motivoPerdaCodigo ?? ""} onChange={(e) => setDraft({ ...draft, motivoPerdaCodigo: e.target.value || null })}>
+                      <option value="">Escolha o motivo…</option>
+                      {MOTIVOS_PERDA.map((m) => <option key={m.id} value={m.id}>{m.rotulo}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-muted-foreground">Detalhe (opcional)</label>
+                    <input className={inputCls} value={draft.motivoPerda ?? ""} onChange={(e) => setDraft({ ...draft, motivoPerda: e.target.value })} placeholder="qual concorrente, o que pesou…" />
+                  </div>
+                  {draft.motivoPerdaCodigo === "sem_verba" && <p className="col-span-2 text-lone-caption text-muted-foreground">Volta sozinho para a lista em 90 dias (se você não marcar outra data em &quot;Retomar em&quot;).</p>}
                 </div>
               )}
               <div>
@@ -999,7 +1227,7 @@ export default function CrmPage() {
                   <label className="mb-1.5 block text-lone-caption font-medium text-muted-foreground">Histórico</label>
                   <div className="flex gap-2">
                     <select className={`${inputCls} w-auto shrink-0`} value={novaTipo} onChange={(e) => setNovaTipo(e.target.value as CrmAtividadeTipo)}>
-                      {(["nota", "ligacao", "whatsapp", "email", "reuniao"] as CrmAtividadeTipo[]).map((t) => (
+                      {(["nota", "ligacao", "whatsapp", "email", "reuniao", "visita"] as CrmAtividadeTipo[]).map((t) => (
                         <option key={t} value={t}>{ATIVIDADE_META[t].label}</option>
                       ))}
                     </select>
@@ -1092,7 +1320,7 @@ export default function CrmPage() {
             )}
 
             {/* ── Proposta (Leva 7C, N29): PDF do diagnóstico, sem R$; conta a DATA de envio ── */}
-            {draft.id && ["reuniao", "proposta", "orcamento"].includes(draft.estagio) && (
+            {draft.id && ["diagnostico", "proposta", "negociacao"].includes(draft.estagio) && (
               <div className="mt-3 space-y-2 border-t border-border pt-3">
                 <span className="text-lone-caption font-medium text-muted-foreground">Proposta</span>
                 <div className="flex flex-wrap items-center gap-2">

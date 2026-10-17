@@ -30,7 +30,8 @@ const ANTIGO_PRIMARIO: { href: string; roles: Role[] }[] = [
   { href: "/design",        roles: ["admin", "manager", "designer", "social"] },
   { href: "/defesa",        roles: ["admin", "manager", "traffic"] },
   { href: "/clients",       roles: ["admin", "manager"] },
-  { href: "/crm",           roles: ["admin", "manager", "comercial"] },
+  // Out/2026: o comercial ficou só com os sócios (guarda mensalidade e meta) — lib/crm/acesso.ts.
+  { href: "/crm",           roles: ["admin"] },
   { href: "/prospeccao",    roles: ["admin", "manager"] },
   { href: "/contratos",     roles: ["admin", "manager"] },
   { href: "/churn",         roles: ["admin", "manager"] },
@@ -368,11 +369,12 @@ describe("menu — qual área acende", () => {
 });
 
 describe("menu — painel secundário", () => {
-  it("comercial: Comercial tem painel (abas do funil); Sistema é link direto", () => {
+  it("comercial: sem o funil desde out/2026 (só os sócios); Sistema é link direto", () => {
     const g = menuDoPapel("comercial");
-    expect(g.map((x) => x.id)).toEqual(["inicio", "meu-trabalho", "comercial", "sistema"]);
-    expect(grupoTemPainel(g.find((x) => x.id === "comercial")!)).toBe(true);
+    expect(g.map((x) => x.id)).toEqual(["inicio", "meu-trabalho", "sistema"]);
     expect(grupoTemPainel(g.find((x) => x.id === "sistema")!)).toBe(false);
+    // O admin continua com o Comercial e o painel das abas do funil.
+    expect(grupoTemPainel(menuDoPapel("admin").find((x) => x.id === "comercial")!)).toBe(true);
   });
 
   it("painel ancorado nas mesmas rotas em que o AppShell reserva espaço", () => {
@@ -424,7 +426,8 @@ describe("barra inferior do celular", () => {
   });
 
   it("cada papel abre pelo que mais usa", () => {
-    expect(atalhosMobile("comercial")[0].href).toBe("/crm");
+    // Out/2026: o papel comercial perdeu o funil (lib/crm/acesso.ts) — abre por Tarefas.
+    expect(atalhosMobile("comercial")[0].href).toBe("/tarefas");
     expect(atalhosMobile("traffic").map((i) => i.href)).toContain("/traffic");
     expect(atalhosMobile("social").map((i) => i.href)).toContain("/social");
     expect(atalhosMobile("designer").map((i) => i.href)).toContain("/design");

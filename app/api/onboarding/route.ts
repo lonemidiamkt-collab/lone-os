@@ -25,6 +25,7 @@ function jidCadastro(): string | undefined {
 }
 import { montarNotaHandoff, montarMensagemGrupoHandoff } from "@/lib/cs/handoff";
 import { randomBytes } from "crypto";
+import { PAPEIS_COMERCIAL } from "@/lib/crm/acesso";
 
 /** Token de onboarding forte (128 bits) — não enumerável. */
 function newOnboardingToken(): string {
@@ -95,6 +96,12 @@ export async function POST(req: NextRequest) {
   // não basta — designer ou SDR chamando a rota direto apagava qualquer cliente.
   if (GESTAO_ONBOARDING_ACTIONS.has(body.action)) {
     const gate = await requireRole(req, GESTAO);
+    if (gate instanceof NextResponse) return gate;
+  }
+  // Conversão de um lead do comercial: o servidor lê o lead e o histórico da negociação — só quem
+  // entra no comercial (lib/crm/acesso.ts).
+  if (body.action === "generate_link_with_draft" && body.leadId) {
+    const gate = await requireRole(req, PAPEIS_COMERCIAL);
     if (gate instanceof NextResponse) return gate;
   }
 
@@ -179,7 +186,7 @@ export async function POST(req: NextRequest) {
         const leadHandoff = {
           empresa: lead.empresa as string, contato_nome: lead.contato_nome as string,
           telefone: lead.telefone as string, email: lead.email as string,
-          valor_orcamento: lead.valor_orcamento as number, origem: lead.origem as string,
+          origem: lead.origem as string, // sem valor: a nota vai para a ficha que a equipe lê (lib/cs/handoff.ts)
           responsavel: lead.responsavel as string, observacoes: lead.observacoes as string,
         };
         await supabase.from("client_journey").upsert({

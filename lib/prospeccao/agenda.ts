@@ -150,14 +150,16 @@ export async function marcarReuniao(p: ProspectRow, cfg: ProspectConfig, r: { in
       const lead = await db.insertCrmLead({
         contatoNome: p.decisor_nome ? nomeProprio(p.decisor_nome) : `Responsável — ${p.nome}`,
         empresa: p.nome, telefone: p.decisor_telefone ?? p.telefone ?? null, email: p.email ?? null,
-        estagio: "reuniao", origem: "Prospecção ativa", responsavel: RESPONSAVEL_LONE,
+        // Reunião marcada pela Rafaela = etapa Diagnóstico do funil (lib/crm/etapas.ts).
+        estagio: "diagnostico", origem: "Prospecção ativa", responsavel: RESPONSAVEL_LONE,
+        segmento: p.segmento ?? null, cidade: p.cidade ?? null, instagram: p.instagram ?? null,
         reuniaoData: ini.toISOString(),
         observacoes: `Piloto SDR Lone — score ${p.score ?? "—"} (${rotuloClasse(p.classe)}). ${p.diagnostico?.por_que_prospectar ?? ""}`.trim(),
       });
       crm_lead_id = lead.id;
       await supabaseAdmin.from("crm_leads").update({ prospect_id: p.id }).eq("id", lead.id);
     } else {
-      await db.updateCrmLead(crm_lead_id, { estagio: "reuniao", reuniaoData: ini.toISOString() });
+      await db.updateCrmLead(crm_lead_id, { estagio: "diagnostico", reuniaoData: ini.toISOString() });
     }
   } catch (err) {
     console.error("[prospeccao/agenda] crm_leads falhou (segue sem):", err instanceof Error ? err.message : err);

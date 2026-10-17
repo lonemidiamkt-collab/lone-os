@@ -216,14 +216,16 @@ export function ResumoContas({ t }: { t: ResumoTrafego }) {
 // ── Comercial: o funil ──────────────────────────────────────────────────────
 
 export function ResumoFunil({ c }: { c: ResumoComercial }) {
-  const abertos = c.etapas.lead + c.etapas.orcamento + c.etapas.proposta + c.etapas.reuniao;
+  const e = c.etapas;
+  const abertos = e.novo + e.contato + e.diagnostico + e.proposta + e.negociacao;
   return (
     <Bloco eyebrow="Funil" titulo={abertos === 1 ? "1 negociação aberta" : `${abertos} negociações abertas`} acao={{ label: "Abrir Comercial", href: "/crm" }}>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Numero valor={c.etapas.lead} rotulo="leads" />
-        <Numero valor={c.etapas.orcamento} rotulo="em orçamento" />
-        <Numero valor={c.etapas.proposta} rotulo="com proposta" />
-        <Numero valor={c.etapas.reuniao} rotulo="em reunião" />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+        <Numero valor={e.novo} rotulo="novos" />
+        <Numero valor={e.contato} rotulo="com contato feito" />
+        <Numero valor={e.diagnostico} rotulo="em diagnóstico" />
+        <Numero valor={e.proposta} rotulo="com proposta" />
+        <Numero valor={e.negociacao} rotulo="em negociação" />
       </div>
       <div className="mt-4 grid grid-cols-3 gap-4 border-t border-border pt-3">
         <Numero valor={c.followupsVencidos} rotulo="follow-ups atrasados" tom="perigo" />
