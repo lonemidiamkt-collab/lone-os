@@ -35,6 +35,9 @@ describe("pedido para a IA", () => {
     const { system, user } = montarPedido({ texto: "Loninho, marca a Telhas quinta", autor: "Roberto", hoje, leads: lista });
     expect(system).toContain("2026-10-20 = terça (HOJE)");
     expect(system).toContain("2026-10-22 = quinta");
+    expect(system).toContain("semana que vem (sem dia) = 2026-10-26"); // hoje é terça 20/10 → segunda 26/10
+    const sabado = montarPedido({ texto: "x", autor: "R", hoje: "2026-10-17", leads: [] }).system;
+    expect(sabado).toContain("semana que vem (sem dia) = 2026-10-19"); // o caso do ensaio: sábado → segunda 19/10
     expect(system).toMatch(/\d+\. Telhas Exemplo — Fulano \(Negociação\)/);
     expect(system).not.toContain("Loja Fechada");
     expect(user).toBe("Roberto: Loninho, marca a Telhas quinta");

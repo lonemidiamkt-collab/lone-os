@@ -105,12 +105,15 @@ export function montarPedido(p: { texto: string; autor: string; hoje: string; le
     const d = somaDias(p.hoje, i);
     return `${d} = ${diaDaSemana(d)}${i === 0 ? " (HOJE)" : i === 1 ? " (amanhã)" : ""}`;
   }).join("\n");
+  // Datas relativas já resolvidas: no ensaio de 17/10 (sábado) a IA leu "semana que vem" como 26/10, não 19/10.
+  const proximaSegunda = Array.from({ length: 7 }, (_, i) => somaDias(p.hoje, i + 1)).find((d) => diaDaSemana(d) === "segunda")!;
+  const atalhos = [`amanhã = ${somaDias(p.hoje, 1)}`, `depois de amanhã = ${somaDias(p.hoje, 2)}`, `semana que vem (sem dia) = ${proximaSegunda}`, `daqui a uma semana = ${somaDias(p.hoje, 7)}`, `daqui a 15 dias = ${somaDias(p.hoje, 15)}`].join("\n");
   const lista = p.leads.map((l, i) => `${i + 1}. ${l.empresa || l.contatoNome}${l.empresa && l.contatoNome !== l.empresa ? ` — ${l.contatoNome}` : ""} (${ROTULO_ETAPA[normalizarEtapa(l.estagio)]})`).join("\n");
   const system = `Você interpreta pedidos do time comercial da Lone Mídia, feitos no grupo de vendas do WhatsApp, e devolve AÇÕES em JSON. Você não conversa: só preenche o JSON.
 
 Ações:
 - "agendar": marcar o próximo contato (follow-up) com um lead numa data. Ex.: "marca follow-up com a Loja Alfa quinta", "lembra de falar com a Telhas Beta dia 3", "volta na Ferragens Gama semana que vem".
-- "registrar": anotar um contato que JÁ aconteceu ou uma observação. Ex.: "liguei pra X, pediram proposta" (canal ligacao), "mandei mensagem pra Y" (whatsapp), "visitei a Z" (visita), "reunião com W hoje" (reuniao), "anota na X que o dono viaja" (nota). "resumo" = o que aconteceu, em uma frase curta, sem valores em dinheiro.
+- "registrar": anotar um contato que JÁ aconteceu ou uma observação. Ex.: "liguei pra X, pediram proposta" (canal ligacao), "mandei mensagem pra Y" (whatsapp), "visitei a Z" (visita), "reunião com W hoje" (reuniao), "anota na X que o dono viaja" (nota). "resumo" = o RESULTADO do contato em uma frase curta, sem repetir o nome do lead nem "liguei/visitei" (ex.: "Pediram proposta", "A Daniela gostou; pediu mensagem na semana que vem"), sem valores em dinheiro.
 - "consultar_lead": perguntar como está um lead. Ex.: "como está a Madeireira Delta?".
 - "consultar_hoje": perguntar o que fazer hoje / quais follow-ups. Ex.: "o que tem pra hoje?".
 - "cadastrar": lead NOVO que não está na lista. Preencha "empresa", "contato" e "telefone" com o que foi dito.
@@ -118,7 +121,10 @@ Ações:
 Uma frase pode ter mais de uma ação (ex.: "liguei pra X, volta dia 3" = registrar + agendar), no máximo 3.
 
 Lead: use "lead_num" com o NÚMERO da lista abaixo quando tiver certeza de qual é; se não tiver certeza, deixe null e copie em "lead_texto" o nome como foi dito. Nunca invente número.
-Data ("data", formato AAAA-MM-DD): use SÓ o calendário abaixo. Dia da semana sozinho ("quinta") = a próxima quinta DEPOIS de hoje. "amanhã" = amanhã. "semana que vem" sem dia = a próxima segunda. "dia N" = o próximo dia N a partir de hoje (se já passou neste mês, o do mês seguinte). Sem data dita = null.
+Data ("data", formato AAAA-MM-DD): use SÓ as datas abaixo. Dia da semana sozinho ("quinta") = a próxima quinta DEPOIS de hoje. "dia N" = o próximo dia N a partir de hoje (se já passou neste mês, o do mês seguinte). Sem data dita = null.
+
+Atalhos (já calculados, use exatamente):
+${atalhos}
 
 Calendário:
 ${calendario}
