@@ -24,6 +24,7 @@ import { ETAPAS_ABERTAS, MOTIVOS_PERDA, ROTULO_ETAPA, CRITERIO_SAIDA, chanceDe, 
 import { brl, calcularEsforco, calcularMeta, hojeSP, mesSP, type ResumoMeta } from "@/lib/crm/meta";
 import { podeVerComercial } from "@/lib/crm/acesso";
 import { resumirPipeline } from "@/lib/crm/pipeline";
+import { useCascoComercial } from "@/lib/navegacao/use-casco";
 import type { CrmMeta } from "@/lib/types";
 
 // ─── Metadados do funil ──────────────────────────────────────────────
@@ -206,6 +207,7 @@ export default function CrmPage() {
   const [acaoBusy, setAcaoBusy] = useState<string | null>(null);
 
   const podeVer = podeVerComercial(role);
+  const casco = useCascoComercial(); // em comercial.lonemidia.com as abas moram no cabeçalho do casco
 
   useEffect(() => {
     if (!podeVer) { setLoading(false); return; }
@@ -217,6 +219,18 @@ export default function CrmPage() {
       setLoading(false);
     });
   }, [podeVer]);
+
+  // Endereço com ?aba= (abas do casco do comercial) e ?lead= (a Rota abre o lead direto no funil).
+  useEffect(() => {
+    if (loading) return;
+    const q = new URLSearchParams(window.location.search);
+    const aba = q.get("aba");
+    if (aba && ["hoje", "dashboard", "funil", "agenda", "relatorios"].includes(aba)) setTab(aba as typeof tab);
+    const leadId = q.get("lead");
+    const lead = leadId ? leads.find((l) => l.id === leadId) : null;
+    if (lead) { setTab("funil"); setDraft({ ...lead }); }
+    if (aba || leadId) window.history.replaceState(null, "", window.location.pathname);
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sidebar secundária nativa: clicar num item seta pendingTab → troca a aba aqui;
   // setCurrentTab mantém o item ativo destacado na sidebar.
@@ -640,14 +654,14 @@ export default function CrmPage() {
 
       {/* No desktop, a sidebar secundária NATIVA (Sidebar.tsx → SECONDARY_NAV["/crm"]) cuida da
           navegação — fica colada no rail principal. No mobile, abas horizontais. */}
-      <div className="flex gap-1 overflow-x-auto border-b border-border lg:hidden">
+      {!casco && <div className="flex gap-1 overflow-x-auto border-b border-border lg:hidden">
             {([["hoje", "Hoje", Sun], ["dashboard", "Dashboard", LayoutDashboard], ["funil", "Funil", Columns3], ["agenda", "Agenda", CalendarDays], ["relatorios", "Relatórios", BarChart3]] as const).map(([id, label, Icon]) => (
               <button key={id} onClick={() => setTab(id)}
                 className={`flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2 text-lone-body font-medium transition-colors ${tab === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
                 <Icon size={15} /> {label}
               </button>
             ))}
-          </div>
+          </div>}
 
       {tab === "hoje" && (() => {
         const porGrupo = ORDEM_GRUPOS.map((g) => ({ g, itens: fila.filter((i) => i.grupo === g) })).filter((x) => x.itens.length);

@@ -105,6 +105,7 @@ export function lerEtapas(html: string): unknown[] {
 
 export interface LojaCatalogo {
   id: number;
+  etapa: number; // posição da cidade na rota (ordem de visita)
   empresa: string;
   contato: string | null;
   tratamento: string | null;
@@ -128,7 +129,7 @@ export function telefoneDaRota(v: unknown): string | null {
 
 export function catalogoDaPagina(html: string): LojaCatalogo[] {
   const out = new Map<number, LojaCatalogo>();
-  for (const et of lerEtapas(html)) {
+  for (const [posicao, et] of lerEtapas(html).entries()) {
     const e = et as Record<string, unknown>;
     const cidade = txt(e.cidade, 80);
     for (const x of Array.isArray(e.empresas) ? e.empresas : []) {
@@ -137,7 +138,7 @@ export function catalogoDaPagina(html: string): LojaCatalogo[] {
       const empresa = txt(o.nome, 120);
       if (id == null || id < 1 || id > 999 || !empresa || out.has(id)) continue;
       out.set(id, {
-        id, empresa, cidade,
+        id, etapa: posicao + 1, empresa, cidade,
         contato: txt(o.dono, 120), tratamento: txt(o.saud, 120), segmento: txt(o.seg, 80),
         endereco: txt(o.end, 240), telefone: telefoneDaRota(o.tel),
         instagram: txt(o.ig, 60)?.replace(/^@/, "") ?? null, obs: txt(o.obs, 200),
@@ -179,6 +180,49 @@ export function lojasVisitadas(catalogo: LojaCatalogo[], visitas: VisitaRota[]):
     });
   }
   return { lojas, semCadastro };
+}
+
+// ─── Aba Rota do comercial: catálogo + visitas + situação no funil ──────────────────────────────
+
+export interface LojaNaRota extends LojaCatalogo {
+  visitada: boolean;
+  por: string | null;
+  quando: string | null; // visita mais recente
+  lead: { id: string; estagio: string } | null;
+}
+
+export function montarVisaoRota(
+  catalogo: LojaCatalogo[],
+  visitas: VisitaRota[],
+  leads: { id: string; estagio: string; rotaLojaId: number | null; telefone: string | null }[],
+): { cidades: { cidade: string; lojas: LojaNaRota[] }[]; totais: { lojas: number; visitadas: number; noFunil: number; negociando: number } } {
+  const ultima = new Map<number, VisitaRota>();
+  for (const v of visitas) {
+    if (!v.visitada || ehRotaDeTeste(v.rota)) continue;
+    const atual = ultima.get(v.loja);
+    if (!atual || (v.visitadaEm ?? "") > (atual.visitadaEm ?? "")) ultima.set(v.loja, v);
+  }
+  const digitos = (t: string | null) => (t ?? "").replace(/\D/g, "").slice(-8);
+  const lojas: LojaNaRota[] = [...catalogo].sort((a, b) => a.etapa - b.etapa || a.id - b.id).map((c) => {
+    const v = ultima.get(c.id);
+    const lead = leads.find((l) => l.rotaLojaId === c.id) ?? (c.telefone ? leads.find((l) => digitos(l.telefone).length === 8 && digitos(l.telefone) === digitos(c.telefone)) : undefined);
+    return { ...c, visitada: !!v, por: v?.por ?? null, quando: v?.visitadaEm ?? null, lead: lead ? { id: lead.id, estagio: lead.estagio } : null };
+  });
+  const cidades: { cidade: string; lojas: LojaNaRota[] }[] = [];
+  for (const l of lojas) {
+    const nome = l.cidade ?? "Sem cidade";
+    const g = cidades.find((c) => c.cidade === nome);
+    if (g) g.lojas.push(l); else cidades.push({ cidade: nome, lojas: [l] });
+  }
+  return {
+    cidades,
+    totais: {
+      lojas: lojas.length,
+      visitadas: lojas.filter((l) => l.visitada).length,
+      noFunil: lojas.filter((l) => l.lead).length,
+      negociando: lojas.filter((l) => l.lead && ["proposta", "negociacao"].includes(l.lead.estagio)).length,
+    },
+  };
 }
 
 /** Dia (São Paulo) de um ISO — para não registrar a mesma visita duas vezes. */

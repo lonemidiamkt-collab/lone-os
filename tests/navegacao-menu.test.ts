@@ -99,7 +99,8 @@ const LEVA_6A_GESTAO = ["/saude", "/agente?view=desempenho"];
 //    não existia; só admin e manager (a API também exige gestão).
 const LEVA_7D_GESTAO = ["/mapa-postagem"];
 const ACRESCIMOS: Record<Role, string[]> = {
-  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO],
+  // /crm/rota (17/10/2026): a aba Rota do comercial — tela nova, só dos sócios.
+  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO, "/crm/rota"],
   manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO],
   traffic:   ["/settings", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
   social:    ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA, "/saude"],

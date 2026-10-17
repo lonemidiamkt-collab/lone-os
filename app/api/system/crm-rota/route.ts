@@ -6,7 +6,8 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import * as db from "@/lib/supabase/queries";
 import { planejarImportacao, mesmoTelefone, normalizarNome } from "@/lib/crm/importar";
-import { catalogoDaPagina, diaDaVisita, ehRotaDeTeste, lojasVisitadas, type VisitaRota } from "@/lib/crm/rota";
+import { diaDaVisita, ehRotaDeTeste, lojasVisitadas, type VisitaRota } from "@/lib/crm/rota";
+import { buscarCatalogo } from "@/lib/crm/rota-catalogo";
 import { gravarPlano } from "@/lib/crm/gravar-plano";
 import { textoRotaGrupo } from "@/lib/crm/grupo-vendas";
 import { mandarNoGrupoVendas } from "@/lib/crm/grupo-vendas-envio";
@@ -19,8 +20,6 @@ import { hojeSP } from "@/lib/crm/meta";
 // loja que já está no funil ganha a visita no histórico (uma por dia); cliente fica de fora.
 // Lojas novas vão numa mensagem só para o grupo de vendas, com o WhatsApp de cada uma.
 // Cron: a cada 30 min, 8h–20h30 BRT (`*/30 11-23 * * *`). ?dry=1 mostra o plano sem gravar.
-
-const PAGINA = process.env.ROTA_PAGINA_URL || "https://rota-lagos.vercel.app/";
 
 export async function POST(req: NextRequest) {
   const denied = requireCron(req);
@@ -38,18 +37,9 @@ export async function POST(req: NextRequest) {
     .filter((v) => !ehRotaDeTeste(v.rota));
   if (!visitas.length) return NextResponse.json({ ok: true, dry, visitas: 0 });
 
-  let html: string;
-  try {
-    const r = await fetch(PAGINA, { cache: "no-store", signal: AbortSignal.timeout(10_000) });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    html = await r.text();
-  } catch (e) {
-    console.error("[crm-rota] página da rota fora:", e instanceof Error ? e.message : e);
-    return NextResponse.json({ ok: false, error: "página da rota fora do ar" }, { status: 502 });
-  }
   let catalogo;
-  try { catalogo = catalogoDaPagina(html); } catch (e) {
-    console.error("[crm-rota] não li a lista de lojas:", e instanceof Error ? e.message : e);
+  try { catalogo = await buscarCatalogo({ fresco: true }); } catch (e) {
+    console.error("[crm-rota] não li a lista de lojas da rota:", e instanceof Error ? e.message : e);
     return NextResponse.json({ ok: false, error: "não consegui ler a lista de lojas da rota" }, { status: 502 });
   }
 

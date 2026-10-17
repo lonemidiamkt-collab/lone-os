@@ -18,7 +18,7 @@ import {
   Instagram, CalendarClock, Palette, Layers, Columns3, UserCheck, History, BarChart2, ShieldCheck,
   AlertTriangle, Target, FileSignature,
   Radar, ListOrdered, Building2, MessageSquare, Settings2, BarChart3,
-  Lock, Zap, Info, CalendarCheck, ShoppingBag, DatabaseZap,
+  Lock, Zap, Info, CalendarCheck, ShoppingBag, DatabaseZap, MapPin,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/types";
@@ -235,6 +235,7 @@ export const MENU: readonly GrupoMenu[] = [
           { titulo: "Operação", itens: [
             { id: "crm-funil", rotulo: "Funil", icone: Layers, href: "/crm", aba: "funil" },
             { id: "crm-agenda", rotulo: "Agenda", icone: Calendar, href: "/crm", aba: "agenda" },
+            { id: "crm-rota", rotulo: "Rota", icone: MapPin, href: "/crm/rota" },
           ] },
           { titulo: "Análise", itens: [
             { id: "crm-relatorios", rotulo: "Relatórios", icone: BarChart2, href: "/crm", aba: "relatorios" },

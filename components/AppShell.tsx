@@ -29,7 +29,7 @@ import SessionTimeout from "@/components/SessionTimeout";
 
 // Routes that have a secondary sidebar (240px extra)
 
-function AuthGate({ children }: { children: React.ReactNode }) {
+export function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, hydrated } = useRole();
 
   if (!hydrated) {

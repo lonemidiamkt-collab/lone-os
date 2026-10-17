@@ -16,6 +16,7 @@ import { proporRegra, decidirRegra } from "@/lib/cs/regras-propostas";
 import { podeAgir, numerosDaEquipe } from "@/lib/cs/autoridade";
 import { comExecucao, definirAtor } from "@/lib/obs/correlacao";
 import { ehDm, tratarDmProspeccao } from "@/lib/prospeccao/inbound";
+import { ehGrupoVendas, tratarGrupoVendas } from "@/lib/crm/assistente-server";
 import { ehPedidoPrioridades, formatarTop } from "@/lib/priority/comando";
 import { ehAprovacaoDeProposta, ehRecusaDeProposta } from "@/lib/traffic/brief-segunda";
 import type { Recomendacao } from "@/lib/priority/tipos";
@@ -951,6 +952,20 @@ async function processarInbound(req: NextRequest) {
       .insert({ message_id: msg.messageId, group_jid: msg.groupJid });
     if (claimErr?.code === "23505") return NextResponse.json({ ok: true, skip: "message_id já processado (claim)" });
     if (claimErr) console.warn("[CS/inbound] claim indisponível (migration 058?):", claimErr.message);
+  }
+
+  // ─── GRUPO DE VENDAS (out/2026): o Loninho marca, registra e consulta follow-up do comercial
+  // (lib/crm/assistente-server.ts). Sai daqui antes de tudo: não é grupo de cliente, não vai para o
+  // corpus de estilo nem vira demanda, e só os sócios mandam. ───
+  if (ehGrupoVendas(msg.groupJid)) {
+    definirAtor("comercial");
+    try {
+      return NextResponse.json(await tratarGrupoVendas(msg, payload.data ?? {}));
+    } catch (err) {
+      const erro = err instanceof Error ? err.message : String(err);
+      console.error("[crm-assistente] falhou:", erro);
+      return NextResponse.json({ ok: true, erro }); // 200: a Evolution reenviaria e a mensagem já foi reclamada
+    }
   }
 
   // ─── Corpus de estilo (passo 1 do aprendizado de estilo do CS) ───

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { destinoNoComercial, ehHostComercial } from "@/lib/navegacao/casco";
 
 // Public paths that don't require authentication
 // /api/cs/inbound: webhook da Evolution (sem cookie/JWT) — público no middleware, mas a rota
@@ -16,9 +17,22 @@ const PUBLIC_PATHS = ["/api/integracoes/site/lead", "/api/auth", "/api/team/rost
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const publico = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+
+  // comercial.lonemidia.com (out/2026): só o Comercial aparece nesse endereço (lib/navegacao/casco.ts).
+  // API e arquivos públicos seguem as regras de sempre, logo abaixo.
+  if (!publico && !pathname.startsWith("/api/") && ehHostComercial(request.headers.get("host"))) {
+    const d = destinoNoComercial(pathname);
+    if (d.tipo === "reescrever") return NextResponse.rewrite(new URL(d.para, request.url));
+    // Atrás do nginx o app recebe http: o endereço de volta é montado com o Host e o protocolo de fora.
+    if (d.tipo === "redirecionar") {
+      const proto = request.headers.get("x-forwarded-proto") || "https";
+      return NextResponse.redirect(`${proto}://${request.headers.get("host")}${d.para}`);
+    }
+  }
 
   // Allow public assets and API routes
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  if (publico) {
     const res = NextResponse.next();
     // Links públicos do cliente (portal de tráfego e Ficha Viva) — não indexar
     if (pathname.startsWith("/portal") || pathname.startsWith("/ficha")) {
