@@ -419,7 +419,7 @@ export default function ExternalOnboardingPage() {
     ];
     for (const [k, set] of campos) if (txt(k)) set(txt(k));
     // Já consultado antes: mostra de novo o que a Receita disse, sem gastar outra consulta.
-    if (txt("receita_consultada_em")) {
+    if (txt("receita_consultada_em") && txt("cnpj")) {
       ultimoCnpjConsultado.current = txt("cnpj").replace(/\D/g, "");
       setConsulta({ estado: "ok", msg: "Dados conferidos na Receita Federal.", cnae: txt("cnae_descricao") || undefined,
         ativa: !txt("situacao_cadastral") || txt("situacao_cadastral") === "ATIVA" });
