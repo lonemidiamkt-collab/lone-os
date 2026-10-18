@@ -97,6 +97,6 @@ export function leadDoPacote(p: PacoteSite, v: Extract<Veredito, { ok: true }>, 
 /** Texto da atividade que registra o cadastro e o consentimento (base legal do contato). */
 export function atividadeDoCadastro(p: PacoteSite, quando: string): string {
   const c = p.consent;
-  const consent = c?.aceito ? ` · consentimento ${c.versao ?? "?"} em ${new Date(c.timestamp ?? quando).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : " · sem registro de consentimento";
+  const consent = c?.aceito ? ` · consentimento${c.versao ? ` ${c.versao}` : ""} em ${new Date(c.timestamp ?? quando).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : " · sem registro de consentimento";
   return `Formulário do site${consent}`;
 }

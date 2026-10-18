@@ -232,10 +232,10 @@ export default function CrmPage() {
     const leadsPorMes = meses.map((ym) => ({ ym, qtd: leads.filter((l) => (l.createdAt || "").slice(0, 7) === ym).length }));
     const maxLeadsMes = Math.max(1, ...leadsPorMes.map((m) => m.qtd));
 
-    const agrupa = (chave: (l: Lead) => string | null) => {
+    const agrupa = (chave: (l: Lead) => string | null, semValor: string) => {
       const grupos = new Map<string, { total: number; ganhos: number }>();
       for (const l of leads) {
-        const k = (chave(l) || "").trim() || "Sem origem";
+        const k = (chave(l) || "").trim() || semValor;
         const g = grupos.get(k) ?? { total: 0, ganhos: 0 };
         g.total++;
         if (l.estagio === "ganho") g.ganhos++;
@@ -250,8 +250,8 @@ export default function CrmPage() {
     }
     return {
       porMes, maxQtd, meses, leadsPorMes, maxLeadsMes,
-      porOrigem: agrupa((l) => l.origem),
-      porResponsavel: agrupa((l) => l.responsavel),
+      porOrigem: agrupa((l) => l.origem, "Sem origem"),
+      porResponsavel: agrupa((l) => l.responsavel, "Sem responsável"),
       motivos: [...motivos.entries()].sort((a, b) => b[1] - a[1]),
     };
   }, [leads]);
@@ -796,7 +796,7 @@ export default function CrmPage() {
           </button>
         );
         return (
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid items-start gap-4 lg:grid-cols-3">
             <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none lg:col-span-2">
               <h2 className="text-lone-h2 text-foreground">{nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)}</h2>
               <div className="mt-4 grid grid-cols-7 gap-1.5 text-center">
@@ -854,6 +854,9 @@ export default function CrmPage() {
             {(() => {
               const metasMes = relatorio.porMes.map((m) => metas[m.ym]?.metaValor ?? null);
               const teto = Math.max(1, ...relatorio.porMes.map((m) => m.valor), ...metasMes.map((v) => v ?? 0));
+              if (relatorio.porMes.every((m) => m.valor === 0) && metasMes.every((v) => v == null)) {
+                return <p className="mt-4 rounded-xl border border-dashed border-border px-4 py-6 text-center text-lone-body text-muted-foreground">Nenhum contrato fechado nos últimos 6 meses ainda. Quando um negócio for para Ganho, a mensalidade aparece aqui, mês a mês, ao lado da meta.</p>;
+              }
               return (
                 <div className="mt-5 flex h-44 items-end gap-4 border-b border-border pb-px">
                   {relatorio.porMes.map((m, i) => {

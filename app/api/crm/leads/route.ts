@@ -114,6 +114,11 @@ export async function PATCH(req: NextRequest) {
       if (!fechado) {
         patch.fechadoEm = null;
         if (atual?.estagio === "perdido" && patch.motivoPerda === undefined) { patch.motivoPerda = null; patch.motivoPerdaCodigo = null; }
+        // Saiu de Ganho/Perdido com chance de 100%/0% (a chance do fechamento, não uma estimativa): volta para
+        // o padrão da etapa. Achado de 17/10/2026: dois negócios devolvidos para Negociação ficaram com 100%
+        // e inflavam o ponderado.
+        const chanceDeFechado = atual?.probabilidade === 1 || atual?.probabilidade === 0;
+        if ((atual?.estagio === "ganho" || atual?.estagio === "perdido") && chanceDeFechado && patch.probabilidade === undefined) patch.probabilidade = null;
       }
       if (patch.estagio === "proposta" && !atual?.propostaEnviadaEm && patch.propostaEnviadaEm === undefined) {
         patch.propostaEnviadaEm = hoje;
