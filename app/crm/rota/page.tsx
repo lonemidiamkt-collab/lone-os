@@ -13,6 +13,7 @@ import { podeVerComercial } from "@/lib/crm/acesso";
 import { ROTULO_ETAPA, normalizarEtapa } from "@/lib/crm/etapas";
 import { formatarWhatsapp } from "@/lib/team/whatsapp";
 import type { LojaNaRota } from "@/lib/crm/rota";
+import { Anel } from "@/components/crm/graficos";
 
 interface Resposta {
   cidades: { cidade: string; lojas: LojaNaRota[] }[];
@@ -73,7 +74,7 @@ export default function RotaComercialPage() {
       {carregando && !dados && <p className="text-lone-body text-muted-foreground">Carregando a rota…</p>}
 
       {t && (
-        <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-border bg-card lg:grid-cols-4 lg:divide-x lg:divide-border">
+        <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-border bg-card shadow-sm dark:shadow-none lg:grid-cols-4 lg:divide-x lg:divide-border">
           {([
             ["Lojas na rota", t.lojas, "na lista do app"],
             ["Visitadas", t.visitadas, t.lojas ? `${Math.round((t.visitadas / t.lojas) * 100)}% da rota` : "—"],
@@ -90,10 +91,15 @@ export default function RotaComercialPage() {
       )}
 
       {dados?.cidades.map((c) => (
-        <section key={c.cidade} className="rounded-xl border border-border bg-card p-5">
+        <section key={c.cidade} className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none">
           <div className="mb-3 flex items-baseline justify-between gap-2">
             <h2 className="flex items-center gap-2 text-lone-h2 text-foreground"><MapPin size={15} className="text-muted-foreground" /> {c.cidade}</h2>
-            <span className="text-lone-caption text-muted-foreground">{c.lojas.filter((l) => l.visitada).length} de {c.lojas.length} visitadas</span>
+            <span className="flex items-center gap-2 text-lone-caption text-muted-foreground">
+              <Anel tamanho="xs" pct={(c.lojas.filter((l) => l.visitada).length / c.lojas.length) * 100} tom={c.lojas.every((l) => l.visitada) ? "success" : "primary"}
+                rotuloAcessivel={`${c.lojas.filter((l) => l.visitada).length} de ${c.lojas.length} visitadas`} />
+              {c.lojas.filter((l) => l.visitada).length} de {c.lojas.length} visitadas
+              {c.lojas.some((l) => l.lead && ["proposta", "negociacao"].includes(l.lead.estagio)) && <span className="rounded-md bg-lone-success-bg px-1.5 py-0.5 font-medium text-lone-success">{c.lojas.filter((l) => l.lead && ["proposta", "negociacao"].includes(l.lead.estagio)).length} em negociação</span>}
+            </span>
           </div>
           <div className="divide-y divide-border">
             {c.lojas.map((l) => (

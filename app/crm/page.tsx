@@ -14,7 +14,7 @@ import { Plus, X, Search, Trophy, CalendarClock, AlertCircle, MessageCircle, Pho
 import type { LucideIcon } from "lucide-react";
 import type { ExtrasLead } from "@/lib/crm/extras";
 import { proximoToque, rotuloToque, TIPOS_TOQUE, type ProximoToque } from "@/lib/crm/cadencia";
-import { montarFilaHoje, inicioDaCadencia, ORDEM_GRUPOS, ROTULO_GRUPO } from "@/lib/crm/hoje";
+import { montarFilaHoje, inicioDaCadencia } from "@/lib/crm/hoje";
 import { waComTexto } from "@/lib/crm/modelos";
 import { PORTES, type QualificacaoLead } from "@/lib/crm/nota";
 import { PACOTES_VENDA } from "@/lib/clients/conversao";
@@ -24,6 +24,9 @@ import { ETAPAS_ABERTAS, MOTIVOS_PERDA, ROTULO_ETAPA, CRITERIO_SAIDA, chanceDe, 
 import { brl, calcularEsforco, calcularMeta, hojeSP, mesSP, type ResumoMeta } from "@/lib/crm/meta";
 import { podeVerComercial } from "@/lib/crm/acesso";
 import DashboardComercial, { type FiltroFunil } from "@/components/crm/DashboardComercial";
+import HojeComercial from "@/components/crm/HojeComercial";
+import { eventosDaAgenda, ROTULO_EVENTO, type Evento } from "@/lib/crm/agenda";
+import { Anel } from "@/components/crm/graficos";
 import { useCascoComercial } from "@/lib/navegacao/use-casco";
 import type { CrmMeta } from "@/lib/types";
 
@@ -52,7 +55,6 @@ const TITULO_ABA: Record<"hoje" | "dashboard" | "funil" | "agenda" | "relatorios
 // ─── Formatação ──────────────────────────────────────────────────────
 const fmtData = (d: string | null) => (d ? new Date(d.length === 10 ? `${d}T12:00:00` : d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : null);
 const hojeYmd = () => hojeSP();
-const diasDesde = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 const iniciais = (nome: string) => nome.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
 
 // Cadência de follow-up (Leva 7C, N28): o toque do dia 2/5/12 contado pelas atividades do lead.
@@ -119,55 +121,6 @@ type Draft = Partial<Lead> & { estagio: CrmEstagio };
 const inputCls =
   "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none";
 
-// ─── Barra da meta (Hoje e Dashboard) ───────────────────────────────────
-// Contas em lib/crm/meta.ts (código, fuso de SP). Projeção sempre ao lado do ponderado: sozinha ela
-// engana quando as vendas se concentram no fim do mês.
-function BarraMeta({ r, esforco, meta, onDefinir }: {
-  r: ResumoMeta; esforco: { contatosSemana: number; propostasMes: number }; meta: CrmMeta | null; onDefinir: () => void;
-}) {
-  const nomeMes = new Date(`${r.mes}-15T12:00:00`).toLocaleDateString("pt-BR", { month: "long" });
-  if (r.meta == null) {
-    return (
-      <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-border bg-card p-5">
-        <div>
-          <div className="flex items-center gap-1.5 text-lone-eyebrow uppercase text-muted-foreground"><Target size={13} /> Meta de {nomeMes}</div>
-          <p className="mt-1 text-lone-body text-foreground">Sem meta definida. Vendido no mês: {brl(r.vendido)} · pipeline ponderado: {brl(r.ponderado)}.</p>
-        </div>
-        <Button size="sm" onClick={onDefinir}>Definir meta</Button>
-      </section>
-    );
-  }
-  const pct = Math.min(100, Math.round((r.progresso ?? 0) * 100));
-  const corCobertura = r.nivelCobertura === "verde" ? "text-lone-success" : r.nivelCobertura === "amarelo" ? "text-lone-warning" : "text-lone-danger";
-  const forte = "font-medium text-foreground";
-  return (
-    <section className="rounded-xl border border-border bg-card p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-lone-eyebrow uppercase text-muted-foreground"><Target size={13} /> Meta de {nomeMes}: {brl(r.meta)} de MRR novo</div>
-        <button onClick={onDefinir} className="text-lone-caption text-primary hover:underline">Editar metas</button>
-      </div>
-      <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="text-lone-hero tracking-tight text-foreground">{brl(r.vendido)}</span>
-        <span className="text-lone-body text-muted-foreground">{pct}% vendido · {r.ganhos} {r.ganhos === 1 ? "contrato" : "contratos"}</span>
-        {r.bateu
-          ? <span className="text-lone-body font-medium text-lone-success">Meta batida</span>
-          : <span className="text-lone-body font-medium text-foreground">faltam {brl(r.falta ?? 0)} ({100 - pct}%)</span>}
-      </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Progresso da meta do mês">
-        <div className={`h-full rounded-full ${r.bateu ? "bg-lone-success" : "bg-primary"}`} style={{ width: `${Math.max(2, pct)}%` }} />
-      </div>
-      <div className="mt-3 grid gap-2 text-lone-caption text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
-        <span>{r.ritmoNecessario != null
-          ? <>Precisa de <span className={forte}>{brl(r.ritmoNecessario)}</span> por dia útil ({r.restantes} {r.restantes === 1 ? "restante" : "restantes"})</>
-          : r.bateu ? "Ritmo: meta já batida" : "Sem dias úteis restantes no mês"}</span>
-        <span>{r.projecao != null ? <>No ritmo atual: <span className={forte}>{brl(r.projecao)}</span></> : "Cedo para projetar (antes do 3º dia útil)"}</span>
-        <span>Pipeline ponderado: <span className={forte}>{brl(r.ponderado)}</span>{r.cobertura != null && <> · <span className={`font-medium ${corCobertura}`}>cobre {r.cobertura.toFixed(1).replace(".", ",")}×</span> o que falta</>}</span>
-        <span>Esforço: <span className={forte}>{esforco.contatosSemana}{meta?.metaContatosSemana ? `/${meta.metaContatosSemana}` : ""}</span> contatos na semana · <span className={forte}>{esforco.propostasMes}{meta?.metaPropostasMes ? `/${meta.metaPropostasMes}` : ""}</span> propostas no mês</span>
-      </div>
-    </section>
-  );
-}
-
 export default function CrmPage() {
   const { role, currentUser } = useRole();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -201,13 +154,18 @@ export default function CrmPage() {
     setMetas((prev) => (mes in prev ? prev : { ...prev, [mes]: null }));
     chamar<{ meta: CrmMeta | null }>(`/api/crm/metas?mes=${mes}`).then((r) => { if (r.ok) setMetas((prev) => ({ ...prev, [mes]: r.data?.meta ?? null })); });
   }, []);
+  // Relatórios: a linha da meta precisa da meta de cada um dos 6 meses.
+  useEffect(() => {
+    if (tab !== "relatorios") return;
+    for (const ym of relatorio.meses) carregarMeta(ym);
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
   // Filtro que vem do dashboard ("Negócios parados", uma fatia da rosca…) para o Funil.
   const [filtroFunil, setFiltroFunil] = useState<FiltroFunil | null>(null);
+  const [verTodosFechados, setVerTodosFechados] = useState(false);
+  const [abaFicha, setAbaFicha] = useState<"resumo" | "historico" | "dados">("resumo");
   const [editMeta, setEditMeta] = useState<{ metaValor: string; metaContatosSemana: string; metaPropostasMes: string } | null>(null);
   const [salvandoMeta, setSalvandoMeta] = useState(false);
-  // Lista de trabalho do Hoje: texto editado antes de enviar e qual item está ocupado.
-  const [textoEditado, setTextoEditado] = useState<Record<string, string>>({});
-  const [editando, setEditando] = useState<string | null>(null);
+  // Qual lead do Hoje está com uma ação em andamento.
   const [acaoBusy, setAcaoBusy] = useState<string | null>(null);
 
   const podeVer = podeVerComercial(role);
@@ -266,7 +224,7 @@ export default function CrmPage() {
     const ganhos = leads.filter((l) => l.estagio === "ganho" && l.fechadoEm);
     const porMes = meses.map((ym) => {
       const vs = ganhos.filter((l) => mesDe(l.fechadoEm!) === ym);
-      return { ym, qtd: vs.length };
+      return { ym, qtd: vs.length, valor: vs.reduce((t, l) => t + (l.valorOrcamento ?? 0), 0) };
     });
     const maxQtd = Math.max(1, ...porMes.map((m) => m.qtd));
 
@@ -291,7 +249,7 @@ export default function CrmPage() {
       motivos.set(m, (motivos.get(m) ?? 0) + 1);
     }
     return {
-      porMes, maxQtd, leadsPorMes, maxLeadsMes,
+      porMes, maxQtd, meses, leadsPorMes, maxLeadsMes,
       porOrigem: agrupa((l) => l.origem),
       porResponsavel: agrupa((l) => l.responsavel),
       motivos: [...motivos.entries()].sort((a, b) => b[1] - a[1]),
@@ -310,21 +268,7 @@ export default function CrmPage() {
   };
 
   // ─── Agenda (reuniões + follow-ups) ────────────────────────────────
-  const agenda = useMemo(() => {
-    const hj = hojeYmd();
-    type Ev = { lead: Lead; data: string; tipo: "reuniao" | "follow" };
-    const evs: Ev[] = [];
-    for (const l of leads) {
-      if (l.reuniaoData) evs.push({ lead: l, data: l.reuniaoData, tipo: "reuniao" });
-      if (l.proximoContato && ABERTOS.includes(l.estagio)) evs.push({ lead: l, data: l.proximoContato, tipo: "follow" });
-    }
-    evs.sort((a, b) => a.data.localeCompare(b.data));
-    const proximos = evs.filter((e) => e.data >= hj);
-    const atrasados = evs.filter((e) => e.data < hj && ABERTOS.includes(e.lead.estagio));
-    const porDia = new Map<string, Ev[]>();
-    for (const e of evs) { const arr = porDia.get(e.data) ?? []; arr.push(e); porDia.set(e.data, arr); }
-    return { proximos, atrasados, porDia };
-  }, [leads]);
+  const agenda = useMemo(() => eventosDaAgenda(leads, hojeYmd()), [leads]);
 
   // ─── Lista de trabalho do Hoje (lib/crm/hoje.ts) ───────────────────
   const fila = useMemo(() => montarFilaHoje(leads, hojeYmd()), [leads]);
@@ -343,9 +287,11 @@ export default function CrmPage() {
     );
   }, [leads, busca, fResp, fOrigem, filtroFunil]);
 
+  // Funil (redesign D3): só as 5 etapas ABERTAS viram coluna — cabem na tela; Ganho e Perdido vão para a
+  // seção "Fechados" embaixo (e continuam no "Mover para" do cartão).
   const columns: KanbanColumn<Lead>[] = useMemo(
     () =>
-      CRM_ESTAGIOS.map((e) => {
+      ABERTOS.map((e) => {
         const items = filtrados.filter((l) => l.estagio === e);
         return {
           id: e,
@@ -573,7 +519,6 @@ export default function CrmPage() {
       avancos: [...(x.avancos ?? []), quando],
       primeiroContatoEm: x.primeiroContatoEm ?? (contato ? quando : null),
     }));
-    setEditando(null);
     toast.success(tipo === "pulado" ? "Toque pulado — a régua seguiu." : movido?.estagio === "contato" && l.estagio === "novo" ? "Registrado. O lead foi para Contato feito." : "Registrado.");
     return true;
   }
@@ -613,7 +558,15 @@ export default function CrmPage() {
   });
 
   // Trocar de lead fecha os painéis do anterior.
-  useEffect(() => { setQualificando(null); setConversao(null); }, [draft?.id]);
+  useEffect(() => { setQualificando(null); setConversao(null); setAbaFicha("resumo"); }, [draft?.id]);
+  // Esc fecha a ficha.
+  const fichaAberta = !!draft;
+  useEffect(() => {
+    if (!fichaAberta) return;
+    const fechar = (e: KeyboardEvent) => { if (e.key === "Escape") setDraft(null); };
+    window.addEventListener("keydown", fechar);
+    return () => window.removeEventListener("keydown", fechar);
+  }, [fichaAberta]);
 
   if (!podeVer) return <div className="p-8 text-sm text-destructive">Esta área é do time comercial.</div>;
   if (loading) return <div className="p-8 text-sm text-muted-foreground">Carregando o funil…</div>;
@@ -653,92 +606,21 @@ export default function CrmPage() {
             ))}
           </div>}
 
-      {tab === "hoje" && (() => {
-        const porGrupo = ORDEM_GRUPOS.map((g) => ({ g, itens: fila.filter((i) => i.grupo === g) })).filter((x) => x.itens.length);
-        const btn = "inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-lone-caption text-foreground transition-colors hover:bg-accent disabled:opacity-50";
-        const btnForte = "inline-flex items-center gap-1 rounded-md bg-lone-success-bg px-2.5 py-1 text-lone-caption font-medium text-lone-success transition-opacity hover:opacity-80 disabled:opacity-50";
-        return (
-          <div className="space-y-4">
-            <BarraMeta r={resumoMeta} esforco={esforco} meta={meta} onDefinir={abrirMetas} />
-            {porGrupo.length === 0 && (
-              <section className="rounded-xl border border-border bg-card p-5 text-lone-body text-muted-foreground">Nada para fazer agora: nenhum lead novo, toque vencido ou negócio esfriando.</section>
-            )}
-            {porGrupo.map(({ g, itens }) => (
-              <section key={g} className={`rounded-xl border bg-card p-5 ${g === "responder" ? "border-lone-warning-border" : "border-border"}`}>
-                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 className="flex items-center gap-2 text-lone-h2 text-foreground">
-                    {ROTULO_GRUPO[g].titulo}
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-lone-eyebrow font-semibold text-muted-foreground">{itens.length}</span>
-                  </h2>
-                  <span className="text-lone-caption text-muted-foreground">{ROTULO_GRUPO[g].dica}</span>
-                </div>
-                <div className="space-y-2">
-                  {itens.map((item) => {
-                    const l = item.lead;
-                    const ocupado = acaoBusy === l.id;
-                    const texto = textoEditado[l.id] ?? item.mensagem?.texto ?? "";
-                    const ehMensagem = item.mensagem?.tipo === "mensagem";
-                    const canal = item.passo?.canal ?? (ehMensagem ? "whatsapp" : null);
-                    const temZap = !!waLink(l.telefone);
-                    return (
-                      <article key={`${g}-${l.id}`} className="rounded-lg border border-border bg-background p-3">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <button onClick={() => setDraft({ ...l })} className="min-w-0 text-left">
-                            <span className="block truncate text-lone-body font-medium text-foreground">{l.empresa || l.contatoNome}</span>
-                            <span className="block truncate text-lone-caption text-muted-foreground">
-                              {[l.empresa ? l.contatoNome : null, ROTULO_ETAPA[l.estagio], item.motivo].filter(Boolean).join(" · ")}
-                            </span>
-                          </button>
-                          {l.valorOrcamento != null && l.valorOrcamento > 0 && <span className="shrink-0 text-lone-caption text-muted-foreground">{brl(l.valorOrcamento)}/mês</span>}
-                        </div>
-                        {item.passo && <p className="mt-2 text-lone-caption text-muted-foreground">{item.passo.objetivo}</p>}
-                        {item.mensagem && (
-                          editando === l.id ? (
-                            <textarea className={`${inputCls} mt-2`} rows={4} value={texto} onChange={(e) => setTextoEditado({ ...textoEditado, [l.id]: e.target.value })} />
-                          ) : (
-                            <p className={`mt-2 whitespace-pre-wrap rounded-md border border-border bg-card px-3 py-2 text-lone-caption ${ehMensagem ? "text-foreground" : "italic text-muted-foreground"}`}>{texto}</p>
-                          )
-                        )}
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {ehMensagem && temZap && (
-                            <button className={btnForte} disabled={ocupado} onClick={() => enviarWhatsApp(l, texto)}><MessageCircle size={12} /> Enviar no WhatsApp</button>
-                          )}
-                          {ehMensagem && !temZap && (
-                            <button className={btn} disabled={ocupado} onClick={() => { navigator.clipboard?.writeText(texto).catch(() => {}); toast.success("Texto copiado — sem WhatsApp no cadastro."); }}><StickyNote size={12} /> Copiar texto</button>
-                          )}
-                          {item.mensagem && <button className={btn} onClick={() => setEditando(editando === l.id ? null : l.id)}>{editando === l.id ? "Pronto" : "Editar texto"}</button>}
-                          {canal === "ligacao" && l.telefone && <a className={btn} href={`tel:${l.telefone.replace(/\D/g, "")}`}><Phone size={12} /> Ligar</a>}
-                          {canal === "ligacao" && <button className={btn} disabled={ocupado} onClick={() => registrarToque(l, "ligacao", `Ligação (${item.passo?.objetivo ?? "follow-up"})`)}>Registrar ligação</button>}
-                          {canal === "visita" && <button className={btn} disabled={ocupado} onClick={() => registrarToque(l, "visita", `Visita (${item.passo?.objetivo ?? "follow-up"})`)}><MapPin size={12} /> Registrar visita</button>}
-                          {ehMensagem && <button className={btn} disabled={ocupado} onClick={() => registrarToque(l, "whatsapp", "Contato feito por outro caminho (registrado no Hoje)")} title="Já falou com a pessoa por outro caminho">Feito</button>}
-                          {g === "fim" && (
-                            <>
-                              <button className={btn} disabled={ocupado} onClick={() => patchLead(l, { estagio: "perdido", motivoPerdaCodigo: "sem_resposta" }, "Marcado como perdido (sem resposta).")}>Perdido: sem resposta</button>
-                              <button className={btn} disabled={ocupado} onClick={() => patchLead(l, { retomarEm: somaDias(hoje, 30) }, "Volta para o Hoje em 30 dias.")}>Retomar em 30 dias</button>
-                            </>
-                          )}
-                          {g !== "fim" && g !== "reuniao" && (
-                            <span className="inline-flex items-center gap-1">
-                              <span className="text-lone-caption text-muted-foreground">Adiar:</span>
-                              {[1, 3, 7].map((d) => (
-                                <button key={d} className={btn} disabled={ocupado} onClick={() => patchLead(l, { retomarEm: somaDias(hoje, d) }, `Volta para o Hoje em ${d === 1 ? "1 dia" : `${d} dias`}.`)}>{d}d</button>
-                              ))}
-                            </span>
-                          )}
-                          {item.passo && item.toque && item.toque.total != null && (
-                            <button className={btn} disabled={ocupado} onClick={() => registrarToque(l, "pulado", `Toque pulado: ${item.passo!.objetivo}`)} title="Não fazer este passo; a régua segue para o próximo">Pular</button>
-                          )}
-                          <button className={btn} onClick={() => setDraft({ ...l })}>Abrir</button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
-        );
-      })()}
+      {tab === "hoje" && (
+        <HojeComercial
+          fila={fila}
+          leads={leads}
+          hoje={hoje}
+          resumoMeta={resumoMeta}
+          ocupado={acaoBusy}
+          onAbrir={(l) => setDraft({ ...l })}
+          onEnviarWhatsApp={enviarWhatsApp}
+          onRegistrar={registrarToque}
+          onPatch={patchLead}
+          onDefinirMeta={abrirMetas}
+          onVerDashboard={() => setTab("dashboard")}
+        />
+      )}
 
       {tab === "dashboard" && (
         <DashboardComercial
@@ -763,19 +645,25 @@ export default function CrmPage() {
         />
       )}
 
-      {tab === "funil" && (
+      {tab === "funil" && (() => {
+        const campo = "h-9 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none";
+        const mesAtual = hoje.slice(0, 7);
+        const fechados = filtrados.filter((l) => l.estagio === "ganho" || l.estagio === "perdido");
+        const fechadosDoMes = fechados.filter((l) => (l.fechadoEm ?? l.updatedAt ?? "").slice(0, 7) === mesAtual);
+        const listaFechados = verTodosFechados ? fechados : fechadosDoMes;
+        return (
         <>
-          {/* Filtros */}
+          {/* Filtros numa linha só */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input className={`${inputCls} w-56 pl-8`} placeholder="Buscar contato ou empresa…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input className={`${campo} w-64 pl-8`} placeholder="Buscar empresa ou contato…" value={busca} onChange={(e) => setBusca(e.target.value)} />
             </div>
-            <select className={`${inputCls} w-auto`} value={fResp} onChange={(e) => setFResp(e.target.value)}>
+            <select className={campo} value={fResp} onChange={(e) => setFResp(e.target.value)} aria-label="Responsável">
               <option value="">Todos os responsáveis</option>
               {responsaveis.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
-            <select className={`${inputCls} w-auto`} value={fOrigem} onChange={(e) => setFOrigem(e.target.value)}>
+            <select className={campo} value={fOrigem} onChange={(e) => setFOrigem(e.target.value)} aria-label="Origem">
               <option value="">Todas as origens</option>
               {origens.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
@@ -788,151 +676,169 @@ export default function CrmPage() {
             {(busca || fResp || fOrigem || filtroFunil) && (
               <button className="text-xs text-muted-foreground underline" onClick={() => { setBusca(""); setFResp(""); setFOrigem(""); setFiltroFunil(null); }}>limpar</button>
             )}
+            <span className="ml-auto text-lone-caption text-muted-foreground">{filtrados.filter((l) => ABERTOS.includes(l.estagio)).length} abertos · arraste o cartão para mudar de etapa</span>
           </div>
 
           <KanbanBoard<Lead>
             columns={columns}
+            classeColuna="w-64 shrink-0 xl:w-auto xl:min-w-0 xl:flex-1"
+            destinosExtras={[{ id: "ganho", title: ESTAGIO_META.ganho.title, color: ESTAGIO_META.ganho.color }, { id: "perdido", title: ESTAGIO_META.perdido.title, color: ESTAGIO_META.perdido.color }]}
+            cabecalhoExtra={(col) => {
+              const soma = col.items.reduce((s2, l) => s2 + (l.valorOrcamento ?? 0), 0);
+              return soma > 0 ? <span className="ml-auto mr-1 text-lone-caption font-medium tabular-nums text-muted-foreground">{brl(soma)}</span> : null;
+            }}
             onMove={moverEstagio}
             onAdd={(colId) => setDraft({ estagio: colId as CrmEstagio, responsavel: currentUser ?? undefined })}
             onEdit={(lead) => setDraft({ ...lead })}
             onDelete={excluir}
             renderCard={(l) => {
-              const reuniaoPassou = l.reuniaoData && l.reuniaoData < hoje && ABERTOS.includes(l.estagio);
-              const followAtrasado = l.proximoContato && l.proximoContato < hoje && ABERTOS.includes(l.estagio);
+              const passo = proximoPasso(l);
               const toque = toqueDo(l, hoje);
+              const atrasoForte = !!toque && toque.situacao === "atrasado" && toque.diasAtraso > 3;
+              const corPasso = atrasoForte ? "bg-lone-danger-bg text-lone-danger" : passo.alerta ? "bg-lone-warning-bg text-lone-warning" : "bg-muted text-muted-foreground";
+              const reuniaoPassou = l.reuniaoData && l.reuniaoData < hoje;
               return (
-                <div
-                  onClick={() => setDraft({ ...l })}
-                  className="cursor-pointer rounded-lg border border-border bg-background p-3 transition-colors hover:border-primary/40">
-                  <div className="flex items-start justify-between gap-2">
+                <div onClick={() => setDraft({ ...l })}
+                  className="cursor-pointer rounded-xl border border-border bg-background p-3 shadow-sm transition-colors hover:border-primary/40 dark:shadow-none">
+                  <div className="flex items-start justify-between gap-2 pr-5">
                     <div className="min-w-0">
-                      <div className="truncate text-lone-body font-medium text-foreground">{l.contatoNome}</div>
-                      {l.empresa && <div className="truncate text-xs text-muted-foreground">{l.empresa}</div>}
+                      <div className="truncate text-lone-body font-medium text-foreground">{l.empresa || l.contatoNome}</div>
+                      {l.empresa && l.contatoNome !== l.empresa && <div className="truncate text-lone-caption text-muted-foreground">{l.contatoNome}</div>}
                     </div>
                     <ChipNota l={l} />
                   </div>
-                  {toque && (
-                    <div className={`mt-2 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-lone-caption ${toque.situacao === "atrasado" ? "bg-lone-danger-bg text-lone-danger" : toque.situacao === "hoje" ? "bg-lone-warning-bg text-lone-warning" : "bg-muted text-muted-foreground"}`}>
-                      <Phone size={10} aria-hidden="true" /> {rotuloToque(toque)}
-                    </div>
-                  )}
                   {l.valorOrcamento != null && l.valorOrcamento > 0 && (
-                    <div className="mt-2 text-lone-caption text-foreground">
-                      {brl(l.valorOrcamento)}/mês
-                      {ABERTOS.includes(l.estagio) && <span className="text-muted-foreground"> · {Math.round(chanceDe(l) * 100)}% de chance</span>}
-                    </div>
-                  )}
-                  {estacionado(l, hoje) && (
-                    <div className="mt-2 inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-lone-caption text-muted-foreground">
-                      <CalendarClock size={10} aria-hidden="true" /> Retomar {fmtData(l.retomarEm)}
-                    </div>
-                  )}
-                  {l.clienteId && l.estagio === "ganho" && (
-                    <div className="mt-2 text-lone-caption text-lone-success">Já é cliente</div>
-                  )}
-                  {(l.reuniaoData || l.proximoContato || l.origem) && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {l.reuniaoData && (
-                        <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-lone-caption ${reuniaoPassou ? "bg-lone-danger-bg text-lone-danger" : "bg-lone-info-bg text-lone-info"}`}>
-                          <CalendarClock size={10} /> {fmtData(l.reuniaoData)}{reuniaoPassou ? " (passou)" : ""}
-                        </span>
-                      )}
-                      {followAtrasado && (
-                        <span className="inline-flex items-center gap-1 rounded bg-lone-danger-bg px-1.5 py-0.5 text-lone-caption text-lone-danger">
-                          <AlertCircle size={10} /> follow-up atrasado
-                        </span>
-                      )}
-                      {l.origem && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{l.origem}</span>}
-                    </div>
-                  )}
-                  <div className="mt-2 flex items-center justify-between">
-                    {l.responsavel ? (
-                      <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary/15 text-[8px] font-bold text-primary">{iniciais(l.responsavel)}</span>
-                        {l.responsavel.split(" ")[0]}
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-lone-body font-semibold tabular-nums text-foreground">{brl(l.valorOrcamento)}<span className="text-lone-caption font-normal text-muted-foreground">/mês</span></span>
+                      <span className="ml-auto flex items-center gap-1 text-lone-caption tabular-nums text-muted-foreground">
+                        <Anel tamanho="xs" pct={chanceDe(l) * 100} tom="primary" rotuloAcessivel={`Chance de ${Math.round(chanceDe(l) * 100)}%`} />
+                        {Math.round(chanceDe(l) * 100)}%
                       </span>
-                    ) : <span />}
-                    <div className="flex items-center gap-2">
-                      {waLink(l.telefone) && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); abrirWhatsApp(l.telefone, l.id); }}
-                          title="Abrir conversa no WhatsApp"
-                          className="inline-flex items-center gap-1 rounded bg-lone-success-bg px-1.5 py-0.5 text-lone-caption font-medium text-lone-success transition-opacity hover:opacity-80">
-                          <MessageCircle size={11} /> WhatsApp
-                        </button>
-                      )}
-                      <span className="text-lone-caption text-muted-foreground" title="dias desde a última atualização">há {diasDesde(l.updatedAt)}d</span>
                     </div>
-                  </div>
-                  {l.estagio === "perdido" && (l.motivoPerdaCodigo || l.motivoPerda) && (
-                    <div className="mt-1.5 truncate text-lone-caption italic text-lone-danger">Perdido: {rotuloMotivo(l.motivoPerdaCodigo) ?? l.motivoPerda}</div>
                   )}
+                  <div className={`mt-2 inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-lone-caption ${reuniaoPassou ? "bg-lone-danger-bg text-lone-danger" : corPasso}`}>
+                    <CalendarClock size={11} className="shrink-0" aria-hidden="true" />
+                    <span className="truncate">{reuniaoPassou ? `Reunião de ${fmtData(l.reuniaoData)} passou` : passo.texto}</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    {l.responsavel ? (
+                      <span className="inline-flex min-w-0 items-center gap-1.5 text-[10.5px] text-muted-foreground" title={l.responsavel}>
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-semibold text-primary">{iniciais(l.responsavel)}</span>
+                        <span className="truncate">{l.cidade || l.responsavel.split(" ")[0]}</span>
+                      </span>
+                    ) : <span className="truncate text-[10.5px] text-muted-foreground">{l.cidade}</span>}
+                    {waLink(l.telefone) && (
+                      <button onClick={(e) => { e.stopPropagation(); abrirWhatsApp(l.telefone, l.id); }} title="Abrir conversa no WhatsApp"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-md bg-lone-success-bg px-1.5 py-0.5 text-lone-caption font-medium text-lone-success transition-opacity hover:opacity-80">
+                        <MessageCircle size={11} /> WhatsApp
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             }}
           />
+
+          {/* Fechados: ganhos e perdidos (do mês, ou todos) */}
+          <section className="rounded-2xl border border-border bg-card shadow-sm dark:shadow-none">
+            <div className="flex flex-wrap items-center gap-3 px-5 py-3.5">
+              <h2 className="text-lone-h2 text-foreground">Fechados</h2>
+              <span className="text-lone-caption text-muted-foreground">
+                {listaFechados.filter((l) => l.estagio === "ganho").length} ganhos · {listaFechados.filter((l) => l.estagio === "perdido").length} perdidos {verTodosFechados ? "(todos)" : "este mês"}
+              </span>
+              <button onClick={() => setVerTodosFechados((v) => !v)} className="ml-auto text-lone-caption text-primary hover:underline">{verTodosFechados ? "Só este mês" : "Ver todos"}</button>
+            </div>
+            {listaFechados.length === 0 ? (
+              <p className="border-t border-border px-5 py-4 text-lone-caption text-muted-foreground">Nenhum negócio fechado {verTodosFechados ? "ainda" : "este mês"}.</p>
+            ) : (
+              <ul className="divide-y divide-border border-t border-border">
+                {listaFechados.map((l) => (
+                  <li key={l.id}>
+                    <button onClick={() => setDraft({ ...l })} className="flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors hover:bg-accent/50">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${ESTAGIO_META[l.estagio].color}`} aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate text-lone-body text-foreground">{l.empresa || l.contatoNome}</span>
+                      <span className={`shrink-0 text-lone-caption ${l.estagio === "ganho" ? "text-lone-success" : "text-lone-danger"}`}>
+                        {l.estagio === "ganho" ? (l.clienteId ? "Ganho · já é cliente" : "Ganho") : `Perdido${rotuloMotivo(l.motivoPerdaCodigo) ? ` · ${rotuloMotivo(l.motivoPerdaCodigo)}` : ""}`}
+                      </span>
+                      {l.valorOrcamento != null && l.valorOrcamento > 0 && <span className="w-24 shrink-0 text-right text-lone-caption tabular-nums text-muted-foreground">{brl(l.valorOrcamento)}/mês</span>}
+                      <span className="w-12 shrink-0 text-right text-lone-caption text-muted-foreground">{fmtData(l.fechadoEm)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </>
-      )}
+        );
+      })()}
 
       {tab === "agenda" && (() => {
-        const now = new Date();
-        const ano = now.getFullYear(), mes = now.getMonth();
-        const primeiroDiaSemana = new Date(ano, mes, 1).getDay();
-        const diasNoMes = new Date(ano, mes + 1, 0).getDate();
+        const now = new Date(`${hoje}T12:00:00Z`);
+        const ano = now.getUTCFullYear(), mes = now.getUTCMonth();
+        const primeiroDiaSemana = new Date(Date.UTC(ano, mes, 1)).getUTCDay();
+        const diasNoMes = new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate();
         const celulas: (number | null)[] = [];
         for (let i = 0; i < primeiroDiaSemana; i++) celulas.push(null);
         for (let d = 1; d <= diasNoMes; d++) celulas.push(d);
         const ymdDe = (d: number) => `${ano}-${String(mes + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-        const evRow = (e: { lead: Lead; data: string; tipo: "reuniao" | "follow" }, i: number) => (
-          <button key={i} onClick={() => setDraft({ ...e.lead })} className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-background p-2 text-left transition-colors hover:border-primary/40">
-            <span className={`flex flex-col items-center rounded-md px-2 py-1 ${e.tipo === "reuniao" ? "bg-primary/10 text-primary" : "bg-lone-warning-bg text-lone-warning"}`}>
-              <span className="text-lone-body font-semibold leading-none">{e.data.slice(8, 10)}</span>
-              <span className="text-lone-eyebrow uppercase">{mesLabel(e.data.slice(0, 7))}</span>
+        const nomeMes = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
+        const corEvento = (t: Evento<Lead>["tipo"]) => (t === "reuniao" ? "bg-primary" : t === "retomar" ? "bg-chart-4" : "bg-lone-warning");
+        const evRow = (e: Evento<Lead>, i: number, atrasado = false) => (
+          <button key={`${e.lead.id}-${e.tipo}-${i}`} onClick={() => setDraft({ ...e.lead })} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background p-2.5 text-left transition-colors hover:border-primary/40">
+            <span className={`flex w-11 shrink-0 flex-col items-center rounded-lg px-2 py-1 ${atrasado ? "bg-lone-danger-bg text-lone-danger" : e.tipo === "reuniao" ? "bg-primary/10 text-primary" : "bg-muted text-foreground"}`}>
+              <span className="text-lone-body font-semibold leading-none tabular-nums">{e.data.slice(8, 10)}</span>
+              <span className="text-[10px] uppercase">{mesLabel(e.data.slice(0, 7))}</span>
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-lone-body font-medium text-foreground">{e.lead.contatoNome}</span>
-              <span className="block truncate text-lone-caption text-muted-foreground">{e.tipo === "reuniao" ? "Reunião" : "Follow-up"}{e.lead.empresa ? ` · ${e.lead.empresa}` : ""}</span>
+              <span className="block truncate text-lone-body font-medium text-foreground">{e.lead.empresa || e.lead.contatoNome}</span>
+              <span className="flex items-center gap-1.5 truncate text-lone-caption text-muted-foreground"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${corEvento(e.tipo)}`} />{e.rotulo}{e.lead.cidade ? ` · ${e.lead.cidade}` : ""}</span>
             </span>
           </button>
         );
         return (
           <div className="grid gap-4 lg:grid-cols-3">
-            <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
-              <h2 className="text-lone-h2 capitalize text-foreground">{now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}</h2>
-              <div className="mt-5 grid grid-cols-7 gap-1 text-center">
-                {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d, i) => <div key={i} className="py-1 text-lone-eyebrow uppercase text-muted-foreground">{d}</div>)}
+            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none lg:col-span-2">
+              <h2 className="text-lone-h2 text-foreground">{nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)}</h2>
+              <div className="mt-4 grid grid-cols-7 gap-1.5 text-center">
+                {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d, i) => <div key={i} className="py-1 text-[10.5px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{d}</div>)}
                 {celulas.map((d, i) => {
                   if (d === null) return <div key={i} />;
                   const ymd = ymdDe(d);
                   const evs = agenda.porDia.get(ymd) ?? [];
                   const isHoje = ymd === hoje;
+                  const passado = ymd < hoje;
                   return (
-                    <div key={i} className={`aspect-square rounded-lg border p-1 ${isHoje ? "border-primary bg-primary/5" : "border-border"}`}>
-                      <div className={`text-lone-caption ${isHoje ? "font-semibold text-primary" : "text-foreground"}`}>{d}</div>
-                      <div className="mt-0.5 flex flex-wrap justify-center gap-0.5">
-                        {evs.slice(0, 3).map((e, j) => <span key={j} title={e.lead.contatoNome} className={`h-1.5 w-1.5 rounded-full ${e.tipo === "reuniao" ? "bg-primary" : "bg-lone-warning"}`} />)}
-                      </div>
+                    <div key={i} title={evs.map((e) => `${e.rotulo}: ${e.lead.empresa || e.lead.contatoNome}`).join("\n") || undefined}
+                      className={`flex min-h-[64px] flex-col rounded-xl border p-1.5 text-left ${isHoje ? "border-primary bg-primary/5" : "border-border"} ${passado ? "opacity-60" : ""}`}>
+                      <div className={`text-lone-caption tabular-nums ${isHoje ? "font-semibold text-primary" : "text-foreground"}`}>{d}</div>
+                      {evs.length > 0 && (
+                        <div className="mt-auto flex flex-wrap items-center gap-1">
+                          {evs.slice(0, 4).map((e, j) => <span key={j} className={`h-1.5 w-1.5 rounded-full ${corEvento(e.tipo)}`} />)}
+                          {evs.length > 4 && <span className="text-[10px] font-medium text-muted-foreground">+{evs.length - 4}</span>}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
-              <div className="mt-4 flex gap-4 text-lone-caption text-muted-foreground">
-                <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-primary" /> Reunião</span>
-                <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-lone-warning" /> Follow-up</span>
+              <div className="mt-4 flex flex-wrap gap-4 text-lone-caption text-muted-foreground">
+                <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-primary" /> {ROTULO_EVENTO.reuniao}</span>
+                <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-lone-warning" /> Follow-up (régua ou contato marcado)</span>
+                <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-chart-4" /> {ROTULO_EVENTO.retomar}</span>
               </div>
-              <p className="mt-3 text-lone-caption text-muted-foreground">Para marcar uma reunião, abra o lead e preencha &quot;Data da reunião&quot;.</p>
             </section>
 
-            <section className="rounded-xl border border-border bg-card p-5">
+            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none">
               {agenda.atrasados.length > 0 && (
-                <div className="mb-4">
-                  <p className="mb-2 text-lone-eyebrow uppercase text-lone-danger">Atrasados ({agenda.atrasados.length})</p>
-                  <div className="space-y-1.5">{agenda.atrasados.slice(0, 6).map(evRow)}</div>
+                <div className="mb-5">
+                  <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-lone-danger">Atrasados · {agenda.atrasados.length}</p>
+                  <div className="space-y-1.5">{agenda.atrasados.slice(0, 6).map((e, i) => evRow(e, i, true))}</div>
+                  {agenda.atrasados.length > 6 && <button onClick={() => setTab("hoje")} className="mt-2 text-lone-caption text-primary hover:underline">Ver todos no Hoje →</button>}
                 </div>
               )}
-              <p className="mb-2 text-lone-eyebrow uppercase text-muted-foreground">Próximos</p>
+              <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Próximos</p>
               <div className="space-y-1.5">
-                {agenda.proximos.length === 0 ? <p className="text-xs text-muted-foreground">Nada agendado.</p> : agenda.proximos.slice(0, 10).map(evRow)}
+                {agenda.proximos.length === 0 ? <p className="text-lone-caption text-muted-foreground">Nada agendado.</p> : agenda.proximos.slice(0, 12).map((e, i) => evRow(e, i))}
               </div>
             </section>
           </div>
@@ -941,26 +847,34 @@ export default function CrmPage() {
 
       {tab === "relatorios" && (
         <div className="grid gap-4 lg:grid-cols-2">
-          {/* Ganhos por mês (quantidade, pelo mês do fechamento) */}
-          <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
+          {/* Ganhos por mês: mensalidade vendida pelo mês do fechamento, com a meta de cada mês tracejada */}
+          <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none lg:col-span-2">
             <h2 className="text-lone-h2 text-foreground">Ganhos por mês</h2>
-            <p className="text-lone-caption text-muted-foreground">Leads fechados como ganho, pelo mês do fechamento — últimos 6 meses</p>
-            <div className="mt-4 flex h-32 items-end gap-4 border-b border-border pb-px">
-              {relatorio.porMes.map((m) => {
-                const atual = m.ym === hoje.slice(0, 7);
-                return (
-                  <div key={m.ym} className="flex h-full flex-1 flex-col items-center justify-end gap-1" title={`${mesLabel(m.ym)}/${m.ym.slice(0, 4)} — ${m.qtd} ganho(s)`}>
-                    {m.qtd > 0 && <span className={`text-lone-caption ${atual ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{m.qtd}</span>}
-                    <div className={`w-full max-w-12 rounded-t ${m.qtd > 0 ? "bg-lone-success" : "bg-muted"}`} style={{ height: m.qtd > 0 ? `${Math.max(6, (m.qtd / relatorio.maxQtd) * 100)}%` : "3px" }} />
-                    <span className={`text-lone-caption capitalize ${atual ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{mesLabel(m.ym)}</span>
-                  </div>
-                );
-              })}
-            </div>
+            <p className="text-lone-caption text-muted-foreground">Mensalidade (MRR novo) vendida em cada mês, pela data do fechamento — a linha tracejada é a meta do mês</p>
+            {(() => {
+              const metasMes = relatorio.porMes.map((m) => metas[m.ym]?.metaValor ?? null);
+              const teto = Math.max(1, ...relatorio.porMes.map((m) => m.valor), ...metasMes.map((v) => v ?? 0));
+              return (
+                <div className="mt-5 flex h-44 items-end gap-4 border-b border-border pb-px">
+                  {relatorio.porMes.map((m, i) => {
+                    const atual = m.ym === hoje.slice(0, 7);
+                    const metaM = metasMes[i];
+                    return (
+                      <div key={m.ym} className="relative flex h-full flex-1 flex-col items-center justify-end gap-1" title={`${mesLabel(m.ym)}/${m.ym.slice(0, 4)}: ${brl(m.valor)} em ${m.qtd} ${m.qtd === 1 ? "contrato" : "contratos"}${metaM ? ` · meta ${brl(metaM)}` : ""}`}>
+                        {metaM != null && <div className="pointer-events-none absolute inset-x-1 border-t-2 border-dashed border-lone-warning" style={{ bottom: `calc(${(metaM / teto) * 78}% + 1.25rem)` }} />}
+                        {m.valor > 0 && <span className={`text-lone-caption tabular-nums ${atual ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{brl(m.valor)}</span>}
+                        <div className={`w-full max-w-14 rounded-t-md ${m.valor > 0 ? "bg-lone-success" : "bg-muted-foreground/15"}`} style={{ height: m.valor > 0 ? `${Math.max(6, (m.valor / teto) * 78)}%` : "3px" }} />
+                        <span className={`text-lone-caption capitalize ${atual ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{mesLabel(m.ym)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </section>
 
           {/* Leads por mês (captação) */}
-          <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
+          <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none lg:col-span-2">
             <h2 className="text-lone-h2 text-foreground">Leads por mês</h2>
             <p className="text-lone-caption text-muted-foreground">Quantos leads entraram em cada mês (pela data de cadastro) — últimos 6 meses</p>
             <div className="mt-4 flex h-32 items-end gap-4 border-b border-border pb-px">
@@ -977,26 +891,30 @@ export default function CrmPage() {
             </div>
           </section>
 
-          {/* Por origem */}
-          <section className="rounded-xl border border-border bg-card p-5">
-            <h2 className="mb-3 text-sm font-semibold text-foreground">Por origem</h2>
-            {relatorio.porOrigem.length === 0 ? <p className="text-xs text-muted-foreground">Sem leads ainda.</p> : (
-              <table className="w-full text-xs">
-                <thead><tr className="text-left text-muted-foreground"><th className="py-1 font-medium">Origem</th><th className="py-1 font-medium">Leads</th><th className="py-1 font-medium">Ganhos</th></tr></thead>
-                <tbody>
-                  {relatorio.porOrigem.map(([k, g]) => (
-                    <tr key={k} className="border-t border-border text-foreground">
-                      <td className="py-1.5">{k}</td><td className="py-1.5">{g.total}</td>
-                      <td className="py-1.5">{g.ganhos}{g.total ? ` (${Math.round((g.ganhos / g.total) * 100)}%)` : ""}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Conversão por origem: qual canal fecha mais */}
+          <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none">
+            <h2 className="text-lone-h2 text-foreground">Conversão por origem</h2>
+            <p className="mb-4 text-lone-caption text-muted-foreground">Quantos leads cada canal trouxe e quantos viraram contrato</p>
+            {relatorio.porOrigem.length === 0 ? <p className="text-lone-caption text-muted-foreground">Sem leads ainda.</p> : (
+              <div className="space-y-3">
+                {relatorio.porOrigem.map(([k, g]) => {
+                  const pct = g.total ? Math.round((g.ganhos / g.total) * 100) : 0;
+                  return (
+                    <div key={k}>
+                      <div className="mb-1 flex items-baseline justify-between gap-2 text-lone-caption">
+                        <span className="min-w-0 truncate text-foreground">{k}</span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">{g.ganhos} de {g.total} · <span className="font-semibold text-foreground">{pct}%</span></span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-muted-foreground/15"><div className="h-full rounded-full bg-lone-success" style={{ width: `${Math.max(g.ganhos ? 3 : 0, pct)}%` }} /></div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </section>
 
           {/* Por responsável */}
-          <section className="rounded-xl border border-border bg-card p-5">
+          <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none">
             <h2 className="mb-3 text-sm font-semibold text-foreground">Por responsável</h2>
             {relatorio.porResponsavel.length === 0 ? <p className="text-xs text-muted-foreground">Sem leads ainda.</p> : (
               <table className="w-full text-xs">
@@ -1013,18 +931,24 @@ export default function CrmPage() {
             )}
           </section>
 
-          {/* Motivos de perda */}
-          <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
-            <h2 className="mb-3 text-sm font-semibold text-foreground">Motivos de perda</h2>
-            {relatorio.motivos.length === 0 ? <p className="text-lone-caption text-muted-foreground">Nenhum lead perdido — bora manter assim.</p> : (
-              <div className="flex flex-wrap gap-2">
-                {relatorio.motivos.map(([m, n]) => (
-                  <span key={m} className="rounded-lg border border-border bg-background px-2.5 py-1 text-lone-caption text-foreground">
-                    {m} <span className="ml-1 rounded bg-lone-danger-bg px-1.5 text-lone-eyebrow font-semibold text-lone-danger">{n}</span>
-                  </span>
-                ))}
-              </div>
-            )}
+          {/* Motivos de perda em ranking */}
+          <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none lg:col-span-2">
+            <h2 className="text-lone-h2 text-foreground">Motivos de perda</h2>
+            <p className="mb-4 text-lone-caption text-muted-foreground">Por que os negócios não fecharam — o que mais aparece primeiro</p>
+            {relatorio.motivos.length === 0 ? <p className="text-lone-caption text-muted-foreground">Nenhum lead perdido até agora.</p> : (() => {
+              const maxM = Math.max(1, ...relatorio.motivos.map(([, n]) => n));
+              return (
+                <div className="space-y-2.5">
+                  {relatorio.motivos.map(([m, n]) => (
+                    <div key={m} className="flex items-center gap-3">
+                      <span className="w-44 shrink-0 truncate text-lone-caption text-foreground">{m}</span>
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted-foreground/15"><div className="h-full rounded-full bg-lone-danger" style={{ width: `${(n / maxM) * 100}%` }} /></div>
+                      <span className="w-6 shrink-0 text-right text-lone-caption font-semibold tabular-nums text-foreground">{n}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </section>
         </div>
       )}
@@ -1062,33 +986,33 @@ export default function CrmPage() {
         </div>
       )}
 
-      {/* Modal add/editar */}
-      {draft && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4" onClick={() => setDraft(null)}>
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-border bg-card p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-foreground">{draft.id ? "Editar lead" : "Novo lead"}</h2>
-              <button onClick={() => setDraft(null)} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Contato *</label>
-                <input className={inputCls} value={draft.contatoNome ?? ""} onChange={(e) => setDraft({ ...draft, contatoNome: e.target.value })} placeholder="Nome de quem você falou" autoFocus />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Empresa</label>
-                <input className={inputCls} value={draft.empresa ?? ""} onChange={(e) => setDraft({ ...draft, empresa: e.target.value })} />
-              </div>
+      {/* Ficha do lead (redesign D3): painel lateral com o resumo fixo no topo e abas Resumo, Histórico e Dados.
+          Antes era um formulário de 20 campos numa coluna estreita, sem resumo, que o Esc não fechava. */}
+      {draft && (() => {
+        const existente = !!draft.id;
+        const passo = existente ? proximoPasso(draft as Lead) : null;
+        const chancePct = Math.round(chanceDe({ estagio: draft.estagio, probabilidade: draft.probabilidade }) * 100);
+        const nomeFicha = draft.empresa || draft.contatoNome || "Novo lead";
+        const abaCls = (a: typeof abaFicha) => `-mb-px border-b-2 px-3 py-2.5 text-lone-body font-medium transition-colors ${abaFicha === a ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`;
+        const resumo = (
+          <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Telefone</label>
-                  <input className={inputCls} value={draft.telefone ?? ""} onChange={(e) => setDraft({ ...draft, telefone: e.target.value })} />
+                  <label className="mb-1 block text-xs text-muted-foreground">Etapa</label>
+                  <select className={inputCls} value={draft.estagio} onChange={(e) => setDraft({ ...draft, estagio: e.target.value as CrmEstagio })}>
+                    {CRM_ESTAGIOS.map((e) => <option key={e} value={e}>{ESTAGIO_META[e].title}</option>)}
+                  </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">E-mail</label>
-                  <input className={inputCls} value={draft.email ?? ""} onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
+                  <label className="mb-1 block text-xs text-muted-foreground">Canal de venda</label>
+                  <select className={inputCls} value={draft.origem ?? ""} onChange={(e) => setDraft({ ...draft, origem: e.target.value || null })}>
+                    <option value="">Selecione o canal…</option>
+                    {CANAIS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    {draft.origem && !CANAIS.includes(draft.origem) && <option value={draft.origem}>{draft.origem} (antigo)</option>}
+                  </select>
                 </div>
               </div>
+              {CRITERIO_SAIDA[draft.estagio] && <p className="-mt-1 text-lone-caption text-muted-foreground">{CRITERIO_SAIDA[draft.estagio]}</p>}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-xs text-muted-foreground">Mensalidade (R$/mês)</label>
@@ -1115,22 +1039,6 @@ export default function CrmPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Etapa</label>
-                  <select className={inputCls} value={draft.estagio} onChange={(e) => setDraft({ ...draft, estagio: e.target.value as CrmEstagio })}>
-                    {CRM_ESTAGIOS.map((e) => <option key={e} value={e}>{ESTAGIO_META[e].title}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Canal de venda</label>
-                  <select className={inputCls} value={draft.origem ?? ""} onChange={(e) => setDraft({ ...draft, origem: e.target.value || null })}>
-                    <option value="">Selecione o canal…</option>
-                    {CANAIS.map((c) => <option key={c} value={c}>{c}</option>)}
-                    {draft.origem && !CANAIS.includes(draft.origem) && <option value={draft.origem}>{draft.origem} (antigo)</option>}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
                   <label className="mb-1 block text-xs text-muted-foreground">Data da reunião</label>
                   <input type="date" className={inputCls} value={draft.reuniaoData ?? ""} onChange={(e) => setDraft({ ...draft, reuniaoData: e.target.value || null })} />
                 </div>
@@ -1139,30 +1047,6 @@ export default function CrmPage() {
                   <input type="date" className={inputCls} value={draft.proximoContato ?? ""} onChange={(e) => setDraft({ ...draft, proximoContato: e.target.value || null })} />
                 </div>
               </div>
-              {CRITERIO_SAIDA[draft.estagio] && <p className="-mt-1 text-lone-caption text-muted-foreground">{CRITERIO_SAIDA[draft.estagio]}</p>}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Segmento</label>
-                  <input className={inputCls} value={draft.segmento ?? ""} onChange={(e) => setDraft({ ...draft, segmento: e.target.value || null })} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Cidade</label>
-                  <input className={inputCls} value={draft.cidade ?? ""} onChange={(e) => setDraft({ ...draft, cidade: e.target.value || null })} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Instagram</label>
-                  <input className={inputCls} value={draft.instagram ?? ""} placeholder="@perfil" onChange={(e) => setDraft({ ...draft, instagram: e.target.value.replace(/^@/, "") || null })} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Responsável</label>
-                  <input className={inputCls} value={draft.responsavel ?? ""} onChange={(e) => setDraft({ ...draft, responsavel: e.target.value })} />
-                </div>
-              </div>
-              {draft.endereco && (
-                <p className="flex items-start gap-1.5 text-lone-caption text-muted-foreground"><MapPin size={12} className="mt-0.5 shrink-0" /> {draft.endereco}</p>
-              )}
               {draft.estagio === "perdido" && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -1190,61 +1074,119 @@ export default function CrmPage() {
                 <p className="text-lone-caption text-muted-foreground">Fechado em {new Date(draft.fechadoEm).toLocaleDateString("pt-BR")} — conta no relatório desse mês.</p>
               )}
 
-              {/* WhatsApp + Histórico do lead (só quando já existe — novo lead ainda não tem id) */}
-              {draft.id && (
-                <div className="border-t border-border pt-3">
-                  {waLink(draft.telefone) && (
-                    <button
-                      type="button"
-                      onClick={() => abrirWhatsApp(draft.telefone, draft.id)}
-                      className="mb-3 inline-flex items-center gap-1.5 rounded-lg bg-lone-success-bg px-3 py-1.5 text-lone-caption font-medium text-lone-success transition-opacity hover:opacity-80">
-                      <MessageCircle size={14} /> Abrir WhatsApp
-                    </button>
-                  )}
-                  <label className="mb-1.5 block text-lone-caption font-medium text-muted-foreground">Histórico</label>
-                  <div className="flex gap-2">
-                    <select className={`${inputCls} w-auto shrink-0`} value={novaTipo} onChange={(e) => setNovaTipo(e.target.value as CrmAtividadeTipo)}>
-                      {(["nota", "ligacao", "whatsapp", "email", "reuniao", "visita"] as CrmAtividadeTipo[]).map((t) => (
-                        <option key={t} value={t}>{ATIVIDADE_META[t].label}</option>
-                      ))}
-                    </select>
-                    <input
-                      className={inputCls}
-                      placeholder="Registrar (ex: liguei, caixa postal)"
-                      value={novoTexto}
-                      onChange={(e) => setNovoTexto(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" && novoTexto.trim()) { registrarAtividade(novaTipo, novoTexto); setNovoTexto(""); } }}
-                    />
-                    <Button size="sm" disabled={!novoTexto.trim()} onClick={() => { registrarAtividade(novaTipo, novoTexto); setNovoTexto(""); }}>
-                      <Send size={14} />
-                    </Button>
-                  </div>
-                  <div className="mt-3 max-h-52 space-y-2 overflow-y-auto">
-                    {loadingAtiv ? (
-                      <p className="text-xs text-muted-foreground">Carregando…</p>
-                    ) : atividades.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">Sem histórico ainda — registre a primeira interação.</p>
-                    ) : (
-                      atividades.map((a) => {
-                        const Icon = ATIVIDADE_META[a.tipo]?.icon ?? StickyNote;
-                        return (
-                          <div key={a.id} className="flex gap-2 text-xs">
-                            <Icon size={13} className="mt-0.5 shrink-0 text-muted-foreground" />
-                            <div className="min-w-0">
-                              <div className="text-foreground">{a.texto}</div>
-                              <div className="text-[10px] text-muted-foreground">
-                                {new Date(a.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                                {a.autor ? ` · ${a.autor.split(" ")[0]}` : ""}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
+          </div>
+        );
+        const dados = (
+          <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">Contato *</label>
+                <input className={inputCls} value={draft.contatoNome ?? ""} onChange={(e) => setDraft({ ...draft, contatoNome: e.target.value })} placeholder="Nome de quem você falou" autoFocus />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">Empresa</label>
+                <input className={inputCls} value={draft.empresa ?? ""} onChange={(e) => setDraft({ ...draft, empresa: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Telefone</label>
+                  <input className={inputCls} value={draft.telefone ?? ""} onChange={(e) => setDraft({ ...draft, telefone: e.target.value })} />
                 </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">E-mail</label>
+                  <input className={inputCls} value={draft.email ?? ""} onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Segmento</label>
+                  <input className={inputCls} value={draft.segmento ?? ""} onChange={(e) => setDraft({ ...draft, segmento: e.target.value || null })} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Cidade</label>
+                  <input className={inputCls} value={draft.cidade ?? ""} onChange={(e) => setDraft({ ...draft, cidade: e.target.value || null })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Instagram</label>
+                  <input className={inputCls} value={draft.instagram ?? ""} placeholder="@perfil" onChange={(e) => setDraft({ ...draft, instagram: e.target.value.replace(/^@/, "") || null })} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Responsável</label>
+                  <input className={inputCls} value={draft.responsavel ?? ""} onChange={(e) => setDraft({ ...draft, responsavel: e.target.value })} />
+                </div>
+              </div>
+              {draft.endereco && (
+                <p className="flex items-start gap-1.5 text-lone-caption text-muted-foreground"><MapPin size={12} className="mt-0.5 shrink-0" /> {draft.endereco}</p>
               )}
-            </div>
+          </div>
+        );
+        return (
+          <div className="fixed inset-0 z-50 flex justify-end bg-overlay" onClick={() => setDraft(null)}>
+            <aside role="dialog" aria-modal="true" aria-label={existente ? `Ficha de ${nomeFicha}` : "Novo lead"}
+              className="cc-gaveta flex h-full w-full max-w-xl flex-col border-l border-border bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <header className="border-b border-border px-5 pb-4 pt-5">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    {existente && (
+                      <p className="flex flex-wrap items-center gap-2 text-lone-caption text-muted-foreground">
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-0.5 font-medium text-primary">
+                          <span className={`h-1.5 w-1.5 rounded-full ${ESTAGIO_META[draft.estagio].color}`} />{ESTAGIO_META[draft.estagio].title}
+                        </span>
+                        {draft.origem && <span>{draft.origem}</span>}
+                        {draft.cidade && <span>· {draft.cidade}</span>}
+                      </p>
+                    )}
+                    <h2 className="mt-1.5 truncate text-lone-h1 tracking-tight text-foreground">{existente ? nomeFicha : "Novo lead"}</h2>
+                    {existente && draft.empresa && draft.contatoNome && draft.contatoNome !== draft.empresa && <p className="truncate text-lone-body text-muted-foreground">{draft.contatoNome}</p>}
+                  </div>
+                  <button onClick={() => setDraft(null)} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Fechar (Esc)"><X size={18} /></button>
+                </div>
+                {existente && (
+                  <>
+                    <div className="mt-4 grid grid-cols-3 gap-2">
+                      <div className="rounded-xl border border-border bg-background px-3 py-2">
+                        <p className="text-[10.5px] uppercase tracking-[0.06em] text-muted-foreground">Mensalidade</p>
+                        <p className="mt-0.5 text-lone-body font-semibold tabular-nums text-foreground">{draft.valorOrcamento ? brl(draft.valorOrcamento) : "—"}</p>
+                      </div>
+                      <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2">
+                        <Anel tamanho="xs" pct={chancePct} tom="primary" rotuloAcessivel={`Chance de ${chancePct}%`} />
+                        <div><p className="text-[10.5px] uppercase tracking-[0.06em] text-muted-foreground">Chance</p><p className="text-lone-body font-semibold tabular-nums text-foreground">{chancePct}%</p></div>
+                      </div>
+                      <div className="rounded-xl border border-border bg-background px-3 py-2">
+                        <p className="text-[10.5px] uppercase tracking-[0.06em] text-muted-foreground">Próximo passo</p>
+                        <p className={`mt-0.5 truncate text-lone-caption font-medium ${passo?.alerta ? "text-lone-warning" : "text-foreground"}`} title={passo?.texto}>{passo?.texto ?? "—"}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {waLink(draft.telefone) && (
+                        <button type="button" onClick={() => abrirWhatsApp(draft.telefone, draft.id)}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-lone-success-bg px-3 text-[13px] font-medium text-lone-success hover:opacity-80"><MessageCircle size={14} /> WhatsApp</button>
+                      )}
+                      {draft.telefone && (
+                        <a href={`tel:${draft.telefone.replace(/\D/g, "")}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] text-foreground hover:bg-accent"><Phone size={14} /> Ligar</a>
+                      )}
+                      {draft.instagram && (
+                        <a href={`https://instagram.com/${draft.instagram}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] text-foreground hover:bg-accent">@{draft.instagram}</a>
+                      )}
+                    </div>
+                  </>
+                )}
+              </header>
+
+              {existente && (
+                <nav className="flex gap-1 border-b border-border px-5" aria-label="Seções da ficha">
+                  <button className={abaCls("resumo")} onClick={() => setAbaFicha("resumo")}>Resumo</button>
+                  <button className={abaCls("historico")} onClick={() => setAbaFicha("historico")}>Histórico{atividades.length ? ` · ${atividades.length}` : ""}</button>
+                  <button className={abaCls("dados")} onClick={() => setAbaFicha("dados")}>Dados</button>
+                </nav>
+              )}
+
+              <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                {!existente && <>{dados}{resumo}</>}
+                {existente && abaFicha === "resumo" && (
+                  <>
+                    {resumo}
             {/* ── Nota A/B/C (Leva 7C, N28): a régua da prospecção aplicada ao lead ── */}
             {draft.id && (
               <div className="mt-4 space-y-2 border-t border-border pt-3">
@@ -1259,7 +1201,7 @@ export default function CrmPage() {
                     )}
                   </span>
                 </div>
-                {draft.notaOrigem === "prospeccao" && <p className="text-lone-caption text-muted-foreground">Nota da prospecção (a leitura completa do Piloto SDR).</p>}
+                {draft.notaOrigem === "prospeccao" && <p className="text-lone-caption text-muted-foreground">Nota que veio da prospecção.</p>}
                 {qualificando && (
                   <div className="space-y-2 rounded-lg border border-border bg-background p-3">
                     <p className="text-lone-caption text-muted-foreground">A mesma régua da prospecção. Deixe em branco o que não sabe — conta como não confirmado.</p>
@@ -1319,7 +1261,6 @@ export default function CrmPage() {
                     </Button>
                   )}
                 </div>
-                {!draft.prospectId && <p className="text-lone-caption text-muted-foreground">O PDF sai do diagnóstico da prospecção — este lead foi cadastrado à mão.</p>}
               </div>
             )}
 
@@ -1347,7 +1288,58 @@ export default function CrmPage() {
               </div>
             )}
 
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                  </>
+                )}
+                {existente && abaFicha === "historico" && (
+                  <div>
+                  <label className="mb-1.5 block text-lone-caption font-medium text-muted-foreground">Registrar contato ou anotação</label>
+                  <div className="flex gap-2">
+                    <select className="h-9 shrink-0 rounded-lg border border-border bg-background px-2 text-sm text-foreground focus:border-primary focus:outline-none" aria-label="Tipo" value={novaTipo} onChange={(e) => setNovaTipo(e.target.value as CrmAtividadeTipo)}>
+                      {(["nota", "ligacao", "whatsapp", "email", "reuniao", "visita"] as CrmAtividadeTipo[]).map((t) => (
+                        <option key={t} value={t}>{ATIVIDADE_META[t].label}</option>
+                      ))}
+                    </select>
+                    <input
+                      className={inputCls}
+                      placeholder="Registrar (ex: liguei, caixa postal)"
+                      value={novoTexto}
+                      onChange={(e) => setNovoTexto(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && novoTexto.trim()) { registrarAtividade(novaTipo, novoTexto); setNovoTexto(""); } }}
+                    />
+                    <Button size="sm" disabled={!novoTexto.trim()} onClick={() => { registrarAtividade(novaTipo, novoTexto); setNovoTexto(""); }}>
+                      <Send size={14} />
+                    </Button>
+                  </div>
+                  <div className="mt-5 space-y-0">
+                    {loadingAtiv ? (
+                      <p className="text-xs text-muted-foreground">Carregando…</p>
+                    ) : atividades.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">Sem histórico ainda — registre a primeira interação.</p>
+                    ) : (
+                      atividades.map((a) => {
+                        const Icon = ATIVIDADE_META[a.tipo]?.icon ?? StickyNote;
+                        return (
+                          <div key={a.id} className="relative flex gap-3 pb-4 before:absolute before:bottom-0 before:left-[13px] before:top-7 before:w-px before:bg-border last:before:hidden">
+                            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-border bg-background"><Icon size={13} className="text-muted-foreground" /></span>
+                            <div className="min-w-0 pt-0.5">
+                              <div className="text-lone-body text-foreground">{a.texto}</div>
+                              <div className="mt-0.5 text-[10.5px] text-muted-foreground">{ATIVIDADE_META[a.tipo]?.label ?? a.tipo} · 
+                                {new Date(a.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                                {a.autor ? ` · ${a.autor.split(" ")[0]}` : ""}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  </div>
+                )}
+                {existente && abaFicha === "dados" && dados}
+              </div>
+
+              <footer className="border-t border-border px-5 py-3">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {draft.id && draft.estagio === "ganho" && (draft.clienteId ? (
                 <a href={`/clients/${draft.clienteId}`}
                   className="mr-auto inline-flex h-9 items-center gap-1.5 rounded-md border border-lone-success-border px-3 text-sm text-lone-success hover:bg-lone-success-bg">
@@ -1366,9 +1358,11 @@ export default function CrmPage() {
               <Button variant="ghost" onClick={() => setDraft(null)}>Cancelar</Button>
               <Button onClick={salvar} disabled={saving || !draft.contatoNome?.trim()}>{saving ? "Salvando…" : draft.id ? "Salvar" : "Criar lead"}</Button>
             </div>
+              </footer>
+            </aside>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

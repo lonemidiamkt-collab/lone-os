@@ -15,6 +15,12 @@ export interface KanbanColumn<T = unknown> {
 
 interface KanbanBoardProps<T extends { id: string }> {
   columns: KanbanColumn<T>[];
+  /** Largura das colunas (padrão: w-72 fixa). O Comercial usa colunas que dividem a tela. */
+  classeColuna?: string;
+  /** Algo a mais no cabeçalho da coluna (ex.: a soma em R$). */
+  cabecalhoExtra?: (col: KanbanColumn<T>) => React.ReactNode;
+  /** Destinos do "Mover para" que não aparecem como coluna (ex.: Ganho e Perdido no Comercial). */
+  destinosExtras?: { id: string; title: string; color: string }[];
   renderCard: (item: T, columnId: string) => React.ReactNode;
   onMove?: (itemId: string, fromColumn: string, toColumn: string) => void;
   onDelete?: (itemId: string) => void;
@@ -29,6 +35,9 @@ export default function KanbanBoard<T extends { id: string }>({
   onDelete,
   onEdit,
   onAdd,
+  classeColuna = "w-72 shrink-0",
+  cabecalhoExtra,
+  destinosExtras = [],
 }: KanbanBoardProps<T>) {
   const [columns, setColumns] = useState(propColumns);
   const [dragging, setDragging] = useState<{ itemId: string; fromCol: string } | null>(null);
@@ -51,6 +60,12 @@ export default function KanbanBoard<T extends { id: string }>({
     const fromColumn = columns.find((c) => c.id === fromCol);
     const item = fromColumn?.items.find((i: T) => i.id === itemId);
     if (!item) return;
+    // Destino que não é coluna (ex.: Ganho): só tira da coluna e avisa — quem chama recarrega.
+    if (!columns.some((c) => c.id === toCol)) {
+      setColumns((prev) => prev.map((col) => (col.id === fromCol ? { ...col, items: col.items.filter((i: T) => i.id !== itemId) } : col)));
+      onMove?.(itemId, fromCol, toCol);
+      return;
+    }
     setColumns((prev) =>
       prev.map((col) => {
         if (col.id === fromCol) return { ...col, items: col.items.filter((i: T) => i.id !== itemId) };
@@ -73,7 +88,8 @@ export default function KanbanBoard<T extends { id: string }>({
         <div
           key={col.id}
           className={cn(
-            "flex flex-col w-72 shrink-0 rounded-xl border transition-colors",
+            "flex flex-col rounded-xl border transition-colors",
+            classeColuna,
             dragOver === col.id ? "border-primary/50 bg-primary/5" : "border-border bg-card"
           )}
           onDragOver={(e) => { e.preventDefault(); setDragOver(col.id); }}
@@ -88,6 +104,7 @@ export default function KanbanBoard<T extends { id: string }>({
                 {col.items.length}
               </span>
             </div>
+            {cabecalhoExtra?.(col)}
             {onAdd && (
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onAdd(col.id)}>
                 <Plus size={14} className="text-muted-foreground" />
@@ -112,7 +129,7 @@ export default function KanbanBoard<T extends { id: string }>({
                 {/* Menu (3 pontinhos). No desktop aparece no hover; no touch fica sempre visível
                     (group-hover não dispara no toque). Inclui "Mover para" — o jeito de mover card
                     no celular/tablet, onde o drag HTML5 não funciona. */}
-                {(onEdit || onDelete || (onMove && columns.length > 1)) && (
+                {(onEdit || onDelete || (onMove && columns.length + destinosExtras.length > 1)) && (
                   <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10">
                     <button
                       onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === item.id ? null : item.id); }}
@@ -125,10 +142,10 @@ export default function KanbanBoard<T extends { id: string }>({
                       <>
                         <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(null)} />
                         <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-30 py-1 min-w-[150px] max-h-72 overflow-y-auto animate-fade-in">
-                          {onMove && columns.length > 1 && (
+                          {onMove && columns.length + destinosExtras.length > 1 && (
                             <>
                               <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Mover para</p>
-                              {columns.filter((c) => c.id !== col.id).map((target) => (
+                              {[...columns, ...destinosExtras].filter((c) => c.id !== col.id).map((target) => (
                                 <button
                                   key={target.id}
                                   onClick={(e) => { e.stopPropagation(); moveItem(item.id, col.id, target.id); setMenuOpen(null); }}

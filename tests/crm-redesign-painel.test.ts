@@ -169,3 +169,24 @@ describe("casco do comercial", () => {
     expect(destinoNoComercial("/ceo")).toEqual({ tipo: "redirecionar", para: "/" });
   });
 });
+
+describe("agenda: régua e retomadas também entram (D4)", () => {
+  it("reunião, passo da régua, retomar e contato marcado; atrasado separado; fechado fora", async () => {
+    const { eventosDaAgenda } = await import("@/lib/crm/agenda");
+    const hoje = "2026-10-20";
+    const r = eventosDaAgenda([
+      L("reg", { etapaDesde: "2026-10-01T12:00:00Z", avancos: ["2026-10-01T13:00:00Z"] }),                 // régua atrasada
+      L("ret", { retomarEm: "2026-11-03", etapaDesde: "2026-10-01T12:00:00Z" }),                             // estacionado
+      L("reu", { estagio: "diagnostico", reuniaoData: "2026-10-22", etapaDesde: "2026-10-19T12:00:00Z", avancos: ["2026-10-19T12:00:00Z"] }),
+      L("man", { estagio: "negociacao", proximoContato: "2026-10-25", etapaDesde: "2026-10-19T12:00:00Z", avancos: ["2026-10-19T12:00:00Z"] }),
+      L("fim", { estagio: "ganho", reuniaoData: "2026-10-30" }),
+    ], hoje);
+    const tipos = (id: string) => [...r.atrasados, ...r.proximos].filter((e) => e.lead.id === id).map((e) => e.tipo);
+    expect(r.atrasados.map((e) => e.lead.id)).toEqual(["reg"]);
+    expect(tipos("ret")).toEqual(["retomar"]);           // retomada no lugar da régua
+    expect(tipos("reu")).toContain("reuniao");
+    expect(tipos("man")).toContain("contato");
+    expect(tipos("fim")).toEqual([]);                    // ganho não entra
+    expect(r.porDia.get("2026-11-03")?.[0].tipo).toBe("retomar");
+  });
+});
