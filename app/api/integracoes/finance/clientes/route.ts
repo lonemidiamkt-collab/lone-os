@@ -13,7 +13,7 @@ import { CAMINHO_CLIENTES, mensagemAssinada, montarClientesParaFinance, type Lin
 // LONEOS_FINANCE_READ_SECRET, carimbo de no máximo 5 min — o mesmo esquema do cadastro do site. Sem o segredo
 // configurado a porta fica fechada (503). Só leitura: esta rota não grava nada.
 
-const COLUNAS_CLIENTE = "id, name, service_type, lifecycle, active, draft_status, join_date, activated_at, paused_at, paused_until, churned_at, churn_category, churn_reason, source_lead_id";
+const COLUNAS_CLIENTE = "id, name, service_type, lifecycle, active, draft_status, join_date, activated_at, paused_at, paused_until, churned_at, churn_category, churn_reason, source_lead_id, faturamento_faixa";
 const COLUNAS_SAIDA = "client_id, estado, iniciativa, motivo, solicitado_em, encerra_em, cancelado_em, created_at";
 
 export async function GET(req: NextRequest) {

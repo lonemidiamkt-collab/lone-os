@@ -2,7 +2,7 @@
 //
 // Direção única, decidida em 25/09/2026: o financeiro LÊ o Lone OS; o Lone OS nunca lê o financeiro (o time loga
 // aqui e o agente lê este banco). Por isso este pacote leva só a SITUAÇÃO de cada cliente — entrada, serviço,
-// pausa, saída — e nunca valor, telefone ou e-mail. Quem cruza com contrato e dinheiro é o outro lado.
+// pausa, saída, faixa de faturamento declarada — e nunca valor, telefone ou e-mail. Quem cruza com contrato e dinheiro é o outro lado.
 //
 // Puro (sem banco, sem relógio): a rota /api/integracoes/finance/clientes busca as linhas e chama montar().
 
@@ -26,6 +26,7 @@ export interface LinhaCliente {
   churn_category: string | null;
   churn_reason: string | null;
   source_lead_id: string | null;
+  faturamento_faixa: string | null;
 }
 
 export interface LinhaSaida {
@@ -58,6 +59,9 @@ export interface ClienteParaFinance {
   /** Saída em andamento ou concluída pelo fluxo de encerramento (a mais recente não cancelada). */
   saida: { estado: string; iniciativa: string | null; motivo: string | null; solicitadoEm: string | null; encerraEm: string | null } | null;
   leadId: string | null;
+  /** Faixa de faturamento MENSAL declarada pelo cliente (ate_30k … acima_500k, nao_informado) — lib/empresa/receita.ts.
+   *  É dado do negócio do cliente, não da Lone; o porte da Receita fica de fora de propósito (é teto legal, não faturamento). */
+  faixaFaturamento: string | null;
 }
 
 /** Data AAAA-MM-DD no fuso de São Paulo (timestamptz) ou a própria data (coluna date). */
@@ -97,6 +101,7 @@ export function montarClientesParaFinance(clientes: LinhaCliente[], saidas: Linh
       motivoSaida: curto(c.churn_reason),
       saida: s ? { estado: s.estado ?? "rascunho", iniciativa: s.iniciativa, motivo: curto(s.motivo), solicitadoEm: diaSP(s.solicitado_em), encerraEm: diaSP(s.encerra_em) } : null,
       leadId: c.source_lead_id ?? null,
+      faixaFaturamento: c.faturamento_faixa ?? null,
     };
   });
 }

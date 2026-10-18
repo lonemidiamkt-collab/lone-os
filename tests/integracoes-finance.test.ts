@@ -5,17 +5,18 @@ import { CAMINHO_CLIENTES, diaSP, mensagemAssinada, montarClientesParaFinance, t
 const base: LinhaCliente = {
   id: "c1", name: "  Loja   Exemplo ", service_type: "lone_growth", lifecycle: "ativo", active: true, draft_status: null,
   join_date: "2026-08-01", activated_at: null, paused_at: null, paused_until: null, churned_at: null,
-  churn_category: null, churn_reason: null, source_lead_id: null,
+  churn_category: null, churn_reason: null, source_lead_id: null, faturamento_faixa: "50k_100k",
 };
 
 describe("pacote de clientes para o financeiro", () => {
   it("leva só situação: nenhuma chave de valor, contato ou documento", () => {
     const [c] = montarClientesParaFinance([base], []);
     expect(Object.keys(c).sort()).toEqual(
-      ["ativo", "categoriaSaida", "ciclo", "entrouEm", "id", "leadId", "motivoSaida", "nome", "pausadoAte", "pausadoDesde", "rascunho", "saida", "saiuEm", "servico"].sort(),
+      ["ativo", "categoriaSaida", "ciclo", "entrouEm", "faixaFaturamento", "id", "leadId", "motivoSaida", "nome", "pausadoAte", "pausadoDesde", "rascunho", "saida", "saiuEm", "servico"].sort(),
     );
-    expect(JSON.stringify(c)).not.toMatch(/valor|value|budget|phone|telefone|email|cnpj|cpf/i);
+    expect(JSON.stringify(c)).not.toMatch(/valor|value|budget|phone|telefone|email|cnpj|cpf|porte|capital/i);
     expect(c.nome).toBe("Loja Exemplo");
+    expect(c.faixaFaturamento).toBe("50k_100k");
   });
 
   it("saída: data em São Paulo, motivo encurtado e rascunho de onboarding marcado", () => {
