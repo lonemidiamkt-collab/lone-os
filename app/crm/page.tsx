@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
@@ -10,7 +10,7 @@ import KanbanBoard, { type KanbanColumn } from "@/components/KanbanBoard";
 import { Button } from "@/components/ui/button";
 import { CRM_ESTAGIOS, type CrmEstagio, type CrmLead, type CrmLeadActivity, type CrmAtividadeTipo } from "@/lib/types";
 import Link from "next/link";
-import { Plus, X, Search, TrendingUp, Trophy, Percent, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3, Sun, FileText, Download, MapPin, Upload, Target, Timer, SkipForward } from "lucide-react";
+import { Plus, X, Search, Trophy, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3, Sun, FileText, Download, MapPin, Upload, Target, SkipForward } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ExtrasLead } from "@/lib/crm/extras";
 import { proximoToque, rotuloToque, TIPOS_TOQUE, type ProximoToque } from "@/lib/crm/cadencia";
@@ -23,7 +23,7 @@ import { PACOTES_PROPOSTA } from "@/lib/crm/proposta";
 import { ETAPAS_ABERTAS, MOTIVOS_PERDA, ROTULO_ETAPA, CRITERIO_SAIDA, chanceDe, rotuloMotivo } from "@/lib/crm/etapas";
 import { brl, calcularEsforco, calcularMeta, hojeSP, mesSP, type ResumoMeta } from "@/lib/crm/meta";
 import { podeVerComercial } from "@/lib/crm/acesso";
-import { resumirPipeline } from "@/lib/crm/pipeline";
+import DashboardComercial, { type FiltroFunil } from "@/components/crm/DashboardComercial";
 import { useCascoComercial } from "@/lib/navegacao/use-casco";
 import type { CrmMeta } from "@/lib/types";
 
@@ -39,6 +39,15 @@ const ABERTOS: readonly CrmEstagio[] = ETAPAS_ABERTAS;
 
 // Canais de venda (origem do lead) — padroniza o campo pra relatórios limpos por canal.
 const CANAIS = ["Site", "Anúncio → site", "Visita — Rota Lagos", "Indicação", "Tráfego pago", "Instagram", "Prospecção ativa", "WhatsApp", "Evento / networking", "Parceria", "Pipeline de outubro", "Outro"];
+
+// Título de cada aba no endereço do comercial (lá o casco já diz "Lone Comercial").
+const TITULO_ABA: Record<"hoje" | "dashboard" | "funil" | "agenda" | "relatorios", { titulo: string; apoio: string }> = {
+  hoje: { titulo: "Hoje", apoio: "O que fazer agora, na ordem que vende" },
+  dashboard: { titulo: "Dashboard", apoio: "" },
+  funil: { titulo: "Funil", apoio: "Todos os negócios, por etapa" },
+  agenda: { titulo: "Agenda", apoio: "Reuniões e contatos marcados" },
+  relatorios: { titulo: "Relatórios", apoio: "Ganhos, entrada de leads e motivos de perda" },
+};
 
 // ─── Formatação ──────────────────────────────────────────────────────
 const fmtData = (d: string | null) => (d ? new Date(d.length === 10 ? `${d}T12:00:00` : d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : null);
@@ -109,20 +118,6 @@ type Lead = CrmLead & Partial<ExtrasLead>;
 type Draft = Partial<Lead> & { estagio: CrmEstagio };
 const inputCls =
   "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none";
-
-// ─── KPI tile ────────────────────────────────────────────────────────
-function Kpi({ icon: Icon, label, value, sub, tone }: {
-  icon: LucideIcon;
-  label: string; value: string; sub?: string; tone?: "good" | "accent";
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center gap-1.5 text-lone-caption text-muted-foreground"><Icon size={13} /> {label}</div>
-      <div className={`mt-1.5 text-lone-hero tracking-tight ${tone === "good" ? "text-lone-success" : "text-foreground"}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-lone-caption text-muted-foreground">{sub}</div>}
-    </div>
-  );
-}
 
 // ─── Barra da meta (Hoje e Dashboard) ───────────────────────────────────
 // Contas em lib/crm/meta.ts (código, fuso de SP). Projeção sempre ao lado do ponderado: sozinha ela
@@ -198,7 +193,16 @@ export default function CrmPage() {
   const [pacoteProposta, setPacoteProposta] = useState("lone_growth");
   const [propostaBusy, setPropostaBusy] = useState<"pdf" | "enviada" | null>(null);
   // Meta do mês (MRR novo) e a janela de editar metas.
-  const [meta, setMeta] = useState<CrmMeta | null>(null);
+  // Metas por mês ("2026-10" → meta): o dashboard também olha o mês passado.
+  const [metas, setMetas] = useState<Record<string, CrmMeta | null>>({});
+  const meta = metas[mesSP()] ?? null;
+  const setMeta = (m: CrmMeta | null) => setMetas((prev) => ({ ...prev, [mesSP()]: m }));
+  const carregarMeta = useCallback((mes: string) => {
+    setMetas((prev) => (mes in prev ? prev : { ...prev, [mes]: null }));
+    chamar<{ meta: CrmMeta | null }>(`/api/crm/metas?mes=${mes}`).then((r) => { if (r.ok) setMetas((prev) => ({ ...prev, [mes]: r.data?.meta ?? null })); });
+  }, []);
+  // Filtro que vem do dashboard ("Negócios parados", uma fatia da rosca…) para o Funil.
+  const [filtroFunil, setFiltroFunil] = useState<FiltroFunil | null>(null);
   const [editMeta, setEditMeta] = useState<{ metaValor: string; metaContatosSemana: string; metaPropostasMes: string } | null>(null);
   const [salvandoMeta, setSalvandoMeta] = useState(false);
   // Lista de trabalho do Hoje: texto editado antes de enviar e qual item está ocupado.
@@ -211,7 +215,7 @@ export default function CrmPage() {
 
   useEffect(() => {
     if (!podeVer) { setLoading(false); return; }
-    chamar<{ meta: CrmMeta | null }>(`/api/crm/metas?mes=${mesSP()}`).then((r) => { if (r.ok) setMeta(r.data?.meta ?? null); });
+    carregarMeta(mesSP());
     chamar<{ leads?: Lead[]; segmentosIcp?: string[] }>("/api/crm/leads").then((r) => {
       // Falha não vira funil vazio: mostra o erro no lugar dos números.
       if (!r.ok) { setErroCarga(r.erro); toast.error(r.erro ?? "Não consegui carregar os leads."); }
@@ -244,28 +248,6 @@ export default function CrmPage() {
     setPendingTab("");
   }, [pendingTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── KPIs ──────────────────────────────────────────────────────────
-  const kpis = useMemo(() => {
-    const abertos = leads.filter((l) => ABERTOS.includes(l.estagio));
-    const ganhos = leads.filter((l) => l.estagio === "ganho");
-    const perdidos = leads.filter((l) => l.estagio === "perdido");
-    const mesAtual = hojeYmd().slice(0, 7);
-    const vendasMes = ganhos.filter((l) => l.fechadoEm && mesDe(l.fechadoEm) === mesAtual);
-    const reunioesMes = leads.filter((l) => l.reuniaoData && mesDe(l.reuniaoData) === mesAtual);
-    const fechados = ganhos.length + perdidos.length;
-    const conversao = fechados ? Math.round((ganhos.length / fechados) * 100) : null;
-    // Proposta conta pela DATA de envio — nunca pelo valor (Leva 7C, N29).
-    const propostasMes = leads.filter((l) => l.propostaEnviadaEm && mesDe(l.propostaEnviadaEm) === mesAtual).length;
-    // Tempo até o 1º contato (mediana, em horas) dos leads que entraram no mês — quem responde em
-    // até 1 h tem ~7× mais chance de qualificar (HBR 2011). Visita da rota conta como contato na hora.
-    const horas = leads
-      .filter((l) => (l.createdAt || "").slice(0, 7) === mesAtual && l.primeiroContatoEm)
-      .map((l) => Math.max(0, (new Date(l.primeiroContatoEm!).getTime() - new Date(l.createdAt).getTime()) / 3_600_000))
-      .sort((a, b) => a - b);
-    const tempoContato = horas.length ? horas[Math.floor(horas.length / 2)] : null;
-    return { abertos: abertos.length, vendasMes: vendasMes.length, reunioesMes: reunioesMes.length, conversao, propostasMes, tempoContato, tempoContatoN: horas.length };
-  }, [leads]);
-
   // ─── Meta do mês ───────────────────────────────────────────────────
   const resumoMeta = useMemo(() => calcularMeta({ leads, metaValor: meta?.metaValor ?? null, hoje: hojeYmd() }), [leads, meta]);
   const esforco = useMemo(() => calcularEsforco({
@@ -295,7 +277,7 @@ export default function CrmPage() {
     const agrupa = (chave: (l: Lead) => string | null) => {
       const grupos = new Map<string, { total: number; ganhos: number }>();
       for (const l of leads) {
-        const k = (chave(l) || "").trim() || "(sem)";
+        const k = (chave(l) || "").trim() || "Sem origem";
         const g = grupos.get(k) ?? { total: 0, ganhos: 0 };
         g.total++;
         if (l.estagio === "ganho") g.ganhos++;
@@ -316,13 +298,16 @@ export default function CrmPage() {
     };
   }, [leads]);
 
-  // ─── Dashboard (lib/crm/pipeline.ts) ───────────────────────────────
-  const pipeline = useMemo(() => resumirPipeline(leads, hojeYmd().slice(0, 7)), [leads]);
-  const origemLeads = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const l of leads) { const k = (l.origem || "").trim() || "Sem origem"; m.set(k, (m.get(k) ?? 0) + 1); }
-    return [...m.entries()].map(([k, n]) => ({ k, n })).sort((x, y) => y.n - x.n);
-  }, [leads]);
+  // ─── Próximo passo de um lead (dashboard e lista de oportunidades) ─────
+  const proximoPasso = (l: Lead): { texto: string; alerta: boolean } => {
+    const hj = hojeYmd();
+    if (l.reuniaoData && l.reuniaoData >= hj) return { texto: `Reunião ${fmtData(l.reuniaoData)}`, alerta: false };
+    if (estacionado(l, hj)) return { texto: `Retomar ${fmtData(l.retomarEm)}`, alerta: false };
+    const t = toqueDo(l, hj);
+    if (t) return { texto: rotuloToque(t), alerta: t.situacao !== "futuro" };
+    if (l.proximoContato) return { texto: `Contato ${fmtData(l.proximoContato)}`, alerta: l.proximoContato <= hj };
+    return { texto: "Definir próximo passo", alerta: true };
+  };
 
   // ─── Agenda (reuniões + follow-ups) ────────────────────────────────
   const agenda = useMemo(() => {
@@ -349,12 +334,14 @@ export default function CrmPage() {
   const origens = useMemo(() => [...new Set(leads.map((l) => l.origem).filter(Boolean))] as string[], [leads]);
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
+    const ids = filtroFunil ? new Set(filtroFunil.ids) : null;
     return leads.filter((l) =>
+      (!ids || ids.has(l.id)) &&
       (!q || l.contatoNome.toLowerCase().includes(q) || (l.empresa ?? "").toLowerCase().includes(q)) &&
       (!fResp || l.responsavel === fResp) &&
       (!fOrigem || l.origem === fOrigem)
     );
-  }, [leads, busca, fResp, fOrigem]);
+  }, [leads, busca, fResp, fOrigem, filtroFunil]);
 
   const columns: KanbanColumn<Lead>[] = useMemo(
     () =>
@@ -636,16 +623,21 @@ export default function CrmPage() {
 
   return (
     <div className="space-y-5 p-6">
-      {/* Header — pr-12 reserva o canto superior direito pro sino de notificações (fixo no AppShell). */}
-      <header className="flex flex-wrap items-center justify-between gap-4 pr-12">
-        <div>
-          <h1 className="text-lone-h1 tracking-tight text-foreground">Comercial</h1>
-          <p className="text-lone-caption text-muted-foreground">Funil, metas e follow-up — só para quem cuida das vendas</p>
-        </div>
+      {/* Cabeçalho por aba (redesign D1): no endereço do comercial cada aba tem o próprio título — o casco já
+          diz "Lone Comercial". O Dashboard tem a saudação dele; aqui fica só o "Novo lead". */}
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        {tab !== "dashboard" ? (
+          <div>
+            <h1 className="text-lone-h1 tracking-tight text-foreground">{casco ? TITULO_ABA[tab].titulo : "Comercial"}</h1>
+            <p className="text-lone-caption text-muted-foreground">{casco ? TITULO_ABA[tab].apoio : "Funil, metas e follow-up — só para quem cuida das vendas"}</p>
+          </div>
+        ) : <span />}
         <div className="flex items-center gap-2">
-          <Link href="/crm/importar" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-foreground hover:bg-accent">
-            <Upload size={15} /> Importar
-          </Link>
+          {!casco && (
+            <Link href="/crm/importar" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-foreground hover:bg-accent">
+              <Upload size={15} /> Importar
+            </Link>
+          )}
           <Button onClick={() => setDraft({ estagio: "novo", responsavel: currentUser ?? undefined })}>
             <Plus size={16} className="mr-1" /> Novo lead
           </Button>
@@ -750,188 +742,23 @@ export default function CrmPage() {
         );
       })()}
 
-      {tab === "dashboard" && (() => {
-        const p = pipeline;
-        const pctMeta = (v: number) => (resumoMeta.meta ? ` · ${Math.round((v / resumoMeta.meta) * 100)}% da meta` : "");
-        const maxEtapa = Math.max(1, ...p.porEtapa.map((e) => e.n));
-        const proximoPasso = (l: Lead): { texto: string; alerta: boolean } => {
-          if (l.reuniaoData && l.reuniaoData >= hoje) return { texto: `Reunião ${fmtData(l.reuniaoData)}`, alerta: false };
-          if (estacionado(l, hoje)) return { texto: `Retomar ${fmtData(l.retomarEm)}`, alerta: false };
-          const t = toqueDo(l, hoje);
-          if (t) return { texto: rotuloToque(t), alerta: t.situacao !== "futuro" };
-          if (l.proximoContato) return { texto: `Contato ${fmtData(l.proximoContato)}`, alerta: l.proximoContato <= hoje };
-          return { texto: "Definir próximo passo", alerta: true };
-        };
-        const th = "px-3 py-2 text-left text-lone-eyebrow font-semibold uppercase text-muted-foreground";
-        const td = "px-3 py-2.5 text-lone-body";
-        return (
-          <div className="space-y-5">
-            <BarraMeta r={resumoMeta} esforco={esforco} meta={meta} onDefinir={abrirMetas} />
-
-            {/* Pipeline em dinheiro: o que está na mesa, quanto vale no ano, o que deve virar. */}
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Kpi icon={TrendingUp} label="MRR potencial" value={brl(p.mrrPotencial)} sub={`${p.oportunidades.length} ${p.oportunidades.length === 1 ? "oportunidade" : "oportunidades"} com valor`} />
-              <Kpi icon={BarChart3} label="Receita anualizada" value={brl(p.anualizado)} sub="MRR potencial × 12 meses" />
-              <Kpi icon={Percent} label="Ponderado pela chance" value={brl(p.ponderado)} sub={`o que deve virar${pctMeta(p.ponderado)}`} tone="accent" />
-              <Kpi icon={Target} label="Ticket médio" value={p.ticketMedio == null ? "—" : brl(p.ticketMedio)} sub="mensalidade por oportunidade" />
-            </div>
-
-            {/* Atividade do mês, numa faixa só. */}
-            <div className="grid grid-cols-2 divide-border overflow-hidden rounded-xl border border-border bg-card sm:grid-cols-3 lg:grid-cols-6 lg:divide-x">
-              {([
-                ["Leads ativos", String(kpis.abertos), "no funil agora"],
-                ["Ganhos no mês", String(p.ganhosNoMes.n), p.ganhosNoMes.valor ? `${brl(p.ganhosNoMes.valor)}/mês` : "nenhum ainda"],
-                ["Propostas no mês", String(kpis.propostasMes), "enviadas"],
-                ["Reuniões no mês", String(kpis.reunioesMes), "marcadas"],
-                ["Conversão", kpis.conversao == null ? "—" : `${kpis.conversao}%`, "dos fechados"],
-                ["1º contato", kpis.tempoContato == null ? "—" : kpis.tempoContato < 1 ? `${Math.round(kpis.tempoContato * 60)} min` : kpis.tempoContato < 48 ? `${kpis.tempoContato.toFixed(1).replace(".", ",")} h` : `${Math.round(kpis.tempoContato / 24)} dias`, "mediana do mês"],
-              ] as const).map(([rot, val, sub]) => (
-                <div key={rot} className="px-4 py-3">
-                  <div className="text-lone-caption text-muted-foreground">{rot}</div>
-                  <div className="mt-0.5 text-lone-h2 text-foreground">{val}</div>
-                  <div className="text-lone-caption text-muted-foreground">{sub}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid gap-4 xl:grid-cols-3">
-              {/* Tabela de oportunidades */}
-              <section className="overflow-hidden rounded-xl border border-border bg-card xl:col-span-2">
-                <div className="flex flex-wrap items-baseline justify-between gap-2 p-5 pb-3">
-                  <div>
-                    <h2 className="text-lone-h2 text-foreground">Oportunidades</h2>
-                    <p className="text-lone-caption text-muted-foreground">Negócios abertos com mensalidade estimada, do mais perto de fechar ao mais longe</p>
-                  </div>
-                  <button onClick={() => setTab("funil")} className="text-lone-caption text-primary hover:underline">Ver funil completo</button>
-                </div>
-                {p.oportunidades.length === 0 ? (
-                  <p className="px-5 pb-5 text-lone-body text-muted-foreground">Nenhuma oportunidade com valor ainda. Coloque a mensalidade estimada no lead quando a conversa chegar no diagnóstico.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[640px] border-t border-border">
-                      <thead className="bg-muted/40">
-                        <tr>
-                          <th className={th}>Empresa</th>
-                          <th className={th}>Etapa</th>
-                          <th className={`${th} text-right`}>Mensalidade</th>
-                          <th className={`${th} text-right`}>Chance</th>
-                          <th className={`${th} text-right`}>Ponderado</th>
-                          <th className={th}>Próximo passo</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {p.oportunidades.map((o) => {
-                          const passo = proximoPasso(o.lead);
-                          return (
-                            <tr key={o.lead.id} onClick={() => setDraft({ ...o.lead })} className="cursor-pointer transition-colors hover:bg-accent/50">
-                              <td className={td}>
-                                <span className="block max-w-[220px] truncate font-medium text-foreground">{o.lead.empresa || o.lead.contatoNome}</span>
-                                {o.lead.empresa && o.lead.contatoNome !== o.lead.empresa && <span className="block max-w-[220px] truncate text-lone-caption text-muted-foreground">{o.lead.contatoNome}</span>}
-                              </td>
-                              <td className={td}>
-                                <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-foreground">
-                                  <span className={`h-2 w-2 shrink-0 rounded-full ${ESTAGIO_META[o.etapa].color}`} />{ESTAGIO_META[o.etapa].title}
-                                </span>
-                              </td>
-                              <td className={`${td} whitespace-nowrap text-right font-medium text-foreground`}>{brl(o.mensalidade)}</td>
-                              <td className={`${td} text-right text-muted-foreground`}>{Math.round(o.chance * 100)}%</td>
-                              <td className={`${td} whitespace-nowrap text-right text-foreground`}>{brl(o.ponderado)}</td>
-                              <td className={td}>
-                                <span className={`whitespace-nowrap text-lone-caption ${passo.alerta ? "font-medium text-lone-warning" : "text-muted-foreground"}`}>{passo.texto}</span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot className="border-t border-border bg-muted/40">
-                        <tr>
-                          <td className={`${td} font-semibold text-foreground`} colSpan={2}>Total · {p.oportunidades.length}</td>
-                          <td className={`${td} whitespace-nowrap text-right font-semibold text-foreground`}>{brl(p.mrrPotencial)}</td>
-                          <td className={`${td} text-right text-muted-foreground`}>{p.mrrPotencial ? `${Math.round((p.ponderado / p.mrrPotencial) * 100)}%` : "—"}</td>
-                          <td className={`${td} whitespace-nowrap text-right font-semibold text-foreground`}>{brl(p.ponderado)}</td>
-                          <td className={td} />
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-                {p.semValor > 0 && (
-                  <p className="border-t border-border px-5 py-3 text-lone-caption text-muted-foreground">
-                    Mais {p.semValor} {p.semValor === 1 ? "lead aberto" : "leads abertos"} ainda sem mensalidade estimada (lojas da rota e contatos novos) — estão no funil e na lista do Hoje.
-                  </p>
-                )}
-              </section>
-
-              {/* Simulação de conversão */}
-              <section className="rounded-xl border border-border bg-card p-5">
-                <h2 className="text-lone-h2 text-foreground">Simulação de conversão</h2>
-                <p className="text-lone-caption text-muted-foreground">Quanto entra por mês se fechar esta parte do MRR potencial</p>
-                <div className="mt-4 space-y-3">
-                  {p.simulacao.map((s) => (
-                    <div key={s.taxa}>
-                      <div className="mb-1 flex items-baseline justify-between gap-2">
-                        <span className="text-lone-caption text-muted-foreground">Fechar {Math.round(s.taxa * 100)}%</span>
-                        <span className="text-lone-body font-medium text-foreground">{brl(s.mrr)}<span className="text-lone-caption font-normal text-muted-foreground">/mês</span></span>
-                      </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${s.taxa * 100}%`, opacity: 0.4 + s.taxa * 0.6 }} /></div>
-                      <div className="mt-0.5 text-right text-lone-caption text-muted-foreground">{brl(s.anual)} no ano</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 rounded-lg border border-border bg-background p-3">
-                  <div className="text-lone-caption text-muted-foreground">Pela chance de cada negócio</div>
-                  <div className="mt-0.5 text-lone-h2 text-foreground">{brl(p.ponderado)}<span className="text-lone-caption font-normal text-muted-foreground">/mês</span></div>
-                  <div className="text-lone-caption text-muted-foreground">{brl(p.ponderado * 12)} no ano{pctMeta(p.ponderado)}</div>
-                </div>
-              </section>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-3">
-              {/* Funil por etapa: quantidade e dinheiro */}
-              <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
-                <h2 className="text-lone-h2 text-foreground">Funil por etapa</h2>
-                <p className="text-lone-caption text-muted-foreground">Leads abertos em cada etapa e a mensalidade que já está estimada nelas</p>
-                <div className="mt-5 space-y-3">
-                  {p.porEtapa.map((e) => (
-                    <div key={e.etapa} className="flex items-center gap-3">
-                      <span className="flex w-28 shrink-0 items-center gap-2 text-lone-caption text-muted-foreground">
-                        <span className={`h-2 w-2 shrink-0 rounded-full ${ESTAGIO_META[e.etapa].color}`} />
-                        <span className="truncate">{ESTAGIO_META[e.etapa].title}</span>
-                      </span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                        <div className={`h-full rounded-full ${ESTAGIO_META[e.etapa].color}`} style={{ width: `${e.n ? Math.max(3, (e.n / maxEtapa) * 100) : 0}%` }} />
-                      </div>
-                      <span className="w-8 shrink-0 text-right text-lone-body font-medium text-foreground">{e.n}</span>
-                      <span className="hidden w-28 shrink-0 text-right text-lone-caption text-muted-foreground sm:block">{e.valor ? `${brl(e.valor)}/mês` : "—"}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              {/* Origem dos leads */}
-              <section className="rounded-xl border border-border bg-card p-5">
-                <h2 className="text-lone-h2 text-foreground">Origem dos leads</h2>
-                <p className="text-lone-caption text-muted-foreground">De onde vieram os {leads.length}</p>
-                <div className="mt-5 space-y-3">
-                  {origemLeads.length === 0 ? <p className="text-lone-caption text-muted-foreground">Sem leads ainda.</p> :
-                    origemLeads.slice(0, 6).map((o) => {
-                      const pct = leads.length ? Math.round((o.n / leads.length) * 100) : 0;
-                      return (
-                        <div key={o.k}>
-                          <div className="mb-1 flex items-center justify-between text-lone-caption">
-                            <span className="min-w-0 truncate text-foreground">{o.k}</span>
-                            <span className="shrink-0 text-muted-foreground">{o.n} · {pct}%</span>
-                          </div>
-                          <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} /></div>
-                        </div>
-                      );
-                    })}
-                </div>
-              </section>
-            </div>
-          </div>
-        );
-      })()}
+      {tab === "dashboard" && (
+        <DashboardComercial
+          leads={leads}
+          metas={metas}
+          carregarMeta={carregarMeta}
+          metaContatosSemana={meta?.metaContatosSemana ?? null}
+          nome={currentUser ?? ""}
+          proximoPasso={proximoPasso}
+          onAbrirLead={(l) => setDraft({ ...l })}
+          onDefinirMeta={(sugestao) => setEditMeta({
+            metaValor: meta?.metaValor != null ? String(meta.metaValor) : String(sugestao),
+            metaContatosSemana: meta?.metaContatosSemana != null ? String(meta.metaContatosSemana) : "",
+            metaPropostasMes: meta?.metaPropostasMes != null ? String(meta.metaPropostasMes) : "",
+          })}
+          onIrPara={({ aba, filtro }) => { setFiltroFunil(filtro ?? null); setTab(aba); window.scrollTo({ top: 0 }); }}
+        />
+      )}
 
       {tab === "funil" && (
         <>
@@ -949,8 +776,14 @@ export default function CrmPage() {
               <option value="">Todas as origens</option>
               {origens.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
-            {(busca || fResp || fOrigem) && (
-              <button className="text-xs text-muted-foreground underline" onClick={() => { setBusca(""); setFResp(""); setFOrigem(""); }}>limpar</button>
+            {filtroFunil && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-lone-caption font-medium text-primary">
+                {filtroFunil.rotulo} · {filtroFunil.ids.length}
+                <button onClick={() => setFiltroFunil(null)} aria-label="Tirar o filtro" className="rounded-full hover:opacity-70"><X size={12} /></button>
+              </span>
+            )}
+            {(busca || fResp || fOrigem || filtroFunil) && (
+              <button className="text-xs text-muted-foreground underline" onClick={() => { setBusca(""); setFResp(""); setFOrigem(""); setFiltroFunil(null); }}>limpar</button>
             )}
           </div>
 
@@ -1164,7 +997,7 @@ export default function CrmPage() {
             <h2 className="mb-3 text-sm font-semibold text-foreground">Por responsável</h2>
             {relatorio.porResponsavel.length === 0 ? <p className="text-xs text-muted-foreground">Sem leads ainda.</p> : (
               <table className="w-full text-xs">
-                <thead><tr className="text-left text-muted-foreground"><th className="py-1 font-medium">SDR</th><th className="py-1 font-medium">Leads</th><th className="py-1 font-medium">Ganhos</th></tr></thead>
+                <thead><tr className="text-left text-muted-foreground"><th className="py-1 font-medium">Responsável</th><th className="py-1 font-medium">Leads</th><th className="py-1 font-medium">Ganhos</th></tr></thead>
                 <tbody>
                   {relatorio.porResponsavel.map(([k, g]) => (
                     <tr key={k} className="border-t border-border text-foreground">

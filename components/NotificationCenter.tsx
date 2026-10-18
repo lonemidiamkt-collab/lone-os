@@ -228,8 +228,13 @@ function rostosDaPilha(itens: Lida[]): ItemDoGrupo[] {
 
 const RAIO_FALLBACK = "rounded-[inherit] font-semibold";
 
-export default function NotificationCenter(_props: { semBotao?: boolean }) {
-  const notifications = useNotificationsStore((s) => s.notifications);
+export default function NotificationCenter({ filtro: filtroDeAvisos }: {
+  semBotao?: boolean;
+  /** Mostra só parte dos avisos (o casco do comercial passa os do comercial). */
+  filtro?: (n: { title?: string | null }) => boolean;
+}) {
+  const todas = useNotificationsStore((s) => s.notifications);
+  const notifications = useMemo(() => (filtroDeAvisos ? todas.filter(filtroDeAvisos) : todas), [todas, filtroDeAvisos]);
   const markRead = useNotificationsStore((s) => s.markRead);
   const markAllRead = useNotificationsStore((s) => s.markAllRead);
   const clientes = useClientsStore((s) => s.clients);

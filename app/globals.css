@@ -286,6 +286,55 @@
     letter-spacing: -0.011em;
   }
 
+  /* ─── COMERCIAL (comercial.lonemidia.com, out/2026) ────────────────────────────────────────
+     Paleta própria do casco do comercial: a classe .casco-comercial vai no <html> SÓ nesse endereço
+     (components/CascoComercial.tsx); o painel da operação não muda. Roberto (17/10): "tá muito escuro,
+     tá bem estranho". Claro: fundo cinza-azulado e cartão branco com borda visível (como o Âncora).
+     Escuro: azul-marinho com contraste de verdade — fundo, cartão e borda que se separam. */
+  html.casco-comercial {
+    --background: #eef0f5;
+    --background-rgb: 238 240 245;
+    --border: #dde0e8;
+    --border-rgb: 221 224 232;
+    --border-alpha: 1;
+    --input: #e3e6ee;
+    --muted: #f3f4f8;
+    --muted-rgb: 243 244 248;
+    --secondary: #f3f4f8;
+    --secondary-rgb: 243 244 248;
+    --accent: #e8ebf3;
+    --accent-rgb: 232 235 243;
+    --muted-foreground: #586175;
+    --muted-foreground-rgb: 88 97 117;
+  }
+  html.dark.casco-comercial {
+    --background: #0a0f1d;
+    --background-rgb: 10 15 29;
+    --foreground: #f1f4fa;
+    --foreground-rgb: 241 244 250;
+    --card: #111a2e;
+    --card-solid: #111a2e;
+    --card-rgb: 17 26 46;
+    --card-foreground: #f1f4fa;
+    --popover: #152038;
+    --popover-foreground: #f1f4fa;
+    --secondary: #172239;
+    --secondary-rgb: 23 34 57;
+    --muted: #172239;
+    --muted-rgb: 23 34 57;
+    --accent: #1c2a47;
+    --accent-rgb: 28 42 71;
+    --border: #26355a;
+    --border-rgb: 38 53 90;
+    --border-alpha: 1;
+    --input: #26355a;
+    --muted-foreground: #aab4ca;
+    --muted-foreground-rgb: 170 180 202;
+    --primary: #4b64ff;
+    --primary-rgb: 75 100 255;
+    --ring: #4b64ff;
+  }
+
   /* Brilho radial azul no tema escuro — toque da marca sobre o grafite; fraco de propósito,
      senão o fundo volta a puxar pro navy. */
   html.dark body {
@@ -501,3 +550,9 @@
   .card-interactive { transition: none; }
   .card-interactive:hover, .card-interactive:active { transform: none; }
 }
+
+/* Anéis e roscas do Comercial (components/crm/graficos.tsx): o arco cresce do zero até o valor uma vez,
+   ~700 ms. O valor final está no estilo do próprio elemento — a animação só tem o "de". */
+@keyframes cc-anel { from { stroke-dasharray: 0 100; } }
+.cc-anel-arco { animation: cc-anel 700ms cubic-bezier(0.16, 1, 0.3, 1); }
+@media (prefers-reduced-motion: reduce) { .cc-anel-arco { animation: none; } }

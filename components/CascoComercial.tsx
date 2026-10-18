@@ -3,8 +3,11 @@
 // O casco do COMERCIAL.LONEMIDIA.COM (out/2026): o mesmo Lone OS, sem o menu da operação. Cabeçalho com
 // a marca, as abas do comercial (lib/navegacao/casco.ts), o sino, o tema e a conta. O login é o mesmo
 // do painel (AuthGate); quem não é sócio vê o aviso e o link para o painel.
+// Redesign (Leva D1): paleta própria (.casco-comercial no <html>, ver app/globals.css), abre no CLARO na
+// primeira visita, sino só com os avisos do comercial e sem o aviso flutuante da operação.
 
 import { useEffect } from "react";
+import { useTheme as useTemaDoSistema } from "next-themes";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, ExternalLink, LogOut, Moon, Sun } from "lucide-react";
@@ -15,7 +18,6 @@ import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { AuthGate } from "@/components/AppShell";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import NotificationCenter from "@/components/NotificationCenter";
-import NotificationToast from "@/components/NotificationToast";
 import SessionTimeout from "@/components/SessionTimeout";
 import { ABRIR_NOTIFICACOES } from "@/components/TopActions";
 import { Logo } from "@/components/ui/Logo";
@@ -25,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ABAS_COMERCIAL, ABAS_DA_PAGINA_CRM, type AbaComercial } from "@/lib/navegacao/casco";
 import { podeVerComercial } from "@/lib/crm/acesso";
+import { ehNotificacaoComercial } from "@/lib/crm/notificacoes";
 
 const PAINEL = "https://painel.lonemidia.com";
 
@@ -62,7 +65,7 @@ function Abas({ className }: { className: string }) {
 function Cabecalho() {
   const { currentProfile, roleLabel, logout } = useRole();
   const { theme, toggleTheme } = useTheme();
-  const naoLidas = useNotificationsStore((s) => s.notifications.filter((n) => !n.read).length);
+  const naoLidas = useNotificationsStore((s) => s.notifications.filter((n) => !n.read && ehNotificacaoComercial(n)).length);
   const botao = "relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground";
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
@@ -105,19 +108,52 @@ function Cabecalho() {
   );
 }
 
+/**
+ * Fundo da marca (o mesmo do site da Lone, ~/dev/lone-midia-site, FundoMarca): arcos de luz royal e o
+ * "M" em contorno, numa camada fixa atrás de tudo. Pedido do Roberto em 17/10/2026: "coloca esse fundo
+ * no Lone Comercial… diminui um pouquinho a opacidade". Entra NÍTIDO e apagado por opacidade (nunca
+ * desfocado — ver a regra do fundo discreto do site); mais fraco que no site, porque aqui se lê número
+ * o dia todo e os cartões ficam por cima. No claro vira quase uma marca d'água azul.
+ */
+function FundoMarca() {
+  return (
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 bg-background">
+      <picture className="block h-full w-full">
+        <source media="(min-width: 768px)" type="image/avif" srcSet="/fundos/topo.avif" />
+        <source media="(min-width: 768px)" type="image/webp" srcSet="/fundos/topo.webp" />
+        <source type="image/avif" srcSet="/fundos/topo-celular.avif" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/fundos/topo-celular.webp" alt="" decoding="async"
+          className="h-full w-full object-cover object-[60%_top] opacity-[0.07] md:object-center dark:opacity-[0.22]" />
+      </picture>
+    </div>
+  );
+}
+
 function Conteudo({ children }: { children: React.ReactNode }) {
   const { role } = useRole();
+  const pathname = usePathname();
+  const { setTheme } = useTemaDoSistema();
   const init = useNotificationsStore((s) => s.init);
   const refresh = useNotificationsStore((s) => s.refresh);
   useEffect(() => {
-    document.title = "Lone Comercial";
     init();
     const t = setInterval(refresh, 45000);
     return () => clearInterval(t);
   }, [init, refresh]);
+  // Paleta do comercial no <html> (alcança também janelas e menus que abrem fora do casco) e tema claro
+  // na primeira visita — o navegador guarda o tema por endereço, e o padrão do sistema é escuro.
+  useEffect(() => {
+    document.documentElement.classList.add("casco-comercial");
+    try { if (!window.localStorage.getItem("theme")) setTheme("light"); } catch { /* sem localStorage: fica o padrão */ }
+    return () => document.documentElement.classList.remove("casco-comercial");
+  }, [setTheme]);
+  // Cada tela do Next troca o título; o do comercial é um só.
+  useEffect(() => { document.title = "Lone Comercial"; }, [pathname]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="relative isolate flex min-h-screen flex-col">
+      <FundoMarca />
       <Cabecalho />
       <main className="mx-auto w-full max-w-[1400px] flex-1">
         {podeVerComercial(role) ? (
@@ -129,8 +165,7 @@ function Conteudo({ children }: { children: React.ReactNode }) {
           </div>
         )}
       </main>
-      <NotificationCenter semBotao />
-      <NotificationToast />
+      <NotificationCenter semBotao filtro={ehNotificacaoComercial} />
       <SessionTimeout />
     </div>
   );

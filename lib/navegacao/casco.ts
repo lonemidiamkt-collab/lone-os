@@ -15,6 +15,9 @@ export type DestinoComercial = { tipo: "seguir" } | { tipo: "reescrever"; para: 
 
 /** O que fazer com uma PÁGINA pedida no endereço do comercial (API e arquivos públicos não passam aqui). */
 export function destinoNoComercial(pathname: string): DestinoComercial {
+  // Arquivo (foto do time, fonte, imagem) passa direto: sem isto, /equipe/roberto.jpg virava redirecionamento
+  // para "/" e a foto do perfil aparecia quebrada no cabeçalho (achado de 17/10/2026).
+  if (/\.[a-z0-9]{2,5}$/i.test(pathname)) return { tipo: "seguir" };
   if (pathname === "/" || pathname === "") return { tipo: "reescrever", para: "/crm" };
   if (pathname === "/crm" || pathname.startsWith("/crm/")) return { tipo: "seguir" };
   return { tipo: "redirecionar", para: "/" };
