@@ -14,6 +14,7 @@ import { mesmoTelefone, normalizarNome } from "@/lib/crm/importar";
 import { telefoneDaRota } from "@/lib/crm/rota";
 import { ROTULO_ETAPA, ehAberta, normalizarEtapa } from "@/lib/crm/etapas";
 import type { CrmAtividadeTipo } from "@/lib/types";
+import { horaPorFrase as horaDaFrase } from "@/lib/crm/reunioes";
 
 // ─── Quando ouvir ───────────────────────────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ export function chamadaDireta(texto: string): boolean {
 
 // ─── Contrato com a IA ──────────────────────────────────────────────────────────────────────────
 
-export type TipoAcao = "agendar" | "registrar" | "consultar_lead" | "consultar_hoje" | "cadastrar" | "nada";
+export type TipoAcao = "agendar" | "registrar" | "consultar_lead" | "consultar_hoje" | "cadastrar" | "reuniao" | "nada";
 export type CanalAcao = "whatsapp" | "ligacao" | "visita" | "reuniao" | "email" | "nota";
 
 export interface AcaoIA {
@@ -43,6 +44,8 @@ export interface AcaoIA {
   empresa: string | null;
   contato: string | null;
   telefone: string | null;
+  hora?: string | null;              // "15:00" — só na reunião
+  formato?: "meet" | "presencial" | "ligacao" | null;
 }
 export interface RespostaIA { acoes: AcaoIA[] }
 
@@ -58,9 +61,11 @@ export const SCHEMA_ASSISTENTE: Record<string, unknown> = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["tipo", "lead_num", "lead_texto", "data", "canal", "resumo", "empresa", "contato", "telefone"],
+        required: ["tipo", "lead_num", "lead_texto", "data", "canal", "resumo", "empresa", "contato", "telefone", "hora", "formato"],
         properties: {
-          tipo: { type: "string", enum: ["agendar", "registrar", "consultar_lead", "consultar_hoje", "cadastrar", "nada"] },
+          tipo: { type: "string", enum: ["agendar", "registrar", "consultar_lead", "consultar_hoje", "cadastrar", "reuniao", "nada"] },
+          hora: nulo("string"),
+          formato: { type: ["string", "null"], enum: ["meet", "presencial", "ligacao", null] },
           lead_num: nulo("integer"),
           lead_texto: nulo("string"),
           data: nulo("string"),
@@ -116,6 +121,7 @@ Ações:
 - "consultar_lead": perguntar como está um lead. Ex.: "como está a Madeireira Delta?".
 - "consultar_hoje": perguntar o que fazer hoje / quais follow-ups. Ex.: "o que tem pra hoje?".
 - "cadastrar": lead NOVO que não está na lista. Preencha "empresa", "contato" e "telefone" com o que foi dito.
+- "reuniao": MARCAR UMA REUNIÃO com horário (vira evento no Google Agenda). Ex.: "marca reunião com a X quinta 15h no Meet", "visita na Y sexta às 10" (formato "presencial"), "liga pra Z amanhã 9h30" (formato "ligacao"). Preencha "data", "hora" (HH:MM, 24h) e "formato" ("meet" se não disser). Follow-up sem horário continua sendo "agendar".
 - "nada": não é pedido para você.
 Uma frase pode ter mais de uma ação (ex.: "liguei pra X, volta dia 3" = registrar + agendar), no máximo 3.
 
@@ -148,6 +154,7 @@ export type Passo<L extends LeadAssistente = LeadAssistente> =
   | { tipo: "consultar_lead"; lead: L }
   | { tipo: "consultar_hoje" }
   | { tipo: "cadastrar"; empresa: string; contato: string; telefone: string | null }
+  | { tipo: "reuniao"; lead: L; data: string; hora: string; formato: "meet" | "presencial" | "ligacao" }
   | { tipo: "responder"; texto: string };
 
 export const AJUDA = [
@@ -258,7 +265,7 @@ export function planejarPassos<L extends LeadAssistente>(p: {
   const dataFixa = p.texto && (p.resposta?.acoes ?? []).filter((a) => a?.tipo === "agendar").length === 1 ? dataPorFrase(p.texto, p.hoje) : null;
   const acoes = (p.resposta?.acoes ?? []).filter((a) => a && a.tipo !== "nada").slice(0, 3);
   if (!acoes.length) return []; // quem chama decide: ajuda se foi chamado direto, silêncio se só citou o nome
-  const ordem: Record<TipoAcao, number> = { registrar: 0, agendar: 1, consultar_lead: 2, consultar_hoje: 3, cadastrar: 4, nada: 9 };
+  const ordem: Record<TipoAcao, number> = { registrar: 0, reuniao: 1, agendar: 2, consultar_lead: 3, consultar_hoje: 4, cadastrar: 5, nada: 9 };
   const passos: Passo<L>[] = [];
   for (const a of [...acoes].sort((x, y) => ordem[x.tipo] - ordem[y.tipo])) {
     if (a.tipo === "consultar_hoje") { passos.push({ tipo: "consultar_hoje" }); continue; }
@@ -290,6 +297,15 @@ export function planejarPassos<L extends LeadAssistente>(p: {
       const atividade = CANAL_PARA_TIPO[a.canal ?? "nota"] ?? "nota";
       const resumo = (a.resumo ?? "").trim().slice(0, 400) || "registrado pelo grupo de vendas";
       passos.push({ tipo: "registrar", lead, atividade, resumo });
+      continue;
+    }
+    if (a.tipo === "reuniao") {
+      const data = (p.texto ? dataPorFrase(p.texto, p.hoje) : null) ?? a.data;
+      const hora = (p.texto ? horaDaFrase(p.texto) : null) ?? (a.hora && /^\d{2}:\d{2}$/.test(a.hora) ? a.hora : null);
+      if (!dataValida(data, p.hoje)) { passos.push({ tipo: "responder", texto: `Para que dia marco a reunião com *${nomeDe(lead)}*?` }); continue; }
+      if (!hora) { passos.push({ tipo: "responder", texto: `Que horas marco a reunião com *${nomeDe(lead)}* (${diaPorExtenso(data!)})?` }); continue; }
+      const formato = a.formato === "presencial" || a.formato === "ligacao" ? a.formato : "meet";
+      passos.push({ tipo: "reuniao", lead, data: data!, hora, formato });
       continue;
     }
     if (a.tipo === "agendar") {

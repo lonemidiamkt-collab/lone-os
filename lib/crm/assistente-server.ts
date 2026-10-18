@@ -25,6 +25,8 @@ import {
   type RespostaIA, type Passo,
 } from "@/lib/crm/assistente";
 import type { CrmLead } from "@/lib/types";
+import { marcarReuniao } from "@/lib/crm/reunioes-server";
+import { inicioDe } from "@/lib/crm/reunioes";
 
 export interface MensagemGrupo {
   groupJid: string;
@@ -148,6 +150,12 @@ async function executar(p: Passo<CrmLead>, autor: string, hoje: string, todos: C
       const fazer = fila.filter((i) => i.grupo !== "fim");
       return textoFollowupsGrupo(fazer.map((i) => ({ empresa: i.lead.empresa, contatoNome: i.lead.contatoNome, motivo: i.motivo })), fila.length - fazer.length)
         ?? "Nada para hoje: nenhum follow-up vencido, retomada ou lead novo esperando.";
+    }
+    case "reuniao": {
+      // marcarReuniao já manda o "Reunião marcada" completo no grupo; aqui só a confirmação para o lead.
+      const r = await marcarReuniao({ leadId: p.lead.id, inicio: inicioDe(p.data, p.hora), duracao: 45, formato: p.formato, autor });
+      if (!r.ok) return `Não marquei a reunião com *${p.lead.empresa || p.lead.contatoNome}*: ${r.erro}`;
+      return [r.aviso, `Confirmação pronta para mandar ao lead:\n${r.mensagemLead}`].filter(Boolean).join("\n\n");
     }
     case "cadastrar": {
       await db.insertCrmLead({

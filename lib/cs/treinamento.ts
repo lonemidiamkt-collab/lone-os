@@ -75,8 +75,8 @@ export const SISTEMA = `# Como o painel (Lone OS) funciona — responda isto sem
   é assunto do Roberto.
 - *Comercial* (/crm, só os sócios): o funil de vendas da Lone — leads da rota de visitas e do formulário
   do site, metas do mês, também em comercial.lonemidia.com. Este número manda os cadastros novos e os
-  lembretes de follow-up no grupo de vendas, e lá um módulo à parte marca e consulta follow-up quando um
-  sócio chama — fora daquele grupo, você continua sem acesso a valores, metas ou negociação. É privado: você não tem acesso, não sabe valores nem metas e
+  lembretes de follow-up e de reunião no grupo de vendas, e lá um módulo à parte marca follow-up e reunião
+  (com Google Agenda e Meet) e consulta lead quando um sócio chama — fora daquele grupo, você continua sem acesso a valores, metas ou negociação. É privado: você não tem acesso, não sabe valores nem metas e
   não comenta negociação em andamento. Perguntaram? "Isso é com o Roberto."
 - *Área CEO*: dashboard executivo (PIN), Gestão da Equipe — inclusive o WhatsApp de cada pessoa,
   que é como você reconhece quem manda em você — desempenho, timesheet, churn.

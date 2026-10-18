@@ -344,6 +344,10 @@ export const AUTOMACOES: Automacao[] = [
     nome: "Cobrança da meta do comercial", descricao: "No máximo 1 aviso por dia: segunda (resumo da semana), ritmo abaixo do necessário por 3 dias úteis ou projeção abaixo de 80% no dia 10/20. Números no sino; WhatsApp do dono sem valor.",
     familia: "Prospecção", destino: "admin", cron: "5 11 * * 1-5", agendaBRT: "seg a sex, 8h05", maxSilencioHoras: 74, ensaio: "dry=1",
   }),
+  ep("crm-reunioes", {
+    nome: "Lembretes das reuniões de venda", descricao: "Reunião de venda marcada no Comercial: lembrete no grupo de vendas e no sino na véspera (a partir das 9h) e 1 hora antes, com o link do Meet ou o endereço. Uma vez cada.",
+    familia: "Prospecção", destino: "grupo de vendas", cron: "*/15 10-23 * * *", agendaBRT: "todo dia, a cada 15 min das 7h às 20h45", maxSilencioHoras: 26, ensaio: "dry=1",
+  }),
   ep("crm-rota", {
     nome: "Visitas da rota no funil", descricao: "Loja marcada como visitada no app da Rota de Prospecção vira lead em Contato feito (régua contando do dia da visita) e vai para o grupo de vendas com o WhatsApp. Revisita entra no histórico.",
     familia: "Prospecção", destino: "grupo de vendas", cron: "*/30 11-23 * * *", agendaBRT: "todo dia, a cada 30 min das 8h às 20h30", maxSilencioHoras: 26, ensaio: "dry=1",

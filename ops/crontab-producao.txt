@@ -12,6 +12,7 @@
 */15 11-23 * * 1-6 /opt/loneos/scripts/cron-call.sh crm-lead-novo POST >> /var/log/loneos-crm-lead-novo.log 2>&1
 5 11 * * 1-5 /opt/loneos/scripts/cron-call.sh crm-meta POST >> /var/log/loneos-crm-meta.log 2>&1
 */30 11-23 * * * /opt/loneos/scripts/cron-call.sh crm-rota POST >> /var/log/loneos-crm-rota.log 2>&1
+*/15 10-23 * * * /opt/loneos/scripts/cron-call.sh crm-reunioes POST >> /var/log/loneos-crm-reunioes.log 2>&1
 0 11 * * 1-5 /opt/loneos/scripts/cron-call.sh traffic-diagnostico POST >> /var/log/loneos-traffic-diag.log 2>&1
 0 11 * * 2,4 /opt/loneos/scripts/cron-call.sh urgent-alerts POST >> /var/log/loneos-urgent-alerts.log 2>&1
 0 11 * * 3 /opt/loneos/scripts/client-messages.sh wed >> /var/log/loneos-client-msgs.log 2>&1

@@ -17,9 +17,10 @@ import { ORDEM_GRUPOS, ROTULO_GRUPO, type GrupoHoje, type ItemHoje, type LeadHoj
 import { waComTexto } from "@/lib/crm/modelos";
 import { ROTULO_ETAPA, normalizarEtapa } from "@/lib/crm/etapas";
 import { brl, type ResumoMeta } from "@/lib/crm/meta";
+import { horaCurta, itensDeReuniao, mensagemVesperaLead, type ReuniaoBase } from "@/lib/crm/reunioes";
 import type { CrmAtividadeTipo } from "@/lib/types";
 
-type LeadDoHoje = LeadHoje & { cidade?: string | null };
+type LeadDoHoje = LeadHoje & { cidade?: string | null; endereco?: string | null };
 
 const somaDias = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 const diaSP = (iso: string) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }));
@@ -28,6 +29,7 @@ const RECOLHIDOS_DE_INICIO: GrupoHoje[] = ["fim"];
 
 export default function HojeComercial<L extends LeadDoHoje>({
   fila, leads, hoje, resumoMeta, ocupado, onAbrir, onEnviarWhatsApp, onRegistrar, onPatch, onDefinirMeta, onVerDashboard,
+  reunioes = [], onReuniao, onMarcarReuniao,
 }: {
   fila: ItemHoje<L>[];
   leads: L[];
@@ -40,6 +42,10 @@ export default function HojeComercial<L extends LeadDoHoje>({
   onPatch: (l: L, patch: Record<string, unknown>, ok: string) => Promise<void>;
   onDefinirMeta: () => void;
   onVerDashboard: () => void;
+  /** Reuniões de venda (lib/crm/reunioes.ts): as de hoje, as de amanhã para confirmar e as sem registro. */
+  reunioes?: ReuniaoBase[];
+  onReuniao?: (id: string, acao: "realizada" | "nao_veio") => Promise<boolean>;
+  onMarcarReuniao?: (l: L) => void;
 }) {
   const [aberto, setAberto] = useState<string | null>(null);
   const [textoEditado, setTextoEditado] = useState<Record<string, string>>({});
@@ -70,6 +76,9 @@ export default function HojeComercial<L extends LeadDoHoje>({
   }
 
   const pctMeta = resumoMeta.progresso != null ? Math.round(resumoMeta.progresso * 100) : null;
+  const itensReuniao = itensDeReuniao(reunioes, new Date());
+  const leadPorId = new Map(leads.map((l) => [l.id, l]));
+  const temReuniao = itensReuniao.hoje.length + itensReuniao.confirmarAmanha.length + itensReuniao.comoFoi.length > 0;
 
   return (
     <div className="space-y-4">
@@ -103,6 +112,64 @@ export default function HojeComercial<L extends LeadDoHoje>({
           )}
         </Cartao>
       </div>
+
+      {/* Reuniões: hoje, confirmar as de amanhã e registrar as que já passaram */}
+      {temReuniao && (
+        <Cartao semMargem className="overflow-hidden border-primary/30">
+          <p className="px-5 pt-4 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-primary">Reuniões</p>
+          <ul className="divide-y divide-border">
+            {itensReuniao.comoFoi.map((r) => {
+              const l = leadPorId.get(r.leadId);
+              return l ? (
+                <li key={`f-${r.id}`} className="flex flex-wrap items-center gap-3 px-5 py-2.5">
+                  <span className="w-12 shrink-0 text-lone-body font-semibold tabular-nums text-lone-warning">{horaCurta(r.inicio)}</span>
+                  <button onClick={() => onAbrir(l)} className="min-w-0 flex-1 text-left">
+                    <span className="block truncate text-lone-body font-medium text-foreground">{l.empresa || l.contatoNome}</span>
+                    <span className="block text-lone-caption text-muted-foreground">Já passou — como foi?</span>
+                  </button>
+                  <button onClick={() => onReuniao?.(r.id, "realizada")} className="h-8 rounded-lg bg-lone-success-bg px-3 text-[13px] font-medium text-lone-success hover:opacity-80">Aconteceu</button>
+                  <button onClick={async () => { if (await onReuniao?.(r.id, "nao_veio")) onMarcarReuniao?.(l); }} className="h-8 rounded-lg border border-border px-3 text-[13px] text-foreground hover:bg-accent">Não veio · remarcar</button>
+                </li>
+              ) : null;
+            })}
+            {itensReuniao.hoje.map((r) => {
+              const l = leadPorId.get(r.leadId);
+              return l ? (
+                <li key={`h-${r.id}`} className="flex flex-wrap items-center gap-3 px-5 py-2.5">
+                  <span className="w-12 shrink-0 text-lone-body font-semibold tabular-nums text-primary">{horaCurta(r.inicio)}</span>
+                  <button onClick={() => onAbrir(l)} className="min-w-0 flex-1 text-left">
+                    <span className="block truncate text-lone-body font-medium text-foreground">{l.empresa || l.contatoNome}</span>
+                    <span className="block truncate text-lone-caption text-muted-foreground">Hoje · {r.formato === "meet" ? "Google Meet" : r.formato === "presencial" ? `presencial${r.local ? ` · ${r.local}` : ""}` : "ligação"}</span>
+                  </button>
+                  {r.meetUrl && <a href={r.meetUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:opacity-90">Entrar no Meet</a>}
+                  {r.formato === "presencial" && r.local && <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.local)}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] text-foreground hover:bg-accent"><MapPin size={14} /> Mapa</a>}
+                </li>
+              ) : null;
+            })}
+            {itensReuniao.confirmarAmanha.map((r) => {
+              const l = leadPorId.get(r.leadId);
+              if (!l) return null;
+              const msg = mensagemVesperaLead(r, l);
+              const link = waComTexto(l.telefone, msg);
+              return (
+                <li key={`c-${r.id}`} className="flex flex-wrap items-center gap-3 px-5 py-2.5">
+                  <span className="w-12 shrink-0 text-lone-body font-semibold tabular-nums text-foreground">{horaCurta(r.inicio)}</span>
+                  <div className="min-w-0 flex-1">
+                    <span className="block truncate text-lone-body font-medium text-foreground">{l.empresa || l.contatoNome}</span>
+                    <span className="block text-lone-caption text-muted-foreground">Amanhã — confirme hoje com o lead</span>
+                  </div>
+                  {link ? (
+                    <a href={link} target="_blank" rel="noopener noreferrer" onClick={() => onRegistrar(l, "whatsapp", "Pedido de confirmação da reunião de amanhã (pelo Hoje)")}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-lone-success-bg px-3 text-[13px] font-medium text-lone-success hover:opacity-80"><MessageCircle size={14} /> Pedir confirmação</a>
+                  ) : (
+                    <button onClick={() => { navigator.clipboard?.writeText(msg).catch(() => {}); toast.success("Mensagem copiada — o lead está sem WhatsApp."); }} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] text-foreground hover:bg-accent"><Copy size={14} /> Copiar confirmação</button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Cartao>
+      )}
 
       {/* Ações em lote */}
       {selecionados.size > 0 && (

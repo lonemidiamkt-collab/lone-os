@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { createHmac } from "crypto";
+import { assinarState } from "@/lib/google/estado-oauth";
 import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { estadoGoogle, googleConfigurado, urlDeAutorizacao, desconectarGoogle, planilhaId, urlDaPlanilha, calendarioId } from "@/lib/prospeccao/google";
 import { gravarSetting } from "@/lib/prospeccao/config";
@@ -13,13 +13,6 @@ import { gravarSetting } from "@/lib/prospeccao/config";
 //
 // O `state` é assinado (HMAC com CRON_SECRET) e vale 10 min: o callback é público no middleware
 // (o navegador volta do Google sem header de auth), então é o state que prova que o fluxo começou aqui.
-
-function assinarState(): string {
-  const segredo = process.env.CRON_SECRET || process.env.VAULT_KEY || "lone";
-  const ts = Date.now().toString(36);
-  const mac = createHmac("sha256", segredo).update(ts).digest("hex").slice(0, 32);
-  return `${ts}.${mac}`;
-}
 
 export async function GET(req: NextRequest) {
   const gate = await requireRole(req, GESTAO);
@@ -33,8 +26,8 @@ export async function POST(req: NextRequest) {
   if (gate instanceof NextResponse) return gate;
   const body = (await req.json().catch(() => null)) as { acao?: string; id?: string } | null;
   if (body?.acao === "iniciar") {
-    if (!googleConfigurado()) return NextResponse.json({ error: "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET não configurados no servidor" }, { status: 400 });
-    return NextResponse.json({ ok: true, url: urlDeAutorizacao(assinarState()) });
+    if (!(await googleConfigurado())) return NextResponse.json({ error: "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET não configurados no servidor" }, { status: 400 });
+    return NextResponse.json({ ok: true, url: await urlDeAutorizacao(assinarState("prospeccao")) });
   }
   if (body?.acao === "calendario") {
     await gravarSetting("prospect_calendar_id", body.id?.trim() || null);

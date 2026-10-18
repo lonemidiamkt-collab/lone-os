@@ -26,6 +26,9 @@ import { podeVerComercial } from "@/lib/crm/acesso";
 import DashboardComercial, { type FiltroFunil } from "@/components/crm/DashboardComercial";
 import HojeComercial from "@/components/crm/HojeComercial";
 import { eventosDaAgenda, ROTULO_EVENTO, type Evento } from "@/lib/crm/agenda";
+import MarcarReuniao from "@/components/crm/MarcarReuniao";
+import ConectarGoogle from "@/components/crm/ConectarGoogle";
+import { diaCurto, horaCurta, inicioDe, duracaoMin, mensagemVesperaLead, type ReuniaoBase, type Formato } from "@/lib/crm/reunioes";
 import { Anel } from "@/components/crm/graficos";
 import { useCascoComercial } from "@/lib/navegacao/use-casco";
 import type { CrmMeta } from "@/lib/types";
@@ -163,6 +166,20 @@ export default function CrmPage() {
   const [filtroFunil, setFiltroFunil] = useState<FiltroFunil | null>(null);
   const [verTodosFechados, setVerTodosFechados] = useState(false);
   const [abaFicha, setAbaFicha] = useState<"resumo" | "historico" | "dados">("resumo");
+  // Reuniões de venda (lib/crm/reunioes.ts) + o resto do Google Agenda da Lone, e a janela de marcar.
+  type ReuniaoTela = ReuniaoBase & { googleEventId: string | null; pauta: string | null };
+  type EventoGoogle = { id: string; titulo: string; inicio: string; fim: string; diaInteiro: boolean; link: string | null };
+  const [reunioes, setReunioes] = useState<ReuniaoTela[]>([]);
+  const [agendaGoogle, setAgendaGoogle] = useState<{ conectado: boolean; email: string | null; eventos: EventoGoogle[] }>({ conectado: false, email: null, eventos: [] });
+  const [marcando, setMarcando] = useState<{ lead?: Lead | null; dia?: string | null } | null>(null);
+  const [remarcando, setRemarcando] = useState<{ id: string; dia: string; hora: string; duracao: number } | null>(null);
+  const carregarReunioes = useCallback(() => {
+    chamar<{ reunioes: ReuniaoTela[]; google: { conectado: boolean; email: string | null; eventos: EventoGoogle[] } }>("/api/crm/reunioes").then((r) => {
+      if (!r.ok || !r.data) return;
+      setReunioes(r.data.reunioes);
+      setAgendaGoogle({ conectado: r.data.google.conectado, email: r.data.google.email, eventos: r.data.google.eventos });
+    });
+  }, []);
   const [editMeta, setEditMeta] = useState<{ metaValor: string; metaContatosSemana: string; metaPropostasMes: string } | null>(null);
   const [salvandoMeta, setSalvandoMeta] = useState(false);
   // Qual lead do Hoje está com uma ação em andamento.
@@ -174,6 +191,7 @@ export default function CrmPage() {
   useEffect(() => {
     if (!podeVer) { setLoading(false); return; }
     carregarMeta(mesSP());
+    carregarReunioes();
     chamar<{ leads?: Lead[]; segmentosIcp?: string[] }>("/api/crm/leads").then((r) => {
       // Falha não vira funil vazio: mostra o erro no lugar dos números.
       if (!r.ok) { setErroCarga(r.erro); toast.error(r.erro ?? "Não consegui carregar os leads."); }
@@ -191,7 +209,10 @@ export default function CrmPage() {
     const leadId = q.get("lead");
     const lead = leadId ? leads.find((l) => l.id === leadId) : null;
     if (lead) { setTab("funil"); setDraft({ ...lead }); }
-    if (aba || leadId) window.history.replaceState(null, "", window.location.pathname);
+    const voltaGoogle = q.get("google");
+    if (voltaGoogle === "ok") toast.success(`Google Agenda conectado${q.get("email") ? ` (${q.get("email")})` : ""}. As reuniões novas já saem com Meet.`);
+    if (voltaGoogle === "erro") toast.error(`O Google não conectou: ${q.get("motivo") ?? "erro"}`);
+    if (aba || leadId || voltaGoogle) window.history.replaceState(null, "", window.location.pathname);
   }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sidebar secundária nativa: clicar num item seta pendingTab → troca a aba aqui;
@@ -539,6 +560,19 @@ export default function CrmPage() {
     if (r.data.aviso) toast.warning(r.data.aviso); else toast.success(ok);
   }
 
+  // Depois de marcar/remarcar/cancelar, o servidor mexe no lead (etapa, data da reunião): recarrega.
+  function recarregarLeads() {
+    chamar<{ leads?: Lead[] }>("/api/crm/leads").then((r) => { if (r.ok && r.data?.leads) setLeads(r.data.leads); });
+  }
+  async function reuniaoAcao(id: string, acao: "remarcar" | "cancelar" | "realizada" | "nao_veio", extra: Record<string, unknown> = {}) {
+    if (acao === "cancelar" && !window.confirm("Cancelar esta reunião? O convite é cancelado no Google Agenda e o grupo é avisado.")) return false;
+    const r = await chamar("/api/crm/reunioes", { id, acao, autor: currentUser ?? null, ...extra }, { method: "PATCH" });
+    if (!r.ok) { toast.error(r.erro ?? "Não consegui atualizar a reunião."); return false; }
+    toast.success(acao === "remarcar" ? "Reunião remarcada e avisada no grupo." : acao === "cancelar" ? "Reunião cancelada." : acao === "realizada" ? "Registrado: a reunião aconteceu." : "Registrado: não compareceu.");
+    carregarReunioes(); recarregarLeads();
+    return true;
+  }
+
   async function salvarMeta() {
     if (!editMeta) return;
     setSalvandoMeta(true);
@@ -619,6 +653,9 @@ export default function CrmPage() {
           onPatch={patchLead}
           onDefinirMeta={abrirMetas}
           onVerDashboard={() => setTab("dashboard")}
+          reunioes={reunioes}
+          onReuniao={reuniaoAcao}
+          onMarcarReuniao={(l) => setMarcando({ lead: l })}
         />
       )}
 
@@ -782,10 +819,15 @@ export default function CrmPage() {
         for (let d = 1; d <= diasNoMes; d++) celulas.push(d);
         const ymdDe = (d: number) => `${ano}-${String(mes + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
         const nomeMes = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
+        const diaDe = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+        const leadPorId = new Map(leads.map((l) => [l.id, l]));
+        const agendadas = reunioes.filter((r) => r.estado === "agendada");
+        const proximas = agendadas.filter((r) => Date.parse(r.fim) > Date.now());
+        const semRegistro = agendadas.filter((r) => Date.parse(r.fim) <= Date.now());
         const corEvento = (t: Evento<Lead>["tipo"]) => (t === "reuniao" ? "bg-primary" : t === "retomar" ? "bg-chart-4" : "bg-lone-warning");
         const evRow = (e: Evento<Lead>, i: number, atrasado = false) => (
           <button key={`${e.lead.id}-${e.tipo}-${i}`} onClick={() => setDraft({ ...e.lead })} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background p-2.5 text-left transition-colors hover:border-primary/40">
-            <span className={`flex w-11 shrink-0 flex-col items-center rounded-lg px-2 py-1 ${atrasado ? "bg-lone-danger-bg text-lone-danger" : e.tipo === "reuniao" ? "bg-primary/10 text-primary" : "bg-muted text-foreground"}`}>
+            <span className={`flex w-11 shrink-0 flex-col items-center rounded-lg px-2 py-1 ${atrasado ? "bg-lone-danger-bg text-lone-danger" : "bg-muted text-foreground"}`}>
               <span className="text-lone-body font-semibold leading-none tabular-nums">{e.data.slice(8, 10)}</span>
               <span className="text-[10px] uppercase">{mesLabel(e.data.slice(0, 7))}</span>
             </span>
@@ -795,52 +837,123 @@ export default function CrmPage() {
             </span>
           </button>
         );
-        return (
-          <div className="grid items-start gap-4 lg:grid-cols-3">
-            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none lg:col-span-2">
-              <h2 className="text-lone-h2 text-foreground">{nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)}</h2>
-              <div className="mt-4 grid grid-cols-7 gap-1.5 text-center">
-                {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d, i) => <div key={i} className="py-1 text-[10.5px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{d}</div>)}
-                {celulas.map((d, i) => {
-                  if (d === null) return <div key={i} />;
-                  const ymd = ymdDe(d);
-                  const evs = agenda.porDia.get(ymd) ?? [];
-                  const isHoje = ymd === hoje;
-                  const passado = ymd < hoje;
-                  return (
-                    <div key={i} title={evs.map((e) => `${e.rotulo}: ${e.lead.empresa || e.lead.contatoNome}`).join("\n") || undefined}
-                      className={`flex min-h-[64px] flex-col rounded-xl border p-1.5 text-left ${isHoje ? "border-primary bg-primary/5" : "border-border"} ${passado ? "opacity-60" : ""}`}>
-                      <div className={`text-lone-caption tabular-nums ${isHoje ? "font-semibold text-primary" : "text-foreground"}`}>{d}</div>
-                      {evs.length > 0 && (
-                        <div className="mt-auto flex flex-wrap items-center gap-1">
-                          {evs.slice(0, 4).map((e, j) => <span key={j} className={`h-1.5 w-1.5 rounded-full ${corEvento(e.tipo)}`} />)}
-                          {evs.length > 4 && <span className="text-[10px] font-medium text-muted-foreground">+{evs.length - 4}</span>}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+        const reuniaoRow = (r: ReuniaoTela, passou: boolean) => {
+          const l = leadPorId.get(r.leadId);
+          const editando = remarcando?.id === r.id;
+          return (
+            <div key={r.id} className="rounded-xl border border-border bg-background p-3">
+              <div className="flex items-start gap-3">
+                <span className={`flex w-12 shrink-0 flex-col items-center rounded-lg px-1.5 py-1 ${passou ? "bg-lone-warning-bg text-lone-warning" : "bg-primary/10 text-primary"}`}>
+                  <span className="text-lone-body font-semibold leading-none tabular-nums">{horaCurta(r.inicio)}</span>
+                  <span className="mt-0.5 text-[10px] uppercase">{diaDe(r.inicio).slice(8, 10)}/{diaDe(r.inicio).slice(5, 7)}</span>
+                </span>
+                <button onClick={() => l && setDraft({ ...l })} className="min-w-0 flex-1 text-left">
+                  <span className="block truncate text-lone-body font-medium text-foreground">{l ? l.empresa || l.contatoNome : "Lead"}</span>
+                  <span className="block truncate text-lone-caption text-muted-foreground">{r.formato === "meet" ? "Google Meet" : r.formato === "presencial" ? `Presencial${r.local ? ` · ${r.local}` : ""}` : "Ligação"} · {duracaoMin(r)} min</span>
+                </button>
               </div>
-              <div className="mt-4 flex flex-wrap gap-4 text-lone-caption text-muted-foreground">
-                <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-primary" /> {ROTULO_EVENTO.reuniao}</span>
-                <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-lone-warning" /> Follow-up (régua ou contato marcado)</span>
-                <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-chart-4" /> {ROTULO_EVENTO.retomar}</span>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none">
-              {agenda.atrasados.length > 0 && (
-                <div className="mb-5">
-                  <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-lone-danger">Atrasados · {agenda.atrasados.length}</p>
-                  <div className="space-y-1.5">{agenda.atrasados.slice(0, 6).map((e, i) => evRow(e, i, true))}</div>
-                  {agenda.atrasados.length > 6 && <button onClick={() => setTab("hoje")} className="mt-2 text-lone-caption text-primary hover:underline">Ver todos no Hoje →</button>}
+              {editando ? (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <input type="date" value={remarcando.dia} min={hoje} onChange={(e) => setRemarcando({ ...remarcando, dia: e.target.value })} className="h-8 rounded-lg border border-border bg-card px-2 text-[13px]" aria-label="Novo dia" />
+                  <input type="time" step={900} value={remarcando.hora} onChange={(e) => setRemarcando({ ...remarcando, hora: e.target.value })} className="h-8 rounded-lg border border-border bg-card px-2 text-[13px]" aria-label="Novo horário" />
+                  <button onClick={async () => { if (await reuniaoAcao(r.id, "remarcar", { inicio: inicioDe(remarcando.dia, remarcando.hora), duracao: remarcando.duracao })) setRemarcando(null); }} className="h-8 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground">Salvar</button>
+                  <button onClick={() => setRemarcando(null)} className="h-8 px-2 text-[13px] text-muted-foreground">Cancelar</button>
+                </div>
+              ) : (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {passou ? (
+                    <>
+                      <span className="mr-1 text-lone-caption text-muted-foreground">Como foi?</span>
+                      <button onClick={() => reuniaoAcao(r.id, "realizada")} className="h-7 rounded-lg bg-lone-success-bg px-2.5 text-[12px] font-medium text-lone-success">Aconteceu</button>
+                      <button onClick={() => reuniaoAcao(r.id, "nao_veio")} className="h-7 rounded-lg border border-border px-2.5 text-[12px] text-foreground hover:bg-accent">Não veio</button>
+                    </>
+                  ) : (
+                    <>
+                      {r.meetUrl && <a href={r.meetUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-7 items-center rounded-lg bg-primary/10 px-2.5 text-[12px] font-medium text-primary hover:opacity-80">Entrar no Meet</a>}
+                      <button onClick={() => setRemarcando({ id: r.id, dia: diaDe(r.inicio), hora: new Date(r.inicio).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }), duracao: duracaoMin(r) })} className="h-7 rounded-lg border border-border px-2.5 text-[12px] text-foreground hover:bg-accent">Remarcar</button>
+                      <button onClick={() => reuniaoAcao(r.id, "cancelar")} className="h-7 rounded-lg px-2 text-[12px] text-muted-foreground hover:text-lone-danger">Cancelar</button>
+                    </>
+                  )}
                 </div>
               )}
-              <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Próximos</p>
-              <div className="space-y-1.5">
-                {agenda.proximos.length === 0 ? <p className="text-lone-caption text-muted-foreground">Nada agendado.</p> : agenda.proximos.slice(0, 12).map((e, i) => evRow(e, i))}
+            </div>
+          );
+        };
+        return (
+          <div className="space-y-4">
+            {!agendaGoogle.conectado && <ConectarGoogle onMudou={carregarReunioes} />}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {agendaGoogle.conectado ? <ConectarGoogle onMudou={carregarReunioes} /> : <span />}
+              <button onClick={() => setMarcando({ dia: hoje })} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"><CalendarClock size={15} /> Nova reunião</button>
+            </div>
+            <div className="grid items-start gap-4 lg:grid-cols-3">
+              <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none lg:col-span-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h2 className="text-lone-h2 text-foreground">{nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)}</h2>
+                  <span className="text-lone-caption text-muted-foreground">Clique num dia para marcar uma reunião</span>
+                </div>
+                <div className="mt-4 grid grid-cols-7 gap-1.5 text-center">
+                  {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d, i) => <div key={i} className="py-1 text-[10.5px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{d}</div>)}
+                  {celulas.map((d, i) => {
+                    if (d === null) return <div key={i} />;
+                    const ymd = ymdDe(d);
+                    const evs = agenda.porDia.get(ymd) ?? [];
+                    const rDia = agendadas.filter((r) => diaDe(r.inicio) === ymd);
+                    const gDia = agendaGoogle.eventos.filter((e) => diaDe(e.inicio) === ymd);
+                    const isHoje = ymd === hoje;
+                    const passado = ymd < hoje;
+                    const chips = [
+                      ...rDia.map((r) => ({ k: r.id, cls: "bg-primary/15 text-primary", txt: `${horaCurta(r.inicio)} ${leadPorId.get(r.leadId)?.empresa || leadPorId.get(r.leadId)?.contatoNome || ""}` })),
+                      ...gDia.map((e) => ({ k: e.id, cls: "bg-muted text-muted-foreground", txt: `${e.diaInteiro ? "" : `${horaCurta(e.inicio)} `}${e.titulo}` })),
+                    ];
+                    return (
+                      <button key={i} type="button" disabled={passado} onClick={() => setMarcando({ dia: ymd })}
+                        title={[...chips.map((c) => c.txt), ...evs.map((e) => `${e.rotulo}: ${e.lead.empresa || e.lead.contatoNome}`)].join("\n") || (passado ? undefined : "Marcar reunião neste dia")}
+                        className={`flex min-h-[78px] flex-col gap-0.5 rounded-xl border p-1.5 text-left transition-colors ${isHoje ? "border-primary bg-primary/5" : "border-border"} ${passado ? "cursor-default opacity-60" : "hover:border-primary/50"}`}>
+                        <span className={`text-lone-caption tabular-nums ${isHoje ? "font-semibold text-primary" : "text-foreground"}`}>{d}</span>
+                        {chips.slice(0, 2).map((c) => <span key={c.k} className={`truncate rounded px-1 py-px text-[10px] font-medium ${c.cls}`}>{c.txt}</span>)}
+                        {chips.length > 2 && <span className="text-[10px] text-muted-foreground">+{chips.length - 2}</span>}
+                        {evs.length > 0 && (
+                          <span className="mt-auto flex flex-wrap items-center gap-1">
+                            {evs.slice(0, 4).map((e, j) => <span key={j} className={`h-1.5 w-1.5 rounded-full ${corEvento(e.tipo)}`} />)}
+                            {evs.length > 4 && <span className="text-[10px] font-medium text-muted-foreground">+{evs.length - 4}</span>}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-4 text-lone-caption text-muted-foreground">
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-sm bg-primary/15" /> Reunião de venda</span>
+                  {agendaGoogle.conectado && <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-sm bg-muted" /> Outros compromissos do Google Agenda</span>}
+                  <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-lone-warning" /> Follow-up</span>
+                  <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-chart-4" /> {ROTULO_EVENTO.retomar}</span>
+                </div>
+              </section>
+
+              <div className="space-y-4">
+                <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none">
+                  <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Reuniões · {proximas.length}</p>
+                  {semRegistro.length > 0 && <div className="mb-3 space-y-2">{semRegistro.map((r) => reuniaoRow(r, true))}</div>}
+                  <div className="space-y-2">
+                    {proximas.length === 0 ? <p className="text-lone-caption text-muted-foreground">Nenhuma reunião marcada. Use “Nova reunião” ou clique num dia.</p> : proximas.slice(0, 8).map((r) => reuniaoRow(r, false))}
+                  </div>
+                </section>
+                <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none">
+                  {agenda.atrasados.length > 0 && (
+                    <div className="mb-5">
+                      <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-lone-danger">Follow-ups atrasados · {agenda.atrasados.length}</p>
+                      <div className="space-y-1.5">{agenda.atrasados.slice(0, 5).map((e, i) => evRow(e, i, true))}</div>
+                      {agenda.atrasados.length > 5 && <button onClick={() => setTab("hoje")} className="mt-2 text-lone-caption text-primary hover:underline">Ver todos no Hoje →</button>}
+                    </div>
+                  )}
+                  <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Próximos follow-ups</p>
+                  <div className="space-y-1.5">
+                    {agenda.proximos.filter((e) => e.tipo !== "reuniao").length === 0 ? <p className="text-lone-caption text-muted-foreground">Nada agendado.</p> : agenda.proximos.filter((e) => e.tipo !== "reuniao").slice(0, 8).map((e, i) => evRow(e, i))}
+                  </div>
+                </section>
               </div>
-            </section>
+            </div>
           </div>
         );
       })()}
@@ -987,6 +1100,17 @@ export default function CrmPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {marcando && (
+        <MarcarReuniao
+          leads={leads}
+          leadInicial={marcando.lead ?? null}
+          diaInicial={marcando.dia ?? null}
+          autor={currentUser ?? null}
+          onFechar={() => setMarcando(null)}
+          onMarcada={() => { carregarReunioes(); recarregarLeads(); }}
+        />
       )}
 
       {/* Ficha do lead (redesign D3): painel lateral com o resumo fixo no topo e abas Resumo, Histórico e Dados.
@@ -1169,6 +1293,8 @@ export default function CrmPage() {
                       {draft.telefone && (
                         <a href={`tel:${draft.telefone.replace(/\D/g, "")}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] text-foreground hover:bg-accent"><Phone size={14} /> Ligar</a>
                       )}
+                      <button type="button" onClick={() => setMarcando({ lead: draft as Lead })}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary/10 px-3 text-[13px] font-medium text-primary hover:opacity-80"><CalendarClock size={14} /> Marcar reunião</button>
                       {draft.instagram && (
                         <a href={`https://instagram.com/${draft.instagram}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] text-foreground hover:bg-accent">@{draft.instagram}</a>
                       )}
@@ -1177,6 +1303,16 @@ export default function CrmPage() {
                 )}
               </header>
 
+              {existente && (() => {
+                const prox = reunioes.filter((r) => r.leadId === draft.id && r.estado === "agendada").sort((a2, b2) => a2.inicio.localeCompare(b2.inicio))[0];
+                return prox ? (
+                  <div className="flex flex-wrap items-center gap-2 border-b border-border bg-primary/5 px-5 py-2.5 text-lone-caption">
+                    <CalendarClock size={14} className="text-primary" aria-hidden="true" />
+                    <span className="text-foreground">Reunião {diaCurto(prox.inicio)} às {horaCurta(prox.inicio)} · {prox.formato === "meet" ? "Google Meet" : prox.formato === "presencial" ? "presencial" : "ligação"}</span>
+                    {prox.meetUrl && <a href={prox.meetUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">entrar</a>}
+                  </div>
+                ) : null;
+              })()}
               {existente && (
                 <nav className="flex gap-1 border-b border-border px-5" aria-label="Seções da ficha">
                   <button className={abaCls("resumo")} onClick={() => setAbaFicha("resumo")}>Resumo</button>
