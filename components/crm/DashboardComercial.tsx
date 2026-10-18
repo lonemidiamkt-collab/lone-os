@@ -43,7 +43,7 @@ function Rotulo({ children }: { children: React.ReactNode }) {
 }
 
 export default function DashboardComercial<L extends LeadDash>({
-  leads, metas, carregarMeta, metaContatosSemana, nome, proximoPasso, onAbrirLead, onDefinirMeta, onIrPara, agora: agoraFixo,
+  leads, metas, carregarMeta, metaContatosSemana, nome, proximoPasso, onAbrirLead, onDefinirMeta, onIrPara, agora: agoraFixo, acao,
 }: {
   leads: L[];
   /** Metas por mês ("2026-10" → meta). Mês ausente = ainda não carregado. */
@@ -56,6 +56,8 @@ export default function DashboardComercial<L extends LeadDash>({
   onDefinirMeta: (sugestao: number) => void;
   onIrPara: (destino: { aba: "hoje" | "funil"; filtro?: FiltroFunil }) => void;
   agora?: Date;
+  /** Botão ao lado do período (o "Novo lead" da página). */
+  acao?: React.ReactNode;
 }) {
   const agora = agoraFixo ?? new Date();
   const hoje = hojeSP(agora);
@@ -119,13 +121,16 @@ export default function DashboardComercial<L extends LeadDash>({
               : periodo === "mes_passado" ? `Resultado de ${nomeDoMes(iv.mes)}` : "Últimos 30 dias"}
           </p>
         </div>
-        <div className="flex gap-1.5" role="group" aria-label="Período">
-          {(Object.keys(ROTULO_PERIODO) as Periodo[]).map((p) => (
-            <button key={p} onClick={() => trocarPeriodo(p)} aria-pressed={periodo === p}
-              className={`h-8 rounded-lg border px-3 text-[13px] transition-colors ${periodo === p ? "border-primary/30 bg-primary/10 font-semibold text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground"}`}>
-              {ROTULO_PERIODO[p]}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex gap-1.5" role="group" aria-label="Período">
+            {(Object.keys(ROTULO_PERIODO) as Periodo[]).map((p) => (
+              <button key={p} onClick={() => trocarPeriodo(p)} aria-pressed={periodo === p}
+                className={`h-8 rounded-lg border px-3 text-[13px] transition-colors ${periodo === p ? "border-primary/30 bg-primary/10 font-semibold text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground"}`}>
+                {ROTULO_PERIODO[p]}
+              </button>
+            ))}
+          </div>
+          {acao}
         </div>
       </header>
 

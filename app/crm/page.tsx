@@ -625,13 +625,11 @@ export default function CrmPage() {
     <div className="space-y-5 p-6">
       {/* Cabeçalho por aba (redesign D1): no endereço do comercial cada aba tem o próprio título — o casco já
           diz "Lone Comercial". O Dashboard tem a saudação dele; aqui fica só o "Novo lead". */}
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        {tab !== "dashboard" ? (
-          <div>
-            <h1 className="text-lone-h1 tracking-tight text-foreground">{casco ? TITULO_ABA[tab].titulo : "Comercial"}</h1>
-            <p className="text-lone-caption text-muted-foreground">{casco ? TITULO_ABA[tab].apoio : "Funil, metas e follow-up — só para quem cuida das vendas"}</p>
-          </div>
-        ) : <span />}
+      {tab !== "dashboard" && <header className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-lone-h1 tracking-tight text-foreground">{casco ? TITULO_ABA[tab].titulo : "Comercial"}</h1>
+          <p className="text-lone-caption text-muted-foreground">{casco ? TITULO_ABA[tab].apoio : "Funil, metas e follow-up — só para quem cuida das vendas"}</p>
+        </div>
         <div className="flex items-center gap-2">
           {!casco && (
             <Link href="/crm/importar" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-foreground hover:bg-accent">
@@ -642,7 +640,7 @@ export default function CrmPage() {
             <Plus size={16} className="mr-1" /> Novo lead
           </Button>
         </div>
-      </header>
+      </header>}
 
       {/* No desktop, a sidebar secundária NATIVA (Sidebar.tsx → SECONDARY_NAV["/crm"]) cuida da
           navegação — fica colada no rail principal. No mobile, abas horizontais. */}
@@ -757,6 +755,11 @@ export default function CrmPage() {
             metaPropostasMes: meta?.metaPropostasMes != null ? String(meta.metaPropostasMes) : "",
           })}
           onIrPara={({ aba, filtro }) => { setFiltroFunil(filtro ?? null); setTab(aba); window.scrollTo({ top: 0 }); }}
+          acao={(
+            <Button size="sm" onClick={() => setDraft({ estagio: "novo", responsavel: currentUser ?? undefined })}>
+              <Plus size={15} className="mr-1" /> Novo lead
+            </Button>
+          )}
         />
       )}
 
