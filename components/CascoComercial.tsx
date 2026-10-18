@@ -110,7 +110,7 @@ function Cabecalho() {
 
 /**
  * Fundo da marca (o mesmo do site da Lone, ~/dev/lone-midia-site, FundoMarca): arcos de luz royal e o
- * "M" em contorno, numa camada fixa atrás de tudo. Pedido do Roberto em 17/10/2026: "coloca esse fundo
+ * "M" em contorno, numa camada fixa atrás de tudo — redesenhado em vetor para ficar nítido. Pedido do Roberto em 17/10/2026: "coloca esse fundo
  * no Lone Comercial… diminui um pouquinho a opacidade". Entra NÍTIDO e apagado por opacidade (nunca
  * desfocado — ver a regra do fundo discreto do site); mais fraco que no site, porque aqui se lê número
  * o dia todo e os cartões ficam por cima. No claro vira quase uma marca d'água azul.
@@ -118,14 +118,10 @@ function Cabecalho() {
 function FundoMarca() {
   return (
     <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 bg-background">
-      <picture className="block h-full w-full">
-        <source media="(min-width: 768px)" type="image/avif" srcSet="/fundos/topo.avif" />
-        <source media="(min-width: 768px)" type="image/webp" srcSet="/fundos/topo.webp" />
-        <source type="image/avif" srcSet="/fundos/topo-celular.avif" />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/fundos/topo-celular.webp" alt="" decoding="async"
-          className="h-full w-full object-cover object-[60%_top] opacity-[0.07] md:object-center dark:opacity-[0.22]" />
-      </picture>
+      {/* Vetor (public/fundos/marca.svg): nítido em qualquer tela — a arte do site é um JPEG de 2000 px. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/fundos/marca.svg" alt="" decoding="async"
+        className="h-full w-full object-cover opacity-[0.07] dark:opacity-[0.22]" />
     </div>
   );
 }

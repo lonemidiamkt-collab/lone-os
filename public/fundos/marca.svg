@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" preserveAspectRatio="xMidYMid slice">
+  <!-- Fundo da marca Lone em VETOR (17/10/2026): os mesmos arcos de luz royal e o "M" em contorno da arte
+       do site (lone-midia-site/assets/arte/fundo-marca-original.jpg), redesenhados para ficarem nítidos em
+       qualquer tela — a arte original é um JPEG de 2000 px e a versão ampliada mostrava riscos e borda borrada.
+       Círculos calculados a partir de três pontos de cada arco da arte. -->
+  <defs>
+    <linearGradient id="noite" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#020615"/>
+      <stop offset="0.55" stop-color="#030a26"/>
+      <stop offset="1" stop-color="#040f3a"/>
+    </linearGradient>
+    <radialGradient id="arcoA" gradientUnits="userSpaceOnUse" cx="24" cy="-962" r="1216">
+      <stop offset="0.55" stop-color="#0618b0" stop-opacity="0.55"/>
+      <stop offset="0.9" stop-color="#0f2ef2" stop-opacity="0.92"/>
+      <stop offset="0.985" stop-color="#1c3fff"/>
+      <stop offset="1" stop-color="#3f62ff"/>
+    </radialGradient>
+    <radialGradient id="arcoB" gradientUnits="userSpaceOnUse" cx="2426" cy="971" r="1215">
+      <stop offset="0.55" stop-color="#0618b0" stop-opacity="0.55"/>
+      <stop offset="0.9" stop-color="#0f2ef2" stop-opacity="0.92"/>
+      <stop offset="0.985" stop-color="#1c3fff"/>
+      <stop offset="1" stop-color="#3f62ff"/>
+    </radialGradient>
+    <radialGradient id="arcoC" gradientUnits="userSpaceOnUse" cx="1720" cy="3522" r="2851">
+      <stop offset="0.84" stop-color="#0618b0" stop-opacity="0.55"/>
+      <stop offset="0.965" stop-color="#0f2ef2" stop-opacity="0.92"/>
+      <stop offset="0.985" stop-color="#1c3fff"/>
+      <stop offset="1" stop-color="#3f62ff"/>
+    </radialGradient>
+    <radialGradient id="neblina" cx="0.62" cy="0.82" r="0.7">
+      <stop offset="0" stop-color="#1433ff" stop-opacity="0.38"/>
+      <stop offset="0.55" stop-color="#0b22c0" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#0b22c0" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="halo" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="28"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#noite)"/>
+  <!-- a neblina azul que a arte tem no meio de baixo -->
+  <rect width="1600" height="900" fill="url(#neblina)"/>
+
+  <!-- halo de luz fora de cada arco (o brilho que vaza da borda) -->
+  <g filter="url(#halo)" fill="none" stroke="#1a3bff" stroke-opacity="0.55" stroke-width="90">
+    <circle cx="24" cy="-962" r="1230"/>
+    <circle cx="2426" cy="971" r="1229"/>
+    <circle cx="1720" cy="3522" r="2865"/>
+  </g>
+
+  <!-- o "M" da Lone em contorno, bem apagado -->
+  <g fill="none" stroke="#2b49c9" stroke-opacity="0.18" stroke-width="1.4" stroke-linejoin="miter">
+    <path d="M415 820 L480 245 L800 535 L1135 125 L1135 745"/>
+    <path d="M455 820 L515 300 L800 560 L1100 195 L1100 745"/>
+  </g>
+
+  <!-- os arcos: preenchimento que acende na borda + traço azul-claro nítido (nunca branco) -->
+  <circle cx="24" cy="-962" r="1216" fill="url(#arcoA)"/>
+  <circle cx="2426" cy="971" r="1215" fill="url(#arcoB)"/>
+  <circle cx="1720" cy="3522" r="2851" fill="url(#arcoC)"/>
+  <g fill="none" stroke="#8fa6ff" stroke-opacity="0.8" stroke-width="1.6">
+    <circle cx="24" cy="-962" r="1216"/>
+    <circle cx="2426" cy="971" r="1215"/>
+    <circle cx="1720" cy="3522" r="2851"/>
+  </g>
+</svg>

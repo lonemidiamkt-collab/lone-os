@@ -306,6 +306,9 @@
     --accent-rgb: 232 235 243;
     --muted-foreground: #586175;
     --muted-foreground-rgb: 88 97 117;
+    /* 2º tom das roscas: bem mais claro que o azul da marca, para as fatias se separarem. */
+    --chart-2: #8a97ff;
+    --chart-2-rgb: 138 151 255;
   }
   html.dark.casco-comercial {
     --background: #0a0f1d;
@@ -333,6 +336,8 @@
     --primary: #4b64ff;
     --primary-rgb: 75 100 255;
     --ring: #4b64ff;
+    --chart-2: #a7b1ff;
+    --chart-2-rgb: 167 177 255;
   }
 
   /* Brilho radial azul no tema escuro — toque da marca sobre o grafite; fraco de propósito,

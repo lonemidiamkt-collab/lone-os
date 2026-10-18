@@ -39,8 +39,9 @@ export function Anel({ pct, tom = "primary", tamanho = "md", rotulo, centro, rot
   const raio = 50 - t.traco / 2;
   return (
     <div className={`relative grid shrink-0 place-items-center ${t.caixa}`} role="img" aria-label={rotuloAcessivel}>
-      <svg viewBox="0 0 100 100" className="h-full w-full" fill="none" aria-hidden="true">
-        <circle cx="50" cy="50" r={raio} strokeWidth={t.traco} className="stroke-muted-foreground/15" />
+      <svg viewBox="0 0 100 100" className="h-full w-full" fill="none" aria-hidden="true" shapeRendering="geometricPrecision">
+        <circle cx="50" cy="50" r={raio} strokeWidth={t.traco} className="stroke-muted-foreground/15"
+          strokeDasharray={pct == null ? "1.5 2.5" : undefined} pathLength={pct == null ? 100 : undefined} />
         {a.pintar > 0 && (
           <circle cx="50" cy="50" r={raio} strokeWidth={t.traco} strokeLinecap="round" pathLength={100}
             transform="rotate(-90 50 50)" className={`cc-anel-arco ${TRACO[tom]}`}
@@ -64,9 +65,10 @@ export function Anel({ pct, tom = "primary", tamanho = "md", rotulo, centro, rot
   );
 }
 
-// Rosca em tons da cor de marca (pesquisa: uma cor para os dados; verde/âmbar/vermelho só para estado).
-const TOM_FATIA = ["stroke-primary", "stroke-primary/70", "stroke-primary/45", "stroke-primary/25", "stroke-primary/15"];
-const QUADRADO_FATIA = ["bg-primary", "bg-primary/70", "bg-primary/45", "bg-primary/25", "bg-primary/15"];
+// Rosca na família da cor de marca (pesquisa: uma cor para os dados; verde/âmbar/vermelho só para estado).
+// Cores SÓLIDAS dos tokens de gráfico — transparência sobre o cartão lavava o tom no escuro.
+const TOM_FATIA = ["stroke-primary", "stroke-chart-2", "stroke-chart-4", "stroke-chart-3", "stroke-chart-5"];
+const QUADRADO_FATIA = ["bg-primary", "bg-chart-2", "bg-chart-4", "bg-chart-3", "bg-chart-5"];
 
 /** Rosca de composição: até 5 fatias em ordem decrescente a partir das 12h; legenda com valor E %. */
 export function Rosca({ fatias, centroValor, centroRotulo, formatar, rotuloAcessivel, aoClicar }: {
@@ -81,13 +83,15 @@ export function Rosca({ fatias, centroValor, centroRotulo, formatar, rotuloAcess
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 sm:flex-row">
       <div className="relative grid h-40 w-40 shrink-0 place-items-center" role="img" aria-label={rotuloAcessivel}>
-        <svg viewBox="0 0 100 100" className="h-full w-full" fill="none" aria-hidden="true">
-          <circle cx="50" cy="50" r="40" strokeWidth="16" className="stroke-muted-foreground/10" />
+        <svg viewBox="0 0 100 100" className="group/rosca h-full w-full" fill="none" aria-hidden="true" shapeRendering="geometricPrecision">
+          <circle cx="50" cy="50" r="40" strokeWidth="14" className="stroke-muted-foreground/10" />
           {fatias.map((f, i) => (
-            <circle key={f.chave} cx="50" cy="50" r="40" strokeWidth="16" pathLength={100} transform="rotate(-90 50 50)"
-              className={`cc-anel-arco ${f.outros ? "stroke-muted-foreground/30" : TOM_FATIA[i] ?? TOM_FATIA[4]}`}
-              // 0,8 de folga entre fatias (a "lacuna da superfície" em vez de contorno).
-              style={{ strokeDasharray: `${Math.max(0.5, f.tamanho - (varias ? 0.8 : 0))} 100`, strokeDashoffset: -f.inicio }} />
+            <circle key={f.chave} cx="50" cy="50" r="40" strokeWidth="14" pathLength={100} transform="rotate(-90 50 50)"
+              className={`cc-anel-arco cursor-default transition-opacity duration-150 group-hover/rosca:opacity-40 hover:!opacity-100 ${f.outros ? "stroke-muted-foreground/35" : TOM_FATIA[i] ?? TOM_FATIA[4]}`}
+              // 1,2 de folga entre fatias (a "lacuna da superfície" em vez de contorno).
+              style={{ strokeDasharray: `${Math.max(0.5, f.tamanho - (varias ? 1.2 : 0))} 100`, strokeDashoffset: -f.inicio }}>
+              <title>{`${f.rotulo}: ${formatar(f)} · ${f.pct}%`}</title>
+            </circle>
           ))}
         </svg>
         <span className="absolute inset-0 grid place-content-center text-center leading-none">
@@ -99,7 +103,7 @@ export function Rosca({ fatias, centroValor, centroRotulo, formatar, rotuloAcess
         {fatias.map((f, i) => {
           const conteudo = (
             <>
-              <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${f.outros ? "bg-muted-foreground/30" : QUADRADO_FATIA[i] ?? QUADRADO_FATIA[4]}`} aria-hidden="true" />
+              <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${f.outros ? "bg-muted-foreground/35" : QUADRADO_FATIA[i] ?? QUADRADO_FATIA[4]}`} aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate text-lone-body text-foreground">{f.rotulo}</span>
               <span className="shrink-0 text-lone-caption tabular-nums text-muted-foreground">{formatar(f)}</span>
               <span className="w-9 shrink-0 text-right text-lone-body font-medium tabular-nums text-foreground">{f.pct}%</span>

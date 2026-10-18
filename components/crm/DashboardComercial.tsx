@@ -253,7 +253,7 @@ export default function DashboardComercial<L extends LeadDash>({
                   {d.pctDaAnterior != null && <span className={`tabular-nums ${d.pctDaAnterior < 30 ? "text-lone-warning" : "text-muted-foreground"}`}>{d.pctDaAnterior}% da anterior</span>}
                   <span className="w-8 text-right font-semibold tabular-nums text-foreground">{d.n}</span>
                 </div>
-                <div className="mt-1 h-1.5 w-full rounded-full bg-muted-foreground/15">
+                <div className="mt-1.5 h-2 w-full rounded-full bg-muted-foreground/15">
                   <div className={`h-full rounded-full ${d.etapa === "ganho" ? "bg-lone-success" : "bg-primary"}`} style={{ width: `${funil.total ? Math.max(d.n ? 4 : 0, (d.n / funil.total) * 100) : 0}%` }} />
                 </div>
               </div>
@@ -279,15 +279,22 @@ export default function DashboardComercial<L extends LeadDash>({
       <div className="grid gap-4 lg:grid-cols-3">
         <Cartao>
           <TituloBloco titulo="Contatos da semana" apoio="WhatsApp, ligação, visita e reunião registrados" />
-          <div className="flex h-28 items-end gap-2">
-            {semana.dias.map((d) => (
-              <div key={d.dia} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
-                <span className="text-[10.5px] tabular-nums text-muted-foreground">{d.n || ""}</span>
-                <div className={`w-full rounded-t-md ${d.futuro ? "bg-muted-foreground/10" : d.n ? "bg-primary" : "bg-muted-foreground/15"}`}
-                  style={{ height: d.n ? `${Math.max(8, (d.n / maxDia) * 100)}%` : "4px" }} />
-                <span className="text-[10.5px] text-muted-foreground">{["seg", "ter", "qua", "qui", "sex", "sáb", "dom"][semana.dias.indexOf(d)]}</span>
-              </div>
-            ))}
+          <div className="relative flex h-32 items-end gap-2 border-b border-border pb-px">
+            {metaDia != null && (
+              <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-lone-warning"
+                style={{ bottom: `calc(${Math.min(100, (metaDia / maxDia) * 100)}% * 0.78 + 1.25rem)` }} title={`Meta: ${Math.round(metaDia)} por dia útil`} />
+            )}
+            {semana.dias.map((d, i) => {
+              const ehHoje = d.dia === hoje;
+              return (
+                <div key={d.dia} className="flex h-full flex-1 flex-col items-center justify-end gap-1" title={`${["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"][i]}: ${d.n} ${d.n === 1 ? "contato" : "contatos"}`}>
+                  <span className="text-[10.5px] font-medium tabular-nums text-foreground">{d.n || ""}</span>
+                  <div className={`w-full max-w-9 rounded-t-md transition-colors ${d.futuro ? "bg-muted-foreground/10" : d.n ? "bg-primary hover:bg-primary/85" : "bg-muted-foreground/15"}`}
+                    style={{ height: d.n ? `${Math.max(8, (d.n / maxDia) * 78)}%` : "3px" }} />
+                  <span className={`text-[10.5px] ${ehHoje ? "font-semibold text-primary" : "text-muted-foreground"}`}>{["seg", "ter", "qua", "qui", "sex", "sáb", "dom"][i]}</span>
+                </div>
+              );
+            })}
           </div>
           <p className="mt-3 text-lone-caption text-muted-foreground">
             <span className="font-semibold text-foreground">{semana.total}</span> {semana.total === 1 ? "contato" : "contatos"} esta semana
