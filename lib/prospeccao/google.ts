@@ -15,6 +15,7 @@
 
 import { encryptVault, decryptVault } from "@/lib/crypto/vault";
 import { lerSetting, gravarSetting } from "./config";
+import { lerTesteNoGoogle } from "@/lib/google/credencial";
 
 const CHAVE_OAUTH = "google_oauth";
 const CHAVE_CLIENTE = "google_client";
@@ -35,6 +36,15 @@ async function credenciais(): Promise<{ id: string; secret: string } | null> {
     const c = JSON.parse(decryptVault(raw) ?? "") as { id?: string; secret?: string };
     return c.id && c.secret ? { id: c.id, secret: c.secret } : null;
   } catch { return null; }
+}
+
+/** Testa o par no Google com um código falso (lib/google/credencial.ts explica a leitura). Nada é gravado. */
+export async function conferirNoGoogle(id: string, secret: string): Promise<ReturnType<typeof lerTesteNoGoogle>> {
+  try {
+    const body = new URLSearchParams({ code: "teste-de-credencial", client_id: id, client_secret: secret, redirect_uri: redirectUri(), grant_type: "authorization_code" });
+    const res = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body, signal: AbortSignal.timeout(10_000) });
+    return lerTesteNoGoogle(await res.json().catch(() => null));
+  } catch { return "indefinido"; }
 }
 
 export async function gravarCredenciais(id: string, secret: string): Promise<void> {

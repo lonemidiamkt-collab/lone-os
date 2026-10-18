@@ -17,6 +17,9 @@ export default function ConectarGoogle({ compacto = false, onMudou }: { compacto
   const [id, setId] = useState("");
   const [secret, setSecret] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  // Credencial guardada mas sem conexão: deixa trocar (18/10/2026 — o Client ID foi colado no lugar do segredo
+  // e o formulário sumia, sem caminho para corrigir).
+  const [trocando, setTrocando] = useState(false);
   const carregar = () => chamar<Estado>("/api/crm/google").then((r) => { if (r.ok && r.data) setE(r.data); });
   useEffect(() => { carregar(); }, []);
 
@@ -25,8 +28,8 @@ export default function ConectarGoogle({ compacto = false, onMudou }: { compacto
     const r = await chamar("/api/crm/google", { acao: "credenciais", id, secret });
     setOcupado(false);
     if (!r.ok) { toast.error(r.erro ?? "Não consegui guardar."); return; }
-    setId(""); setSecret("");
-    toast.success("Credencial guardada. Agora conecte a conta Google da Lone.");
+    setId(""); setSecret(""); setTrocando(false);
+    toast.success("Credencial conferida com o Google e guardada. Agora clique em Conectar Google Agenda.");
     carregar();
   }
   async function conectar() {
@@ -63,18 +66,26 @@ export default function ConectarGoogle({ compacto = false, onMudou }: { compacto
             Sem ele, a reunião fica só no Lone OS.
           </p>
         </div>
-        {e.configurado && (
-          <button disabled={ocupado} onClick={conectar} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
-            {ocupado ? "Abrindo o Google…" : "Conectar Google Agenda"}
-          </button>
+        {e.configurado && !trocando && (
+          <div className="flex flex-col items-end gap-1">
+            <button disabled={ocupado} onClick={conectar} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+              {ocupado ? "Abrindo o Google…" : "Conectar Google Agenda"}
+            </button>
+            {e.origem === "tela" && (
+              <button onClick={() => setTrocando(true)} className="inline-flex items-center gap-1 text-lone-caption text-muted-foreground hover:text-foreground"><KeyRound size={12} /> trocar credencial</button>
+            )}
+          </div>
         )}
       </div>
-      {!e.configurado && (
+      {(!e.configurado || trocando) && (
         <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
           <input className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:border-primary focus:outline-none" placeholder="Client ID (…apps.googleusercontent.com)" value={id} onChange={(ev) => setId(ev.target.value)} aria-label="Client ID do Google" />
-          <input type="password" autoComplete="off" className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:border-primary focus:outline-none" placeholder="Segredo do cliente" value={secret} onChange={(ev) => setSecret(ev.target.value)} aria-label="Segredo do cliente do Google" />
-          <button disabled={ocupado || !id || !secret} onClick={salvarCredenciais} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-4 text-sm text-foreground hover:bg-accent disabled:opacity-50"><KeyRound size={14} /> Guardar</button>
-          <p className="text-lone-caption text-muted-foreground sm:col-span-3">Fica guardado cifrado no servidor. Endereço de volta para cadastrar no Google Cloud: <span className="font-mono text-foreground">{e.redirect_uri}</span></p>
+          <input type="password" autoComplete="off" className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:border-primary focus:outline-none" placeholder="Chave secreta do cliente (GOCSPX-…)" value={secret} onChange={(ev) => setSecret(ev.target.value)} aria-label="Segredo do cliente do Google" />
+          <button disabled={ocupado || !id || !secret} onClick={salvarCredenciais} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-4 text-sm text-foreground hover:bg-accent disabled:opacity-50"><KeyRound size={14} /> {ocupado ? "Conferindo…" : "Guardar"}</button>
+          <p className="text-lone-caption text-muted-foreground sm:col-span-3">
+            O Lone OS confere com o Google antes de guardar, e fica cifrado no servidor. Endereço de volta para cadastrar no Google Cloud: <span className="font-mono text-foreground">{e.redirect_uri}</span>
+            {trocando && <button onClick={() => { setTrocando(false); setId(""); setSecret(""); }} className="ml-2 text-muted-foreground underline hover:text-foreground">cancelar</button>}
+          </p>
         </div>
       )}
     </section>

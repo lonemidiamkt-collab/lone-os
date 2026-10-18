@@ -28,6 +28,7 @@ import HojeComercial from "@/components/crm/HojeComercial";
 import { eventosDaAgenda, ROTULO_EVENTO, type Evento } from "@/lib/crm/agenda";
 import MarcarReuniao from "@/components/crm/MarcarReuniao";
 import ConectarGoogle from "@/components/crm/ConectarGoogle";
+import { motivoLegivel } from "@/lib/google/credencial";
 import { diaCurto, horaCurta, inicioDe, duracaoMin, mensagemVesperaLead, type ReuniaoBase, type Formato } from "@/lib/crm/reunioes";
 import { Anel } from "@/components/crm/graficos";
 import { useCascoComercial } from "@/lib/navegacao/use-casco";
@@ -211,7 +212,7 @@ export default function CrmPage() {
     if (lead) { setTab("funil"); setDraft({ ...lead }); }
     const voltaGoogle = q.get("google");
     if (voltaGoogle === "ok") toast.success(`Google Agenda conectado${q.get("email") ? ` (${q.get("email")})` : ""}. As reuniões novas já saem com Meet.`);
-    if (voltaGoogle === "erro") toast.error(`O Google não conectou: ${q.get("motivo") ?? "erro"}`);
+    if (voltaGoogle === "erro") toast.error(`O Google não conectou: ${motivoLegivel(q.get("motivo"))}`, { duration: 15_000 });
     if (aba || leadId || voltaGoogle) window.history.replaceState(null, "", window.location.pathname);
   }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
