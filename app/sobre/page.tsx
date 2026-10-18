@@ -443,6 +443,8 @@ const MODULES: Module[] = [
     howItWorks: [
       "Lista de clientes em /clients — filtra por status, nicho ou responsável.",
       "Pra cadastrar novo cliente, você gera um 'Link de Onboarding' e manda pro cliente por WhatsApp.",
+      "CADASTRO PELO CNPJ (18/10): no link de cadastro o cliente começa pelo CNPJ e o sistema busca na Receita Federal (BrasilAPI) — razão social, nome fantasia, telefone e endereço já vêm preenchidos, e o ramo (nicho) vem SUGERIDO pela atividade registrada (CNAE), na mesma lista de nichos que alimenta as pautas. O cliente confere e corrige; o que ele digitou nunca é apagado. O CEP também passou a ser buscado pela BrasilAPI (com a ViaCEP de reserva). Se a Receita estiver fora do ar, o formulário avisa e segue à mão",
+      "FAIXA DE FATURAMENTO (18/10): o cadastro pergunta o faturamento médio por mês em faixas (até R$ 30 mil … acima de R$ 500 mil, ou 'prefiro não informar'). Fica só com a gestão — aparece em Dados › Perfil da empresa, junto com o que a Receita diz: porte (MEI, ME, EPP, Demais), atividade principal e situação. Porte é enquadramento legal com teto anual, NÃO é faturamento — por isso os dois ficam separados. Para clientes antigos, o botão 'Buscar na Receita' preenche porte e atividade pelo CNPJ (e o nicho, se estiver vazio)",
       "Cliente abre o link, preenche nome, CNPJ, endereço, WhatsApp, e-mail — 11 campos obrigatórios.",
       "Upload de logotipo (fica público) e contrato social (fica privado, só admin acessa).",
       "Após envio, o cadastro vai pra uma fila de 'Aguardando aprovação' — admin revisa e ativa.",

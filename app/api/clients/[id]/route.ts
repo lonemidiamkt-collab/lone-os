@@ -18,6 +18,7 @@ const CAMPOS_SENSIVEIS = [
   "cpfCnpj", "birthDate", "idade", "docIdentidade", "docContratoSocial",
   "endereco", "enderecoRua", "enderecoNumero", "enderecoBairro", "enderecoCep",
   "facebookLogin", "googleAdsLogin", "instagramLogin",
+  "faturamentoFaixa", // faturamento declarado pelo cliente: só gestão vê
   "publicReportToken", "publicReportTokenCreatedAt", "publicReportTokenRevokedAt",
   "fichaVivaToken", "fichaVivaRaioxToken", "fichaVivaTokenCreatedAt", "fichaVivaTokenRevokedAt",
 ] as const;

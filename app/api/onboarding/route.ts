@@ -1,6 +1,7 @@
 export const runtime = "nodejs"; // vault usa crypto nativo de Node
 
 import { NextRequest, NextResponse } from "next/server";
+import { faixaValida } from "@/lib/empresa/receita";
 import { createClient } from "@supabase/supabase-js";
 import { encryptVault } from "@/lib/crypto/vault";
 import { requireRole, GESTAO } from "@/lib/api/require-role";
@@ -62,7 +63,8 @@ const ONBOARDING_PUBLIC_COLS =
   "id, client_id, token, status, submitted_at, created_at, contact_name, contact_cpf, contact_email, " +
   "contact_whatsapp, company_phone, contact_phone, instagram_user, nome_fantasia, razao_social, cnpj, nicho, endereco_rua, endereco_bairro, " +
   "endereco_cidade, endereco_estado, endereco_cep, doc_contrato_social, doc_identidade, doc_logo, " +
-  "notes, meta_status, instagram_status, google_status, clients(name, industry, service_type)";
+  "notes, meta_status, instagram_status, google_status, faturamento_faixa, porte_receita, cnae_principal, " +
+  "cnae_descricao, situacao_cadastral, receita_consultada_em, clients(name, industry, service_type)";
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token");
@@ -303,6 +305,7 @@ export async function POST(req: NextRequest) {
       instagram_user: fields.instagramUser || null,
       cnpj: fields.cnpj || null,
       nicho: fields.nicho || null,
+      faturamento_faixa: faixaValida(fields.faturamentoFaixa) ? fields.faturamentoFaixa : null,
       endereco_rua: fields.enderecoRua || null,
       endereco_bairro: fields.enderecoBairro || null,
       endereco_cidade: fields.enderecoCidade || null,
@@ -340,7 +343,7 @@ export async function POST(req: NextRequest) {
     }
     const { data: sub, error: subErr } = await supabase
       .from("client_onboarding_submissions")
-      .select("id, client_id")
+      .select("id, client_id, porte_receita, cnae_principal, cnae_descricao, cnaes_secundarios, capital_social, situacao_cadastral, receita_consultada_em")
       .eq("token", token)
       .maybeSingle();
     if (subErr) return NextResponse.json({ error: "Não consegui validar o link de cadastro. Tente de novo." }, { status: 500 });
@@ -389,6 +392,7 @@ export async function POST(req: NextRequest) {
         instagram_user: formData.instagramUser || null,
         cnpj: formData.cnpj || null,
         nicho: formData.nicho || null,
+        faturamento_faixa: faixaValida(formData.faturamentoFaixa) ? formData.faturamentoFaixa : null,
         endereco_rua: formData.enderecoRua || null,
         endereco_bairro: formData.enderecoBairro || null,
         endereco_cidade: formData.enderecoCidade || null,
@@ -427,6 +431,14 @@ export async function POST(req: NextRequest) {
         razao_social: formData.razaoSocial || null,
         cnpj: formData.cnpj || null,
         nicho: formData.nicho || null,
+        // Faixa declarada e o que a Receita disse (gravado pela consulta do CNPJ, no servidor). Só
+        // grava o que existe: cadastro antigo, sem consulta, não apaga o que a ficha já tinha.
+        ...(faixaValida(formData.faturamentoFaixa) ? { faturamento_faixa: formData.faturamentoFaixa } : {}),
+        ...(sub.receita_consultada_em ? {
+          porte_receita: sub.porte_receita, cnae_principal: sub.cnae_principal, cnae_descricao: sub.cnae_descricao,
+          cnaes_secundarios: sub.cnaes_secundarios, capital_social: sub.capital_social,
+          situacao_cadastral: sub.situacao_cadastral, receita_consultada_em: sub.receita_consultada_em,
+        } : {}),
         contact_name: formData.contactName,
         cpf_cnpj: formData.contactCpf,
         phone: formData.contactWhatsapp,
@@ -545,6 +557,12 @@ export async function POST(req: NextRequest) {
       if (subRow.razao_social) updatePayload.razao_social = subRow.razao_social;
       if (subRow.cnpj) updatePayload.cnpj = subRow.cnpj;
       if (subRow.nicho) updatePayload.nicho = subRow.nicho;
+      if (subRow.faturamento_faixa) updatePayload.faturamento_faixa = subRow.faturamento_faixa;
+      if (subRow.receita_consultada_em) {
+        for (const c of ["porte_receita", "cnae_principal", "cnae_descricao", "cnaes_secundarios", "capital_social", "situacao_cadastral", "receita_consultada_em"]) {
+          updatePayload[c] = subRow[c];
+        }
+      }
       if (subRow.contact_name) updatePayload.contact_name = subRow.contact_name;
       if (subRow.contact_cpf) updatePayload.cpf_cnpj = subRow.contact_cpf;
       if (subRow.contact_whatsapp) updatePayload.phone = subRow.contact_whatsapp;

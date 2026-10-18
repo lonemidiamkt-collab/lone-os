@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { chamar } from "@/lib/api/chamar";
+import { ROTULO_NICHO } from "@/lib/cs/nicho";
+import { FAIXAS_FATURAMENTO, rotuloFaixa, capitalizar, type EmpresaReceita } from "@/lib/empresa/receita";
 
 // ─── Types ──────────────────────────────────────────────────
 interface SubmissionData {
@@ -324,6 +326,12 @@ export default function ExternalOnboardingPage() {
   const [googlePassword, setGooglePassword] = useState("");
   const [googleStatus, setGoogleStatus] = useState<AccessStatus>("fill_now");
   const [notes, setNotes] = useState("");
+  const [faturamentoFaixa, setFaturamentoFaixa] = useState("");
+  // Consulta do CNPJ na Receita (BrasilAPI, pelo servidor — app/api/onboarding/cnpj).
+  const [consulta, setConsulta] = useState<{ estado: "buscando" | "ok" | "erro"; msg: string; cnae?: string; ativa?: boolean } | null>(null);
+  const ultimoCnpjConsultado = useRef("");
+  // O que a consulta escreveu: se o cliente trocar o CNPJ, isso pode ser substituído; o que ELE digitou, não.
+  const preenchidoPelaReceita = useRef<Record<string, string>>({});
 
   // ─── Required fields (integrity gate) ─────────────────────
   // These MUST be filled to enable submit. Missing any → contract + automation break.
@@ -339,6 +347,7 @@ export default function ExternalOnboardingPage() {
     enderecoRua: !enderecoRua.trim(),
     enderecoBairro: !enderecoBairro.trim(),
     enderecoCidade: !enderecoCidade.trim(),
+    faturamentoFaixa: !faturamentoFaixa,
     docLogo: !docLogo,
     docContrato: !docContrato,
   };
@@ -360,7 +369,7 @@ export default function ExternalOnboardingPage() {
   // ─── Auto-save draft (debounced) ──────────────────────────
   const rascunho = {
     contactName, contactCpf, contactWhatsapp, contactEmail, contactPhone,
-    nomeFantasia, razaoSocial, cnpj, nicho, companyPhone, instagramUser,
+    nomeFantasia, razaoSocial, cnpj, nicho, faturamentoFaixa, companyPhone, instagramUser,
     enderecoRua, enderecoBairro, enderecoCidade, enderecoEstado, enderecoCep,
     metaLogin, metaPassword, metaStatus,
     instagramLogin: instaLogin, instagramPassword: instaPassword, instagramStatus: instaStatus,
@@ -406,9 +415,15 @@ export default function ExternalOnboardingPage() {
       ["endereco_rua", setEnderecoRua], ["endereco_bairro", setEnderecoBairro], ["endereco_cidade", setEnderecoCidade],
       ["endereco_estado", setEnderecoEstado], ["endereco_cep", setEnderecoCep],
       ["doc_contrato_social", setDocContrato], ["doc_identidade", setDocIdentidade], ["doc_logo", setDocLogo],
-      ["notes", setNotes],
+      ["notes", setNotes], ["faturamento_faixa", setFaturamentoFaixa],
     ];
     for (const [k, set] of campos) if (txt(k)) set(txt(k));
+    // Já consultado antes: mostra de novo o que a Receita disse, sem gastar outra consulta.
+    if (txt("receita_consultada_em")) {
+      ultimoCnpjConsultado.current = txt("cnpj").replace(/\D/g, "");
+      setConsulta({ estado: "ok", msg: "Dados conferidos na Receita Federal.", cnae: txt("cnae_descricao") || undefined,
+        ativa: !txt("situacao_cadastral") || txt("situacao_cadastral") === "ATIVA" });
+    }
   };
 
   // Load submission
@@ -445,25 +460,78 @@ export default function ExternalOnboardingPage() {
   const goNext = () => { const idx = STEPS.findIndex((s) => s.key === step); if (idx < STEPS.length - 1) setStep(STEPS[idx + 1].key); };
   const goPrev = () => { const idx = STEPS.findIndex((s) => s.key === step); if (idx > 0) setStep(STEPS[idx - 1].key); };
 
-  // ViaCEP
+  // CEP pela BrasilAPI (v2, que já junta várias fontes); se ela falhar, a ViaCEP de sempre.
+  const buscarCep = async (digits: string): Promise<{ rua?: string; bairro?: string; cidade?: string; uf?: string } | null> => {
+    try {
+      const r = await fetch(`https://brasilapi.com.br/api/cep/v2/${digits}`, { signal: AbortSignal.timeout(6000) });
+      if (r.ok) {
+        const d = await r.json();
+        return { rua: d.street ?? undefined, bairro: d.neighborhood ?? undefined, cidade: d.city ?? undefined, uf: d.state ?? undefined };
+      }
+    } catch {}
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${digits}/json/`, { signal: AbortSignal.timeout(6000) });
+      const d = await r.json();
+      if (!d.erro) return { rua: d.logradouro, bairro: d.bairro, cidade: d.localidade, uf: d.uf };
+    } catch {}
+    return null;
+  };
+
   const handleCepChange = async (value: string) => {
     const masked = maskCep(value);
     setEnderecoCep(masked);
     const digits = value.replace(/\D/g, "");
     if (digits.length === 8) {
-      try {
-        const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
-        const data = await res.json();
-        if (!data.erro) {
-          // Só completa o que está vazio: antes apagava a rua (com número) que o cliente já tinha digitado.
-          const seVazio = (novo: string) => (atual: string) => (atual.trim() ? atual : novo || "");
-          setEnderecoRua(seVazio(data.logradouro));
-          setEnderecoBairro(seVazio(data.bairro));
-          setEnderecoCidade(seVazio(data.localidade));
-          setEnderecoEstado(seVazio(data.uf));
-        }
-      } catch {}
+      const data = await buscarCep(digits);
+      if (data) {
+        // Só completa o que está vazio: antes apagava a rua (com número) que o cliente já tinha digitado.
+        const seVazio = (novo?: string) => (atual: string) => (atual.trim() ? atual : novo || "");
+        setEnderecoRua(seVazio(data.rua));
+        setEnderecoBairro(seVazio(data.bairro));
+        setEnderecoCidade(seVazio(data.cidade));
+        setEnderecoEstado(seVazio(data.uf));
+      }
     }
+  };
+
+  // CNPJ → Receita. Preenche o que está vazio (ou o que a consulta anterior preencheu, se o cliente
+  // trocou de CNPJ); o que o cliente digitou fica. O nicho vem como SUGESTÃO pelas atividades (CNAE).
+  const consultarCnpj = async (digits: string) => {
+    if (digits === ultimoCnpjConsultado.current) return;
+    ultimoCnpjConsultado.current = digits;
+    setConsulta({ estado: "buscando", msg: "Buscando os dados da empresa na Receita Federal…" });
+    const r = await chamar<{ ok: boolean; empresa: EmpresaReceita }>(
+      `/api/onboarding/cnpj?token=${encodeURIComponent(token)}&cnpj=${digits}`,
+    );
+    if (!r.ok || !r.data?.empresa) {
+      ultimoCnpjConsultado.current = "";
+      setConsulta({ estado: "erro", msg: r.erro || "Não deu para consultar agora. Preencha os dados à mão." });
+      return;
+    }
+    const e = r.data.empresa;
+    const antes = preenchidoPelaReceita.current;
+    const agora: Record<string, string> = {};
+    const preencher = (chave: string, novo: string | null | undefined, set: (f: (atual: string) => string) => void) => {
+      if (!novo) return;
+      agora[chave] = novo;
+      set((atual) => (!atual.trim() || atual === antes[chave] ? novo : atual));
+    };
+    preencher("nomeFantasia", capitalizar(e.nomeFantasia) ?? capitalizar(e.razaoSocial), setNomeFantasia);
+    preencher("razaoSocial", e.razaoSocial, setRazaoSocial);
+    preencher("companyPhone", e.telefone, setCompanyPhone);
+    preencher("enderecoCep", e.endereco.cep, setEnderecoCep);
+    preencher("enderecoRua", e.endereco.rua, setEnderecoRua);
+    preencher("enderecoBairro", e.endereco.bairro, setEnderecoBairro);
+    preencher("enderecoCidade", e.endereco.cidade, setEnderecoCidade);
+    preencher("enderecoEstado", e.endereco.uf, setEnderecoEstado);
+    preencher("nicho", e.nichoRotulo, setNicho);
+    preenchidoPelaReceita.current = agora;
+    setConsulta({
+      estado: "ok",
+      msg: `Encontramos ${e.razaoSocial ?? "a empresa"} e preenchemos os dados abaixo. Confira e corrija o que precisar.`,
+      cnae: e.cnaeDescricao ?? undefined,
+      ativa: e.ativa,
+    });
   };
 
   // CNPJ validation
@@ -472,7 +540,9 @@ export default function ExternalOnboardingPage() {
     setCnpj(masked);
     const digits = v.replace(/\D/g, "");
     if (digits.length === 14) {
-      setCnpjError(validateCnpj(v) ? "" : "CNPJ inválido");
+      const ok = validateCnpj(v);
+      setCnpjError(ok ? "" : "CNPJ inválido");
+      if (ok) void consultarCnpj(digits);
     } else {
       setCnpjError("");
     }
@@ -504,7 +574,7 @@ export default function ExternalOnboardingPage() {
   const buildPayload = () => ({
     action: "submit", token,
     nomeFantasia: nomeFantasia.trim(), razaoSocial: razaoSocial.trim(), cnpj: cnpj.trim(),
-    nicho: nicho.trim(),
+    nicho: nicho.trim(), faturamentoFaixa,
     companyPhone: companyPhone.trim(), instagramUser: instagramUser.trim().replace(/^@+/, ""),
     contactName: contactName.trim(), contactCpf: contactCpf.trim(), contactWhatsapp: contactWhatsapp.trim(),
     contactPhone: contactPhone.trim(),
@@ -523,7 +593,7 @@ export default function ExternalOnboardingPage() {
       const missingCount = Object.values(missingRequired).filter(Boolean).length;
       setError(`Existem ${missingCount} campo(s) obrigatório(s) pendente(s). ${REQUIRED_ERROR}`);
       // Jump to first step with missing field for UX
-      if (missingRequired.nomeFantasia || missingRequired.cnpj || missingRequired.contactName ||
+      if (missingRequired.nomeFantasia || missingRequired.cnpj || missingRequired.faturamentoFaixa || missingRequired.contactName ||
           missingRequired.contactEmail || missingRequired.contactWhatsapp ||
           missingRequired.enderecoCep || missingRequired.enderecoRua ||
           missingRequired.enderecoBairro || missingRequired.enderecoCidade) {
@@ -660,6 +730,29 @@ export default function ExternalOnboardingPage() {
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
                 <Building2 size={10} className="text-primary" /> Dados da Empresa
               </p>
+              <InputField label="CNPJ" value={cnpj} onChange={handleCnpjChange} placeholder="00.000.000/0000-00" required
+                error={cnpjError || (showValidation && missingRequired.cnpj ? REQUIRED_ERROR : undefined)} />
+              {!consulta && (
+                <p className="text-[10px] text-muted-foreground/80 -mt-2">
+                  Comece pelo CNPJ: a gente busca na Receita Federal e preenche nome, endereço e ramo para você.
+                </p>
+              )}
+              {consulta && (
+                <div role="status" className={`-mt-1 rounded-lg border px-3 py-2 text-[11px] leading-relaxed flex gap-2 ${
+                  consulta.estado === "erro" ? "border-lone-warning-border bg-lone-warning-bg text-foreground"
+                    : consulta.estado === "ok" ? "border-lone-success-border bg-lone-success-bg text-foreground"
+                    : "border-border bg-background text-muted-foreground"}`}>
+                  {consulta.estado === "buscando" ? <Loader2 size={12} className="animate-spin shrink-0 mt-0.5" />
+                    : consulta.estado === "ok" ? <Check size={12} className="text-lone-success shrink-0 mt-0.5" />
+                    : <AlertTriangle size={12} className="text-lone-warning shrink-0 mt-0.5" />}
+                  <div className="space-y-0.5">
+                    <p>{consulta.msg}</p>
+                    {consulta.estado === "ok" && consulta.ativa === false && (
+                      <p className="text-lone-warning">A Receita mostra este CNPJ como não ativo. Se estiver certo, siga em frente; a equipe confere com você.</p>
+                    )}
+                  </div>
+                </div>
+              )}
               <InputField label="Nome Fantasia" value={nomeFantasia} onChange={setNomeFantasia} placeholder="Ex: Loja do João" required
                 error={showValidation && missingRequired.nomeFantasia ? REQUIRED_ERROR : undefined} />
               <InputField label="Razão Social" value={razaoSocial} onChange={setRazaoSocial} placeholder="Ex: João da Silva LTDA" />
@@ -667,29 +760,11 @@ export default function ExternalOnboardingPage() {
                           placeholder="(22) 2222-2222" />
               <InputField label="Instagram da Empresa" value={instagramUser} onChange={setInstagramUser}
                           placeholder="@sualoja" />
-              <InputField label="CNPJ" value={cnpj} onChange={handleCnpjChange} placeholder="00.000.000/0000-00" required
-                error={cnpjError || (showValidation && missingRequired.cnpj ? REQUIRED_ERROR : undefined)} />
               <div className="space-y-2">
                 <InputField label="Ramo de Atividade / Nicho" value={nicho} onChange={setNicho}
-                  placeholder="Ex: varejo de moda, odontologia, restaurante..." />
+                  placeholder="Ex: materiais de construção, ótica, restaurante..." />
                 <div className="flex flex-wrap gap-1.5">
-                  {[
-                    "Construção Civil",
-                    "Arquitetura e Engenharia",
-                    "Imobiliária",
-                    "Odontologia",
-                    "Estética e Beleza",
-                    "Restaurante / Food",
-                    "Varejo de Moda",
-                    "Fitness / Academia",
-                    "Saúde / Clínicas",
-                    "Advocacia",
-                    "Educação / Cursos",
-                    "E-commerce",
-                    "Automotivo",
-                    "Tecnologia / SaaS",
-                    "Turismo / Hotelaria",
-                  ].map((opt) => (
+                  {Object.values(ROTULO_NICHO).map((opt) => (
                     <button
                       key={opt}
                       type="button"
@@ -705,7 +780,37 @@ export default function ExternalOnboardingPage() {
                   ))}
                 </div>
                 <p className="text-[10px] text-muted-foreground/70">
-                  Clique numa sugestão ou digite o seu. Usado pra personalizar o objeto do contrato.
+                  {consulta?.estado === "ok" && consulta.cnae
+                    ? `Sugerimos pela atividade registrada na Receita (${consulta.cnae}). Se não for isso, escolha outro ou escreva o seu.`
+                    : "Clique numa sugestão ou digite o seu. Usado para planejar o conteúdo e personalizar o contrato."}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-foreground">
+                  Faturamento médio por mês <span className="text-lone-danger">*</span>
+                </p>
+                <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Faturamento médio por mês">
+                  {FAIXAS_FATURAMENTO.map((f) => (
+                    <button
+                      key={f.chave}
+                      type="button"
+                      role="radio"
+                      aria-checked={faturamentoFaixa === f.chave}
+                      onClick={() => setFaturamentoFaixa(f.chave)}
+                      className={`text-[11px] px-3 py-1.5 rounded-full border transition-all ${
+                        faturamentoFaixa === f.chave
+                          ? "bg-primary/15 text-primary border-primary/30"
+                          : "bg-background text-muted-foreground border-border hover:border-primary/20 hover:text-foreground"
+                      }`}
+                    >
+                      {f.rotulo}
+                    </button>
+                  ))}
+                </div>
+                <p className={`text-[10px] ${showValidation && missingRequired.faturamentoFaixa ? "text-lone-danger" : "text-muted-foreground/70"}`}>
+                  {showValidation && missingRequired.faturamentoFaixa
+                    ? "Escolha uma faixa (ou \"Prefiro não informar\")."
+                    : "Fica só com a equipe da Lone: ajuda a planejar a estratégia e o investimento em anúncios. Não aparece no contrato."}
                 </p>
               </div>
             </div>
@@ -782,6 +887,7 @@ export default function ExternalOnboardingPage() {
                 {razaoSocial && <div className="flex justify-between"><span className="text-muted-foreground">Razão Social</span><span className="text-foreground">{razaoSocial}</span></div>}
                 {cnpj && <div className="flex justify-between"><span className="text-muted-foreground">CNPJ</span><span className={`${cnpjError ? "text-lone-danger" : "text-foreground"}`}>{cnpj} {cnpjError && "(inválido)"}</span></div>}
                 {nicho && <div className="flex justify-between"><span className="text-muted-foreground">Ramo / Nicho</span><span className="text-foreground">{nicho}</span></div>}
+                {faturamentoFaixa && <div className="flex justify-between"><span className="text-muted-foreground">Faturamento mensal</span><span className="text-foreground">{rotuloFaixa(faturamentoFaixa)}</span></div>}
                 <div className="flex justify-between"><span className="text-muted-foreground">Responsável</span><span className="text-foreground">{contactName || "—"}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">WhatsApp</span><span className="text-foreground">{contactWhatsapp || "—"}</span></div>
                 {(enderecoRua || enderecoCidade) && (

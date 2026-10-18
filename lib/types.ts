@@ -115,6 +115,14 @@ export interface Client {
   contactRole?: string;
   idade?: string;
   nicho?: string;
+  /** Faturamento médio MENSAL declarado pelo cliente — chave de lib/empresa/receita.ts (FAIXAS_FATURAMENTO). */
+  faturamentoFaixa?: string | null;
+  /** O que a Receita diz (BrasilAPI): enquadramento, atividade e situação. Porte NÃO é faturamento. */
+  porteReceita?: string | null;
+  cnaePrincipal?: string | null;
+  cnaeDescricao?: string | null;
+  situacaoCadastral?: string | null;
+  receitaConsultadaEm?: string | null;
   razaoSocial?: string;
   nomeFantasia?: string;
   cnpj?: string;

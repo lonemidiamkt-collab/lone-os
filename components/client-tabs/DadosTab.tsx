@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import type { Client, Role, ServiceType, ContentProfile } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
+import { FAIXAS_FATURAMENTO, rotuloFaixa, PORTES, porteValido, type EmpresaReceita } from "@/lib/empresa/receita";
 import type { ClientPatch } from "@/stores/useClientsStore";
 import {
   Building2, Shield, FileText, Eye, EyeOff, Download, Upload,
@@ -118,6 +119,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   const initForm = () => ({
     nomeFantasia: client.nomeFantasia || "", razaoSocial: client.razaoSocial || "",
     cnpj: client.cnpj || "", nicho: client.nicho || "",
+    faturamentoFaixa: client.faturamentoFaixa || "",
     contactName: client.contactName || "",
     cpfCnpj: client.cpfCnpj || "", phone: client.phone || "",
     emailCorporativo: client.emailCorporativo || "",
@@ -140,6 +142,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   const assinaturaSensivel = [
     client.id, client.cpfCnpj, client.facebookLogin, client.instagramLogin, client.googleAdsLogin,
     client.enderecoRua, client.enderecoNumero, client.enderecoBairro, client.enderecoCep, client.razaoSocial, client.cnpj,
+    client.faturamentoFaixa,
   ].join("|");
   useEffect(() => {
     if (!editing) setForm(initForm());
@@ -171,6 +174,8 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       await updateClientData(client.id, {
         nomeFantasia: v(form.nomeFantasia), razaoSocial: v(form.razaoSocial),
         cnpj: v(form.cnpj), nicho: v(form.nicho),
+        // Só gestão vê e edita a faixa (a rota de detalhe nem a manda para os outros papéis).
+        ...(isAdmin ? { faturamentoFaixa: form.faturamentoFaixa || null } : {}),
         contactName: v(form.contactName),
         cpfCnpj: v(form.cpfCnpj), phone: v(form.phone),
         emailCorporativo: v(form.emailCorporativo),
@@ -552,6 +557,12 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         </div>
       </div>
 
+      {/* BLOCO 1b: Perfil da empresa (Receita + faturamento declarado) — só gestão */}
+      {isAdmin && (
+        <PerfilEmpresa client={client} editing={editing}
+          faixa={form.faturamentoFaixa || ""} onFaixa={(f) => setForm((p) => ({ ...p, faturamentoFaixa: f }))} />
+      )}
+
       {/* BLOCO 2: Cofre de Acessos */}
       {role !== "designer" && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
@@ -855,6 +866,75 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       )}
       </>)}
 
+    </div>
+  );
+}
+
+
+/**
+ * O que a Receita diz da empresa e a faixa de faturamento que o cliente declarou (lib/empresa/receita.ts).
+ * Porte é enquadramento legal com teto anual, nunca o faturamento — por isso aparecem separados.
+ */
+function PerfilEmpresa({ client, editing, faixa, onFaixa }: {
+  client: Client; editing: boolean; faixa: string; onFaixa: (f: string) => void;
+}) {
+  const [receita, setReceita] = useState({
+    porte: client.porteReceita ?? null, cnae: client.cnaePrincipal ?? null, cnaeDescricao: client.cnaeDescricao ?? null,
+    situacao: client.situacaoCadastral ?? null, em: client.receitaConsultadaEm ?? null,
+  });
+  const [buscando, setBuscando] = useState(false);
+
+  const atualizar = async () => {
+    setBuscando(true);
+    const r = await chamar<{ empresa: EmpresaReceita; nichoPreenchido: boolean }>(`/api/clients/${client.id}/receita`, {});
+    setBuscando(false);
+    if (!r.ok || !r.data) { toast.error(r.erro ?? "Não deu para consultar a Receita agora."); return; }
+    const e = r.data.empresa;
+    setReceita({ porte: e.porte, cnae: e.cnaePrincipal, cnaeDescricao: e.cnaeDescricao, situacao: e.situacao, em: new Date().toISOString() });
+    toast.success(r.data.nichoPreenchido ? `Dados da Receita atualizados. Nicho sugerido: ${e.nichoRotulo}.` : "Dados da Receita atualizados.");
+  };
+
+  const porte = porteValido(receita.porte) ? PORTES[receita.porte] : null;
+  const item = (rotulo: string, valor: React.ReactNode, dica?: string) => (
+    <div className="space-y-1">
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{rotulo}</p>
+      <div className="text-sm text-foreground">{valor ?? <span className="text-muted-foreground italic">Não informado</span>}</div>
+      {dica && <p className="text-[10px] text-muted-foreground">{dica}</p>}
+    </div>
+  );
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
+          <Building2 size={11} className="text-primary" /> Perfil da empresa
+        </p>
+        <button type="button" onClick={atualizar} disabled={buscando || !client.cnpj}
+          title={client.cnpj ? "Consulta o CNPJ na Receita Federal (BrasilAPI)" : "Cadastre o CNPJ primeiro"}
+          className="text-[11px] px-2.5 py-1 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors disabled:opacity-50">
+          {buscando ? "Consultando…" : receita.em ? "Atualizar pela Receita" : "Buscar na Receita"}
+        </button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+        <div className="space-y-1">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Faturamento médio por mês (declarado)</p>
+          {editing ? (
+            <select value={faixa} onChange={(e) => onFaixa(e.target.value)}
+              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
+              <option value="">Não informado</option>
+              {FAIXAS_FATURAMENTO.map((f) => <option key={f.chave} value={f.chave}>{f.rotulo}</option>)}
+            </select>
+          ) : (
+            <p className="text-sm text-foreground">{rotuloFaixa(faixa) ?? <span className="text-muted-foreground italic">Não informado</span>}</p>
+          )}
+        </div>
+        {item("Porte na Receita", porte?.rotulo ?? null, porte ? `Enquadramento: ${porte.teto}. Não é o faturamento.` : undefined)}
+        {item("Atividade principal (CNAE)", receita.cnae ? `${receita.cnae} · ${receita.cnaeDescricao ?? ""}` : null)}
+        {item("Situação na Receita", receita.situacao
+          ? <span className={receita.situacao === "ATIVA" ? "" : "text-lone-warning"}>{receita.situacao.charAt(0) + receita.situacao.slice(1).toLowerCase()}</span>
+          : null,
+          receita.em ? `Consultado em ${new Date(receita.em).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : undefined)}
+      </div>
     </div>
   );
 }

@@ -23,7 +23,7 @@ const FIELD_MAP: Record<string, string> = {
   metaAdAccountId: "meta_ad_account_id", metaAdAccountName: "meta_ad_account_name",
   leadSource: "lead_source", facebookLogin: "facebook_login",
   googleAdsLogin: "google_ads_login", instagramLogin: "instagram_login",
-  nomeFantasia: "nome_fantasia", nicho: "nicho",
+  nomeFantasia: "nome_fantasia", nicho: "nicho", faturamentoFaixa: "faturamento_faixa",
   clientFinancePhone: "client_finance_phone", clientPixKey: "client_pix_key",
   cpfCnpj: "cpf_cnpj", birthDate: "birth_date", phone: "phone", email: "email",
   draftStatus: "draft_status", agenteAtivo: "agente_ativo",
@@ -75,6 +75,8 @@ const ClientUpdateSchema = z.object({
   instagramLogin: txt(256),
   nomeFantasia: txt(256),
   nicho: txt(128),
+  // Só as chaves da lista (o banco também tem a trava): texto livre aqui vira faixa que nenhum gráfico agrupa.
+  faturamentoFaixa: z.enum(["ate_30k", "30k_50k", "50k_100k", "100k_200k", "200k_500k", "acima_500k", "nao_informado"]).nullable().optional(),
   clientFinancePhone: txt(32),
   clientPixKey: txt(256),
   cpfCnpj: txt(32),

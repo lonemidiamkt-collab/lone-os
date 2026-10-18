@@ -35,7 +35,8 @@ export const ROTULO_NICHO: Record<Nicho, string> = {
 export function normalizarNicho(bruto?: string | null): Nicho | null {
   // Pontuação interna some antes de comparar: o cliente "Portuga P'Neus" existe assim no cadastro,
   // e o apóstrofo fazia /pneu/ não casar. Nome de empresa é escrito como o dono quis.
-  const t = (bruto ?? "").toLowerCase().trim().replace(/['´`’.]/g, "");
+  // Sublinhado vira espaço: o comercial grava a chave ("servicos_profissionais", "energia_solar").
+  const t = (bruto ?? "").toLowerCase().trim().replace(/['´`’.]/g, "").replace(/_/g, " ");
   if (!t) return null;
 
   // O que a Lone VENDE não é o ramo de ninguém.
@@ -51,7 +52,7 @@ export function normalizarNicho(bruto?: string | null): Nicho | null {
   if (/ótic|otic|óculos|oculos/.test(t)) return "otica";
   if (/pet|animal|agropec/.test(t)) return "pet";
   if (/fitness|academia|crossfit|pilates|muscula/.test(t)) return "fitness";
-  if (/contabil|advoca|jurídic|juridic|consultor|arquitet|engenhar/.test(t)) return "servicos_profissionais";
+  if (/contabil|advoca|jurídic|juridic|consultor|arquitet|engenhar|profissiona/.test(t)) return "servicos_profissionais";
   if (/segur|corretora/.test(t)) return "seguros";
   if (/imobili|imóvel|imovel|corretor de imó/.test(t)) return "imobiliario";
   if (/educaç|educac|escola|curso|ensino|faculdade/.test(t)) return "educacao";

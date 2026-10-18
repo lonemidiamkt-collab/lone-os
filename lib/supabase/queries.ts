@@ -92,6 +92,12 @@ function snakeToClient(row: Record<string, unknown>): Client {
     contactRole: (row.contact_role as string) ?? undefined,
     idade: (row.idade as string) ?? undefined,
     nicho: (row.nicho as string) ?? undefined,
+    faturamentoFaixa: (row.faturamento_faixa as string) ?? null,
+    porteReceita: (row.porte_receita as string) ?? null,
+    cnaePrincipal: (row.cnae_principal as string) ?? null,
+    cnaeDescricao: (row.cnae_descricao as string) ?? null,
+    situacaoCadastral: (row.situacao_cadastral as string) ?? null,
+    receitaConsultadaEm: (row.receita_consultada_em as string) ?? null,
     razaoSocial: (row.razao_social as string) ?? undefined,
     nomeFantasia: (row.nome_fantasia as string) ?? undefined,
     cnpj: (row.cnpj as string) ?? undefined,
@@ -177,6 +183,7 @@ function clientToSnake(c: Partial<Client>): Record<string, unknown> {
   if (c.contactRole !== undefined) row.contact_role = c.contactRole;
   if (c.idade !== undefined) row.idade = c.idade;
   if (c.nicho !== undefined) row.nicho = c.nicho;
+  if (c.faturamentoFaixa !== undefined) row.faturamento_faixa = c.faturamentoFaixa;
   if (c.razaoSocial !== undefined) row.razao_social = c.razaoSocial;
   if (c.nomeFantasia !== undefined) row.nome_fantasia = c.nomeFantasia;
   if (c.cnpj !== undefined) row.cnpj = c.cnpj;
@@ -229,6 +236,8 @@ const CLIENT_LEAN_COLS = [
   "paused_at", "paused_reason", "paused_until", "paused_by",
   "posts_this_month", "posts_goal", "service_type", "perfil_conteudo", "draft_status", "contact_name",
   "contact_role", "razao_social", "nome_fantasia", "cnpj", "email", "email_corporativo", "phone",
+  // Dado público da Receita. A faixa de faturamento NÃO entra na lista magra: vem só pela ficha completa.
+  "porte_receita", "cnae_principal", "cnae_descricao", "situacao_cadastral", "receita_consultada_em",
   "company_phone", "contact_phone",
   "last_kanban_activity", "campaign_briefing", "fixed_briefing", "agente_ativo", "meta_ad_account_id",
   "meta_ad_account_name", "lead_source", "budget_alert_pct", "first_value_delivered_at",
