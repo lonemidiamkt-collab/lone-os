@@ -77,6 +77,9 @@ services:
       # Comercial (out/2026): o formulário do site assina cada cadastro com este segredo (o mesmo valor
       # de LONEOS_LEAD_SECRET na Vercel do site). Vazio = recebimento desligado (a rota responde 503).
       LONEOS_SITE_LEAD_SECRET: ${LONEOS_SITE_LEAD_SECRET:-}
+      # Leitura assinada da situação dos clientes pelo financeiro privado (out/2026; só situação, nunca valor).
+      # O mesmo valor fica no financeiro como LF_LONE_OS_READ_SECRET. Vazio = porta fechada (503).
+      LONEOS_FINANCE_READ_SECRET: ${LONEOS_FINANCE_READ_SECRET:-}
       # E-mails PESSOAIS da equipe que o filtro de lixo trata como "teste da equipe" (não moram no código).
       CRM_EMAILS_EQUIPE: ${CRM_EMAILS_EQUIPE:-}
       # Grupos SANDBOX de teste: ali o agente trata msg da equipe como pedido e classifica mesmo
