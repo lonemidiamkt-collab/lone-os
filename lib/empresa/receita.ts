@@ -120,7 +120,9 @@ export function nichoPorCnae(
     const n = nichoDaAtividade(s.codigo, s.descricao);
     if (n && !GENERICO.has(n)) return n;
   }
-  return p ?? null;
+  // "Outro" não é sugestão: preencher o nicho com ele só esconde que ninguém escolheu (Horto Naenc,
+  // atividades paisagísticas, 19/10). Sem palpite útil, o campo fica vazio para o cliente escolher.
+  return p && p !== "outro" ? p : null;
 }
 
 // ── A resposta da BrasilAPI, limpa ──────────────────────────────────────────

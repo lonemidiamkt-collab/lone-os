@@ -87,6 +87,10 @@ describe("nichoPorCnae — sugestão a partir das atividades", () => {
       [{ codigo: 4744099, descricao: "Comércio varejista de materiais de construção em geral" }])).toBe("construcao");
     expect(caso(4713002, "Lojas de variedades, exceto lojas de departamentos ou magazines")).toBe("varejo");
   });
+
+  it("sem palpite útil não sugere 'Outro' (o campo fica vazio para o cliente escolher)", () => {
+    expect(caso(8130300, "Atividades paisagísticas")).toBeNull();
+  });
 });
 
 describe("porte e faixa", () => {
