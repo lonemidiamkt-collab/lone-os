@@ -2,6 +2,7 @@ export const runtime = "nodejs"; // vault usa crypto nativo de Node
 
 import { NextRequest, NextResponse } from "next/server";
 import { faixaValida } from "@/lib/empresa/receita";
+import { sincronizarRascunho } from "@/lib/onboarding/sincronia-server";
 import { createClient } from "@supabase/supabase-js";
 import { encryptVault } from "@/lib/crypto/vault";
 import { requireRole, GESTAO } from "@/lib/api/require-role";
@@ -329,6 +330,10 @@ export async function POST(req: NextRequest) {
       console.error("[onboarding/auto_save] update failed:", autoSaveErr);
       return NextResponse.json({ error: autoSaveErr.message }, { status: 500 });
     }
+    // O que já foi digitado vai para a FICHA agora, sem esperar o "Enviar" (que trava sem logo e
+    // contrato social) — ver lib/onboarding/sincronia.ts. Falha aqui não derruba o rascunho.
+    const sinc = await sincronizarRascunho({ token: t });
+    if (sinc.erro) console.error("[onboarding/auto_save] ficha não sincronizou:", sinc.erro);
     return NextResponse.json({ ok: true });
   }
 
