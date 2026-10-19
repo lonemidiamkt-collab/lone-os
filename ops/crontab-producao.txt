@@ -18,6 +18,7 @@
 0 11 * * 3 /opt/loneos/scripts/client-messages.sh wed >> /var/log/loneos-client-msgs.log 2>&1
 0 11 * * 5 /opt/loneos/scripts/client-messages.sh fri >> /var/log/loneos-client-msgs.log 2>&1
 0 11 1 * * /opt/loneos/scripts/relatorio-mensal.sh >> /var/log/loneos-mensal.log 2>&1
+0 12 1 * * /opt/loneos/scripts/diagnostico-mensal.sh >> /var/log/loneos-diag-mensal.log 2>&1
 0 11-20 * * 1-5 /opt/loneos/scripts/cron-call.sh cs-reuniao-mensal POST >> /var/log/loneos-cs-reuniao.log 2>&1
 0 12 * * * /opt/loneos/scripts/cron-call.sh cs-eventos POST >> /var/log/loneos-cs-eventos.log 2>&1
 0 12 * * * /opt/loneos/scripts/cron-call.sh task-reminders POST >> /var/log/loneos-task-reminders.log 2>&1

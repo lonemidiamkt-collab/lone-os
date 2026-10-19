@@ -232,6 +232,13 @@ export const AUTOMACOES: Automacao[] = [
     nome: "Coleta por campanha e anúncio", descricao: "Grava o desempenho por campanha, conjunto e anúncio (e os criativos que gastaram) dos últimos dias.",
     familia: "Tráfego", destino: "sistema", cron: "0 10 * * 1-5", agendaBRT: "seg a sex, 7h", maxSilencioHoras: 74, ensaio: "dry=1",
   }),
+  {
+    id: "diagnostico-mensal", nome: "Diagnóstico mensal dos clientes",
+    descricao: "Dia 1º: um PDF por cliente com tráfego (nota, anúncios, Instagram, conteúdo e plano de ação) do mês fechado, no grupo de tráfego, mais o placar da carteira.",
+    familia: "Tráfego", destino: "grupo de tráfego", cron: "0 12 1 * *", agendaBRT: "dia 1º de cada mês, 9h",
+    maxSilencioHoras: 32 * 24, suportaEnsaio: false, enviaParaCliente: false, controlavel: true,
+    comando: "diagnostico-mensal.sh",
+  },
   ep("traffic-diagnostico", {
     nome: "Diagnóstico diário das contas", descricao: "PDF com o que quebrou em cada conta, ordenado pelo tamanho do estrago, no grupo de tráfego.",
     familia: "Tráfego", destino: "grupo de tráfego", cron: "0 11 * * 1-5", agendaBRT: "seg a sex, 8h", maxSilencioHoras: 74, ensaio: "dry=1",
