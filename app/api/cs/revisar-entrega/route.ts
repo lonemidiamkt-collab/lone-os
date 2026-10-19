@@ -3,14 +3,14 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 import { NextRequest, NextResponse } from "next/server";
+import { requireCronOrUser } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { getServerUser } from "@/lib/supabase/auth-server";
 import { isOpenAIConfigured } from "@/lib/ai/openai";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 import { loadBriefingCombinado } from "@/lib/cs/load-briefing";
 import { revisarArte } from "@/lib/cs/revisao-arte";
 import { csSendGroupText } from "@/lib/cs/notify";
-import { agruparProblemas } from "@/lib/cs/revisao-agrupar";
+import { agruparProblemas, comentarioDaRevisao, avisoSemConferencia, type ArteNaoVista } from "@/lib/cs/revisao-agrupar";
 
 // POST /api/cs/revisar-entrega { cardId } — REVISÃO AUTOMÁTICA na ENTREGA do designer. Confere as
 // artes contra o briefing (preço/texto/localização/regras). Se achar problema, avisa no grupo de
@@ -19,8 +19,9 @@ const isImageUrl = (u: string) => /^https?:\/\//.test(u) && /\.(png|jpe?g|webp|g
 const MAX_ARTES = 6; // teto de artes revisadas por card (bound de custo da visão)
 
 export async function POST(req: NextRequest) {
-  const user = await getServerUser(req);
-  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  // Usuário logado (a entrega no quadro) ou rotina do sistema (refazer revisões que falharam).
+  const negado = await requireCronOrUser(req);
+  if (negado) return negado;
   if (!isOpenAIConfigured()) return NextResponse.json({ ok: false, skip: "IA não configurada" });
 
   const { cardId } = (await req.json().catch(() => ({}))) as { cardId?: string };
@@ -48,28 +49,41 @@ export async function POST(req: NextRequest) {
   // Revisa cada arte SABENDO A POSIÇÃO no carrossel (sem isso, toda arte era comparada com o
   // "Slide 1 — Capa"). O mesmo problema em várias artes vira uma linha só.
   const porArte: string[][] = [];
+  const naoVistas: ArteNaoVista[] = [];
   for (let i = 0; i < urls.length; i++) {
     const r = await revisarArte({ imageUrl: urls[i], clienteNome, briefing, regras, temaEsperado, posicao: { n: i + 1, total: urls.length } });
-    porArte.push(r.ok && r.data && !r.data.ok ? r.data.problemas : []);
+    // Falha NÃO é "sem problema" (ver comentarioDaRevisao): a arte fica marcada como não conferida.
+    if (!r.ok || !r.data) { naoVistas.push({ n: i + 1, motivo: r.error ?? "erro desconhecido" }); porArte.push([]); continue; }
+    porArte.push(r.data.ok ? [] : r.data.problemas);
   }
   const problemas = agruparProblemas(porArte);
+  const comentario = comentarioDaRevisao(problemas, naoVistas, urls.length);
 
   const designer = (cli?.assigned_designer as string) || "";
   const social = (cli?.assigned_social as string) || "";
 
-  if (problemas.length === 0) {
-    // Tudo certo — registro discreto no card (sem poluir o grupo).
+  if (comentario === null) {
+    // Nenhuma arte vista: o card diz isso, em vez do selo de aprovado.
     await supabaseAdmin.from("card_comments").insert({
-      card_id: cardId, author: "🤖 Revisão IA", role: "system", text: "✅ Revisão automática: arte conferida contra o briefing, nenhum erro aparente.",
+      card_id: cardId, author: "🤖 Revisão IA", role: "system", text: avisoSemConferencia(naoVistas),
     }).then(() => {}, () => {});
-    return NextResponse.json({ ok: true, problemas: [], artes: urls.length });
+    console.error("[revisar-entrega] nenhuma arte conferida:", cardId, naoVistas[0]?.motivo);
+    return NextResponse.json({ ok: false, problemas: [], artes: urls.length, nao_conferidas: naoVistas });
+  }
+
+  if (problemas.length === 0) {
+    // Tudo certo (ou só parte vista, o que o comentário diz) — registro discreto no card, sem poluir o grupo.
+    await supabaseAdmin.from("card_comments").insert({
+      card_id: cardId, author: "🤖 Revisão IA", role: "system", text: comentario,
+    }).then(() => {}, () => {});
+    return NextResponse.json({ ok: true, problemas: [], artes: urls.length, nao_conferidas: naoVistas });
   }
 
   // Achou problema → comenta no card, notifica e avisa no grupo de Artes. O card leva a lista INTEIRA
   // (antes cortava em 8 e a mensagem dizia "achei 16").
   const lista = problemas.map((p) => `• ${p}`).join("\n");
   await supabaseAdmin.from("card_comments").insert({
-    card_id: cardId, author: "🤖 Revisão IA", role: "system", text: `⚠️ Revisão automática encontrou pontos a conferir:\n${lista}`,
+    card_id: cardId, author: "🤖 Revisão IA", role: "system", text: comentario,
   }).then(() => {}, () => {});
   await supabaseAdmin.from("notifications").insert({
     type: "content", title: "⚠️ Revisão da arte (IA)",

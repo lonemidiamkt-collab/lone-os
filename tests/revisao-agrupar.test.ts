@@ -41,3 +41,26 @@ describe("briefing resumido", () => {
     expect(r.split("\n").slice(-2, -1)[0]).toBe("Linha um do briefing");
   });
 });
+
+import { comentarioDaRevisao, avisoSemConferencia } from "@/lib/cs/revisao-agrupar";
+
+describe("comentarioDaRevisao — falha de revisão nunca vira aprovação", () => {
+  it("nenhuma arte vista (as imagens deram 502 de 16 a 19/10): sem selo, o chamador avisa", () => {
+    expect(comentarioDaRevisao([], [{ n: 1, motivo: "não consegui baixar a arte" }], 1)).toBeNull();
+    expect(avisoSemConferencia([{ n: 1, motivo: "não consegui baixar a arte" }])).toMatch(/NÃO conseguiu ver a arte \(não consegui baixar a arte\)/);
+  });
+  it("todas vistas e sem problema: o selo de sempre", () => {
+    expect(comentarioDaRevisao([], [], 3)).toBe("✅ Revisão automática: arte conferida contra o briefing, nenhum erro aparente.");
+  });
+  it("parte vista: aprova só o que viu e diz quais ficaram sem conferência", () => {
+    const t = comentarioDaRevisao([], [{ n: 2, motivo: "erro de conexão" }], 3)!;
+    expect(t).toMatch(/^✅ Revisão automática: as artes que consegui ver/);
+    expect(t).toMatch(/1 de 3 artes NÃO foram conferidas \(arte 2: erro de conexão\)/);
+    expect(t).not.toMatch(/nenhum erro aparente/);
+  });
+  it("com problema: lista e, se houver, o aviso de parcial", () => {
+    const t = comentarioDaRevisao(["Preço diferente do briefing"], [{ n: 3, motivo: "erro" }], 3)!;
+    expect(t).toMatch(/^⚠️ Revisão automática encontrou pontos a conferir:\n• Preço diferente do briefing/);
+    expect(t).toMatch(/1 de 3 artes NÃO foram conferidas/);
+  });
+});

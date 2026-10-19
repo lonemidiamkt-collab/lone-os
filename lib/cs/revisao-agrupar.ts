@@ -43,3 +43,32 @@ export function briefingResumido(briefing: string | null | undefined, max: numbe
   const base = corte > max * 0.5 ? b.slice(0, corte) : b.slice(0, max).replace(/\s+\S*$/, "");
   return `${base.trimEnd()}\n[briefing resumido — o resto foi omitido; isto NÃO é texto da arte]`;
 }
+
+export interface ArteNaoVista { n: number; motivo: string }
+
+/**
+ * O comentário que a revisão deixa no card. null = nenhuma arte foi vista (o chamador avisa à parte).
+ *
+ * POR QUE (19/10/2026). Revisão que FALHOU contava como "sem problema": quando a imagem não baixava
+ * (de 16 a 19/10 as artes deram 502 depois do reboot da VPS) ou a IA dava erro, o card ganhava
+ * "✅ arte conferida, nenhum erro aparente" sem ninguém ter olhado nada — Contele e CIIL foram ao
+ * cliente com esse selo. "Não consegui conferir" tem que ser dito, nunca virar aprovação.
+ */
+export function comentarioDaRevisao(problemas: string[], naoVistas: ArteNaoVista[], total: number): string | null {
+  if (total > 0 && naoVistas.length >= total) return null;
+  const parcial = naoVistas.length
+    ? `\n\n⚠️ ${naoVistas.length} de ${total} artes NÃO foram conferidas (${naoVistas.map((a) => `arte ${a.n}`).join(", ")}: ${naoVistas[0].motivo}). Confira essas à mão.`
+    : "";
+  if (problemas.length === 0) {
+    return naoVistas.length
+      ? `✅ Revisão automática: as artes que consegui ver estão de acordo com o briefing.${parcial}`
+      : "✅ Revisão automática: arte conferida contra o briefing, nenhum erro aparente.";
+  }
+  return `⚠️ Revisão automática encontrou pontos a conferir:\n${problemas.map((p) => `• ${p}`).join("\n")}${parcial}`;
+}
+
+/** Quando nenhuma arte pôde ser vista: o aviso que vai no card no lugar do selo. */
+export function avisoSemConferencia(naoVistas: ArteNaoVista[]): string {
+  const motivo = naoVistas[0]?.motivo ?? "erro desconhecido";
+  return `⚠️ Revisão automática NÃO conseguiu ver a arte (${motivo}). Ninguém conferiu ainda: confira à mão antes de enviar ao cliente.`;
+}
