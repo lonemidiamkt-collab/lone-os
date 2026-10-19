@@ -91,6 +91,7 @@ export interface Analise {
 
 const arred = (n: number, casas = 2) => Math.round(n * 10 ** casas) / 10 ** casas;
 export const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+export const dec = (n: number, casas = 1) => n.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
 export const inteiro = (n: number) => Math.round(n).toLocaleString("pt-BR");
 export const dm = (iso: string) => iso.split("-").reverse().slice(0, 2).join("/");
 
@@ -144,6 +145,27 @@ const MIN_RESULTADOS_RANKING = 5;
 /** Playbook Social: segunda, quarta e sexta ≈ 13 posts em 30 dias. */
 export const POSTS_ESPERADOS_MES = 13;
 
+/** "Anúncio X — Cópia" é o mesmo criativo duplicado para outro conjunto: o gestor lê um só. */
+const nomeBase = (n: string) => n.replace(/\s*[—–-]\s*(c[oó]pia|copy)(\s*\d+)?\s*$/i, "").trim() || n;
+export function consolidar(lista: Entidade[]): Entidade[] {
+  const por = new Map<string, Entidade[]>();
+  for (const e of lista) por.set(nomeBase(e.nome), [...(por.get(nomeBase(e.nome)) ?? []), e]);
+  return [...por.entries()].map(([nome, es]) => {
+    const imp = es.reduce((s, e) => s + e.impressoes, 0);
+    const freq = es.reduce((s, e) => s + (e.frequencia ?? 0) * e.impressoes, 0);
+    const maior = [...es].sort((a, b) => b.invest - a.invest)[0];
+    const soma = (f: (e: Entidade) => number) => es.reduce((s, e) => s + f(e), 0);
+    return {
+      id: maior.id, nome, campanha: es.length > 1 ? `${es.length} versões` : maior.campanha,
+      invest: soma((e) => e.invest), impressoes: imp, cliques: soma((e) => e.cliques), resultados: soma((e) => e.resultados),
+      frequencia: imp > 0 && freq > 0 ? freq / imp : null,
+      recente: { invest: soma((e) => e.recente.invest), resultados: soma((e) => e.recente.resultados) },
+      antigo: { invest: soma((e) => e.antigo.invest), resultados: soma((e) => e.antigo.resultados) },
+      ativo: es.some((e) => e.ativo),
+    };
+  });
+}
+
 const nomeDe = (e: Entidade) => (e.nome.length > 52 ? `${e.nome.slice(0, 50)}…` : e.nome);
 
 export function analisar(d: DadosCliente): Analise {
@@ -153,9 +175,10 @@ export function analisar(d: DadosCliente): Analise {
   const achados: Achado[] = [];
   const R = d.rotulo;
   const temAnuncio = atual.invest > 0;
+  const anuncios = consolidar(d.anuncios);
 
   // ── Referência de custo: a meta cadastrada; sem ela, a mediana dos anúncios do próprio cliente ──
-  const cplsAnuncios = d.anuncios.filter((a) => a.resultados >= MIN_RESULTADOS_RANKING).map((a) => cplDe(a)!).filter((x) => x > 0);
+  const cplsAnuncios = anuncios.filter((a) => a.resultados >= MIN_RESULTADOS_RANKING).map((a) => cplDe(a)!).filter((x) => x > 0);
   const referencia = d.metaCpl ?? mediana(cplsAnuncios) ?? atual.cpl;
 
   // ── 1. Conta parou de entregar nos últimos 3 dias ────────────────────────────
@@ -194,7 +217,7 @@ export function analisar(d: DadosCliente): Analise {
 
   // ── 3. Desperdício: gastou e não trouxe nada ─────────────────────────────────
   const limiteDesp = Math.max(PISO_DESPERDICIO, referencia ? referencia * 3 : 0);
-  const queimando = d.anuncios.filter((a) => a.resultados === 0 && a.invest >= limiteDesp).sort((a, b) => b.invest - a.invest);
+  const queimando = anuncios.filter((a) => a.resultados === 0 && a.invest >= limiteDesp).sort((a, b) => b.invest - a.invest);
   if (queimando.length) {
     const total = queimando.reduce((s, a) => s + a.invest, 0);
     achados.push({
@@ -206,8 +229,24 @@ export function analisar(d: DadosCliente): Analise {
     });
   }
 
+  // ── 3b. Gastou bastante e trouxe pouco: custo várias vezes acima da referência ──
+  const carissimos = referencia
+    ? anuncios.filter((a) => a.resultados > 0 && a.invest >= Math.max(60, atual.invest * 0.01) && a.invest / a.resultados >= referencia * 4).sort((a, b) => b.invest - a.invest)
+    : [];
+  if (carissimos.length) {
+    const total = carissimos.reduce((s, a) => s + a.invest, 0);
+    const a0 = carissimos[0];
+    achados.push({
+      area: "anuncios", gravidade: total >= atual.invest * 0.1 ? "alta" : "media",
+      titulo: `${carissimos.length} anúncio${carissimos.length > 1 ? "s" : ""} com custo muito acima do normal`,
+      evidencia: `${brl(total)} no mês. “${nomeDe(a0)}”: ${brl(a0.invest)} para ${inteiro(a0.resultados)} ${R} (${brl(a0.invest / a0.resultados)} cada, referência da conta ${brl(referencia!)}).`,
+      porque: "Custa mais de 4 vezes o que a conta paga normalmente por resultado.",
+      acao: "Pausar ou trocar o criativo e conferir se não é publicação turbinada pelo botão do Instagram, que quase nunca vira conversa.",
+    });
+  }
+
   // ── 4. Criativo cansando: frequência alta E custo piorando dentro do mês ─────
-  const cansando = d.anuncios.filter((a) => {
+  const cansando = anuncios.filter((a) => {
     if (!a.ativo || a.invest < PISO_FADIGA_GASTO || (a.frequencia ?? 0) < FADIGA_FREQ) return false;
     const c1 = cplDe(a.antigo), c2 = cplDe(a.recente);
     return c1 != null && c2 != null && a.antigo.resultados >= 3 && a.recente.resultados >= 2 && c2 > c1 * 1.3;
@@ -217,7 +256,7 @@ export function analisar(d: DadosCliente): Analise {
     achados.push({
       area: "anuncios", gravidade: "media",
       titulo: `${cansando.length} criativo${cansando.length > 1 ? "s" : ""} cansando`,
-      evidencia: `“${nomeDe(a)}”: frequência ${arred(a.frequencia!, 1)} e custo de ${brl(cplDe(a.antigo)!)} para ${brl(cplDe(a.recente)!)} na última semana.${cansando.length > 1 ? ` Mais ${cansando.length - 1} no mesmo caminho.` : ""}`,
+      evidencia: `“${nomeDe(a)}”: frequência ${dec(a.frequencia!)} e custo de ${brl(cplDe(a.antigo)!)} para ${brl(cplDe(a.recente)!)} na última semana.${cansando.length > 1 ? ` Mais ${cansando.length - 1} no mesmo caminho.` : ""}`,
       porque: "Quando a mesma pessoa vê o mesmo anúncio várias vezes, o custo sobe antes de o volume cair.",
       acao: "Subir 2 ou 3 variações com abertura nova mantendo a oferta que funciona.",
     });
@@ -262,7 +301,9 @@ export function analisar(d: DadosCliente): Analise {
   }
 
   // ── Campeões e piores do mês ─────────────────────────────────────────────────
-  const ranking = d.anuncios.filter((a) => a.resultados >= MIN_RESULTADOS_RANKING).sort((a, b) => cplDe(a)! - cplDe(b)!);
+  // Ranking só de anúncio que gastou o bastante: 6 conversas com R$ 7 não é campeão, é amostra.
+  const pisoRanking = Math.max(50, atual.invest * 0.02);
+  const ranking = anuncios.filter((a) => a.resultados >= MIN_RESULTADOS_RANKING && a.invest >= pisoRanking).sort((a, b) => cplDe(a)! - cplDe(b)!);
   const campeoes = ranking.slice(0, 3);
   const piores = ranking.length > 3 ? ranking.slice(-3).reverse() : [];
 
@@ -276,7 +317,7 @@ export function analisar(d: DadosCliente): Analise {
       achados.push({
         area: "instagram", gravidade: ig.postsNoPeriodo < POSTS_ESPERADOS_MES * 0.3 ? "alta" : "media",
         titulo: "Ritmo de publicação abaixo do combinado",
-        evidencia: `${ig.postsNoPeriodo} posts em 30 dias (${arred(porSemana, 1)} por semana)${ig.postsNoAnterior != null ? `; no mês anterior foram ${ig.postsNoAnterior}` : ""}. O playbook é segunda, quarta e sexta: cerca de ${POSTS_ESPERADOS_MES} no mês.`,
+        evidencia: `${ig.postsNoPeriodo} posts em 30 dias (${dec(porSemana)} por semana)${ig.postsNoAnterior != null ? `; no mês anterior foram ${ig.postsNoAnterior}` : ""}. O playbook é segunda, quarta e sexta: cerca de ${POSTS_ESPERADOS_MES} no mês.`,
         porque: "Perfil que publica pouco perde alcance e dá menos matéria-prima para o anúncio.",
         acao: "Fechar o calendário do mês seguinte antes do dia 25 e cobrar a entrega pela data do post.",
       });
@@ -289,13 +330,19 @@ export function analisar(d: DadosCliente): Analise {
         acao: "Rever o que travou a produção e recompor o ritmo no calendário.",
       });
     }
-    if (!ig.parcial && ig.alcance != null && ig.alcance > 0 && ig.postsNoPeriodo >= 3) {
-      const taxa = (ig.engajamento / ig.alcance) * 100;
+    // Engajamento = curtidas+comentários dos POSTS sobre o alcance dos POSTS. O alcance da conta
+    // inclui o que veio de anúncio (no Império, 96% do alcance de um reel era pago), e dividir por ele
+    // acusaria "pouco engajamento" num perfil que só é muito anunciado.
+    const comAlc = ig.posts.filter((p) => p.alcance != null && p.alcance > 0);
+    const alcPosts = comAlc.reduce((s, p) => s + (p.alcance ?? 0), 0);
+    const engPosts = comAlc.reduce((s, p) => s + p.engajamento, 0);
+    if (!ig.parcial && comAlc.length >= 3 && alcPosts > 0) {
+      const taxa = (engPosts / alcPosts) * 100;
       if (taxa < 1.5) {
         achados.push({
           area: "instagram", gravidade: "media",
-          titulo: "Pouco engajamento para o alcance",
-          evidencia: `${arred(taxa, 1)}% de curtidas e comentários sobre o alcance (${inteiro(ig.alcance)} contas em ${ig.alcanceJanelaDias ?? 30} dias).`,
+          titulo: "Pouco engajamento nos posts",
+          evidencia: `${dec(taxa)}% de curtidas e comentários sobre o alcance de ${comAlc.length} posts (${inteiro(alcPosts)} contas alcançadas, orgânico e anúncio somados).`,
           porque: "Quem vê e não reage indica conteúdo que não está dando motivo para parar.",
           acao: "Abrir reels e carrosséis com pergunta ou promessa clara nos 3 primeiros segundos e fechar com chamada para comentar.",
         });
@@ -306,10 +353,10 @@ export function analisar(d: DadosCliente): Analise {
     const cad = Math.min(10, Math.round((ig.postsNoPeriodo / POSTS_ESPERADOS_MES) * 10));
     const partes = [cad];
     const motivos = [`${ig.postsNoPeriodo} posts (esperado ~${POSTS_ESPERADOS_MES})`];
-    if (!ig.parcial && ig.alcance && ig.alcance > 0 && ig.postsNoPeriodo >= 3) {
-      const taxa = (ig.engajamento / ig.alcance) * 100;
+    if (!ig.parcial && comAlc.length >= 3 && alcPosts > 0) {
+      const taxa = (engPosts / alcPosts) * 100;
       partes.push(taxa >= 5 ? 9 : taxa >= 3 ? 7 : taxa >= 1.5 ? 5 : 3);
-      motivos.push(`${arred(taxa, 1)}% de engajamento`);
+      motivos.push(`${dec(taxa)}% de engajamento`);
     }
     notaIg = Math.round(partes.reduce((s, x) => s + x, 0) / partes.length);
     motivoIg = motivos.join(" · ");

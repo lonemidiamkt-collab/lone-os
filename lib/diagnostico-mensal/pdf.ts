@@ -113,7 +113,7 @@ export function diagnosticoMensalHtml(d: DadosCliente, logo: string, geradoEm = 
         ${kpi("Posts no período", inteiro(ig.postsNoPeriodo), ig.postsNoAnterior != null ? `${inteiro(ig.postsNoAnterior)} no mês anterior` : `esperado ~13 (seg/qua/sex)`)}
         ${kpi("Alcance", ig.alcance != null ? inteiro(ig.alcance) : "—", ig.alcanceJanelaDias ? `contas, janela de ${ig.alcanceJanelaDias} dias` : "indisponível")}
         ${kpi("Novos seguidores", ig.seguidoresGanhos != null ? inteiro(ig.seguidoresGanhos) : "—", "saldo do período")}
-        ${kpi("Curtidas + comentários", inteiro(ig.engajamento), ig.alcance ? `${((ig.engajamento / ig.alcance) * 100).toFixed(1).replace(".", ",")}% do alcance` : "—")}
+        ${kpi("Curtidas + comentários", inteiro(ig.engajamento), "soma dos posts do período")}
       </div>
       ${ig.posts.length ? `<div class="sub">Posts de maior alcance</div>
       <table><thead><tr><th>Post</th><th>Formato</th><th class="n">Alcance</th><th class="n">Curtidas + com.</th></tr></thead><tbody>

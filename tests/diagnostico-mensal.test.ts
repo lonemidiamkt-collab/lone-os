@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { analisar, semanal, somar, variacao, type DadosCliente, type Dia, type Entidade } from "@/lib/diagnostico-mensal/analise";
+import { analisar, consolidar, semanal, somar, variacao, type DadosCliente, type Dia, type Entidade } from "@/lib/diagnostico-mensal/analise";
 import { periodoAnterior, periodoPadrao } from "@/lib/diagnostico-mensal/dados";
 import { diagnosticoMensalHtml } from "@/lib/diagnostico-mensal/pdf";
 
@@ -70,6 +70,23 @@ describe("achados", () => {
     expect(analisar(base({ ig })).achados.some((x) => x.area === "instagram")).toBe(true);
     const sem = analisar(base());
     expect(sem.dimensoes.find((x) => x.nome === "Instagram e conteúdo")?.nota).toBeNull();
+  });
+});
+
+describe("anúncios", () => {
+  it("cópias do mesmo criativo viram um só", () => {
+    const c = consolidar([ent({ id: "1", nome: "ADS - VIDEO — Cópia", invest: 50, resultados: 10 }), ent({ id: "2", nome: "ADS - VIDEO", invest: 150, resultados: 30 })]);
+    expect(c).toHaveLength(1);
+    expect(c[0].invest).toBe(200);
+    expect(c[0].resultados).toBe(40);
+  });
+  it("campeão exige gasto mínimo: 6 conversas com R$ 7 não é campeão", () => {
+    const a = analisar(base({ anuncios: [ent({ id: "p", nome: "Pequeno", invest: 7, resultados: 6 }), ent({ id: "g", nome: "Grande", invest: 400, resultados: 80 })] }));
+    expect(a.campeoes.map((x) => x.nome)).toEqual(["Grande"]);
+  });
+  it("anúncio que custa mais de 4x a referência é apontado mesmo com resultado", () => {
+    const a = analisar(base({ metaCpl: 5, anuncios: [ent({ id: "c", nome: "Turbinado", invest: 600, resultados: 4 })] }));
+    expect(a.achados.some((x) => x.titulo.includes("custo muito acima"))).toBe(true);
   });
 });
 
