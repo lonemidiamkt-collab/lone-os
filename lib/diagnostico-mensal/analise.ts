@@ -34,6 +34,8 @@ export interface DadosCliente {
   nome: string;
   /** "tráfego + social" | "só tráfego" | "só social" — vem do contrato, não da conta. */
   servico: string;
+  /** O cliente tem conta de anúncios vinculada? Sem ela, "zero investimento" não é achado, é cadastro. */
+  comConta: boolean;
   periodo: { de: string; ate: string };
   anterior: { de: string; ate: string };
   /** Dias dos DOIS períodos (anterior + atual), ordem livre. */
@@ -181,6 +183,33 @@ export function analisar(d: DadosCliente): Analise {
   const cplsAnuncios = anuncios.filter((a) => a.resultados >= MIN_RESULTADOS_RANKING).map((a) => cplDe(a)!).filter((x) => x > 0);
   const referencia = d.metaCpl ?? mediana(cplsAnuncios) ?? atual.cpl;
 
+  // ── 0. Contrato com tráfego e nada rodando ───────────────────────────────────
+  if (!d.comConta) {
+    achados.push({
+      area: "conta", gravidade: "media",
+      titulo: "Sem conta de anúncios vinculada",
+      evidencia: "O contrato inclui tráfego, mas não há conta de anúncios da Meta vinculada ao cliente no sistema.",
+      porque: "Sem a conta, o sistema não mede nem alerta nada de anúncio deste cliente.",
+      acao: "Vincular a conta de anúncios no cadastro ou confirmar com o cliente se o tráfego está de fato em andamento.",
+    });
+  } else if (atual.invest === 0 && anterior.invest > 0) {
+    achados.push({
+      area: "conta", gravidade: "alta",
+      titulo: "Nenhum anúncio rodou no período",
+      evidencia: `Investiu ${brl(anterior.invest)} no período anterior e ${brl(0)} neste.`,
+      porque: "Sem anúncio no ar não entra pessoa nova; o resultado do mês anterior não se repete sozinho.",
+      acao: "Conferir saldo, forma de pagamento, restrição da conta e se as campanhas foram pausadas de propósito.",
+    });
+  } else if (atual.invest === 0 && anterior.invest === 0) {
+    achados.push({
+      area: "conta", gravidade: "media",
+      titulo: "Contrato com tráfego e nenhum anúncio nos últimos dois períodos",
+      evidencia: "A conta de anúncios está vinculada, mas não houve gasto neste período nem no anterior.",
+      porque: "O cliente paga por tráfego e nada está rodando.",
+      acao: "Confirmar com o gestor se o cliente está em pausa de verba, aguardando criativo ou com a conta bloqueada.",
+    });
+  }
+
   // ── 1. Conta parou de entregar nos últimos 3 dias ────────────────────────────
   const ultimos3 = somar(d.dias, somarDia(d.periodo.ate, -2), d.periodo.ate);
   const antes3 = somar(d.dias, d.periodo.de, somarDia(d.periodo.ate, -3));
@@ -222,7 +251,7 @@ export function analisar(d: DadosCliente): Analise {
     const total = queimando.reduce((s, a) => s + a.invest, 0);
     achados.push({
       area: "anuncios", gravidade: total >= atual.invest * 0.1 ? "alta" : "media",
-      titulo: `${queimando.length} anúncio${queimando.length > 1 ? "s" : ""} gastou e não trouxe ${R}`,
+      titulo: queimando.length > 1 ? `${queimando.length} anúncios gastaram e não trouxeram ${R}` : `1 anúncio gastou e não trouxe ${R}`,
       evidencia: `${brl(total)} no mês sem nenhum resultado. Maiores: ${queimando.slice(0, 3).map((a) => `“${nomeDe(a)}” (${brl(a.invest)})`).join(", ")}.`,
       porque: "É verba que poderia estar nos anúncios que convertem.",
       acao: "Pausar os que seguem ativos e redistribuir para o campeão do mês.",
@@ -255,7 +284,7 @@ export function analisar(d: DadosCliente): Analise {
     const a = cansando[0];
     achados.push({
       area: "anuncios", gravidade: "media",
-      titulo: `${cansando.length} criativo${cansando.length > 1 ? "s" : ""} cansando`,
+      titulo: cansando.length > 1 ? `${cansando.length} criativos cansando` : "1 criativo cansando",
       evidencia: `“${nomeDe(a)}”: frequência ${dec(a.frequencia!)} e custo de ${brl(cplDe(a.antigo)!)} para ${brl(cplDe(a.recente)!)} na última semana.${cansando.length > 1 ? ` Mais ${cansando.length - 1} no mesmo caminho.` : ""}`,
       porque: "Quando a mesma pessoa vê o mesmo anúncio várias vezes, o custo sobe antes de o volume cair.",
       acao: "Subir 2 ou 3 variações com abertura nova mantendo a oferta que funciona.",

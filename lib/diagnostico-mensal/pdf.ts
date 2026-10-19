@@ -174,7 +174,7 @@ export function diagnosticoMensalHtml(d: DadosCliente, logo: string, geradoEm = 
       <div><b style="font-size:15px">${esc(a.veredito)}</b><div style="color:${SUAVE};font-size:11.5px">Nota sobre as dimensões com dado. O que não tem evidência fica sem nota e não entra na conta.</div></div></div>
     <div class="sub" style="margin-top:0">Nota por dimensão</div>
     ${dimensoes}
-    <div class="sub">Os ${principais.length || 0} pontos que mais pedem ação</div>
+    <div class="sub">${principais.length === 1 ? "O ponto que mais pede ação" : principais.length ? `Os ${principais.length} pontos que mais pedem ação` : "Pontos de ação"}</div>
     ${principais.length ? principais.map((x, i) => `<div class="ach" style="border-left-color:${corGrav(x.gravidade)}"><div class="ach-t"><span class="num">${String(i + 1).padStart(2, "0")}</span> ${esc(x.titulo)}</div><div class="ach-e">${esc(x.evidencia)}</div></div>`).join("")
       : `<p class="nota">Nenhum ponto fora do lugar neste período.</p>`}
     <div class="rodape"><span>Lone Mídia · Diagnóstico mensal · ${esc(d.nome)} · ${esc(per)}</span><span>01</span></div>

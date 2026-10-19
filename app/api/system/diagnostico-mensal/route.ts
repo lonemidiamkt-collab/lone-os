@@ -74,6 +74,11 @@ async function handle(req: NextRequest) {
         pontos: analise.achados.length, investimento: analise.atual.invest,
       };
 
+      // Sem anúncio e sem Instagram não há o que diagnosticar: um PDF só de "não avaliado" é ruído.
+      // Fica fora do envio e vai listado no fecho, para alguém conferir o cadastro.
+      const semDado = analise.nota == null && analise.atual.invest === 0 && !dados.ig;
+      if (semDado && enviar) { resultados.push({ ...linha, erro: "sem dado no período (nenhum gasto, sem Instagram) — PDF não enviado" }); continue; }
+
       if (html) return new NextResponse(pagina, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 
       if (baixar || enviar) {
@@ -107,10 +112,12 @@ async function handle(req: NextRequest) {
   if (enviar && resultados.some((r) => r.enviado)) {
     const ok = resultados.filter((r) => r.enviado && r.nota != null).sort((a, b) => (a.nota ?? 0) - (b.nota ?? 0));
     const linhas = ok.slice(0, 8).map((r) => `• ${r.cliente} — ${r.nota}/100${r.urgentes ? ` (${r.urgentes} urgente${r.urgentes > 1 ? "s" : ""})` : ""}`);
-    const falhas = resultados.filter((r) => r.erro && r.enviado !== false);
+    const falhas = resultados.filter((r) => r.erro && r.enviado !== false && !r.erro.startsWith("sem dado"));
+    const semDado = resultados.filter((r) => r.erro?.startsWith("sem dado"));
     await csSendGroupText(jid, [
       `✅ *Diagnóstico mensal enviado* — ${resultados.filter((r) => r.enviado).length} clientes, período ${since.split("-").reverse().join("/")} a ${until.split("-").reverse().join("/")}.`,
       linhas.length ? `\n*Os que mais precisam de atenção (menor nota):*\n${linhas.join("\n")}` : "",
+      semDado.length ? `\n🔎 Sem dado para diagnosticar (conferir cadastro/conta): ${semDado.map((f) => f.cliente).join(", ")}` : "",
       falhas.length ? `\n⚠️ ${falhas.length} não gerou: ${falhas.map((f) => f.cliente).join(", ")}` : "",
     ].filter(Boolean).join("\n")).catch(() => {});
   }

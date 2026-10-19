@@ -13,7 +13,7 @@ const ent = (o: Partial<Entidade>): Entidade => ({
   recente: { invest: 25, resultados: 5 }, antigo: { invest: 75, resultados: 15 }, ativo: true, ...o,
 });
 const base = (o: Partial<DadosCliente> = {}): DadosCliente => ({
-  nome: "Cliente Teste", servico: "tráfego + social", periodo, anterior, rotulo: "conversas",
+  nome: "Cliente Teste", servico: "tráfego + social", comConta: true, periodo, anterior, rotulo: "conversas",
   dias: [...serie(anterior.de, 30, 50, () => 5), ...serie(periodo.de, 30, 50, () => 6)],
   anuncios: [], campanhas: [], metaCpl: null, ig: null, ...o,
 });
@@ -48,6 +48,13 @@ describe("achados", () => {
     const dias = [...serie(anterior.de, 30, 50, () => 5), ...serie(periodo.de, 27, 50, () => 6), ...serie(somarDia(periodo.de, 27), 3, 0, () => 0)];
     const a = analisar(base({ dias }));
     expect(a.achados.find((x) => x.titulo === "Conta parou de gastar")?.gravidade).toBe("alta");
+  });
+  it("contrato com tráfego e conta sem gasto é apontado; com conta vinculada e gasto anterior, é urgente", () => {
+    const parou = analisar(base({ dias: serie(anterior.de, 30, 50, () => 5) }));
+    expect(parou.achados.find((x) => x.titulo === "Nenhum anúncio rodou no período")?.gravidade).toBe("alta");
+    const nunca = analisar(base({ dias: [] }));
+    expect(nunca.achados.some((x) => x.titulo.includes("nenhum anúncio nos últimos dois períodos"))).toBe(true);
+    expect(analisar(base({ dias: [], comConta: false })).achados.some((x) => x.titulo === "Sem conta de anúncios vinculada")).toBe(true);
   });
   it("anúncio que gastou acima do piso sem resultado é desperdício; abaixo do piso, não", () => {
     const caro = analisar(base({ anuncios: [ent({ id: "a", nome: "Queimando", invest: 180, resultados: 0, antigo: { invest: 180, resultados: 0 }, recente: { invest: 0, resultados: 0 } })] }));

@@ -182,7 +182,7 @@ export async function coletar(c: ClienteDiagnostico, periodo: { de: string; ate:
   }
 
   return {
-    nome: nomeDe(c), servico: rotuloServico(c), periodo, anterior, dias, rotulo, anuncios, campanhas,
+    nome: nomeDe(c), servico: rotuloServico(c), comConta, periodo, anterior, dias, rotulo, anuncios, campanhas,
     metaCpl: politica.data?.cpl_meta ? Number(politica.data.cpl_meta) : null, ig,
   };
 }
