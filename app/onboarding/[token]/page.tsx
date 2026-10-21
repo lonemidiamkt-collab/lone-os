@@ -12,6 +12,7 @@ import { Logo } from "@/components/ui/Logo";
 import { chamar } from "@/lib/api/chamar";
 import { ROTULO_NICHO } from "@/lib/cs/nicho";
 import { FAIXAS_FATURAMENTO, rotuloFaixa, capitalizar, type EmpresaReceita } from "@/lib/empresa/receita";
+import { faltandoNaEtapa, destinoPermitido, limiteDoDocumento, MB } from "@/lib/onboarding/etapas";
 
 // ─── Types ──────────────────────────────────────────────────
 interface SubmissionData {
@@ -126,7 +127,12 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
 
   const handleFile = async (file: File) => {
     setError("");
-    if (file.size > 10 * 1024 * 1024) { setError("Máximo 10MB."); return; }
+    const limite = limiteDoDocumento(docType);
+    if (file.size > limite) {
+      setError(`Arquivo com ${(file.size / MB).toFixed(1).replace(".", ",")} MB — o limite é ${limite / MB} MB.` +
+        (docType === "contrato_social" ? " Se o PDF for grande, mande o cartão CNPJ ou uma foto de cada página." : ""));
+      return;
+    }
     const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"];
     if (!allowed.includes(file.type) && !file.name.match(/\.(jpg|jpeg|png|webp|heic|heif|pdf)$/i)) {
       setError("Formato não suportado. Use JPG, PNG ou PDF."); return;
@@ -216,7 +222,7 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
       }} />
       {error && <p className="text-xs text-lone-danger">{error}</p>}
       <p className="text-[10px] text-muted-foreground/70">
-        JPG, PNG ou PDF — máximo 10MB{multiplo ? " por arquivo. Pode enviar mais de um (frente e verso, várias páginas)." : ""}
+        JPG, PNG ou PDF — máximo {limiteDoDocumento(docType) / MB} MB{multiplo ? " por arquivo. Pode enviar mais de um (frente e verso, várias páginas)." : ""}
       </p>
       {multiplo && listaDocs(uploaded).length > 0 && (
         <p className="text-xs text-lone-success">
@@ -327,6 +333,8 @@ export default function ExternalOnboardingPage() {
   const [googleStatus, setGoogleStatus] = useState<AccessStatus>("fill_now");
   const [notes, setNotes] = useState("");
   const [faturamentoFaixa, setFaturamentoFaixa] = useState("");
+  // Ligado quando o cliente tenta avançar com obrigatório faltando nesta etapa (lib/onboarding/etapas.ts).
+  const [avisoEtapa, setAvisoEtapa] = useState(false);
   // Consulta do CNPJ na Receita (BrasilAPI, pelo servidor — app/api/onboarding/cnpj).
   const [consulta, setConsulta] = useState<{ estado: "buscando" | "ok" | "erro"; msg: string; cnae?: string; ativa?: boolean } | null>(null);
   const ultimoCnpjConsultado = useRef("");
@@ -457,8 +465,32 @@ export default function ExternalOnboardingPage() {
   }, [token]);
 
   const currentStep = STEPS.findIndex((s) => s.key === step);
-  const goNext = () => { const idx = STEPS.findIndex((s) => s.key === step); if (idx < STEPS.length - 1) setStep(STEPS[idx + 1].key); };
-  const goPrev = () => { const idx = STEPS.findIndex((s) => s.key === step); if (idx > 0) setStep(STEPS[idx - 1].key); };
+  // O Próximo confere a etapa atual: obrigatório faltando aqui não passa (antes só trocava de etapa e
+  // o cliente descobria a falta no fim). As abas do topo seguem a mesma regra — voltar é livre.
+  const irPara = (pedida: Step) => {
+    const destino = destinoPermitido(step, pedida, missingRequired);
+    if (destino !== pedida) {
+      setShowValidation(true);
+      setAvisoEtapa(true);
+      setStep(destino);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    setAvisoEtapa(false);
+    setStep(pedida);
+  };
+  const goNext = () => {
+    if (faltandoNaEtapa(step, missingRequired).length) {
+      setShowValidation(true);
+      setAvisoEtapa(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    const idx = STEPS.findIndex((s) => s.key === step);
+    if (idx < STEPS.length - 1) irPara(STEPS[idx + 1].key);
+  };
+  const goPrev = () => { const idx = STEPS.findIndex((s) => s.key === step); if (idx > 0) { setAvisoEtapa(false); setStep(STEPS[idx - 1].key); } };
+  const faltaNestaEtapa = faltandoNaEtapa(step, missingRequired);
 
   // CEP pela BrasilAPI (v2, que já junta várias fontes); se ela falhar, a ViaCEP de sempre.
   const buscarCep = async (digits: string): Promise<{ rua?: string; bairro?: string; cidade?: string; uf?: string } | null> => {
@@ -703,7 +735,7 @@ export default function ExternalOnboardingPage() {
           </div>
           <div className="flex justify-between mt-2">
             {STEPS.map((s, i) => (
-              <button key={s.key} onClick={() => setStep(s.key)}
+              <button key={s.key} onClick={() => irPara(s.key)}
                 className={`text-[10px] transition-colors ${i <= currentStep ? "text-primary" : "text-muted-foreground/70"}`}>
                 {s.label}
               </button>
@@ -859,6 +891,11 @@ export default function ExternalOnboardingPage() {
               required missing={showValidation && missingRequired.docLogo} onToast={setUploadToast} />
             <FileUpload label="Contrato Social / Cartão CNPJ (PDF ou Foto)" docType="contrato_social" clientId={submission.client_id} token={token} onUploaded={setDocContrato} uploaded={docContrato}
               required missing={showValidation && missingRequired.docContrato} onToast={setUploadToast} multiplo />
+            <p className="text-[11px] text-muted-foreground -mt-2 px-1">
+              Não tem o contrato social à mão, ou o arquivo é grande demais? O cartão CNPJ também serve — é um PDF leve que sai na hora no{" "}
+              <a href="https://solucoes.receita.fazenda.gov.br/Servicos/cnpjreva/Cnpjreva_Solicitacao.asp" target="_blank" rel="noopener noreferrer"
+                className="text-primary underline underline-offset-2">site da Receita Federal</a>.
+            </p>
             <FileUpload label="Documento com Foto (RG ou CNH)" docType="identidade" clientId={submission.client_id} token={token} onUploaded={setDocIdentidade} uploaded={docIdentidade}
               onToast={setUploadToast} multiplo />
           </div>
@@ -923,6 +960,13 @@ export default function ExternalOnboardingPage() {
                 placeholder="Alguma informação adicional..."
                 className="w-full bg-background border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary/50 transition-colors resize-none" />
             </div>
+          </div>
+        )}
+
+        {avisoEtapa && faltaNestaEtapa.length > 0 && (
+          <div role="alert" className="rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-foreground flex gap-2">
+            <AlertTriangle size={13} className="text-lone-danger shrink-0 mt-0.5" />
+            <p>Para continuar, falta preencher: <strong>{faltaNestaEtapa.join(", ")}</strong>.</p>
           </div>
         )}
 

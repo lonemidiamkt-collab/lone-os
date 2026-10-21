@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { limiteDoDocumento } from "@/lib/onboarding/etapas";
 import { createClient } from "@supabase/supabase-js";
 import { getServerUser } from "@/lib/supabase/auth-server";
 
@@ -110,8 +111,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Formato não suportado. Use JPG, PNG, WEBP, HEIC ou PDF." }, { status: 400 });
   }
 
-  if (file.size > 10 * 1024 * 1024) {
-    return NextResponse.json({ error: "Arquivo muito grande. Máximo 10MB." }, { status: 400 });
+  // Limite por documento (lib/onboarding/etapas.ts): contrato social escaneado passa fácil de 10 MB.
+  const limite = limiteDoDocumento(docType);
+  if (file.size > limite) {
+    return NextResponse.json({ error: `Arquivo muito grande. Máximo ${limite / (1024 * 1024)} MB.` }, { status: 400 });
   }
 
   const path = `${clientId}/${docType}-${Date.now()}.${ext}`;
