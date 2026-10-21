@@ -3,6 +3,7 @@ export const runtime = "nodejs"; // vault usa crypto nativo de Node
 import { NextRequest, NextResponse } from "next/server";
 import { faixaValida } from "@/lib/empresa/receita";
 import { listaDocs, removerDocDaLista } from "@/lib/onboarding/docs";
+import { ACOES_PUBLICAS_DO_CADASTRO } from "@/lib/onboarding/acoes";
 import { sincronizarRascunho } from "@/lib/onboarding/sincronia-server";
 import { createClient } from "@supabase/supabase-js";
 import { encryptVault } from "@/lib/crypto/vault";
@@ -37,7 +38,7 @@ function newOnboardingToken(): string {
 
 // Ações do PORTAL EXTERNO do cliente (sem login) — autenticadas pelo token de
 // onboarding. Todas as outras ações do POST são administrativas e exigem admin logado.
-const PUBLIC_ONBOARDING_ACTIONS = new Set(["auto_save", "submit"]);
+const PUBLIC_ONBOARDING_ACTIONS = ACOES_PUBLICAS_DO_CADASTRO;
 const GESTAO_ONBOARDING_ACTIONS = new Set(["approve", "provision", "reject"]);
 
 const supabaseUrl = process.env.SUPABASE_INTERNAL_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://supabase-kong-1:8000";

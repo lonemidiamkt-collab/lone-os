@@ -26,3 +26,15 @@ describe("cada etapa confere o que é dela (cliente DOMINOS, 21/10)", () => {
     expect(limiteDoDocumento("logo")).toBe(10 * MB);
   });
 });
+
+import { readFileSync } from "node:fs";
+import { ACOES_PUBLICAS_DO_CADASTRO } from "@/lib/onboarding/acoes";
+
+describe("ações que o formulário público chama precisam estar liberadas sem login", () => {
+  it("toda action enviada pela página de cadastro está na lista pública", () => {
+    const pagina = readFileSync("app/onboarding/[token]/page.tsx", "utf8");
+    const usadas = [...pagina.matchAll(/action:\s*"([a-z_]+)"/g)].map((m) => m[1]);
+    expect(usadas.length).toBeGreaterThan(0);
+    for (const a of usadas) expect(ACOES_PUBLICAS_DO_CADASTRO.has(a), a).toBe(true);
+  });
+});
