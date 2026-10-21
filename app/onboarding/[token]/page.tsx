@@ -760,7 +760,8 @@ export default function ExternalOnboardingPage() {
         <div className="max-w-lg mx-auto px-6 py-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              {docLogo ? (
+              {/* Só imagem vira foto do topo: um PDF aqui (logo vetorial ou o cartão CNPJ por engano) aparecia quebrado. */}
+              {docLogo && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(docLogo) ? (
                 <img src={docLogo} alt="Logo do cliente" className="w-7 h-7 rounded-lg object-contain border border-border" />
               ) : (
                 <Logo className="w-7 h-7" />
