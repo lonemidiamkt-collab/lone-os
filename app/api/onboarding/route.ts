@@ -2,6 +2,7 @@ export const runtime = "nodejs"; // vault usa crypto nativo de Node
 
 import { NextRequest, NextResponse } from "next/server";
 import { faixaValida } from "@/lib/empresa/receita";
+import { listaDocs, removerDocDaLista } from "@/lib/onboarding/docs";
 import { sincronizarRascunho } from "@/lib/onboarding/sincronia-server";
 import { createClient } from "@supabase/supabase-js";
 import { encryptVault } from "@/lib/crypto/vault";
@@ -286,6 +287,34 @@ export async function POST(req: NextRequest) {
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ token, url: `/onboarding/${token}` });
+  }
+
+  // ─── Remover um arquivo enviado (cliente errou o arquivo) ───
+  // Roberto (21/10/2026): "enviei o cartão CNPJ no campo do logo, errei, e não tem opção de enviar
+  // outro". Tira a url do rascunho E da ficha (o upload já grava direto em clients); o arquivo fica no
+  // storage, só deixa de ser usado. Ver docs/regras/erro-recuperavel.md.
+  if (body.action === "remover_doc") {
+    const { token: t, campo, url } = body as { token?: string; campo?: string; url?: string };
+    const CAMPOS_DOC = ["doc_logo", "doc_contrato_social", "doc_identidade"];
+    if (!t || typeof campo !== "string" || !CAMPOS_DOC.includes(campo) || typeof url !== "string" || !url) {
+      return NextResponse.json({ error: "Pedido inválido." }, { status: 400 });
+    }
+    const { data: subRow } = await supabase.from("client_onboarding_submissions")
+      .select("id, client_id, doc_logo, doc_contrato_social, doc_identidade").eq("token", t).maybeSingle();
+    if (!subRow) return NextResponse.json({ error: "Link de cadastro inválido." }, { status: 404 });
+    const subDoc = subRow as unknown as Record<string, unknown>;
+    const tirar = (valor: unknown) => removerDocDaLista(valor as string | null, url);
+    const valor = tirar(subDoc[campo]);
+    const { error: eSub } = await supabase.from("client_onboarding_submissions").update({ [campo]: valor }).eq("id", subDoc.id as string);
+    if (eSub) return NextResponse.json({ error: eSub.message }, { status: 500 });
+    if (subDoc.client_id) {
+      const { data: cli } = await supabase.from("clients").select("doc_logo, doc_contrato_social, doc_identidade").eq("id", subDoc.client_id as string).maybeSingle();
+      const atual = (cli as unknown as Record<string, unknown> | null)?.[campo];
+      if (listaDocs(atual as string | null).includes(url)) {
+        await supabase.from("clients").update({ [campo]: tirar(atual) }).eq("id", subDoc.client_id as string);
+      }
+    }
+    return NextResponse.json({ ok: true, valor });
   }
 
   // ─── Auto-save draft (debounced from client) ───

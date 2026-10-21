@@ -43,3 +43,17 @@ describe("patchDoRascunho — o rascunho chega à ficha sem esperar o Enviar", (
     expect(patchDoRascunho({ cnpj: "1", nicho: "" }, { cnpj: "1" }, true)).toEqual({});
   });
 });
+
+import { removerDocDaLista } from "@/lib/onboarding/docs";
+
+describe("removerDocDaLista — o cliente mandou o arquivo errado", () => {
+  it("tira só o arquivo escolhido e mantém os outros", () => {
+    expect(removerDocDaLista("a.pdf\nb.pdf\nc.pdf", "b.pdf")).toBe("a.pdf\nc.pdf");
+  });
+  it("campo de um arquivo só fica vazio (null)", () => {
+    expect(removerDocDaLista("https://x/logo-1.pdf", "https://x/logo-1.pdf")).toBeNull();
+  });
+  it("url que não está lá não muda nada", () => {
+    expect(removerDocDaLista("a.pdf", "z.pdf")).toBe("a.pdf");
+  });
+});

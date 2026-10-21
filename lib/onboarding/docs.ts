@@ -25,3 +25,9 @@ export function adicionarDoc(valorAtual: string | undefined | null, novaUrl: str
 export function primeiroDoc(valor?: string | null): string | null {
   return listaDocs(valor)[0] ?? null;
 }
+
+/** Tira UM arquivo do campo (o cliente mandou o arquivo errado). null = campo ficou vazio. */
+export function removerDocDaLista(valorAtual: string | undefined | null, url: string): string | null {
+  const resto = listaDocs(valorAtual).filter((u) => u !== url);
+  return resto.length ? resto.join(SEP_DOCS) : null;
+}

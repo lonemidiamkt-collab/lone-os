@@ -24,6 +24,12 @@
 - **Primary Color (LM Blue)**: #0d4af5
 - **No financial data in system** (no MRR/ARR/LTV by CEO request)
 
+## Regra de produto: erro recuperável
+Toda ação que uma pessoa (cliente ou equipe) pode fazer errado precisa poder ser desfeita por ela
+mesma, na hora — arquivo enviado tem Trocar/Remover, escolha se desfaz, validação no lugar onde o
+erro nasce — e toda falha do sistema aparece como falha, nunca como "✅", vazio ou zero. Ler
+`docs/ERRO_RECUPERAVEL.md` antes de criar ou mudar tela, formulário, upload ou automação.
+
 ## Regras obrigatórias de Git
 
 ### Portão de push (tipos + testes)

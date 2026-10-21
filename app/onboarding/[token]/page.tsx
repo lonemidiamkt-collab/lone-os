@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import {
   User, FileText, Shield, Upload, Camera, Check, Loader2,
   Eye, EyeOff, AlertTriangle, Building2, ChevronRight, MapPin, RefreshCw,
-  Facebook, Instagram, Search, type LucideIcon,
+  Facebook, Instagram, Search, X, type LucideIcon,
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { chamar } from "@/lib/api/chamar";
@@ -111,15 +111,19 @@ function InputField({ label, value, onChange, placeholder, required, type = "tex
   );
 }
 
-function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, previewRound, required, missing, onToast, multiplo }: {
+function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, previewRound, required, missing, onToast, multiplo, onRemover }: {
   label: string; docType: string; clientId: string; token: string; onUploaded: (url: string) => void; uploaded?: string;
   previewRound?: boolean; required?: boolean; missing?: boolean; onToast?: (msg: string) => void;
   /** Cartão CNPJ e RG costumam ter mais de uma página/lado (Roberto, 24/08). */
   multiplo?: boolean;
+  /** Tira o arquivo do rascunho e da ficha. true = deu certo. */
+  onRemover?: (url: string) => Promise<boolean>;
 }) {
   const [uploading, setUploading] = useState(false);
+  const [removendo, setRemovendo] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [preview, setPreview] = useState<string | null>(null);
+  // Nome original de cada arquivo enviado nesta visita: o cliente reconhece "cartao_cnpj.pdf", não "logo-1792….pdf".
+  const [nomes, setNomes] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
   // Uploads em sequência liam o `uploaded` da closure ANTIGA e um sobrescrevia o outro.
   const uploadedRef = useRef(uploaded);
@@ -137,7 +141,6 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
     if (!allowed.includes(file.type) && !file.name.match(/\.(jpg|jpeg|png|webp|heic|heif|pdf)$/i)) {
       setError("Formato não suportado. Use JPG, PNG ou PDF."); return;
     }
-    if (file.type.startsWith("image/")) setPreview(URL.createObjectURL(file));
     setUploading(true);
     try {
       const fd = new FormData();
@@ -147,23 +150,49 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
       fd.append("token", token); // portal público: autoriza o upload sem login (validado contra o clientId no server)
       const res = await fetch("/api/onboarding/upload", { method: "POST", body: fd });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || "Erro no servidor."); setPreview(null); return; }
+      if (!res.ok) { setError(data.error || "Erro no servidor."); return; }
+      setNomes((n) => ({ ...n, [data.url]: file.name }));
       // Acumula em vez de substituir: o cartão CNPJ costuma ter 2-3 páginas, e antes a segunda
       // apagava a primeira sem aviso — o cliente achava que tinha mandado e só uma chegava.
+      // Campo de um arquivo só (logo): o novo SUBSTITUI — é o "Trocar arquivo".
       const jaTem = listaDocs(uploadedRef.current);
       onUploaded(multiplo ? [...jaTem, data.url].join(SEP_DOCS) : data.url);
-      setPreview(null);
       onToast?.(`${label} salvo com sucesso${multiplo && jaTem.length ? ` (${jaTem.length + 1} arquivos)` : ""}`);
     } catch {
-      setError("Falha na conexão."); setPreview(null);
+      setError("Falha na conexão. O arquivo não foi enviado — tente de novo.");
     } finally { setUploading(false); }
   };
 
-  const borderClass = uploaded
+  const remover = async (url: string) => {
+    if (!onRemover) return;
+    setError("");
+    setRemovendo(url);
+    const ok = await onRemover(url);
+    setRemovendo(null);
+    if (!ok) setError("Não deu para remover agora. Tente de novo.");
+  };
+
+  const enviados = listaDocs(uploaded);
+  const ehImagem = (u: string) => !u.startsWith("legal://") && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u);
+  const ehPdf = (u: string) => /\.pdf(\?|$)/i.test(u);
+  const nomeDe = (u: string, i: number) =>
+    nomes[u] ?? (u.startsWith("legal://") ? `Arquivo ${enviados.length > 1 ? i + 1 : ""} salvo com segurança`.replace("  ", " ")
+      : ehPdf(u) ? `Arquivo PDF ${enviados.length > 1 ? i + 1 : ""}`.trim() : `Imagem ${enviados.length > 1 ? i + 1 : ""}`.trim());
+  // O caso que motivou isto: o cartão CNPJ (PDF) enviado no campo do logo, mostrado como imagem quebrada.
+  const pdfNoLogo = docType === "logo" && enviados.some(ehPdf);
+
+  const borderClass = enviados.length
     ? "border-lone-success-border bg-lone-success-bg"
     : missing
       ? "border-lone-danger-border bg-lone-danger-bg"
       : "border-border bg-card";
+
+  const abrirCamera = () => {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = "image/*"; input.capture = "environment";
+    input.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleFile(f); };
+    input.click();
+  };
 
   return (
     <div className={`rounded-xl border p-4 space-y-3 transition-all ${borderClass}`}>
@@ -171,64 +200,70 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
         <p className="text-sm font-medium text-foreground">
           {label} {required && <span className="text-lone-danger">*</span>}
         </p>
-        {uploaded && <Check size={16} className="text-lone-success" />}
+        {enviados.length > 0 && <Check size={16} className="text-lone-success" />}
       </div>
-      {missing && !uploaded && (
+      {missing && !enviados.length && (
         <p className="text-[10px] text-lone-danger -mt-1">Este arquivo é essencial para a geração do seu contrato.</p>
       )}
-      {(() => {
-        const enviados = listaDocs(uploaded);
-        const itens = [...enviados, ...(preview ? [preview] : [])];
-        if (!itens.length) return null;
-        return (
-          <div className="flex flex-wrap justify-center gap-2">
-            {itens.map((src, i) => src.startsWith("legal://") ? (
-              <div key={i} className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border">
-                <Check size={14} className="text-lone-success" />
-                <span className="text-xs text-muted-foreground">Arquivo {itens.length > 1 ? i + 1 : ""} salvo com segurança</span>
+
+      {enviados.length > 0 && (
+        <ul className="space-y-2">
+          {enviados.map((u, i) => (
+            <li key={u} className="flex items-center gap-3 rounded-lg border border-border bg-background p-2">
+              {ehImagem(u) ? (
+                <img src={u} alt="" className={`w-11 h-11 object-cover shrink-0 ${previewRound ? "rounded-full" : "rounded-md"} border border-border`} />
+              ) : (
+                <div className="w-11 h-11 rounded-md bg-muted flex items-center justify-center shrink-0">
+                  <FileText size={18} className="text-muted-foreground" aria-hidden="true" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-foreground truncate">{nomeDe(u, i)}</p>
+                <p className="text-[10px] text-lone-success">Enviado</p>
               </div>
-            ) : (
-              <img key={i} src={src} alt={`${label} ${i + 1}`}
-                className={`max-h-24 object-contain ${previewRound ? "w-20 h-20 rounded-full border-2 border-primary/30" : "rounded-lg border border-border"}`} />
-            ))}
-          </div>
-        );
-      })()}
-      {uploaded && !multiplo ? (
-        <p className="text-xs text-lone-success">Enviado com sucesso</p>
-      ) : (
-        <div className="flex gap-2">
-          <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-border bg-background hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all text-xs">
-            {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-            {uploading ? "Enviando…" : listaDocs(uploaded).length ? "Adicionar outro arquivo" : (multiplo ? "Selecionar Arquivos" : "Selecionar Arquivo")}
-          </button>
-          <button type="button" disabled={uploading} onClick={() => {
-            const input = document.createElement("input");
-            input.type = "file"; input.accept = "image/*"; input.capture = "environment";
-            input.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleFile(f); };
-            input.click();
-          }}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-border bg-background hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all text-xs">
-            <Camera size={14} /> Foto
-          </button>
-        </div>
+              {!u.startsWith("legal://") && (
+                <a href={u} target="_blank" rel="noopener noreferrer" className="text-[11px] text-primary px-2 py-1">Ver</a>
+              )}
+              {onRemover && (
+                <button type="button" onClick={() => remover(u)} disabled={removendo !== null || uploading}
+                  aria-label={`Remover ${nomeDe(u, i)}`}
+                  className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-lone-danger px-2 py-1 rounded-md transition-colors disabled:opacity-50">
+                  {removendo === u ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />} Remover
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
+
+      {pdfNoLogo && (
+        <p className="text-[11px] text-lone-warning">
+          Você enviou um PDF neste campo. Se não for o logo (por exemplo, o cartão CNPJ), use “Trocar arquivo” ou “Remover”.
+        </p>
+      )}
+
+      <div className="flex gap-2">
+        <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading || removendo !== null}
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-border bg-background hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all text-xs disabled:opacity-60">
+          {uploading ? <Loader2 size={14} className="animate-spin" /> : enviados.length && !multiplo ? <RefreshCw size={14} /> : <Upload size={14} />}
+          {uploading ? "Enviando…" : !enviados.length ? (multiplo ? "Selecionar Arquivos" : "Selecionar Arquivo")
+            : multiplo ? "Adicionar outro arquivo" : "Trocar arquivo"}
+        </button>
+        <button type="button" disabled={uploading || removendo !== null} onClick={abrirCamera}
+          className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-border bg-background hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all text-xs disabled:opacity-60">
+          <Camera size={14} /> Foto
+        </button>
+      </div>
       <input ref={fileRef} type="file" accept="image/*,.pdf,.heic,.heif" multiple={multiplo} className="hidden" onChange={async (e) => {
         const fs = Array.from(e.target.files ?? []);
         // Em série, não em paralelo: cada upload precisa enxergar o que o anterior já salvou.
         for (const f of fs) await handleFile(f);
         e.target.value = ""; // permite reenviar o mesmo arquivo depois de remover
       }} />
-      {error && <p className="text-xs text-lone-danger">{error}</p>}
+      {error && <p role="alert" className="text-xs text-lone-danger">{error}</p>}
       <p className="text-[10px] text-muted-foreground/70">
         JPG, PNG ou PDF — máximo {limiteDoDocumento(docType) / MB} MB{multiplo ? " por arquivo. Pode enviar mais de um (frente e verso, várias páginas)." : ""}
       </p>
-      {multiplo && listaDocs(uploaded).length > 0 && (
-        <p className="text-xs text-lone-success">
-          {listaDocs(uploaded).length} arquivo{listaDocs(uploaded).length > 1 ? "s" : ""} enviado{listaDocs(uploaded).length > 1 ? "s" : ""}
-        </p>
-      )}
     </div>
   );
 }
@@ -491,6 +526,15 @@ export default function ExternalOnboardingPage() {
   };
   const goPrev = () => { const idx = STEPS.findIndex((s) => s.key === step); if (idx > 0) { setAvisoEtapa(false); setStep(STEPS[idx - 1].key); } };
   const faltaNestaEtapa = faltandoNaEtapa(step, missingRequired);
+
+  // Remove um arquivo enviado por engano — do rascunho e da ficha (action remover_doc).
+  const removerDoc = (campo: "doc_logo" | "doc_contrato_social" | "doc_identidade", set: (v: string) => void) =>
+    async (url: string) => {
+      const r = await chamar<{ valor: string | null }>("/api/onboarding", { action: "remover_doc", token, campo, url });
+      if (!r.ok) return false;
+      set(r.data?.valor ?? "");
+      return true;
+    };
 
   // CEP pela BrasilAPI (v2, que já junta várias fontes); se ela falhar, a ViaCEP de sempre.
   const buscarCep = async (digits: string): Promise<{ rua?: string; bairro?: string; cidade?: string; uf?: string } | null> => {
@@ -888,8 +932,10 @@ export default function ExternalOnboardingPage() {
           <div className="space-y-4 animate-fade-in">
             <p className="text-xs text-muted-foreground">Envie os documentos abaixo. Você pode selecionar um arquivo ou tirar uma foto.</p>
             <FileUpload label="Logo da Empresa" docType="logo" clientId={submission.client_id} token={token} onUploaded={setDocLogo} uploaded={docLogo} previewRound
+              onRemover={removerDoc("doc_logo", setDocLogo)}
               required missing={showValidation && missingRequired.docLogo} onToast={setUploadToast} />
             <FileUpload label="Contrato Social / Cartão CNPJ (PDF ou Foto)" docType="contrato_social" clientId={submission.client_id} token={token} onUploaded={setDocContrato} uploaded={docContrato}
+              onRemover={removerDoc("doc_contrato_social", setDocContrato)}
               required missing={showValidation && missingRequired.docContrato} onToast={setUploadToast} multiplo />
             <p className="text-[11px] text-muted-foreground -mt-2 px-1">
               Não tem o contrato social à mão, ou o arquivo é grande demais? O cartão CNPJ também serve — é um PDF leve que sai na hora no{" "}
@@ -897,6 +943,7 @@ export default function ExternalOnboardingPage() {
                 className="text-primary underline underline-offset-2">site da Receita Federal</a>.
             </p>
             <FileUpload label="Documento com Foto (RG ou CNH)" docType="identidade" clientId={submission.client_id} token={token} onUploaded={setDocIdentidade} uploaded={docIdentidade}
+              onRemover={removerDoc("doc_identidade", setDocIdentidade)}
               onToast={setUploadToast} multiplo />
           </div>
         )}
