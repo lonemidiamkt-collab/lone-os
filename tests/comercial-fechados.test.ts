@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { linkDoCliente, separarFechados } from "@/lib/crm/fechados";
+import { clientesParecidos, empresasParecidas, linkDoCliente, separarFechados } from "@/lib/crm/fechados";
 import { ABAS_COMERCIAL, ABAS_DA_PAGINA_CRM } from "@/lib/navegacao/casco";
 
 const L = (id: string, estagio: string, fechadoEm: string | null, clienteId: string | null = null) => ({ id, estagio, fechadoEm, clienteId, updatedAt: null });
@@ -44,5 +44,19 @@ describe("aba Fechados do Comercial", () => {
     const ids = ABAS_COMERCIAL.map((a) => a.id);
     expect(ids.indexOf("fechados")).toBe(ids.indexOf("funil") + 1);
     expect(ABAS_DA_PAGINA_CRM).toContain("fechados");
+  });
+});
+
+describe("já é cliente? (ligar em vez de criar duplicado)", () => {
+  it("acha o cadastro de nome parecido: acento, sufixo, espaço e nome contido", () => {
+    expect(empresasParecidas("Depósito Exemplo dos Fios", "Deposito Exemplo dos Fios Ltda")).toBe(true);
+    expect(empresasParecidas("xyzmultimarcasconceito", "XYZ MULTIMARCAS")).toBe(true);
+    expect(empresasParecidas("Loja Alfa", "Loja Beta")).toBe(false);
+    expect(empresasParecidas("Bar", "Barbearia Central")).toBe(false); // curto demais para valer
+    expect(empresasParecidas("", "Qualquer")).toBe(false);
+  });
+  it("filtra só os parecidos, sem mudar a ordem", () => {
+    const clientes = [{ id: "1", nome: "Deposito Exemplo dos Fios Ltda" }, { id: "2", nome: "Outra Loja" }, { id: "3", nome: "DEPÓSITO EXEMPLO DOS FIOS" }];
+    expect(clientesParecidos("Depósito Exemplo dos Fios", clientes).map((c) => c.id)).toEqual(["1", "3"]);
   });
 });

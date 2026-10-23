@@ -613,6 +613,36 @@ export default function CrmPage() {
   }, [draft?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // A caixa de conversão mora no Resumo da ficha: ao abrir, ela aparece e rola até ficar à vista.
   useEffect(() => { if (conversao) requestAnimationFrame(() => caixaConversao.current?.scrollIntoView({ behavior: "smooth", block: "center" })); }, [conversao !== null]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Já é cliente? Antes de criar, a conversão lista os clientes do Lone OS sem lead ligado (os de nome parecido primeiro)
+  // para LIGAR — os dois primeiros ganhos da aba Fechados já existiam lá e "Converter" criaria duplicado.
+  type ClienteLivre = { id: string; nome: string };
+  const [ligacao, setLigacao] = useState<{ carregando: boolean; parecidos: ClienteLivre[]; outros: ClienteLivre[]; escolhido: string; erro?: string } | null>(null);
+  const [ligando, setLigando] = useState(false);
+  useEffect(() => {
+    if (!conversao || !draft?.id) { setLigacao(null); return; }
+    let vivo = true;
+    setLigacao({ carregando: true, parecidos: [], outros: [], escolhido: "" });
+    chamar<{ parecidos: ClienteLivre[]; outros: ClienteLivre[] }>(`/api/crm/leads/cliente?leadId=${encodeURIComponent(draft.id)}`).then((r) => {
+      if (!vivo) return;
+      setLigacao(r.ok && r.data
+        ? { carregando: false, parecidos: r.data.parecidos, outros: r.data.outros, escolhido: "" }
+        : { carregando: false, parecidos: [], outros: [], escolhido: "", erro: r.erro ?? "Não consegui conferir se já é cliente." });
+    });
+    return () => { vivo = false; };
+  }, [conversao !== null, draft?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function ligarCliente(c: ClienteLivre) {
+    if (!draft?.id || ligando) return;
+    setLigando(true);
+    const r = await chamar<{ clienteId: string }>("/api/crm/leads/cliente", { leadId: draft.id, clientId: c.id, autor: currentUser ?? null });
+    setLigando(false);
+    if (!r.ok || !r.data?.clienteId) { toast.error(r.erro ?? "Não consegui ligar ao cliente."); return; }
+    const clienteId = r.data.clienteId;
+    setLeads((prev) => prev.map((l) => (l.id === draft.id ? { ...l, clienteId } : l)));
+    setDraft({ ...draft, clienteId });
+    setConversao(null);
+    toast.success(`Ligado a ${c.nome}. Nenhum cliente novo foi criado.`);
+  }
+
   function abrirConversao(l: Lead) {
     if (draft?.id === l.id) { setAbaFicha("resumo"); setConversao(conversaoInicial(l)); return; }
     converterAoAbrir.current = l.id;
@@ -1496,7 +1526,34 @@ export default function CrmPage() {
             {/* ── Converter em cliente (Leva 7C, N27): pacote e ramo antes de criar ── */}
             {conversao && draft.id && (
               <div ref={caixaConversao} className="mt-4 space-y-2 rounded-lg border border-lone-success-border bg-lone-success-bg p-3">
-                <p className="text-lone-caption font-medium text-foreground">O que o cliente contratou?</p>
+                {ligacao?.carregando && <p className="text-lone-caption text-muted-foreground">Conferindo se já é cliente no Lone OS…</p>}
+                {ligacao?.erro && <p className="text-lone-caption text-lone-danger">{ligacao.erro}</p>}
+                {ligacao && !ligacao.carregando && (ligacao.parecidos.length > 0 || ligacao.outros.length > 0) && (
+                  <div className="space-y-2 rounded-md border border-border bg-background/70 p-2.5">
+                    {ligacao.parecidos.length > 0 ? (
+                      <>
+                        <p className="text-lone-caption font-medium text-foreground">Parece que já é cliente no Lone OS:</p>
+                        {ligacao.parecidos.map((c) => (
+                          <div key={c.id} className="flex items-center justify-between gap-2">
+                            <span className="min-w-0 truncate text-lone-body text-foreground">{c.nome}</span>
+                            <Button size="sm" disabled={ligando} onClick={() => ligarCliente(c)}>{ligando ? "Ligando…" : "Ligar a este cadastro"}</Button>
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      <p className="text-lone-caption text-muted-foreground">Já é cliente no Lone OS? Ligue ao cadastro em vez de criar outro.</p>
+                    )}
+                    <div className="flex gap-2">
+                      <select className={inputCls} aria-label="Outro cliente que já existe" value={ligacao.escolhido} onChange={(e) => setLigacao({ ...ligacao, escolhido: e.target.value })}>
+                        <option value="">{ligacao.parecidos.length ? "É outro cliente que já existe…" : "Escolher o cliente que já existe…"}</option>
+                        {ligacao.outros.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                      </select>
+                      <Button size="sm" variant="outline" disabled={!ligacao.escolhido || ligando}
+                        onClick={() => { const c = ligacao.outros.find((x) => x.id === ligacao.escolhido); if (c) ligarCliente(c); }}>Ligar</Button>
+                    </div>
+                  </div>
+                )}
+                <p className="text-lone-caption font-medium text-foreground">{ligacao?.parecidos.length ? "Não é nenhum desses? Crie o cliente novo — o que ele contratou?" : "O que o cliente contratou?"}</p>
                 <div className="grid grid-cols-2 gap-2">
                   <select className={inputCls} aria-label="Pacote" value={conversao.pacote} onChange={(e) => setConversao({ ...conversao, pacote: e.target.value })}>
                     <option value="">Pacote…</option>

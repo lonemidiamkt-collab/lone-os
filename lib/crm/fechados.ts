@@ -42,3 +42,33 @@ export function linkDoCliente(clienteId: string, host: string | null | undefined
   const caminho = `/clients/${encodeURIComponent(clienteId)}`;
   return ehHostComercial(host) ? `https://painel.lonemidia.com${caminho}` : caminho;
 }
+
+// ── Já é cliente? (out/2026) ─────────────────────────────────────────────────
+// Os dois primeiros ganhos da aba já existiam como clientes no Lone OS (cadastrados antes do Comercial, sem ligação
+// com o lead). "Converter" criaria um cliente DUPLICADO — o servidor só barra quando a ligação já existe. Antes de
+// criar, a ficha mostra os clientes de nome parecido para LIGAR (clients.source_lead_id), sem criar nada.
+
+/** Nome de empresa comparável: sem acento, pontuação, espaços e sufixos societários. */
+export function chaveDeEmpresa(nome: string): string {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(ltda|me|eireli|epp|sa|s a|cia)\b/g, " ")
+    .replace(/\s+/g, "");
+}
+
+/** Mesmo nome, ou um contido no outro com 6+ letras ("xyzmultimarcasconceito" × "XYZ MULTIMARCAS"). */
+export function empresasParecidas(a: string, b: string): boolean {
+  const x = chaveDeEmpresa(a);
+  const y = chaveDeEmpresa(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const [curto, longo] = x.length <= y.length ? [x, y] : [y, x];
+  return curto.length >= 6 && longo.includes(curto);
+}
+
+export function clientesParecidos<C extends { id: string; nome: string }>(empresa: string, clientes: C[]): C[] {
+  return clientes.filter((c) => empresasParecidas(empresa, c.nome));
+}
