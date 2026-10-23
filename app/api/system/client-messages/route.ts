@@ -34,6 +34,7 @@ import { conferirEAvisar } from "@/lib/cs/entregas";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { montarMensagemCliente } from "@/lib/cs/mensagem-cliente";
 import { sendGroupText, sendMediaDocument } from "@/lib/whatsapp/evolution";
+import { bloqueiaReenvio, erroParaLog, podeTrocarDeNumero } from "@/lib/whatsapp/desfecho-envio";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -56,14 +57,18 @@ function todayKeyBRT(): string {
  *
  * Se o agente não estiver no grupo (faltam 2: Hentzy e Horto Naenc), CAI PRO GESTOR em vez de
  * deixar o cliente sem mensagem.
+ *
+ * SÓ CAI PRO GESTOR QUANDO É CERTO QUE NÃO SAIU (21/10/2026). Timeout do agente não quer dizer que
+ * a mensagem não chegou: mandar de novo pelo gestor punha o mesmo texto duas vezes no grupo. Envio
+ * incerto volta como incerto e a conferência avisa o time.
  */
-async function enviarSuporte(jid: string, texto: string, clientId: string): Promise<{ ok: boolean; error?: string }> {
+async function enviarSuporte(jid: string, texto: string, clientId: string): Promise<{ ok: boolean; error?: string; incerto?: boolean }> {
   const r = await csSendGroupText(jid, texto, undefined, { origem: "suporte", destino: "cliente", clientId });
-  if (r.ok) return r;
+  if (!podeTrocarDeNumero(r)) return r;
   const viaGestor = await sendGroupText(jid, texto, "suporte-fallback-gestor");
   return viaGestor.ok
     ? viaGestor
-    : { ok: false, error: `agente: ${r.error} | gestor: ${viaGestor.error}` };
+    : { ok: false, incerto: viaGestor.incerto, error: `agente: ${r.error} | gestor: ${viaGestor.error}` };
 }
 
 /**
@@ -101,12 +106,13 @@ async function notifyAdminFailure(subject: string, detail: string) {
   } catch (e) { console.error("[client-messages] fallback e-mail falhou:", e); }
 }
 
-/** Já foi enviada (sent) essa mensagem hoje p/ esse cliente? (idempotência) */
+/** Já foi enviada essa mensagem hoje p/ esse cliente? (idempotência). Envio INCERTO conta como
+ *  enviado: pode ter chegado, e reenviar às cegas é o que manda em dobro (21/10/2026). */
 async function alreadySent(clientId: string, dateKey: string, kind: "report" | "support"): Promise<boolean> {
   const { data } = await supabaseAdmin
     .from("client_group_message_log")
-    .select("id").eq("client_id", clientId).eq("date_key", dateKey).eq("kind", kind).eq("status", "sent").limit(1);
-  return !!(data && data.length > 0);
+    .select("status, error").eq("client_id", clientId).eq("date_key", dateKey).eq("kind", kind).in("status", ["sent", "failed"]);
+  return (data ?? []).some((l) => bloqueiaReenvio(l as { status: string; error: string | null }));
 }
 
 /**
@@ -120,12 +126,15 @@ async function groupTextAlreadySent(clientIdsInGroup: string[], dateKey: string)
   if (clientIdsInGroup.length === 0) return false;
   const { data } = await supabaseAdmin
     .from("client_group_message_log")
-    .select("id").in("client_id", clientIdsInGroup).eq("date_key", dateKey).eq("kind", "support").eq("status", "sent").limit(1);
-  return !!(data && data.length > 0);
+    .select("status, error").in("client_id", clientIdsInGroup).eq("date_key", dateKey).eq("kind", "support").in("status", ["sent", "failed"]);
+  return (data ?? []).some((l) => bloqueiaReenvio(l as { status: string; error: string | null }));
 }
 
+/** Grava o desfecho. Registro que falha fica no console — sem ele, a próxima rodada não sabe que
+ *  este cliente já recebeu. */
 async function logMsg(clientId: string, dateKey: string, kind: "report" | "support", status: string, error?: string | null) {
-  await supabaseAdmin.from("client_group_message_log").insert({ client_id: clientId, date_key: dateKey, kind, status, error: error ?? null });
+  const { error: e } = await supabaseAdmin.from("client_group_message_log").insert({ client_id: clientId, date_key: dateKey, kind, status, error: error ?? null });
+  if (e) console.error(`[client-messages] não registrou ${kind}/${status} de ${clientId}:`, e.message);
 }
 
 export async function POST(req: NextRequest) {
@@ -221,7 +230,7 @@ export async function POST(req: NextRequest) {
               const fileName = `relatorio-${slug(name)}-${dateKey}.pdf`;
               const res = await sendMediaDocument(jid, pdf.buffer.toString("base64"), fileName, resend ? RESEND_REPORT_MESSAGE : mondayReportMessage());
               if (res.ok) { reportSent++; await logMsg(c.id, dateKey, "report", "sent"); }
-              else { reportFail++; errors.push(`${name} (relatório): ${res.error}`); await logMsg(c.id, dateKey, "report", "failed", res.error); }
+              else { reportFail++; errors.push(`${name} (relatório): ${res.error}`); await logMsg(c.id, dateKey, "report", "failed", erroParaLog(res)); }
             }
           }
         }
@@ -231,7 +240,7 @@ export async function POST(req: NextRequest) {
         if (force || !(await groupTextAlreadySent(groupClientIds, dateKey))) {
           const res = await enviarSuporte(jid, mondaySocialMessage(), c.id);
           if (res.ok) { supportSent++; await logMsg(c.id, dateKey, "support", "sent"); }
-          else { supportFail++; errors.push(`${name} (início de semana): ${res.error}`); await logMsg(c.id, dateKey, "support", "failed", res.error); }
+          else { supportFail++; errors.push(`${name} (início de semana): ${res.error}`); await logMsg(c.id, dateKey, "support", "failed", erroParaLog(res)); }
         } else { await logMsg(c.id, dateKey, "support", "skipped", "grupo já recebeu o texto hoje (cliente compartilha grupo)"); }
       } else {
         // Quarta/Sexta: texto do dia. Cliente com Meta → mensagem de tráfego;
@@ -266,7 +275,7 @@ export async function POST(req: NextRequest) {
         if (force || !(await groupTextAlreadySent(groupClientIds, dateKey))) {
           const res = await enviarSuporte(jid, text, c.id);
           if (res.ok) { supportSent++; await logMsg(c.id, dateKey, "support", "sent"); }
-          else { supportFail++; errors.push(`${name} (suporte): ${res.error}`); await logMsg(c.id, dateKey, "support", "failed", res.error); }
+          else { supportFail++; errors.push(`${name} (suporte): ${res.error}`); await logMsg(c.id, dateKey, "support", "failed", erroParaLog(res)); }
         } else { await logMsg(c.id, dateKey, "support", "skipped", "grupo já recebeu o texto hoje (cliente compartilha grupo)"); }
       }
 

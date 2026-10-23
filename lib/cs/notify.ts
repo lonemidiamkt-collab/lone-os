@@ -3,6 +3,7 @@
 // NUNCA lança — um WhatsApp fora do ar não pode derrubar o webhook.
 
 import { mencoesUnicas } from "./mencoes-unicas";
+import { erroParaLog, falhaDeExcecao, falhaDeResposta } from "@/lib/whatsapp/desfecho-envio";
 
 /** De onde saiu a mensagem — vira `origem` no cs_outbound. Opcional pra não quebrar quem já chama. */
 export interface CsSendMeta {
@@ -32,7 +33,7 @@ export async function csSendGroupText(
    * só vê se estiver lendo o grupo — que é justamente o que a menção existiria para evitar.
    */
   mencionados?: string[],
-): Promise<{ ok: boolean; error?: string; id?: string }> {
+): Promise<{ ok: boolean; error?: string; id?: string; incerto?: boolean }> {
   const baseUrl = process.env.EVOLUTION_API_URL?.replace(/\/+$/, "");
   const apiKey = process.env.EVOLUTION_API_KEY_NEW;
   const instance = process.env.EVOLUTION_INSTANCE_NEW;
@@ -63,9 +64,12 @@ export async function csSendGroupText(
     });
     const body = await res.text().catch(() => "");
     if (!res.ok) {
-      const erro = `HTTP ${res.status}: ${body.slice(0, 120)}`;
-      await registrarSaida(jid, text, false, erro, meta);
-      return { ok: false, error: erro };
+      // 21/10/2026: 5xx genérico pode ter entregado. Quem chama precisa saber, senão cai pro
+      // número do gestor e o cliente recebe duas vezes.
+      const f = falhaDeResposta(res.status, body);
+      const r = { ok: false, error: f.erro, incerto: f.incerto };
+      await registrarSaida(jid, text, false, erroParaLog(r), meta);
+      return r;
     }
     // Devolve o id da msg enviada (pra casar o "reply" da equipe com a sugestão). Formato: { key: { id } }.
     let id: string | undefined;
@@ -74,9 +78,11 @@ export async function csSendGroupText(
     try { (await import("@/lib/obs/correlacao")).contarEnvio(); } catch { /* fora de execução */ }
     return { ok: true, id };
   } catch (err) {
-    const erro = err instanceof Error ? err.message : "erro de conexão";
-    await registrarSaida(jid, text, false, erro, meta);
-    return { ok: false, error: erro };
+    // Timeout (10 s) não quer dizer que não saiu — só que a resposta não voltou.
+    const f = falhaDeExcecao(err, 10_000);
+    const r = { ok: false, error: f.erro, incerto: f.incerto };
+    await registrarSaida(jid, text, false, erroParaLog(r), meta);
+    return r;
   }
 }
 
@@ -149,7 +155,7 @@ export async function csSendGroupDocument(
   mimetype = "application/pdf",
   /** JIDs a mencionar de verdade na legenda — ver `csSendGroupText`. */
   mencionados?: string[],
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; incerto?: boolean }> {
   const baseUrl = process.env.EVOLUTION_API_URL?.replace(/\/+$/, "");
   const apiKey = process.env.EVOLUTION_API_KEY_NEW;
   const instance = process.env.EVOLUTION_INSTANCE_NEW;
@@ -170,16 +176,17 @@ export async function csSendGroupDocument(
     // Documento enviado também vira registro. Antes só o texto era gravado em cs_outbound, então
     // relatório em PDF — que hoje é a maior parte do que o sistema manda — não deixava rastro
     // nenhum: não dava pra saber se chegou, nem depurar depois.
-    const erro = res.ok ? null : `HTTP ${res.status}: ${body.slice(0, 150)}`;
-    await registrarSaida(jid, `[documento] ${fileName}${caption ? ` — ${caption.slice(0, 120)}` : ""}`, res.ok, erro, {
-      origem: "documento", destino: "interno",
-    }).catch(() => {});
-    if (!res.ok) return { ok: false, error: erro ?? "falhou" };
-    return { ok: true };
+    // 21/10/2026: PDF de 60 s que estoura o tempo costuma ter chegado. Incerto ≠ falhou.
+    const f = res.ok ? null : falhaDeResposta(res.status, body);
+    const r = f ? { ok: false, error: f.erro, incerto: f.incerto } : { ok: true };
+    await registrarSaida(jid, `[documento] ${fileName}${caption ? ` — ${caption.slice(0, 120)}` : ""}`, res.ok,
+      f ? erroParaLog(r) : null, { origem: "documento", destino: "interno" }).catch(() => {});
+    return r;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "erro de conexão";
-    await registrarSaida(jid, `[documento] ${fileName}`, false, msg, { origem: "documento", destino: "interno" }).catch(() => {});
-    return { ok: false, error: msg };
+    const f = falhaDeExcecao(err, 60_000);
+    const r = { ok: false, error: f.erro, incerto: f.incerto };
+    await registrarSaida(jid, `[documento] ${fileName}`, false, erroParaLog(r), { origem: "documento", destino: "interno" }).catch(() => {});
+    return r;
   }
 }
 

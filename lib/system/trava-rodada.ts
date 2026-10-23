@@ -23,12 +23,23 @@ export interface Reserva {
   motivo?: string;
 }
 
+export interface OpcoesReserva {
+  /**
+   * A rodada do dia JÁ TERMINOU: pode rodar de novo? (21/10/2026)
+   *
+   * Para rotina que se reenvia de propósito — "rodar de novo pra quem ficou de fora" do relatório,
+   * o broadcast que completa os grupos que falharam. O dedup por cliente impede a repetição; a
+   * trava só precisa impedir DUAS AO MESMO TEMPO (as duas leriam "ainda não recebeu" juntas).
+   */
+  permitirNovaRodada?: boolean;
+}
+
 /**
  * Reserva a execução de `rotina` para `diaChave` (YYYY-MM-DD).
  *
  * @returns `conseguiu: false` quando outra execução já pegou o dia — nesse caso NÃO rode.
  */
-export async function reservarRodada(rotina: string, diaChave: string): Promise<Reserva> {
+export async function reservarRodada(rotina: string, diaChave: string, opcoes: OpcoesReserva = {}): Promise<Reserva> {
   const { error } = await supabaseAdmin
     .from("routine_runs")
     .insert({ routine: rotina, date_key: diaChave });
@@ -58,6 +69,21 @@ export async function reservarRodada(rotina: string, diaChave: string): Promise<
       return { conseguiu: true };
     }
     return { conseguiu: false, motivo: `outra execução começou há ${Math.round(minutos)} min e ainda está rodando` };
+  }
+
+  if (opcoes.permitirNovaRodada && data?.finished_at) {
+    // Reabre a reserva — e só UMA execução consegue: o update é condicional a `finished_at` estar
+    // preenchido. Duas chamadas juntas: a primeira zera, a segunda não acha mais a linha.
+    const { data: reaberta, error: eUp } = await supabaseAdmin.from("routine_runs")
+      .update({ started_at: new Date().toISOString(), finished_at: null })
+      .eq("routine", rotina).eq("date_key", diaChave).not("finished_at", "is", null)
+      .select("routine");
+    if (eUp) {
+      console.error(`[trava-rodada] ${rotina}/${diaChave}: não reabriu, seguindo assim mesmo:`, eUp.message);
+      return { conseguiu: true };
+    }
+    if (reaberta?.length) return { conseguiu: true };
+    return { conseguiu: false, motivo: "outra execução acabou de começar" };
   }
 
   return { conseguiu: false, motivo: "já rodou hoje" };

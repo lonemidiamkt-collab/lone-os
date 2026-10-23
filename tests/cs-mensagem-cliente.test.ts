@@ -9,6 +9,9 @@ const BASE: SinaisCliente = {
   aguardandoAprovacao: 0, aprovouRecentemente: false, esperandoDesde: null, entreguesNaSemana: 0, diasSemFalar: 2,
   promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: null, pedirProdutosHoje: false,
   conversasDoAnuncio: null, melhorDia: null,
+  // Cliente de tráfego por padrão: os testes de resultado do anúncio partem daqui. O caso só de
+  // social está em tests/mensagem-cliente-contrato.test.ts.
+  contratoDeAnuncio: true,
 };
 const sinais = (over: Partial<SinaisCliente> = {}): SinaisCliente => ({ ...BASE, ...over });
 

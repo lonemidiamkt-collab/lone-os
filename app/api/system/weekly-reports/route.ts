@@ -7,8 +7,11 @@
 //
 //   POST                      → gera o PDF de cada cliente ativo-com-Meta e envia ao grupo.
 //   POST ?dryRun=1            → apenas lista/conta os clientes elegíveis (não gera/envia).
-//   POST ?clientId=<id>       → gera SÓ esse cliente. Com dryRun, salva no Storage e devolve a URL (preview).
-//   POST ?force=1             → ignora a idempotência do dia.
+//   POST ?clientId=<id>       → gera SÓ esse cliente e envia MESMO que ele já tenha recebido hoje (é o
+//                               reenvio de propósito). Com dryRun, salva no Storage e devolve a URL (preview).
+//   Rodar de novo (sem clientId) manda SÓ pra quem ficou de fora: quem já recebeu — ou pode ter
+//   recebido (envio incerto) — é pulado. `?force=1` NÃO desliga mais isso (21/10/2026): ele fazia
+//   todo mundo receber de novo. Pra reenviar a um cliente, use ?clientId=.
 //
 // PRÉVIA SEM ENVIAR (GET ou POST, exige o CRON_SECRET). Não envia, não grava log, não sobe no Storage:
 //   ?baixar=1&cliente=<id>    → devolve o PDF (application/pdf).
@@ -30,6 +33,7 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { getMetaToken, getAlertSettings } from "@/lib/traffic/sync-core";
 import { sendMediaDocument } from "@/lib/whatsapp/evolution";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { bloqueiaReenvio, erroParaLog, textoEnviosIncertos } from "@/lib/whatsapp/desfecho-envio";
 import {
   buildClientPdf, selectActiveMetaClients, periodLabelDays, slug,
   montarHtmlRelatorioCliente, selectReportClient, clientDisplayName,
@@ -134,6 +138,7 @@ export async function POST(req: NextRequest) {
     }
   }
   const dryRun = url.searchParams.get("dryRun") === "1";
+  // `force` não pula mais o dedup por cliente (21/10/2026) — só é lido pra avisar quem ainda manda.
   const force = url.searchParams.get("force") === "1";
   const onlyClientId = url.searchParams.get("clientId");
   // ?period=month → relatório de 30 dias (mensal); padrão = 7 dias (semanal).
@@ -170,7 +175,14 @@ export async function POST(req: NextRequest) {
     : periodDays === 30 ? "30 dias" : "7 dias";
   // Chave de idempotência separada por escopo — semanal e mensal não colidem no mesmo dia.
   // Sufixo com hífen (não ":") — dois-pontos quebra o nome do arquivo no Storage/URL.
-  const dateKey = todayKeyBRT() + (intervalo ? `-${since}_${until}` : periodDays === 30 ? "-mensal" : "");
+  // E por DESTINO (21/10/2026): o digest interno rodado antes marcava o cliente como "já recebeu"
+  // e a rodada pro cliente pulava todo mundo.
+  const escopoChave = intervalo ? `-${since}_${until}` : periodDays === 30 ? "-mensal" : "";
+  const destinoChave = paraCliente ? "" : "-interno";
+  const dateKey = todayKeyBRT() + escopoChave + destinoChave;
+  const rotinaTrava = `weekly-reports${escopoChave || "-semanal"}${destinoChave}`;
+  let reservou = false;
+  const { reservarRodada, fecharRodada } = await import("@/lib/system/trava-rodada");
 
   try {
     const settings = await getAlertSettings();
@@ -225,19 +237,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, status: "failed", error: "Grupo não configurado" }, { status: 200 });
     }
 
-    // Idempotência por dia (salvo force/clientId)
-    if (!force && !onlyClientId) {
-      const { data: already } = await supabaseAdmin
-        .from("weekly_report_log")
-        .select("id").eq("week_key", dateKey).eq("status", "sent").limit(1);
-      if (already && already.length > 0) {
-        return NextResponse.json({ ok: true, status: "skipped", message: "Relatórios já enviados hoje" });
+    // SEM "JÁ ENVIEI HOJE" GLOBAL (21/10/2026). A linha "sent" do dia fazia a segunda rodada sair
+    // "skipped" com ok:true — e o aviso interno mandava justamente "rodar de novo" pra quem ficou de
+    // fora. Ninguém recebia. Quem decide agora é o dedup POR CLIENTE, logo abaixo.
+    //
+    // A trava só impede DUAS RODADAS AO MESMO TEMPO (as duas leriam "ainda não recebeu" juntas);
+    // terminada uma, a próxima pode rodar. O reenvio de 1 cliente (?clientId=) não trava.
+    if (!onlyClientId) {
+      const reserva = await reservarRodada(rotinaTrava, todayKeyBRT(), { permitirNovaRodada: true });
+      if (!reserva.conseguiu) {
+        return NextResponse.json({ ok: true, status: "skip", motivo: reserva.motivo });
       }
+      reservou = true;
     }
 
     const period = periodLabelDays(periodDays);
-    let sent = 0, failed = 0;
+    let sent = 0, failed = 0, jaTinham = 0;
     const errors: string[] = [];
+    // Pode ter chegado (o WhatsApp não confirmou a tempo): não repete, avisa o time.
+    const incertos: { cliente: string; erro?: string }[] = [];
+    // Recebeu, mas o registro não gravou: a próxima rodada mandaria de novo. O time precisa saber.
+    const semRegistro: string[] = [];
     // Quem falhou por erro PASSAGEIRO (a Meta demorou, caiu, recusou rajada) ganha uma segunda
     // tentativa no fim da rodada. Em 01/10 o relatório de setembro da Armazém do Ferro não saiu por
     // um timeout da Meta e ficou de fora — o aviso pedia pra "conferir", ninguém reenviou.
@@ -251,9 +271,17 @@ export async function POST(req: NextRequest) {
       const clientName = c.nome_fantasia || c.name;
       const clientKey = `${dateKey}:${c.id}`;
       // Dedup POR CLIENTE (nao so por execucao): num retry, quem JA recebeu nao recebe o PDF de novo.
-      if (!force && !onlyClientId) {
-        const { data: jaEnviou } = await supabaseAdmin.from("weekly_report_log").select("id").eq("week_key", clientKey).eq("status", "sent").limit(1);
-        if (jaEnviou && jaEnviou.length > 0) continue;
+      // Vale também com force=1 (21/10/2026) e conta o envio INCERTO como recebido. Só o
+      // ?clientId= explícito passa por cima — é o reenvio de propósito, pra um cliente só.
+      if (!onlyClientId) {
+        const { data: linhas, error: eLe } = await supabaseAdmin.from("weekly_report_log")
+          .select("status, error").eq("week_key", clientKey).in("status", ["sent", "failed"]);
+        if (eLe) {
+          // Sem saber se já recebeu, não manda: duplicar pro cliente é pior que esperar a próxima rodada.
+          failed++; errors.push(`${clientName}: não consegui conferir se já tinha recebido (${eLe.message}) — não enviei`);
+          continue;
+        }
+        if ((linhas ?? []).some((l) => bloqueiaReenvio(l as { status: string; error: string | null }))) { jaTinham++; continue; }
       }
       try {
         const pdf = await buildClientPdf(token, c, periodDays, dateFrom, dateTo);
@@ -281,7 +309,17 @@ export async function POST(req: NextRequest) {
         const destinoJid = paraCliente ? (c.whatsapp_group_jid as string | null) : settings.groupJid;
         if (!destinoJid) { failed++; errors.push(`${clientName}: sem grupo de WhatsApp cadastrado`); continue; }
         const res = await sendMediaDocument(destinoJid, pdf.buffer.toString("base64"), fileName, caption);
-        if (res.ok) { sent++; await supabaseAdmin.from("weekly_report_log").insert({ week_key: clientKey, status: "sent", message: clientName }).then(() => {}, () => {}); } else { failed++; errors.push(`${clientName}: envio ${res.error}`); }
+        if (res.ok || res.incerto) {
+          // O registro é o que impede o reenvio — o erro dele não pode sumir (antes: .then(() => {}, () => {})).
+          if (res.ok) sent++; else incertos.push({ cliente: clientName, erro: res.error });
+          const { error: eLog } = await supabaseAdmin.from("weekly_report_log").insert(res.ok
+            ? { week_key: clientKey, status: "sent", message: clientName }
+            : { week_key: clientKey, status: "failed", message: clientName, error: erroParaLog(res) });
+          if (eLog) {
+            console.error(`[weekly-reports] ${clientName}: envio sem registro:`, eLog.message);
+            semRegistro.push(clientName);
+          }
+        } else { failed++; errors.push(`${clientName}: envio ${res.error}`); }
       } catch (e) {
         const erro = `${clientName}: ${e instanceof Error ? e.message : String(e)}`;
         if (tentativa === 1 && passageiro(erro)) { paraTentarDeNovo.push({ c, erro }); continue; }
@@ -299,15 +337,18 @@ export async function POST(req: NextRequest) {
       await rodar(paraTentarDeNovo.map((x) => x.c));
     }
 
-    const status = sent > 0 ? "sent" : "failed";
+    // Rodada que só achou gente que já tinha recebido não é falha: é o reenvio funcionando.
+    const status = sent > 0 ? "sent" : (failed > 0 || incertos.length > 0) ? "failed" : "skipped";
     if (!onlyClientId) {
-      await supabaseAdmin.from("weekly_report_log").insert({
+      // Linha-resumo da rodada: é histórico (ninguém mais decide por ela), mas o erro dela aparece.
+      const { error: eResumo } = await supabaseAdmin.from("weekly_report_log").insert({
         week_key: dateKey, status,
-        message: `enviados ${sent}/${clients.length}`,
+        message: `enviados ${sent}/${clients.length}${jaTinham ? ` · ${jaTinham} já tinham recebido` : ""}${incertos.length ? ` · ${incertos.length} incerto(s)` : ""}`,
         error: errors.length > 0 ? errors.slice(0, 10).join(" | ") : null,
       });
+      if (eResumo) console.error("[weekly-reports] não gravou o resumo da rodada:", eResumo.message);
     }
-    if (sent === 0) {
+    if (sent === 0 && (failed > 0 || incertos.length > 0)) {
       await notifyAdminFailure("Relatório semanal falhou", `0/${clients.length} enviados.\n${errors.join("\n")}`);
     }
 
@@ -325,10 +366,39 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: sent > 0, status, total: clients.length, sent, failed, errors: errors.slice(0, 10) });
+    // Os incertos e os sem registro NÃO entram no "rodar de novo": num caso a rodada pula (pode ter
+    // chegado), no outro mandaria em dobro. Os dois pedem gente olhando o grupo.
+    if (!onlyClientId && (incertos.length || semRegistro.length)) {
+      const jid = process.env.CS_INTERNAL_GROUP_JID;
+      if (jid) {
+        const partes: string[] = [];
+        if (incertos.length) {
+          partes.push(textoEnviosIncertos(`o relatório ${escopoLabel}`, incertos,
+            "peça o reenvio só para ele (weekly-reports com ?clientId=)"));
+        }
+        if (semRegistro.length) {
+          partes.push(`⚠️ *Relatório saiu, mas não consegui registrar* — ${semRegistro.map((n) => `*${n}*`).join(", ")}.\n`
+            + `_Se rodar de novo agora, ${semRegistro.length === 1 ? "ele recebe" : "eles recebem"} duas vezes. Confira o registro antes._`);
+        }
+        await csSendGroupText(jid, partes.join("\n\n"), undefined, { origem: "weekly-reports-incerto", destino: "interno" });
+      }
+    }
+
+    if (reservou) {
+      await fecharRodada(rotinaTrava, todayKeyBRT(), status !== "failed",
+        `enviados ${sent} · falhas ${failed} · incertos ${incertos.length} · já tinham ${jaTinham}`);
+    }
+
+    return NextResponse.json({
+      ok: sent > 0 || status === "skipped", status, total: clients.length, sent, failed,
+      jaTinham, incertos, semRegistro, errors: errors.slice(0, 10),
+      ...(force ? { aviso: "force=1 não reenvia mais a quem já recebeu. Para reenviar a um cliente, use ?clientId=." } : {}),
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[weekly-reports] erro:", msg);
+    // Fecha a reserva mesmo com exceção — senão a rotina fica trancada até o destrave de 90 min.
+    if (reservou) await fecharRodada(rotinaTrava, todayKeyBRT(), false, msg);
     await notifyAdminFailure("Relatório semanal — exceção", msg);
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }

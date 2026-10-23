@@ -8,12 +8,21 @@
 //
 // Princípios: timeout + 1 retry, retorno estruturado { ok, error }, NUNCA lança
 // pra dentro do cron (um WhatsApp fora do ar não pode derrubar o digest).
+//
+// ENVIO NÃO SE REPETE NO ESCURO (21/10/2026). Mandar mensagem não é idempotente: timeout ou 5xx
+// genérico podem ter entregado — repetir mandava em dobro pro cliente. Nos envios, só a falha
+// CERTA (conexão recusada, "Connection Closed") ganha a segunda tentativa; a incerta volta com
+// `incerto: true` e quem chamou avisa o time. Ver lib/whatsapp/desfecho-envio.ts.
+
+import { erroParaLog, falhaDeExcecao, falhaDeResposta } from "./desfecho-envio";
 
 export interface EvoResult<T = unknown> {
   ok: boolean;
   data?: T;
   error?: string;
   status?: number;
+  /** Envio que pode ter chegado (timeout, 5xx genérico). Não repetir nem trocar de número. */
+  incerto?: boolean;
 }
 
 interface EvoConfig {
@@ -38,7 +47,8 @@ async function evoFetch<T>(
   path: string,
   init: RequestInit,
   cfg: EvoConfig,
-  { retries = 1, timeoutMs = 10_000 } = {},
+  /** `envio`: a chamada MANDA mensagem — falha incerta não se repete (ver o topo do arquivo). */
+  { retries = 1, timeoutMs = 10_000, envio = false } = {},
 ): Promise<EvoResult<T>> {
   let lastError = "erro desconhecido";
   let lastStatus: number | undefined;
@@ -69,12 +79,23 @@ async function evoFetch<T>(
         if (res.status >= 400 && res.status < 500) {
           return { ok: false, error: String(msg), status: res.status };
         }
+        // 5xx num ENVIO: se a Evolution não disse que não mandou, pode ter mandado.
+        if (envio && falhaDeResposta(res.status, text).incerto) {
+          return { ok: false, error: `${msg} — pode ter saído`, status: res.status, incerto: true };
+        }
         lastError = String(msg);
         continue;
       }
       return { ok: true, data: (json as T) ?? undefined, status: res.status };
     } catch (err) {
       clearTimeout(timeout);
+      if (envio) {
+        // Timeout ou conexão que caiu no meio: a mensagem pode ter chegado. Não repete.
+        const f = falhaDeExcecao(err, timeoutMs);
+        if (f.incerto) return { ok: false, error: f.erro, incerto: true };
+        lastError = f.erro;
+        continue;
+      }
       lastError = err instanceof Error
         ? (err.name === "AbortError" ? `timeout (${timeoutMs}ms)` : err.message)
         : String(err);
@@ -97,7 +118,7 @@ export async function sendText(to: string, text: string, delayMs?: number): Prom
   return evoFetch(`/message/sendText/${encodeURIComponent(cfg.instance)}`, {
     method: "POST",
     body: JSON.stringify(body),
-  }, cfg);
+  }, cfg, { envio: true });
 }
 
 /**
@@ -114,7 +135,7 @@ export async function sendGroupText(groupJid: string, text: string, origem = "ge
   const r = await sendText(groupJid, text);
   try {
     const { registrarSaida } = await import("@/lib/cs/ja-falamos");
-    await registrarSaida(groupJid, text, r.ok, r.ok ? null : (r.error ?? null), { origem, destino: "cliente" });
+    await registrarSaida(groupJid, text, r.ok, r.ok ? null : erroParaLog(r), { origem, destino: "cliente" });
   } catch { /* registro é secundário */ }
   return r;
 }
@@ -144,12 +165,12 @@ export async function sendMediaDocument(
       fileName,
       ...(caption ? { caption } : {}),
     }),
-  }, cfg, { retries: 1, timeoutMs: 60_000 });
+  }, cfg, { retries: 1, timeoutMs: 60_000, envio: true });
   // O PDF do relatório vai com a legenda de "bom dia" — é uma FALA no grupo e precisa contar
   // como contato do dia, senão a próxima rotina cumprimenta como se fosse a primeira.
   try {
     const { registrarSaida } = await import("@/lib/cs/ja-falamos");
-    await registrarSaida(to, caption || `[documento] ${fileName}`, r.ok, r.ok ? null : (r.error ?? null),
+    await registrarSaida(to, caption || `[documento] ${fileName}`, r.ok, r.ok ? null : erroParaLog(r),
       { origem: "relatorio", destino: "cliente" });
   } catch { /* registro é secundário */ }
   return r;
@@ -180,7 +201,7 @@ export async function sendMediaImage(
       fileName,
       ...(caption ? { caption } : {}),
     }),
-  }, cfg, { retries: 1, timeoutMs: 45_000 });
+  }, cfg, { retries: 1, timeoutMs: 45_000, envio: true });
 }
 
 /** Estado da conexão da instância. `connected=true` quando state==="open". */

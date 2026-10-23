@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { JOB_NPS, TEXTO_FOLLOWUP, textoPergunta } from "@/lib/cs/nps";
 import { npsLigado, montarRodada, enviarPerguntas, fecharVencidas } from "@/lib/cs/nps-server";
+import { csSendGroupText } from "@/lib/cs/notify";
+import { textoEnviosIncertos } from "@/lib/whatsapp/desfecho-envio";
 
 // POST /api/system/cs-nps — NPS depois da reunião (Leva 6B, E6). Regras em lib/cs/nps.ts.
 //
@@ -61,14 +63,26 @@ export async function POST(req: NextRequest) {
 
   const resultados = await enviarPerguntas(rodada.envios);
   const enviados = resultados.filter((r) => r.ok).length;
-  const falhas = resultados.filter((r) => !r.ok);
-  console.log(`[cs-nps] ${enviados} pergunta(s) enviada(s), ${falhas.length} falha(s)`);
+  const falhas = resultados.filter((r) => !r.ok && !r.incerto);
+  const incertos = resultados.filter((r) => r.incerto);
+  console.log(`[cs-nps] ${enviados} pergunta(s) enviada(s), ${falhas.length} falha(s), ${incertos.length} incerta(s)`);
+
+  // Pergunta que PODE ter chegado não é repetida (21/10/2026) — então alguém precisa olhar o grupo.
+  const jidInterno = process.env.CS_INTERNAL_GROUP_JID;
+  if (incertos.length && jidInterno) {
+    await csSendGroupText(jidInterno,
+      textoEnviosIncertos("a pergunta do NPS", incertos.map((r) => ({ cliente: r.cliente, erro: r.erro })),
+        "pergunte a nota na mão — o sistema não vai perguntar de novo para não repetir"),
+      undefined, { origem: "cs-nps-incerto", destino: "interno" });
+  }
+
   return NextResponse.json({
     ok: falhas.length === 0 || enviados > 0,
     job: JOB_NPS,
     enviados,
     clientes: resultados.filter((r) => r.ok).map((r) => r.cliente),
     falhas,
+    incertos,
     ficaram_de_fora: rodada.ignorados.length,
     vencidas,
   });

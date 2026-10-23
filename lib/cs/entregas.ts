@@ -13,6 +13,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { ehIncerto } from "@/lib/whatsapp/desfecho-envio";
 
 export type EntregaKind = "report" | "support" | "calendar";
 
@@ -30,6 +31,9 @@ export interface ConferenciaEntrega {
   falharam: { cliente: string; motivo: string }[];
   /** Elegível e sem NENHUM registro no dia: o loop nem chegou nele (o pior caso, o mais invisível). */
   semRegistro: string[];
+  /** O WhatsApp não confirmou a tempo: PODE ter chegado. Conferir no grupo antes de reenviar
+   *  (21/10/2026 — reenviar às cegas era o que mandava em dobro). */
+  incertos?: string[];
 }
 
 /**
@@ -60,12 +64,13 @@ export async function conferirEntrega(
     porCliente.set(r.client_id as string, arr);
   }
 
-  const conf: ConferenciaEntrega = { kind, dateKey, entregues: 0, falharam: [], semRegistro: [] };
+  const conf: ConferenciaEntrega = { kind, dateKey, entregues: 0, falharam: [], semRegistro: [], incertos: [] };
   for (const c of elegiveis) {
     const linhas = porCliente.get(c.id);
     if (!linhas?.length) { conf.semRegistro.push(c.nome); continue; }
     // "skipped" é entrega legítima (cliente que divide o grupo com outro já recebeu o texto).
     if (linhas.some((l) => l.status === "sent" || l.status === "skipped")) { conf.entregues++; continue; }
+    if (linhas.some((l) => l.status === "failed" && ehIncerto(l.error))) { conf.incertos!.push(c.nome); continue; }
     const falha = linhas.find((l) => l.status === "failed");
     conf.falharam.push({ cliente: c.nome, motivo: falha?.error || "erro não registrado" });
   }
@@ -74,11 +79,14 @@ export async function conferirEntrega(
 
 /** Monta o aviso. Devolve string vazia quando está tudo entregue — aí não se manda nada. */
 export function textoConferencia(conf: ConferenciaEntrega): string {
+  const incertos = conf.incertos ?? [];
   const problemas = conf.falharam.length + conf.semRegistro.length;
-  if (!problemas) return "";
-  const total = conf.entregues + problemas;
+  if (!problemas && !incertos.length) return "";
+  const total = conf.entregues + problemas + incertos.length;
   const linhas: string[] = [
-    `⚠️ *${ROTULO[conf.kind]} não chegou em ${problemas} de ${total} clientes* — ${conf.dateKey}`,
+    problemas
+      ? `⚠️ *${ROTULO[conf.kind]} não chegou em ${problemas} de ${total} clientes* — ${conf.dateKey}`
+      : `❓ *${ROTULO[conf.kind]}: não sei se chegou em ${incertos.length} de ${total} clientes* — ${conf.dateKey}`,
     "",
   ];
   if (conf.falharam.length) {
@@ -93,7 +101,15 @@ export function textoConferencia(conf: ConferenciaEntrega): string {
     if (conf.semRegistro.length > 8) linhas.push(`• …e mais ${conf.semRegistro.length - 8}`);
     linhas.push("");
   }
-  linhas.push("_Vale reenviar pra esses antes que o cliente perceba a falta._");
+  if (problemas) linhas.push("_Vale reenviar pra esses antes que o cliente perceba a falta._");
+  // O incerto vem À PARTE e com a instrução oposta: aqui reenviar sem olhar é o erro.
+  if (incertos.length) {
+    if (problemas) linhas.push("");
+    linhas.push("*Não sei se chegou* (o WhatsApp não confirmou a tempo — pode ter saído):");
+    for (const n of incertos.slice(0, 8)) linhas.push(`• *${n}*`);
+    if (incertos.length > 8) linhas.push(`• …e mais ${incertos.length - 8}`);
+    linhas.push("_Não reenviei para não mandar em dobro. Confira no grupo antes de reenviar._");
+  }
   return linhas.join("\n");
 }
 
