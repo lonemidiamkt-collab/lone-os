@@ -40,17 +40,30 @@ export interface SenhasParaEspelhar {
 export async function espelharNoCofre(
   clientId: string,
   senhas: SenhasParaEspelhar,
+  /**
+   * `limpar`: campos que o admin APAGOU de propósito (21/10/2026). Sem isto, apagar a senha na ficha
+   * deixava a antiga viva no cofre do social. Só vale quando pedido explicitamente: campo vazio no
+   * `senhas` continua significando "não veio", nunca "apague".
+   */
+  opcoes?: { limpar?: (keyof SenhasParaEspelhar)[] },
 ): Promise<{ ok: boolean; campos: string[]; erro?: string }> {
-  // CIFRA ANTES DE ESPELHAR. Este espelho existe pra levar a senha do cadastro admin até quem
-  // trabalha — mas o cofre de origem guarda cifrado e o destino guardava em texto puro. O espelho
-  // estava, na prática, DESFAZENDO a cifra a cada cliente novo. Aqui roda sempre no servidor, onde
-  // a chave existe; se ela faltar, é melhor falhar do que gravar senha aberta achando que salvou.
-  const { encryptVault } = await import("@/lib/crypto/vault");
   const row: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(senhas)) {
-    if (typeof v !== "string" || !v.trim()) continue;
-    row[k] = k.endsWith("_password") ? encryptVault(v.trim()) : v.trim();
+  try {
+    // CIFRA ANTES DE ESPELHAR. Este espelho existe pra levar a senha do cadastro admin até quem
+    // trabalha — mas o cofre de origem guarda cifrado e o destino guardava em texto puro. O espelho
+    // estava, na prática, DESFAZENDO a cifra a cada cliente novo. Aqui roda sempre no servidor, onde
+    // a chave existe; se ela faltar, é melhor falhar do que gravar senha aberta achando que salvou.
+    // (21/10/2026: a falta da chave LANÇAVA daqui, contra o "nunca lança" do contrato — agora volta
+    // como falha para quem chamou mostrar.)
+    const { encryptVault } = await import("@/lib/crypto/vault");
+    for (const [k, v] of Object.entries(senhas)) {
+      if (typeof v !== "string" || !v.trim()) continue;
+      row[k] = k.endsWith("_password") ? encryptVault(v.trim()) : v.trim();
+    }
+  } catch (e) {
+    return { ok: false, campos: Object.keys(senhas), erro: e instanceof Error ? e.message : "falha ao cifrar" };
   }
+  for (const k of opcoes?.limpar ?? []) if (!(k in row)) row[k] = null;
   const campos = Object.keys(row);
   if (!clientId || !campos.length) return { ok: true, campos: [] };
 

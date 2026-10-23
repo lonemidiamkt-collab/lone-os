@@ -12,6 +12,7 @@ import { computeGrowth, type GrowthRow } from "@/lib/fichaViva/growth";
 import { checkAccessCode, ipTravado, pinTravado, registrarTentativaPin, mensagemTrava } from "@/lib/fichaViva/pin";
 import { criarLimite, ipDe } from "@/lib/portal/limite";
 import { WHATSAPP_EQUIPE } from "@/lib/portal/contato";
+import { normalizarRespostas } from "@/lib/fichaViva/raiox";
 
 const LIMITE = criarLimite(10, 60_000); // até 10 chamadas/min por link
 
@@ -49,10 +50,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     if (!certo) return NextResponse.json({ error: "Código de acesso incorreto." }, { status: 401 });
   }
 
-  const { count } = await supabaseAdmin
+  // 21/10/2026 (auditoria 1.3): o link do dono abre o Raio-X com a ÚLTIMA resposta enviada — antes
+  // "atualizar" abria vazio. Falha de leitura não vira "nunca respondeu": devolve erro.
+  const { data: ultima, error: errDiag } = await supabaseAdmin
     .from("client_diagnostics")
-    .select("id", { count: "exact", head: true })
-    .eq("client_id", client.id as string);
+    .select("respostas, answered_at")
+    .eq("client_id", client.id as string)
+    .order("answered_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (errDiag) return NextResponse.json({ error: "Não consegui carregar agora. Tente de novo em instantes." }, { status: 503 });
 
   const base = {
     ok: true,
@@ -60,10 +67,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     clientName: nome,
     whatsappPhone: (client.whatsapp_team_phone as string) || WHATSAPP_EQUIPE,
     welcomeMessage: (client.portal_welcome_message as string) || null,
-    alreadyAnswered: (count ?? 0) > 0,
+    alreadyAnswered: !!ultima,
+    respondidoEm: (ultima?.answered_at as string) ?? null,
   };
 
-  if (scope === "raiox") return NextResponse.json(base); // vendedor: sem crescimento/financeiro
+  // Vendedor (sem PIN): sem crescimento/financeiro E sem as respostas anteriores — elas podem ter a
+  // meta de faturamento do dono. O envio dele completa o anterior em vez de apagar (lib/fichaViva/raiox.ts).
+  if (scope === "raiox") return NextResponse.json(base);
 
   // Dono: crescimento (faturamento/vendas/ticket do negócio)
   const { data: fin, error: errFin } = await supabaseAdmin
@@ -82,6 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
   return NextResponse.json({
     ...base,
+    ultimasRespostas: normalizarRespostas(ultima?.respostas),
     growth: computeGrowth(rows),
     series: rows.map((r) => ({ month: r.month, revenue: r.revenue, vendas: r.vendas, ticket: r.ticket })),
   });

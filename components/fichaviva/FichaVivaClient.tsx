@@ -6,13 +6,17 @@
 //   02 · Raio-X Comercial — responde o diagnóstico de 10 perguntas
 // Tudo revalida o PIN no servidor. Navy, tokens do design system.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  Lock, Loader2, TrendingUp, TrendingDown, Minus, Check, Send, MessageCircle, Sparkles, LineChart as LineIcon,
+  Lock, Loader2, TrendingUp, TrendingDown, Minus, Check, Send, MessageCircle, Sparkles, LineChart as LineIcon, Pencil,
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { DIAG_QUESTIONS } from "@/lib/fichaViva/questions";
 import type { GrowthSummary } from "@/lib/fichaViva/growth";
+import {
+  escolherInicio, lerRascunho, salvarRascunho, apagarRascunho, normalizarRespostas, MAX_RESPOSTA,
+  type Respostas, type OrigemRespostas, type Armazenamento,
+} from "@/lib/fichaViva/raiox";
 import { chamar } from "@/lib/api/chamar";
 import { linkWhatsapp } from "@/lib/portal/contato";
 import { mesesPermitidosCliente, inicioJanelaMeses } from "@/lib/portal/mesesCliente";
@@ -26,7 +30,19 @@ interface AccessData {
   growth?: GrowthSummary;
   series?: SeriePonto[];
   alreadyAnswered: boolean;
+  /** Quando foi o último envio do Raio-X (null = nunca). */
+  respondidoEm?: string | null;
+  /** Última resposta enviada — só no link do dono (com PIN). */
+  ultimasRespostas?: Respostas | null;
 }
+type ResultadoEnvio = "inserir" | "atualizar" | "igual";
+
+/** localStorage pode lançar só de ser lido (aba anônima, bloqueio de site): aí fica sem rascunho. */
+function armazenamento(): Armazenamento | null {
+  try { return typeof window !== "undefined" ? window.localStorage : null; } catch { return null; }
+}
+const dataBR = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "";
 type Sub = "crescimento" | "raiox";
 type Period = "mes" | "tri" | "sem";
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -66,6 +82,63 @@ export default function FichaVivaClient({ token, scope }: { token: string; scope
   const [unlocking, setUnlocking] = useState(false);
   const [gateError, setGateError] = useState("");
   const [sub, setSub] = useState<Sub>("crescimento");
+
+  // ── Raio-X: o estado mora AQUI, não na aba ───────────────────────────────────────────────────
+  // 21/10/2026 (auditoria 1.3): trocar para "Meu Crescimento" desmontava a aba e as respostas
+  // sumiam; recarregar também. Agora: estado no pai + rascunho no aparelho + o link do dono abre com a
+  // última resposta enviada.
+  const [respostas, setRespostas] = useState<Respostas>({});
+  const [origem, setOrigem] = useState<OrigemRespostas>("vazio");
+  const [enviado, setEnviado] = useState<ResultadoEnvio | null>(null);
+  const [rascunhoOk, setRascunhoOk] = useState<boolean | null>(null);
+  const iniciouRaiox = useRef(false);
+  const digitou = useRef(false);
+
+  // Abre o formulário UMA vez, quando os dados chegam (o refresh do crescimento não pode reabrir por cima).
+  useEffect(() => {
+    if (!data || iniciouRaiox.current) return;
+    iniciouRaiox.current = true;
+    const ini = escolherInicio({ rascunho: lerRascunho(armazenamento(), token), enviadas: data.ultimasRespostas, enviadasEm: data.respondidoEm });
+    setRespostas(ini.respostas);
+    setOrigem(ini.origem);
+  }, [data, token]);
+
+  // Cada mudança vai para o rascunho do aparelho (só depois que a pessoa digitou algo).
+  useEffect(() => {
+    if (!digitou.current) return;
+    setRascunhoOk(salvarRascunho(armazenamento(), token, respostas));
+  }, [respostas, token]);
+
+  const mudarResposta = (id: string, valor: string) => {
+    digitou.current = true;
+    setRespostas((p) => ({ ...p, [id]: valor }));
+  };
+
+  const temEnviadas = Object.keys(normalizarRespostas(data?.ultimasRespostas)).length > 0;
+  const descartarRascunho = () => {
+    const destino = temEnviadas ? "voltar às respostas que você já enviou" : "limpar o formulário";
+    if (!window.confirm(`Descartar o que foi digitado e não enviado, e ${destino}?`)) return;
+    apagarRascunho(armazenamento(), token);
+    digitou.current = false;
+    setRascunhoOk(null);
+    setRespostas(temEnviadas ? normalizarRespostas(data?.ultimasRespostas) : {});
+    setOrigem(temEnviadas ? "enviadas" : "vazio");
+  };
+
+  const aoEnviar = (acao: ResultadoEnvio, respondidoEm: string | null) => {
+    apagarRascunho(armazenamento(), token);
+    digitou.current = false;
+    setRascunhoOk(null);
+    setEnviado(acao);
+    setData((d) => d ? {
+      ...d,
+      alreadyAnswered: true,
+      respondidoEm: respondidoEm ?? d.respondidoEm ?? null,
+      // Dono: o que acabou de enviar passa a ser "o enviado" (para Descartar voltar a ele).
+      ultimasRespostas: d.scope === "full" ? normalizarRespostas(respostas) : d.ultimasRespostas,
+    } : d);
+    setOrigem(data?.scope === "full" ? "enviadas" : "vazio");
+  };
 
   // Link do vendedor (raiox): sem PIN — abre direto no formulário.
   useEffect(() => {
@@ -159,7 +232,11 @@ export default function FichaVivaClient({ token, scope }: { token: string; scope
 
         {data.scope === "full" && sub === "crescimento" && data.growth && data.series
           ? <Crescimento token={token} code={code} growth={data.growth} series={data.series} onSaved={refresh} />
-          : <RaioX token={token} code={code} alreadyAnswered={data.alreadyAnswered} whatsappPhone={data.whatsappPhone} />}
+          : <RaioX token={token} code={code} scope={data.scope} whatsappPhone={data.whatsappPhone}
+              alreadyAnswered={data.alreadyAnswered} respondidoEm={data.respondidoEm ?? null}
+              respostas={respostas} onMudar={mudarResposta} origem={origem}
+              onDescartar={descartarRascunho} rascunhoOk={rascunhoOk}
+              enviado={enviado} onEnviado={aoEnviar} onEditar={() => setEnviado(null)} />}
 
         <footer className="pt-2 text-center">
           <a href={linkWhatsapp(data.whatsappPhone)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 min-h-[44px] text-xs text-muted-foreground hover:text-primary transition-colors">
@@ -332,27 +409,41 @@ function Crescimento({ token, code, growth, series, onSaved }: { token: string; 
 }
 
 // ── 02 · Raio-X Comercial ─────────────────────────────────────────────────
-function RaioX({ token, code, alreadyAnswered, whatsappPhone }: { token: string; code: string; alreadyAnswered: boolean; whatsappPhone: string }) {
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+// O estado (respostas, rascunho, enviado) vem do componente de cima: trocar de aba não apaga nada.
+function RaioX({
+  token, code, scope, whatsappPhone, alreadyAnswered, respondidoEm,
+  respostas, onMudar, origem, onDescartar, rascunhoOk, enviado, onEnviado, onEditar,
+}: {
+  token: string; code: string; scope: "full" | "raiox"; whatsappPhone: string;
+  alreadyAnswered: boolean; respondidoEm: string | null;
+  respostas: Respostas; onMudar: (id: string, valor: string) => void; origem: OrigemRespostas;
+  onDescartar: () => void; rascunhoOk: boolean | null;
+  enviado: ResultadoEnvio | null; onEnviado: (acao: ResultadoEnvio, respondidoEm: string | null) => void; onEditar: () => void;
+}) {
   const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
   const [err, setErr] = useState("");
 
   async function submit() {
-    if (Object.values(answers).every((v) => !v.trim())) { setErr("Responda pelo menos uma pergunta."); return; }
+    if (!Object.keys(normalizarRespostas(respostas)).length) { setErr("Responda pelo menos uma pergunta."); return; }
     setSending(true); setErr("");
-    const r = await chamar(`/api/ficha/${token}/submit`, { code, respostas: answers });
+    const r = await chamar<{ acao?: ResultadoEnvio; respondidoEm?: string }>(`/api/ficha/${token}/submit`, { code, respostas });
     setSending(false);
-    if (r.ok) setSent(true);
-    else setErr(r.status === 0 ? "Sem conexão agora. Suas respostas continuam aqui — tente de novo." : (r.erro || "Não foi possível enviar."));
+    if (r.ok) onEnviado(r.data?.acao ?? "inserir", r.data?.respondidoEm ?? null);
+    else setErr(r.status === 0 ? "Sem conexão agora. Suas respostas continuam aqui — tente de novo." : `${r.erro || "Não foi possível enviar."} Suas respostas continuam aqui.`);
   }
 
-  if (sent) return (
+  if (enviado) return (
     <div className="card border-lone-success-border bg-lone-success-bg flex items-start gap-3">
       <Check size={18} className="text-lone-success shrink-0 mt-0.5" />
-      <div>
-        <p className="text-sm font-semibold text-lone-success">Recebemos, obrigado!</p>
-        <p className="text-xs text-muted-foreground mt-0.5">Nosso time comercial vai analisar e falar com você. Qualquer coisa, chame no <a href={linkWhatsapp(whatsappPhone)} target="_blank" rel="noreferrer" className="text-primary underline">WhatsApp</a>.</p>
+      <div className="space-y-2">
+        <p className="text-sm font-semibold text-lone-success">
+          {enviado === "igual" ? "Suas respostas já estavam com a gente — nada mudou." : enviado === "atualizar" ? "Atualizamos suas respostas, obrigado!" : "Recebemos, obrigado!"}
+        </p>
+        <p className="text-xs text-muted-foreground">Nosso time comercial vai analisar e falar com você. Qualquer coisa, chame no <a href={linkWhatsapp(whatsappPhone)} target="_blank" rel="noreferrer" className="text-primary underline">WhatsApp</a>.</p>
+        {/* Errou alguma coisa? Volta ao formulário com o que enviou — e o próximo envio atualiza. */}
+        <button onClick={onEditar} className="inline-flex items-center gap-1.5 min-h-[44px] text-xs font-medium text-primary hover:underline">
+          <Pencil size={12} /> Corrigir ou completar minhas respostas
+        </button>
       </div>
     </div>
   );
@@ -365,14 +456,26 @@ function RaioX({ token, code, alreadyAnswered, whatsappPhone }: { token: string;
       </div>
       <p className="text-sm text-muted-foreground">
         Responda o que der — quanto mais completo, melhor a gente te ajuda a vender mais.
-        {alreadyAnswered && " Você já enviou antes; pode atualizar quando quiser."}
       </p>
+      {alreadyAnswered && (
+        <p className="text-xs text-muted-foreground rounded-lg border border-border bg-muted/30 px-3 py-2">
+          {scope === "full"
+            ? `Você já enviou${respondidoEm ? ` em ${dataBR(respondidoEm)}` : ""}. Suas respostas estão abaixo: ajuste o que mudou e envie de novo — a gente atualiza o que já tinha.`
+            : `Já recebemos um raio-x deste negócio${respondidoEm ? ` em ${dataBR(respondidoEm)}` : ""}. O que você responder aqui completa o anterior; pergunta em branco não apaga nada.`}
+        </p>
+      )}
+      {origem === "rascunho" && (
+        <div className="rounded-lg border border-lone-info-border bg-lone-info-bg px-3 py-2 flex flex-wrap items-center gap-2">
+          <p className="text-xs text-lone-info flex-1 min-w-[12rem]">Recuperamos o que você tinha digitado aqui e ainda não enviou.</p>
+          <button onClick={onDescartar} className="text-xs min-h-[44px] px-2 text-muted-foreground hover:text-foreground underline">Descartar rascunho</button>
+        </div>
+      )}
       <div className="space-y-4">
         {DIAG_QUESTIONS.map((q, i) => (
           <div key={q.id} className="space-y-1.5">
-            <label className="text-sm font-medium block"><span className="text-primary mr-1.5">{i + 1}.</span>{q.label}</label>
-            <textarea value={answers[q.id] ?? ""} onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
-              rows={2} placeholder={q.placeholder} maxLength={1500}
+            <label htmlFor={`raiox-${q.id}`} className="text-sm font-medium block"><span className="text-primary mr-1.5">{i + 1}.</span>{q.label}</label>
+            <textarea id={`raiox-${q.id}`} value={respostas[q.id] ?? ""} onChange={(e) => onMudar(q.id, e.target.value)}
+              rows={2} placeholder={q.placeholder} maxLength={MAX_RESPOSTA}
               className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 resize-none" />
           </div>
         ))}
@@ -380,8 +483,11 @@ function RaioX({ token, code, alreadyAnswered, whatsappPhone }: { token: string;
       {err && <p className="text-xs text-destructive">{err}</p>}
       <button onClick={submit} disabled={sending}
         className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
-        {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={15} />} {sending ? "Enviando…" : "Enviar diagnóstico"}
+        {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={15} />}
+        {sending ? "Enviando…" : alreadyAnswered ? "Enviar atualização" : "Enviar diagnóstico"}
       </button>
+      {rascunhoOk === true && <p className="text-[11px] text-muted-foreground text-center">Rascunho guardado neste aparelho — pode trocar de aba ou recarregar sem perder.</p>}
+      {rascunhoOk === false && <p className="text-[11px] text-lone-warning text-center">Este navegador não deixou guardar rascunho: envie antes de fechar a página.</p>}
     </section>
   );
 }
