@@ -202,10 +202,15 @@ export default function CardArtAttachments({
   // a referência que o social anexou pro designer. Fica clicável na própria arte porque quem sabe
   // qual é qual é quem está olhando o card — e há 782 anexos antigos sem classificação.
   const [marcando, setMarcando] = useState<string | null>(null);
+  // A lista de AGORA (não a do clique): um upload pode terminar enquanto a marcação está no ar.
+  const atuaisRef = useRef(attachments);
+  atuaisRef.current = attachments;
   const marcarTipo = async (att: CardAttachment, tipo: "referencia" | "entrega") => {
     setMarcando(att.id);
     const r = await chamar(`/api/cards/${cardId}/attachments/${att.id}`, { tipo }, { method: "PATCH" });
-    if (r.ok) setAttachments((prev) => prev.map((a) => (a.id === att.id ? { ...a, tipo } : a)));
+    // Avisa o pai também (21/10/2026): o "Entregar arte" decide o que entrega pelo tipo — marcar
+    // "entrega" aqui e o modal seguir com a lista velha deixava a arte de fora sem explicação.
+    if (r.ok) updateAttachments(atuaisRef.current.map((a) => (a.id === att.id ? { ...a, tipo } : a)));
     else setGlobalError(`Não consegui marcar o tipo da arte: ${r.erro}`);
     setMarcando(null);
   };

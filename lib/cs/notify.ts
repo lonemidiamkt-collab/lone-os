@@ -184,18 +184,27 @@ export async function csSendGroupDocument(
 }
 
 /** Envia uma IMAGEM (arte) a um grupo pelo número do CS (monitor[IA]). `media` = URL pública
- *  (bucket `arts` é público → a Evolution baixa direto) ou base64. Pro envio de artes pro cliente. */
+ *  (bucket `arts` é público → a Evolution baixa direto) ou base64. Pro envio de artes pro cliente.
+ *
+ *  `incerto` (21/10/2026): o WhatsApp não respondeu dentro do prazo. A imagem PODE ter saído — quem
+ *  chama não pode tratar isso como "falhou" e mandar de novo (duplica no grupo do cliente).
+ *  `opcoes.meta` grava o envio em cs_outbound, como o texto: arte para cliente sem rastro não dá
+ *  para conferir depois. */
 export async function csSendGroupImage(
   jid: string,
   media: string,
   caption?: string,
   fileName = "arte.png",
-): Promise<{ ok: boolean; error?: string }> {
+  opcoes?: { timeoutMs?: number; meta?: CsSendMeta },
+): Promise<{ ok: boolean; error?: string; incerto?: boolean }> {
   const baseUrl = process.env.EVOLUTION_API_URL?.replace(/\/+$/, "");
   const apiKey = process.env.EVOLUTION_API_KEY_NEW;
   const instance = process.env.EVOLUTION_INSTANCE_NEW;
   if (!baseUrl || !apiKey || !instance) return { ok: false, error: "Evolution (monitor[IA]) não configurada" };
   if (!media) return { ok: false, error: "imagem vazia" };
+  const registro = `[arte] ${media.startsWith("http") ? media.slice(-80) : fileName}${caption ? ` — ${caption}` : ""}`;
+  const registrar = (ok: boolean, erro: string | null) =>
+    opcoes?.meta ? registrarSaida(jid, registro, ok, erro, opcoes.meta) : Promise.resolve();
   try {
     const res = await fetch(`${baseUrl}/message/sendMedia/${encodeURIComponent(instance)}`, {
       method: "POST",
@@ -204,13 +213,22 @@ export async function csSendGroupImage(
         number: jid, mediatype: "image", mimetype: "image/png", media, fileName,
         ...(caption ? { caption } : {}),
       }),
-      signal: AbortSignal.timeout(45_000),
+      signal: AbortSignal.timeout(opcoes?.timeoutMs ?? 45_000),
     });
     const body = await res.text().catch(() => "");
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${body.slice(0, 150)}` };
+    if (!res.ok) {
+      const erro = `HTTP ${res.status}: ${body.slice(0, 150)}`;
+      await registrar(false, erro);
+      return { ok: false, error: erro };
+    }
+    await registrar(true, null);
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "erro de conexão" };
+    const nome = err instanceof Error ? err.name : "";
+    const incerto = nome === "TimeoutError" || nome === "AbortError";
+    const erro = incerto ? "o WhatsApp não respondeu a tempo (pode ter saído)" : err instanceof Error ? err.message : "erro de conexão";
+    await registrar(false, erro);
+    return { ok: false, error: erro, ...(incerto ? { incerto: true } : {}) };
   }
 }
 

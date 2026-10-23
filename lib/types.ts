@@ -331,6 +331,11 @@ export interface CardAttachment {
    * `null` = legado, anexado antes desta separação — a publicação recusa e pede classificação.
    */
   tipo?: "referencia" | "entrega" | null;
+  /**
+   * Versão (creative_deliveries) em que esta arte foi entregue. null = ainda não entregue — é a
+   * versão NOVA. Sem isto o "Entregar arte" mandava a versão anterior junto (21/10/2026).
+   */
+  delivery_id?: string | null;
 }
 
 // Do's & don'ts estruturados do Agente CS (tabela cs_client_rules).
