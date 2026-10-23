@@ -153,6 +153,30 @@ export function textoCanceladaGrupo(r: Pick<ReuniaoBase, "inicio">, l: LeadDaReu
   return `*Reunião cancelada*: *${nome(l)}* — era ${diaCurto(r.inicio)} às ${horaCurta(r.inicio)}. O convite foi cancelado no Google Agenda.`;
 }
 
+/**
+ * O Google não confirmou o cancelamento: a reunião FICA marcada e a tela diz por quê (21/10/2026 —
+ * antes a falha era engolida, o painel dizia "cancelada" e o lead seguia com convite e Meet valendo).
+ */
+export function erroCancelarNoGoogle(r: Pick<ReuniaoBase, "inicio" | "meetUrl">, motivo: string): string {
+  const fazer = /não conectado/i.test(motivo) ? "Conecte o Google na Agenda do Comercial e tente de novo." : "Tente de novo em instantes.";
+  return `O Google Agenda não confirmou o cancelamento da reunião de ${diaCurto(r.inicio)} às ${horaCurta(r.inicio)} (${motivo}). `
+    + `Ela continua marcada e o lead ainda tem o convite${r.meetUrl ? " e o link do Meet" : ""}. ${fazer}`;
+}
+
+/**
+ * Confirmação de excluir um lead que ainda tem reunião por acontecer: diz qual e o que acontece com ela.
+ * Só fala do Google quando há evento lá (googleEventId nulo = reunião marcada com a agenda desconectada).
+ */
+export function textoExcluirComReuniao(reunioes: (Pick<ReuniaoBase, "inicio"> & { googleEventId?: string | null })[]): string {
+  const quando = reunioes.map((r) => `${diaCurto(r.inicio)} às ${horaCurta(r.inicio)}`);
+  const uma = reunioes.length === 1;
+  const qual = uma ? `reunião marcada para ${quando[0]}` : `${reunioes.length} reuniões marcadas (${quando.join("; ")})`;
+  const noGoogle = reunioes.some((r) => r.googleEventId !== null);
+  return `Este lead tem ${qual}. Ao excluir, ${uma ? "ela é cancelada" : "elas são canceladas"} antes`
+    + (noGoogle ? " — no Google Agenda também (quem foi convidado recebe o aviso de cancelamento) —" : "")
+    + " e o grupo de vendas é avisado.";
+}
+
 /** Confirmação para o lead (rascunho do WhatsApp — quem manda é o comercial). */
 export function mensagemConfirmacaoLead(r: Pick<ReuniaoBase, "inicio" | "formato" | "meetUrl" | "local">, l: LeadDaReuniao, temEmail: boolean): string {
   const oi = primeiroNome(l) ? `Oi, ${primeiroNome(l)}!` : "Oi, tudo bem?";

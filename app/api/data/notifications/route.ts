@@ -17,6 +17,8 @@ const EMAIL_TO_NAME: Record<string, string> = {
   "marialuiza@lonemidia.com": "Maria Luiza",
 };
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(req: NextRequest) {
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -30,13 +32,26 @@ export async function POST(req: NextRequest) {
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json();
-  const { action, id, type, title, body: msgBody, clientId, cardId } = body;
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") return NextResponse.json({ error: "Pedido inválido." }, { status: 400 });
+  const { action, id, ids, type, title, body: msgBody, clientId, cardId } = body;
 
-  if (action === "markRead") {
-    await db.markNotificationReadDb(id);
-  } else if (action === "markAllRead") {
-    await db.markAllNotificationsReadDb();
+  if (action === "markRead" || action === "markAllRead" || action === "markUnread") {
+    // SÓ OS IDS DA TELA, SÓ OS DESTA PESSOA (21/10/2026). "markAllRead" sem lista era o botão velho
+    // que marcava a tabela inteira: aba antiga (JS de antes do deploy) recebe o pedido de recarregar
+    // em vez de limpar o sino do time. "markUnread" é o Desfazer.
+    const lista: unknown[] = action === "markRead" ? [id] : Array.isArray(ids) ? ids : [];
+    const validos = [...new Set(lista.filter((x): x is string => typeof x === "string" && UUID.test(x)))].slice(0, 200);
+    if (!validos.length) {
+      return NextResponse.json({ error: "Não recebi quais avisos marcar. Recarregue a página e tente de novo." }, { status: 400 });
+    }
+    const r = await db.marcarAvisosLidosDb(validos, EMAIL_TO_NAME[user.email] ?? null, action !== "markUnread");
+    if (r.error) {
+      return NextResponse.json({ error: action === "markUnread"
+        ? "Não consegui desfazer: os avisos continuam como lidos. Tente de novo."
+        : "Não consegui marcar como lidos agora — os avisos continuam não lidos. Tente de novo." }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, marcados: r.marcados });
   } else {
     // RESOLVE O CARD NO SERVIDOR QUANDO NÃO VEIO.
     //
@@ -56,6 +71,4 @@ export async function POST(req: NextRequest) {
     // Devolve a linha pra tela trocar o item otimista pelo real (id e horário do SERVIDOR).
     return NextResponse.json({ ok: true, notification: criada });
   }
-
-  return NextResponse.json({ ok: true });
 }

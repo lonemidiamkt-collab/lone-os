@@ -2,7 +2,9 @@ import { create } from "zustand";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
 import type { AppNotification, NotificationType } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { supabase, REALTIME_ENABLED } from "@/lib/supabase/client";
+import { ehTemporario, idsNaoLidos, marcarNaLista } from "@/lib/notificacoes/lidas";
 
 interface NotificationsState {
   notifications: AppNotification[];
@@ -14,7 +16,10 @@ interface NotificationsState {
 
   push: (type: NotificationType, title: string, body: string, clientId?: string, cardId?: string) => Promise<void>;
   markRead: (id: string) => Promise<void>;
-  markAllRead: () => Promise<void>;
+  /** Marca SÓ estes ids (os não lidos que estão na tela). Devolve quais marcou — é o que o Desfazer volta. */
+  markAllRead: (ids: string[]) => Promise<{ ok: boolean; erro: string | null; marcadas: string[] }>;
+  /** O Desfazer do "Marcar todas como lidas": volta estes ids para não lidos. */
+  desmarcarLidas: (ids: string[]) => Promise<{ ok: boolean; erro: string | null }>;
 }
 
 export const selectNotifications = (s: NotificationsState) => s.notifications;
@@ -159,15 +164,41 @@ export const useNotificationsStore = create<NotificationsState>()(
         }).catch(() => {});
       },
 
-      markAllRead: async () => {
-        set((s) => ({
-          notifications: s.notifications.map((n) => ({ ...n, read: true })),
-        }), false, "notifs/markAllRead");
-        authedFetch("/api/data/notifications", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "markAllRead" }),
-        }).catch(() => {});
+      // SÓ OS DA TELA, E A FALHA APARECE (21/10/2026). Antes marcava a lista inteira aqui e mandava o
+      // servidor marcar a tabela toda, sem olhar a resposta: limpava o sino do time e, se a rede caía,
+      // a tela dizia "lidas" e elas voltavam na próxima leitura. Agora: marca na hora (otimista),
+      // e se o servidor recusar, volta exatamente o que mudou e devolve a frase do erro.
+      markAllRead: async (ids) => {
+        const naoLidos = new Set(idsNaoLidos(get().notifications));
+        const alvo = ids.filter((id) => naoLidos.has(id));
+        if (!alvo.length) return { ok: true, erro: null, marcadas: [] };
+        set((s) => ({ notifications: marcarNaLista(s.notifications, alvo, true) }), false, "notifs/markAllRead");
+        const doBanco = alvo.filter((id) => !ehTemporario(id));
+        if (!doBanco.length) return { ok: true, erro: null, marcadas: alvo };
+        const r = await chamar<{ marcados?: string[] }>("/api/data/notifications", { action: "markAllRead", ids: doBanco });
+        if (!r.ok) {
+          set((s) => ({ notifications: marcarNaLista(s.notifications, alvo, false) }), false, "notifs/markAllRead/rollback");
+          return { ok: false, erro: r.erro, marcadas: [] };
+        }
+        // O servidor só marca os desta pessoa e os do time: o que ele recusou volta a não lido aqui
+        // também, senão a tela mostraria "lido" e o aviso voltaria na próxima leitura.
+        const doServidor = new Set(r.data?.marcados ?? doBanco);
+        const recusados = doBanco.filter((id) => !doServidor.has(id));
+        if (recusados.length) set((s) => ({ notifications: marcarNaLista(s.notifications, recusados, false) }), false, "notifs/markAllRead/recusados");
+        return { ok: true, erro: null, marcadas: alvo.filter((id) => !recusados.includes(id)) };
+      },
+
+      desmarcarLidas: async (ids) => {
+        if (!ids.length) return { ok: true, erro: null };
+        set((s) => ({ notifications: marcarNaLista(s.notifications, ids, false) }), false, "notifs/desmarcar");
+        const doBanco = ids.filter((id) => !ehTemporario(id));
+        if (!doBanco.length) return { ok: true, erro: null };
+        const r = await chamar("/api/data/notifications", { action: "markUnread", ids: doBanco });
+        if (!r.ok) {
+          set((s) => ({ notifications: marcarNaLista(s.notifications, ids, true) }), false, "notifs/desmarcar/rollback");
+          return { ok: false, erro: r.erro };
+        }
+        return { ok: true, erro: null };
       },
     })),
     { name: "NotificationsStore" }

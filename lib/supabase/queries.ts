@@ -23,6 +23,7 @@
 import { supabase } from "./client";
 import { supabaseAdmin } from "./server";
 import { normalizarEtapa } from "@/lib/crm/etapas";
+import { avisosDaPessoa } from "@/lib/notificacoes/lidas";
 import type {
   Client, Task, ContentCard, DesignRequest, AppNotification,
   TimelineEntry, ChatMessage, OnboardingItem,
@@ -658,9 +659,21 @@ export async function markNotificationReadDb(id: string): Promise<void> {
   if (error) console.error("[DB] markNotificationRead:", error);
 }
 
-export async function markAllNotificationsReadDb(): Promise<void> {
-  const { error } = await db.from("notifications").update({ read: true }).eq("read", false);
-  if (error) console.error("[DB] markAllNotificationsRead:", error);
+/**
+ * Marca (lida = true) ou desmarca (o "Desfazer") SÓ os avisos pedidos, e só os que esta pessoa vê:
+ * os dela e os do time todo (lib/notificacoes/lidas.ts). Até 21/10/2026 o "Marcar todas como lidas"
+ * gravava em toda linha não lida da tabela — limpava o sino do time inteiro. Devolve o erro em vez
+ * de engolir: falha não pode parecer que marcou.
+ */
+export async function marcarAvisosLidosDb(ids: string[], quem: string | null, lida: boolean): Promise<{ error: string | null; marcados: string[] }> {
+  if (!ids.length) return { error: null, marcados: [] };
+  const { data, error } = await db.from("notifications").select("id, target_user").in("id", ids);
+  if (error) { console.error("[DB] marcarAvisosLidos (leitura):", error.message); return { error: error.message, marcados: [] }; }
+  const permitidos = avisosDaPessoa((data ?? []) as { id: string; target_user: string | null }[], quem);
+  if (!permitidos.length) return { error: null, marcados: [] };
+  const { error: errUp } = await db.from("notifications").update({ read: lida }).in("id", permitidos);
+  if (errUp) { console.error("[DB] marcarAvisosLidos:", errUp.message); return { error: errUp.message, marcados: [] }; }
+  return { error: null, marcados: permitidos };
 }
 
 // ═══════════════════════════════════════════════════════════
