@@ -490,6 +490,10 @@ const MODULES: Module[] = [
       "As sugestões de briefing NÃO viram regra sozinhas: esperam um ok no grupo, porque regra errada contamina toda peça futura daquele cliente.",
       "O setup tem prazo de 15 dias e o Loninho confere sozinho o que já está pronto: 3 artes entregues fecham as fixadas, gasto na conta fecha o anúncio no ar, e ele pergunta à Meta se a conta de anúncio responde à credencial da Lone — que é o que separa 'o ID foi digitado' de 'o acesso foi liberado'. Achando a prova, ele fecha a tarefa e para de cobrar.",
       "Passando dos 15 dias, a cobrança diz o que ele observou ('a conta está no cadastro mas não responde à nossa credencial'), em vez de repetir a lista de itens pendentes.",
+      "DOCUMENTOS NA FICHA, ARQUIVO A ARQUIVO (21/10/2026): contrato social, identidade e logo com mais de um arquivo aparecem um por um, com tipo, nome e data, e cada um tem Ver, Baixar, Trocar e Remover (Remover pede confirmação). Trocar substitui só aquele arquivo; 'Adicionar outro arquivo' acrescenta sem apagar os outros. Antes, com 2+ arquivos o 'Visualizar' quebrava e o 'Substituir' apagava as outras páginas.",
+      "COFRE: TROCA DE SENHA TEM VOLTA (21/10/2026): antes de gravar a senha nova, o sistema guarda a anterior (cifrada, com quem trocou e quando). Logo depois de salvar aparece 'Desfazer troca de senha'. Se o espelho para o cofre do social falhar, a tela avisa — antes falhava calado e o social ficava com a senha velha.",
+      "CONTA META DE OUTRO CLIENTE (21/10/2026): a lista de contas na ficha mostra de quem é cada conta. Vincular uma conta que já é de outro cliente pede confirmação ('Transferir para …') e fica no histórico dos dois; sem confirmar, o sistema recusa dizendo de quem ela é. Antes a conta trocava de dono em silêncio e o alerta de verba, o digest e o portal passavam a mostrar os números de um cliente no outro. Se a Meta não responder ao listar, aparece o erro com 'Tentar de novo' (antes dizia 'nenhuma conta disponível').",
+      "FICHA VIVA (21/10/2026): 'Novo link' pede confirmação, porque o link já enviado ao cliente deixa de abrir; depois da troca, o cartão, o 'Copiar' e a mensagem de WhatsApp já usam o link novo (antes continuavam com o velho). No Raio-X, o cliente não perde o que digitou ao trocar de aba ou recarregar, e 'Corrigir minhas respostas' abre com a última resposta, sem criar outra linha.",
     ],
     features: [
       "Formulário externo responsivo — cliente preenche pelo celular",
@@ -554,6 +558,7 @@ const MODULES: Module[] = [
       "A análise fica salva no histórico (aba Análise IA do cliente) — dá pra comparar evolução semana a semana.",
       "Kanban de tarefas de tráfego + rotina diária (checkins por cliente).",
       "Quando percebe algo grande, gera um 'Smart Handoff' pro designer com sugestão de criativo.",
+      "VENDAS SEM GASTO LIDO (21/10/2026): quando ainda não há gasto lido no período (todo dia 1º, ou mês sem métrica), o portal e a aba Vendas mostram '—' com 'investimento ainda não apurado', em vez de 'Custo por venda R$ 0,00'. Gasto zero de verdade continua aparecendo como R$ 0.",
     ],
     features: [
       "Integração Meta API (26 contas conectadas)",
@@ -629,6 +634,10 @@ const MODULES: Module[] = [
       "Depois de aprovado pelo cliente, vai pra 'Agendado' — indica que já está programado na ferramenta de agendamento.",
       "NO AR AUTOMÁTICO (Leva 5a, 24/09): ninguém precisa arrastar o card depois que o post sai. Todo dia às 6h30 o sistema confere o Instagram real de cada cliente e fecha como 'no ar' o card pronto (agendado, com o cliente ou com arte entregue) que casa com um post: mesmo cliente, até 1 dia antes ou depois da data do card, mesmo formato primeiro (reel/carrossel/post), depois o horário mais perto. Um post fecha no máximo um card, e o card guarda o link do post.",
       "As datas de post ficam na Agenda (Meu Trabalho › Agenda, botão 'Conteúdo'): só os posts planejados, filtráveis por social, com o que já foi ao ar marcado e o link do post.",
+      "ENVIO INCERTO NÃO REPETE (21/10/2026): quando o WhatsApp demora a responder, a mensagem pode ter saído. O sistema não manda de novo nem troca de número (era isso que fazia o cliente receber em dobro): registra como incerto e pede para conferir no grupo. A troca para o número do gestor só acontece quando é certo que nada saiu.",
+      "LONINHO E O 'APROVADO' DO CLIENTE (21/10/2026): o aprovado no grupo só marca a arte que está 'Com o cliente'; com mais de uma, o Loninho pergunta ao time qual é. Card em revisão interna ou arquivado nunca é aprovado por engano. Voltar o card para antes de 'Agendado' tira o selo 'Cliente aprovou'.",
+      "LONINHO FALANDO COM O CLIENTE (21/10/2026): cobrança e check-in pedidos ao Loninho ('Loninho, cobra a Loja X') aparecem primeiro no grupo interno, com o cliente e o texto; só vão ao grupo do cliente depois de um 'ok' respondendo àquela prévia. O '✅ Mandei' só aparece quando o WhatsApp confirmou. Reunião mensal: só vale a resposta que cita a pergunta do Loninho, de quem cuida do cliente ou da gestão — um 'ok' solto no grupo não confirma mais reunião.",
+      "PEDIDO DO CLIENTE NÃO SE PERDE (21/10/2026): se a IA falhar ao ler a mensagem do cliente, ela fica numa fila e é relida a cada 15 minutos; a sugestão nasce com a nota 'Li agora a mensagem das HH:MM'. Se um grupo ficar 30 min com mensagem sem leitura, o time é avisado. Confirmar uma demanda só a marca como confirmada quando o card foi criado — se falhar, o próximo 'ok' tenta de novo.",
     ],
     features: [
       "Quadro de produção com 6 etapas (Pauta, Com o designer, Revisão interna, Com o cliente, Agendado, No ar) e 3 vistas",
@@ -743,6 +752,7 @@ const MODULES: Module[] = [
       "Admin sobe manualmente no painel D4Sign e envia pra assinatura — D4Sign cuida do resto (email pro cliente, assinatura, certificado).",
       "9h da manhã todo dia, cron verifica contratos vencendo em 30 dias e cria rascunho V2 automático.",
       "Admin abre o rascunho, revisa, baixa o DOCX V2 e repete o fluxo de assinatura.",
+      "CONTRATO E ADENDO SÓ FECHAM QUANDO GRAVARAM (21/10/2026): gerar contrato e registrar adendo passam pelo servidor. A janela só fecha com a gravação confirmada; erro aparece dentro dela, junto do botão, e o texto do adendo não some. A versão vem do banco (maior + 1) — se a leitura falhar, o sistema recusa em vez de voltar para V1. Lista de contratos que não carregou mostra o erro com 'Tentar de novo', não 'nenhum contrato'.",
     ],
     features: [
       "Template oficial Lone Mídia (3 tipos: Tráfego, Social, Lone Growth) com merge de dados do cliente",
@@ -878,6 +888,8 @@ const MODULES: Module[] = [
       "VIGIA: de hora em hora, os jobs falhando ou parados viram UMA mensagem no grupo administrativo, com o erro de cada um e o link da Central. Cada job é lembrado no máximo uma vez a cada 24h; job desligado não gera aviso.",
       "CAUSA CONHECIDA VIRA UM BLOCO SÓ (30/09): quando vários jobs falham pelo mesmo motivo que o sistema reconhece — OpenAI sem crédito, chave da OpenAI recusada, token da Meta vencido —, o aviso diz o motivo em português, o que fazer (com o link) e lista tudo o que parou por ele, em vez de um 'falhou' com JSON cortado por job. O que não é reconhecido continua saindo job a job, agora com a mensagem de erro em vez dos contadores.",
       "A IA EM SI TAMBÉM É VIGIADA: o vigia lê o registro de todas as chamadas de IA, não só as rotinas. Se desde o último sucesso as falhas se acumulam (3 ou mais, a última nas últimas 3 horas) com causa conhecida, o aviso sai em até 1 hora e diz desde quando e o que parou — o Loninho lendo os grupos dos clientes, a revisão de arte, a transcrição de áudio. Foi o que faltou em 25/09: o saldo zerou às 7h30 e o agente passou 5 dias sem entender nenhuma mensagem sem que ninguém fosse avisado.",
+      "RELATÓRIOS E AVISOS AOS CLIENTES (21/10/2026): rodar o relatório de novo manda só para quem ficou de fora; quem já recebeu não recebe duas vezes (o force não desliga mais isso — para reenviar a um cliente, use ?clientId=). O relatório do mês e a mensagem de quarta/sexta só falam de anúncio para quem tem contrato de tráfego. O calendário do mês vai uma vez só para o grupo com duas lojas, citando as duas. O comunicado (broadcast) escolhe o público pelo contrato e não repete na mesma chave.",
+      "MENSAGENS SEM LEITURA (cs-nao-lidas, a cada 15 min): relê as mensagens de cliente que a IA não conseguiu ler e avisa o time no expediente quando um grupo fica 30 min sem leitura. Depois de 48h sem conseguir, pede para lerem à mão.",
     ],
     features: [
       "Histórico de cada execução (as 200 últimas por job), com quem rodou à mão",
