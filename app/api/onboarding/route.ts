@@ -5,6 +5,8 @@ import { faixaValida } from "@/lib/empresa/receita";
 import { listaDocs, removerDocDaLista } from "@/lib/onboarding/docs";
 import { ACOES_PUBLICAS_DO_CADASTRO } from "@/lib/onboarding/acoes";
 import { sincronizarRascunho } from "@/lib/onboarding/sincronia-server";
+import { acessosDoRascunho, paraPaginaPublica, COLUNAS_SENHA } from "@/lib/onboarding/acessos";
+import { fichaDoEnvio, observacaoDoCliente, COLUNAS_DO_ENVIO } from "@/lib/onboarding/envio";
 import { createClient } from "@supabase/supabase-js";
 import { encryptVault } from "@/lib/crypto/vault";
 import { requireRole, GESTAO } from "@/lib/api/require-role";
@@ -58,15 +60,17 @@ function safeEncrypt(value: string | null | undefined): string | null {
 }
 
 // GET — Fetch submission by token (public, used by onboarding page)
-// SEGURANÇA: NÃO devolve as colunas de credencial (meta/instagram/google login+password). A
-// página pública de onboarding só restaura dados cadastrais/endereço/docs — nunca lê senha de
-// volta (o cliente redigita). Antes o select("*") mandava as creds (cifradas, mas 1 legada em
-// plaintext) pra qualquer portador do token. Allowlist explícita fecha isso.
+// SEGURANÇA: a SENHA nunca sai. Antes o select("*") mandava as creds (cifradas, mas 1 legada em
+// plaintext) pra qualquer portador do token; a allowlist fecha isso.
+// 21/10/2026 (auditoria de erro recuperável, 1.1): o login e o status de cada acesso passam a voltar
+// — sem eles, recarregar a página apagava o que o cliente tinha mandado. As colunas de senha são
+// lidas só para dizer "senha já recebida" e saem da resposta em paraPaginaPublica.
 const ONBOARDING_PUBLIC_COLS =
   "id, client_id, token, status, submitted_at, created_at, contact_name, contact_cpf, contact_email, " +
   "contact_whatsapp, company_phone, contact_phone, instagram_user, nome_fantasia, razao_social, cnpj, nicho, endereco_rua, endereco_bairro, " +
   "endereco_cidade, endereco_estado, endereco_cep, doc_contrato_social, doc_identidade, doc_logo, " +
-  "notes, meta_status, instagram_status, google_status, faturamento_faixa, porte_receita, cnae_principal, " +
+  "notes, meta_login, meta_status, instagram_login, instagram_status, google_login, google_status, " +
+  "faturamento_faixa, porte_receita, cnae_principal, " +
   "cnae_descricao, situacao_cadastral, receita_consultada_em, clients(name, industry, service_type)";
 
 export async function GET(req: NextRequest) {
@@ -75,14 +79,15 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("client_onboarding_submissions")
-    .select(ONBOARDING_PUBLIC_COLS)
+    .select(`${ONBOARDING_PUBLIC_COLS}, ${COLUNAS_SENHA.join(", ")}`)
     .eq("token", token)
     .maybeSingle();
 
   if (error || !data) return NextResponse.json({ error: "Link invalido ou expirado" }, { status: 404 });
-  if ((data as { status?: string }).status === "submitted") return NextResponse.json({ error: "already_submitted", submission: data });
+  const publico = paraPaginaPublica(data as unknown as Record<string, unknown>);
+  if (publico.status === "submitted") return NextResponse.json({ error: "already_submitted", submission: publico });
 
-  return NextResponse.json(data);
+  return NextResponse.json(publico);
 }
 
 // POST — Handle all onboarding actions
@@ -322,8 +327,6 @@ export async function POST(req: NextRequest) {
   if (body.action === "auto_save") {
     const { token: t, ...fields } = body;
     if (!t) return NextResponse.json({ error: "Token required" }, { status: 400 });
-    // Mesma regra do submit: senha em branco = "não mexer" (o form nunca recebe a senha de volta).
-    const senhaDigitada = (v: unknown) => typeof v === "string" && v.trim() !== "";
     const { error: autoSaveErr } = await supabase.from("client_onboarding_submissions").update({
       contact_name: fields.contactName || null,
       contact_cpf: fields.contactCpf || null,
@@ -342,15 +345,9 @@ export async function POST(req: NextRequest) {
       endereco_cidade: fields.enderecoCidade || null,
       endereco_estado: fields.enderecoEstado || null,
       endereco_cep: fields.enderecoCep || null,
-      meta_login: fields.metaLogin || null,  // login em plaintext é ok (não é sensível)
-      ...(senhaDigitada(fields.metaPassword) ? { meta_password: safeEncrypt(fields.metaPassword) } : {}),
-      meta_status: fields.metaStatus || null,
-      instagram_login: fields.instagramLogin || null,
-      ...(senhaDigitada(fields.instagramPassword) ? { instagram_password: safeEncrypt(fields.instagramPassword) } : {}),
-      instagram_status: fields.instagramStatus || null,
-      google_login: fields.googleLogin || null,
-      ...(senhaDigitada(fields.googlePassword) ? { google_password: safeEncrypt(fields.googlePassword) } : {}),
-      google_status: fields.googleStatus || null,
+      // Login, senha e status: senha em branco = "não mexer"; login vazio e "Preencher" só valem
+      // quando a página restaurou os acessos (lib/onboarding/acessos.ts — recarregar apagava, 21/10).
+      ...acessosDoRascunho(fields, { restaurados: fields.acessosRestaurados === true, cifrar: safeEncrypt }),
       doc_contrato_social: fields.docContratoSocial || null,
       doc_identidade: fields.docIdentidade || null,
       doc_logo: fields.docLogo || null,
@@ -378,16 +375,12 @@ export async function POST(req: NextRequest) {
     }
     const { data: sub, error: subErr } = await supabase
       .from("client_onboarding_submissions")
-      .select("id, client_id, porte_receita, cnae_principal, cnae_descricao, cnaes_secundarios, capital_social, situacao_cadastral, receita_consultada_em")
+      .select("id, client_id")
       .eq("token", token)
       .maybeSingle();
     if (subErr) return NextResponse.json({ error: "Não consegui validar o link de cadastro. Tente de novo." }, { status: 500 });
     if (!sub) return NextResponse.json({ error: "Link de cadastro inválido ou expirado." }, { status: 404 });
     const clientId: string | null = (sub.client_id as string | null) ?? null;
-
-    // Senha em branco = "não mexer": o formulário não recebe as senhas guardadas de volta, então
-    // gravar o campo vazio apagava a credencial que já existia.
-    const senha = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
 
     // ── Integrity gate: re-validate required fields server-side (defense vs DevTools bypass) ──
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contactEmail || "");
@@ -412,8 +405,9 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // Update the submission record
-    const { error } = await supabase
+    // Update the submission record — e devolve a linha FINAL: é dela que a ficha sai (inclusive login e
+    // senha que o auto_save guardou antes de a página recarregar e que não voltam no corpo).
+    const { data: linhaFinal, error } = await supabase
       .from("client_onboarding_submissions")
       .update({
         contact_name: formData.contactName,
@@ -433,88 +427,60 @@ export async function POST(req: NextRequest) {
         endereco_cidade: formData.enderecoCidade || null,
         endereco_estado: formData.enderecoEstado || null,
         endereco_cep: formData.enderecoCep || null,
-        meta_login: formData.metaLogin || null,
-        ...(senha(formData.metaPassword) ? { meta_password: safeEncrypt(formData.metaPassword) } : {}),
-        meta_status: formData.metaStatus || "pending",
-        instagram_login: formData.instagramLogin || null,
-        ...(senha(formData.instagramPassword) ? { instagram_password: safeEncrypt(formData.instagramPassword) } : {}),
-        instagram_status: formData.instagramStatus || "pending",
-        google_login: formData.googleLogin || null,
-        ...(senha(formData.googlePassword) ? { google_password: safeEncrypt(formData.googlePassword) } : {}),
-        google_status: formData.googleStatus || "pending",
+        // Mesma regra do auto_save (lib/onboarding/acessos.ts): senha em branco = "não mexer"; login
+        // vazio só apaga quando a página tinha restaurado os acessos.
+        ...acessosDoRascunho(formData, { restaurados: formData.acessosRestaurados === true, cifrar: safeEncrypt }),
         doc_contrato_social: formData.docContratoSocial || null,
         doc_identidade: formData.docIdentidade || null,
         doc_logo: formData.docLogo || null,
+        // A observação do CLIENTE mora aqui (a tela de Pendentes mostra como "Observações do Cliente").
         notes: formData.notes || null,
         status: "submitted",
         submitted_at: new Date().toISOString(),
       })
-      .eq("id", sub.id);
+      .eq("id", sub.id)
+      .select(COLUNAS_DO_ENVIO)
+      .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!linhaFinal) return NextResponse.json({ error: "Não consegui salvar o cadastro agora. Seus dados continuam aqui — tente de novo." }, { status: 500 });
+    const linha = linhaFinal as unknown as Record<string, unknown>;
+    const observacao = observacaoDoCliente(linha.notes);
 
-    // Move draft client to awaiting_approval + sync ALL data to clients table
+    // Move draft client to awaiting_approval + leva o cadastro para a ficha (clients)
     if (clientId) {
       const { data: clientRow } = await supabase.from("clients").select("name, nome_fantasia, draft_status").eq("id", clientId).maybeSingle();
       const clientName = formData.nomeFantasia || clientRow?.nome_fantasia || clientRow?.name || formData.contactName || "Cliente";
 
-      await supabase.from("clients").update({
+      // Só o que veio PREENCHIDO vai para a ficha; vazio não apaga e `notes` (nota interna do time)
+      // nunca é tocado — antes o envio apagava os logins da equipe e trocava as notas pela
+      // observação do cliente (auditoria 21/10/2026, 1.2; regra em lib/onboarding/envio.ts).
+      const { error: eFicha } = await supabase.from("clients").update({
         // Cliente já ativo completando o cadastro (draft_status nulo) continua ativo: voltar pra
         // "aguardando aprovação" o tirava da carteira, dos relatórios e do cockpit.
         ...(clientRow?.draft_status ? { draft_status: "awaiting_approval" } : {}),
-        nome_fantasia: formData.nomeFantasia || null,
-        razao_social: formData.razaoSocial || null,
-        cnpj: formData.cnpj || null,
-        nicho: formData.nicho || null,
-        // Faixa declarada e o que a Receita disse (gravado pela consulta do CNPJ, no servidor). Só
-        // grava o que existe: cadastro antigo, sem consulta, não apaga o que a ficha já tinha.
-        ...(faixaValida(formData.faturamentoFaixa) ? { faturamento_faixa: formData.faturamentoFaixa } : {}),
-        ...(sub.receita_consultada_em ? {
-          porte_receita: sub.porte_receita, cnae_principal: sub.cnae_principal, cnae_descricao: sub.cnae_descricao,
-          cnaes_secundarios: sub.cnaes_secundarios, capital_social: sub.capital_social,
-          situacao_cadastral: sub.situacao_cadastral, receita_consultada_em: sub.receita_consultada_em,
-        } : {}),
-        contact_name: formData.contactName,
-        cpf_cnpj: formData.contactCpf,
-        phone: formData.contactWhatsapp,
-        company_phone: formData.companyPhone || null,
-        contact_phone: formData.contactPhone || null,
-        // Só grava o @ se o cliente informou: apagar o que o mapeamento da Meta já descobriu por
-        // causa de um campo em branco é a sobrescrita por vazio que o pedido proíbe.
-        ...(formData.instagramUser ? { instagram_user: formData.instagramUser } : {}),
-        email: formData.contactEmail || null,
-        email_corporativo: formData.contactEmail || null,
-        endereco_rua: formData.enderecoRua || null,
-        endereco_bairro: formData.enderecoBairro || null,
-        endereco_cidade: formData.enderecoCidade || null,
-        endereco_estado: formData.enderecoEstado || null,
-        endereco_cep: formData.enderecoCep || null,
-        facebook_login: formData.metaLogin || null,
-        ...(senha(formData.metaPassword) ? { facebook_password: safeEncrypt(formData.metaPassword) } : {}),
-        instagram_login: formData.instagramLogin || null,
-        ...(senha(formData.instagramPassword) ? { instagram_password: safeEncrypt(formData.instagramPassword) } : {}),
-        google_ads_login: formData.googleLogin || null,
-        ...(senha(formData.googlePassword) ? { google_ads_password: safeEncrypt(formData.googlePassword) } : {}),
-        doc_contrato_social: formData.docContratoSocial || null,
-        doc_identidade: formData.docIdentidade || null,
-        doc_logo: formData.docLogo || null,
-        notes: formData.notes || null,
+        ...fichaDoEnvio(linha),
       }).eq("id", clientId);
+      // O cliente já está salvo no rascunho; a falha na ficha não pode virar silêncio para a equipe.
+      if (eFicha) console.error("[onboarding submit] ficha não atualizada:", eFicha.message);
 
       // Send notification to admins
       await supabase.from("notifications").insert({
         type: "system",
         title: "Novo cadastro pendente",
-        body: `${clientName} finalizou o formulario de onboarding e aguarda revisao.`,
+        body: `${clientName} finalizou o formulario de onboarding e aguarda revisao.`
+          + (eFicha ? ` ATENÇÃO: os dados não foram copiados para a ficha (${eFicha.message}) — confira em Cadastros Pendentes.` : ""),
         client_id: clientId,
       });
 
-      // Auto-create timeline entry
+      // Auto-create timeline entry — com a observação do cliente, que não vai mais para as notas
+      // internas: é aqui (linha do tempo da ficha) que a equipe a vê quando o cliente já é ativo.
       await supabase.from("timeline_entries").insert({
         client_id: clientId,
         type: "onboarding",
         actor: formData.contactName || "Cliente",
-        description: `${clientName} preencheu o formulario de onboarding externo.`,
+        description: `${clientName} preencheu o formulario de onboarding externo.`
+          + (observacao ? ` Observação do cliente: “${observacao}”` : ""),
         timestamp: new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
       });
 
@@ -544,6 +510,7 @@ export async function POST(req: NextRequest) {
           const linkFicha = `${base}/clients/${clientId}`;
           const msg = `🎉 *${clientName}* concluiu o cadastro do onboarding (100%)!\n`
             + `${time ? `Time: ${time} — já podem se preparar.\n` : ""}`
+            + `${observacao ? `📝 Observação do cliente: “${observacao}”\n` : ""}`
             + `\n👉 ${linkFicha}\n`
             + `Falta revisar e ativar em *Clientes → Cadastros Pendentes* (botão "Revisar").\n\n`
             + `📄 *Quer que eu gere o contrato?* Me manda *valor mensal e dia de vencimento* `
@@ -585,45 +552,11 @@ export async function POST(req: NextRequest) {
       .limit(1)
       .maybeSingle();
 
-    // Clear draft_status + sync all submission data to client record
+    // Clear draft_status + sync all submission data to client record. Mesma regra do envio
+    // (lib/onboarding/envio.ts): só o preenchido vai. Antes daqui saía também `notes` — a observação
+    // do cliente por cima das notas internas do time (auditoria 21/10/2026, 1.2).
     const updatePayload: Record<string, unknown> = { draft_status: null };
-    if (subRow) {
-      if (subRow.nome_fantasia) updatePayload.nome_fantasia = subRow.nome_fantasia;
-      if (subRow.razao_social) updatePayload.razao_social = subRow.razao_social;
-      if (subRow.cnpj) updatePayload.cnpj = subRow.cnpj;
-      if (subRow.nicho) updatePayload.nicho = subRow.nicho;
-      if (subRow.faturamento_faixa) updatePayload.faturamento_faixa = subRow.faturamento_faixa;
-      if (subRow.receita_consultada_em) {
-        for (const c of ["porte_receita", "cnae_principal", "cnae_descricao", "cnaes_secundarios", "capital_social", "situacao_cadastral", "receita_consultada_em"]) {
-          updatePayload[c] = subRow[c];
-        }
-      }
-      if (subRow.contact_name) updatePayload.contact_name = subRow.contact_name;
-      if (subRow.contact_cpf) updatePayload.cpf_cnpj = subRow.contact_cpf;
-      if (subRow.contact_whatsapp) updatePayload.phone = subRow.contact_whatsapp;
-      if (subRow.company_phone) updatePayload.company_phone = subRow.company_phone;
-      if (subRow.contact_phone) updatePayload.contact_phone = subRow.contact_phone;
-      if (subRow.instagram_user) updatePayload.instagram_user = subRow.instagram_user;
-      if (subRow.contact_email) {
-        updatePayload.email = subRow.contact_email;
-        updatePayload.email_corporativo = subRow.contact_email;
-      }
-      if (subRow.endereco_rua) updatePayload.endereco_rua = subRow.endereco_rua;
-      if (subRow.endereco_bairro) updatePayload.endereco_bairro = subRow.endereco_bairro;
-      if (subRow.endereco_cidade) updatePayload.endereco_cidade = subRow.endereco_cidade;
-      if (subRow.endereco_estado) updatePayload.endereco_estado = subRow.endereco_estado;
-      if (subRow.endereco_cep) updatePayload.endereco_cep = subRow.endereco_cep;
-      if (subRow.meta_login) updatePayload.facebook_login = subRow.meta_login;
-      if (subRow.meta_password) updatePayload.facebook_password = subRow.meta_password;
-      if (subRow.instagram_login) updatePayload.instagram_login = subRow.instagram_login;
-      if (subRow.instagram_password) updatePayload.instagram_password = subRow.instagram_password;
-      if (subRow.google_login) updatePayload.google_ads_login = subRow.google_login;
-      if (subRow.google_password) updatePayload.google_ads_password = subRow.google_password;
-      if (subRow.doc_contrato_social) updatePayload.doc_contrato_social = subRow.doc_contrato_social;
-      if (subRow.doc_identidade) updatePayload.doc_identidade = subRow.doc_identidade;
-      if (subRow.doc_logo) updatePayload.doc_logo = subRow.doc_logo;
-      if (subRow.notes) updatePayload.notes = subRow.notes;
-    }
+    if (subRow) Object.assign(updatePayload, fichaDoEnvio(subRow as Record<string, unknown>));
 
     const { error } = await supabase.from("clients").update(updatePayload).eq("id", clientId);
 

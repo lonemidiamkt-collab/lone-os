@@ -13,6 +13,7 @@ import { chamar } from "@/lib/api/chamar";
 import { ROTULO_NICHO } from "@/lib/cs/nicho";
 import { FAIXAS_FATURAMENTO, rotuloFaixa, capitalizar, type EmpresaReceita } from "@/lib/empresa/receita";
 import { faltandoNaEtapa, destinoPermitido, limiteDoDocumento, MB } from "@/lib/onboarding/etapas";
+import { lerAcessos, type StatusAcesso, type SenhasRecebidas } from "@/lib/onboarding/acessos";
 
 // ─── Types ──────────────────────────────────────────────────
 interface SubmissionData {
@@ -25,7 +26,7 @@ interface SubmissionData {
 }
 
 type Step = "dados" | "documentos" | "acessos" | "review";
-type AccessStatus = "fill_now" | "waiting_client" | "partner_invite";
+type AccessStatus = StatusAcesso;
 
 const STEPS: { key: Step; label: string; icon: typeof User }[] = [
   { key: "dados", label: "Identificação", icon: User },
@@ -268,11 +269,18 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
   );
 }
 
-function AccessField({ platform, icon: Icone, login, password, status, onLogin, onPassword, onStatus }: {
+function AccessField({ platform, icon: Icone, login, password, status, senhaRecebida, onLogin, onPassword, onStatus }: {
   platform: string; icon: LucideIcon; login: string; password: string; status: AccessStatus;
+  /** A senha já está guardada no servidor (ela nunca volta para a página). */
+  senhaRecebida?: boolean;
   onLogin: (v: string) => void; onPassword: (v: string) => void; onStatus: (v: AccessStatus) => void;
 }) {
   const [showPw, setShowPw] = useState(false);
+  // 21/10/2026: depois de recarregar, o campo de senha vazio parecia "não mandei" e o cliente
+  // redigitava (ou desistia). Mostra que a senha chegou; "Trocar senha" abre o campo e "Cancelar"
+  // fecha enquanto nada foi digitado.
+  const [trocandoSenha, setTrocandoSenha] = useState(false);
+  const mostrarRecebida = !!senhaRecebida && !trocandoSenha && !password;
   return (
     <div className={`rounded-xl border p-4 space-y-3 transition-all ${
       status === "waiting_client" ? "border-lone-warning-border bg-lone-warning-bg" :
@@ -296,13 +304,31 @@ function AccessField({ platform, icon: Icone, login, password, status, onLogin, 
         <div className="space-y-2">
           <input type="text" value={login} onChange={(e) => onLogin(e.target.value)} placeholder="Login / Email"
             className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary/50" />
-          <div className="relative">
-            <input type={showPw ? "text" : "password"} value={password} onChange={(e) => onPassword(e.target.value)} placeholder="Senha"
-              className="w-full bg-background border border-border rounded-lg px-3 py-2 pr-10 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary/50" />
-            <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-muted-foreground">
-              {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
-            </button>
-          </div>
+          {mostrarRecebida ? (
+            <div role="status" className="flex items-center justify-between gap-2 rounded-lg border border-lone-success-border bg-lone-success-bg px-3 py-2">
+              <span className="flex items-center gap-1.5 text-xs text-lone-success"><Check size={12} aria-hidden="true" /> Senha já recebida</span>
+              <button type="button" onClick={() => setTrocandoSenha(true)}
+                className="text-[11px] text-primary hover:underline underline-offset-2 px-2 py-1">Trocar senha</button>
+            </div>
+          ) : (
+            <>
+              <div className="relative">
+                <input type={showPw ? "text" : "password"} value={password} onChange={(e) => onPassword(e.target.value)}
+                  placeholder={senhaRecebida ? "Nova senha" : "Senha"} autoFocus={trocandoSenha}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 pr-10 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary/50" />
+                <button type="button" onClick={() => setShowPw(!showPw)} aria-label={showPw ? "Esconder senha" : "Mostrar senha"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-muted-foreground">
+                  {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+              {senhaRecebida && (password ? (
+                <p className="text-[10px] text-muted-foreground/80">A nova senha substitui a que você já tinha enviado.</p>
+              ) : (
+                <button type="button" onClick={() => setTrocandoSenha(false)}
+                  className="text-[11px] text-muted-foreground hover:text-foreground px-1">Cancelar</button>
+              ))}
+            </>
+          )}
         </div>
       )}
       {status === "waiting_client" && (
@@ -366,6 +392,8 @@ export default function ExternalOnboardingPage() {
   const [googleLogin, setGoogleLogin] = useState("");
   const [googlePassword, setGooglePassword] = useState("");
   const [googleStatus, setGoogleStatus] = useState<AccessStatus>("fill_now");
+  // Senhas que o servidor já tem (o GET diz só sim/não — a senha nunca volta para a página).
+  const [senhaRecebida, setSenhaRecebida] = useState<SenhasRecebidas>({ meta: false, instagram: false, google: false });
   const [notes, setNotes] = useState("");
   const [faturamentoFaixa, setFaturamentoFaixa] = useState("");
   // Ligado quando o cliente tenta avançar com obrigatório faltando nesta etapa (lib/onboarding/etapas.ts).
@@ -432,7 +460,9 @@ export default function ExternalOnboardingPage() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setAutoSaving(true);
-      const r = await chamar("/api/onboarding", { action: "auto_save", token, ...JSON.parse(rascunhoJson) });
+      // acessosRestaurados: esta página trouxe os logins do servidor — login vazio aqui é o cliente
+      // apagando, não a página recarregada (o servidor só apaga com isso; lib/onboarding/acessos.ts).
+      const r = await chamar("/api/onboarding", { action: "auto_save", token, acessosRestaurados: true, ...JSON.parse(rascunhoJson) });
       setAutoSaving(false);
       if (r.ok) { ultimoSalvo.current = rascunhoJson; setErroRascunho(false); }
       else setErroRascunho(true);
@@ -461,6 +491,16 @@ export default function ExternalOnboardingPage() {
       ["notes", setNotes], ["faturamento_faixa", setFaturamentoFaixa],
     ];
     for (const [k, set] of campos) if (txt(k)) set(txt(k));
+    // Acessos: login, "Não tenho"/"Convite" e se a senha já chegou. Sem isto, recarregar zerava a
+    // etapa e o salvamento seguinte gravava nulo por cima (auditoria 21/10/2026, 1.1).
+    const acessos = lerAcessos(d);
+    if (acessos.meta.login) setMetaLogin(acessos.meta.login);
+    if (acessos.instagram.login) setInstaLogin(acessos.instagram.login);
+    if (acessos.google.login) setGoogleLogin(acessos.google.login);
+    if (acessos.meta.status) setMetaStatus(acessos.meta.status);
+    if (acessos.instagram.status) setInstaStatus(acessos.instagram.status);
+    if (acessos.google.status) setGoogleStatus(acessos.google.status);
+    setSenhaRecebida({ meta: acessos.meta.senhaRecebida, instagram: acessos.instagram.senhaRecebida, google: acessos.google.senhaRecebida });
     // Já consultado antes: mostra de novo o que a Receita disse, sem gastar outra consulta.
     if (txt("receita_consultada_em") && txt("cnpj")) {
       ultimoCnpjConsultado.current = txt("cnpj").replace(/\D/g, "");
@@ -648,7 +688,7 @@ export default function ExternalOnboardingPage() {
 
   // O servidor tira o cliente do token — o corpo não carrega clientId.
   const buildPayload = () => ({
-    action: "submit", token,
+    action: "submit", token, acessosRestaurados: true,
     nomeFantasia: nomeFantasia.trim(), razaoSocial: razaoSocial.trim(), cnpj: cnpj.trim(),
     nicho: nicho.trim(), faturamentoFaixa,
     companyPhone: companyPhone.trim(), instagramUser: instagramUser.trim().replace(/^@+/, ""),
@@ -954,10 +994,13 @@ export default function ExternalOnboardingPage() {
           <div className="space-y-4 animate-fade-in">
             <p className="text-xs text-muted-foreground">Informe os acessos das plataformas. Se não tiver agora, selecione &quot;Não tenho&quot;.</p>
             <AccessField platform="Facebook / Meta Ads" icon={Facebook} login={metaLogin} password={metaPassword} status={metaStatus}
+              senhaRecebida={senhaRecebida.meta}
               onLogin={setMetaLogin} onPassword={setMetaPassword} onStatus={setMetaStatus} />
             <AccessField platform="Instagram" icon={Instagram} login={instaLogin} password={instaPassword} status={instaStatus}
+              senhaRecebida={senhaRecebida.instagram}
               onLogin={setInstaLogin} onPassword={setInstaPassword} onStatus={setInstaStatus} />
             <AccessField platform="Google Ads / Gmail" icon={Search} login={googleLogin} password={googlePassword} status={googleStatus}
+              senhaRecebida={senhaRecebida.google}
               onLogin={setGoogleLogin} onPassword={setGooglePassword} onStatus={setGoogleStatus} />
           </div>
         )}
