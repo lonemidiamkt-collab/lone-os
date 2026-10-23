@@ -11,6 +11,7 @@ import { carregarConfig } from "@/lib/prospeccao/config";
 import { PAPEIS_COMERCIAL } from "@/lib/crm/acesso";
 import { DIAS_REATIVACAO_SEM_VERBA, ROTULO_ETAPA, motivoValido, normalizarEtapa } from "@/lib/crm/etapas";
 import { hojeSP } from "@/lib/crm/meta";
+import { lerHistoricoDeEtapas, registrarEtapa } from "@/lib/crm/etapas-historico";
 
 // CRM comercial — CRUD dos leads.
 // ESCOPO: só quem entra no comercial (lib/crm/acesso.ts → admin). O comercial guarda a mensalidade
@@ -44,7 +45,7 @@ function sanear(body: Record<string, unknown>): Record<string, unknown> {
     if (k in out && out[k] != null && out[k] !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(String(out[k]))) out[k] = null;
   }
   // Campos que só o servidor carimba.
-  delete out.etapaDesde; delete out.primeiroContatoEm; delete out.externoId; delete out.fechadoEm;
+  delete out.etapaDesde; delete out.primeiroContatoEm; delete out.externoId; delete out.fechadoEm; delete out.origemEtapa;
   return out;
 }
 
@@ -68,10 +69,13 @@ export async function GET(req: NextRequest) {
   const leads = await db.fetchCrmLeads();
   // Leva 7C (N27/N28): nota A/B/C, toques da cadência e se já virou cliente — e os segmentos do ICP
   // para a qualificação (os mesmos da prospecção).
-  const [extras, cfg] = await Promise.all([carregarExtras(leads.map((l) => l.id)), carregarConfig()]);
+  const [extras, cfg, hist] = await Promise.all([carregarExtras(leads.map((l) => l.id)), carregarConfig(), lerHistoricoDeEtapas()]);
   return NextResponse.json({
     leads: leads.map((l) => ({ ...l, ...(extras.get(l.id) ?? EXTRAS_VAZIOS) })),
     segmentosIcp: cfg.segmentos.map((x) => x.nome),
+    // Histórico de etapa (lib/crm/taxas.ts): sem ele a taxa de fechamento fica indisponível — nunca "0".
+    historico: hist.ok ? hist.itens : null,
+    historicoErro: hist.ok ? null : hist.erro,
   });
 }
 
@@ -86,6 +90,7 @@ export async function POST(req: NextRequest) {
     patch.etapaDesde = new Date().toISOString();
     if (patch.estagio === "ganho" || patch.estagio === "perdido") patch.fechadoEm = hojeSP();
     const { r: lead, aviso } = await comFallbackDeColunas((p) => db.insertCrmLead(p), patch);
+    await registrarEtapa({ leadId: lead.id, de: null, para: String(patch.estagio), autor: gate.user.email, origem: "criacao" });
     return NextResponse.json({ lead, aviso });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "erro" }, { status: 500 });
@@ -106,6 +111,7 @@ export async function PATCH(req: NextRequest) {
     // → proposta: marca proposta_enviada_em (1ª vez);
     // → qualquer mudança: etapa_desde = agora (dia zero da cadência da etapa).
     let etapaMudou: string | null = null;
+    let etapaAnterior: string | null = null;
     const hoje = hojeSP();
     if (typeof patch.estagio === "string") {
       const atual = await db.fetchCrmLeadById(id);
@@ -123,7 +129,7 @@ export async function PATCH(req: NextRequest) {
       if (patch.estagio === "proposta" && !atual?.propostaEnviadaEm && patch.propostaEnviadaEm === undefined) {
         patch.propostaEnviadaEm = hoje;
       }
-      if (atual && atual.estagio !== patch.estagio) { etapaMudou = patch.estagio; patch.etapaDesde = new Date().toISOString(); }
+      if (atual && atual.estagio !== patch.estagio) { etapaMudou = patch.estagio; etapaAnterior = atual.estagio; patch.etapaDesde = new Date().toISOString(); }
     }
     // "Sem verba agora" volta sozinho: marca a retomada em 90 dias se ninguém marcou outra.
     if (patch.motivoPerdaCodigo === "sem_verba" && patch.retomarEm === undefined) patch.retomarEm = somaDias(hoje, DIAS_REATIVACAO_SEM_VERBA);
@@ -146,6 +152,7 @@ export async function PATCH(req: NextRequest) {
     const { r: lead, aviso } = await comFallbackDeColunas((p) => db.updateCrmLead(id, p), resto);
     // Auto-registra a mudança de etapa na timeline (best-effort — não derruba o update).
     if (etapaMudou) {
+      await registrarEtapa({ leadId: id, de: etapaAnterior, para: etapaMudou, autor: gate.user.email, origem: bruto.origemEtapa === "lote" ? "lote" : "tela" });
       const rotulo = ROTULO_ETAPA[normalizarEtapa(etapaMudou)];
       db.insertLeadActivity({ leadId: id, tipo: "etapa", texto: `Movido para ${rotulo}`, autor: (resto.responsavel as string) ?? lead.responsavel ?? null }).catch(() => {});
     }

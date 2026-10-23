@@ -10,6 +10,7 @@ import * as db from "@/lib/supabase/queries";
 import { atualizarEvento, cancelarEvento, criarEvento, estadoGoogle } from "@/lib/prospeccao/google";
 import { mandarNoGrupoVendas } from "@/lib/crm/grupo-vendas-envio";
 import { registrarAtividade } from "@/lib/crm/registrar-atividade";
+import { registrarEtapa } from "@/lib/crm/etapas-historico";
 import { waComTexto } from "@/lib/crm/modelos";
 import {
   descricaoDoEvento, diaCurto, fimDe, horaCurta, mensagemConfirmacaoLead, textoCanceladaGrupo, textoMarcadaGrupo,
@@ -90,6 +91,7 @@ export async function marcarReuniao(p: {
   // Funil: reunião marcada = quem decide topou ver o diagnóstico (só avança, nunca volta).
   if (lead.estagio === "novo" || lead.estagio === "contato") {
     await db.updateCrmLead(lead.id, { estagio: "diagnostico", etapaDesde: new Date().toISOString() });
+    await registrarEtapa({ leadId: lead.id, de: lead.estagio, para: "diagnostico", autor: p.autor, origem: "reuniao" });
     await db.insertLeadActivity({ leadId: lead.id, tipo: "etapa", texto: "Movido para Diagnóstico (reunião marcada)", autor: p.autor }).catch(() => {});
   }
   await sincronizarReuniaoDoLead(lead.id);

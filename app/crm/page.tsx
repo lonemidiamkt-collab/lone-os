@@ -20,6 +20,8 @@ import { PORTES, type QualificacaoLead } from "@/lib/crm/nota";
 import { PACOTES_VENDA } from "@/lib/clients/conversao";
 import { ROTULO_NICHO, normalizarNicho } from "@/lib/cs/nicho";
 import { linkDoCliente, separarFechados } from "@/lib/crm/fechados";
+import { coortePorMes, porGrupo, textoFracao, type EtapaHist } from "@/lib/crm/taxas";
+import { nomeDoMes } from "@/lib/crm/painel";
 import { ABAS_DA_PAGINA_CRM } from "@/lib/navegacao/casco";
 import { PACOTES_PROPOSTA } from "@/lib/crm/proposta";
 import { ETAPAS_ABERTAS, MOTIVOS_PERDA, ROTULO_ETAPA, CRITERIO_SAIDA, chanceDe, rotuloMotivo } from "@/lib/crm/etapas";
@@ -134,6 +136,9 @@ export default function CrmPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [erroCarga, setErroCarga] = useState<string | null>(null);
+  // Histórico de etapa (taxa de fechamento). null = não carregou — as telas dizem "indisponível", nunca "0".
+  const [historico, setHistorico] = useState<EtapaHist[] | null>(null);
+  const [historicoErro, setHistoricoErro] = useState<string | null>(null);
   const [tab, setTab] = useState<AbaCrm>("hoje");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -197,10 +202,13 @@ export default function CrmPage() {
     if (!podeVer) { setLoading(false); return; }
     carregarMeta(mesSP());
     carregarReunioes();
-    chamar<{ leads?: Lead[]; segmentosIcp?: string[] }>("/api/crm/leads").then((r) => {
+    chamar<{ leads?: Lead[]; segmentosIcp?: string[]; historico?: EtapaHist[] | null; historicoErro?: string | null }>("/api/crm/leads").then((r) => {
       // Falha não vira funil vazio: mostra o erro no lugar dos números.
       if (!r.ok) { console.error("[crm] carga dos leads falhou:", r.erro); setErroCarga(r.erro ?? "erro"); }
-      else { setLeads(r.data?.leads ?? []); setSegmentosIcp(r.data?.segmentosIcp ?? []); }
+      else {
+        setLeads(r.data?.leads ?? []); setSegmentosIcp(r.data?.segmentosIcp ?? []);
+        setHistorico(r.data?.historico ?? null); setHistoricoErro(r.data?.historicoErro ?? (r.data?.historico ? null : "O histórico de etapas não veio do servidor."));
+      }
       setLoading(false);
     });
   }, [podeVer]);
@@ -241,11 +249,14 @@ export default function CrmPage() {
   // ─── Relatórios ────────────────────────────────────────────────────
   const relatorio = useMemo(() => {
     // Últimos 6 meses (YYYY-MM), do mais antigo pro atual.
+    // Começa no mês do primeiro lead (23/10/2026: a tela mostrava maio a setembro vazios antes do Comercial existir).
+    const primeiroMes = leads.reduce<string | null>((m, l) => { const ym = (l.createdAt || "").slice(0, 7); return ym && (!m || ym < m) ? ym : m; }, null);
     const meses: string[] = [];
     const base = new Date();
     for (let i = 5; i >= 0; i--) {
       const d = new Date(base.getFullYear(), base.getMonth() - i, 15);
-      meses.push(d.toLocaleDateString("en-CA").slice(0, 7));
+      const ym = d.toLocaleDateString("en-CA").slice(0, 7);
+      if (!primeiroMes || ym >= primeiroMes || i === 0) meses.push(ym);
     }
     const ganhos = leads.filter((l) => l.estagio === "ganho" && l.fechadoEm);
     const porMes = meses.map((ym) => {
@@ -258,17 +269,6 @@ export default function CrmPage() {
     const leadsPorMes = meses.map((ym) => ({ ym, qtd: leads.filter((l) => (l.createdAt || "").slice(0, 7) === ym).length }));
     const maxLeadsMes = Math.max(1, ...leadsPorMes.map((m) => m.qtd));
 
-    const agrupa = (chave: (l: Lead) => string | null, semValor: string) => {
-      const grupos = new Map<string, { total: number; ganhos: number }>();
-      for (const l of leads) {
-        const k = (chave(l) || "").trim() || semValor;
-        const g = grupos.get(k) ?? { total: 0, ganhos: 0 };
-        g.total++;
-        if (l.estagio === "ganho") g.ganhos++;
-        grupos.set(k, g);
-      }
-      return [...grupos.entries()].sort((a, b) => b[1].ganhos - a[1].ganhos || b[1].total - a[1].total);
-    };
     const motivos = new Map<string, number>();
     for (const l of leads.filter((x) => x.estagio === "perdido")) {
       const m = rotuloMotivo(l.motivoPerdaCodigo) ?? ((l.motivoPerda || "").trim() || "(não informado)");
@@ -276,11 +276,12 @@ export default function CrmPage() {
     }
     return {
       porMes, maxQtd, meses, leadsPorMes, maxLeadsMes,
-      porOrigem: agrupa((l) => l.origem, "Sem origem"),
-      porResponsavel: agrupa((l) => l.responsavel, "Sem responsável"),
+      porOrigem: porGrupo(leads, historico ?? [], null, (l) => l.origem, "Sem origem"),
+      porResponsavel: porGrupo(leads, historico ?? [], null, (l) => l.responsavel, "Sem responsável"),
+      coorte: coortePorMes(leads, historico ?? [], meses),
       motivos: [...motivos.entries()].sort((a, b) => b[1] - a[1]),
     };
-  }, [leads]);
+  }, [leads, historico]);
 
   // ─── Próximo passo de um lead (dashboard e lista de oportunidades) ─────
   const proximoPasso = (l: Lead): { texto: string; alerta: boolean } => {
@@ -764,6 +765,8 @@ export default function CrmPage() {
       {tab === "dashboard" && (
         <DashboardComercial
           leads={leads}
+          historico={historico}
+          historicoErro={historicoErro}
           metas={metas}
           carregarMeta={carregarMeta}
           metaContatosSemana={meta?.metaContatosSemana ?? null}
@@ -1148,43 +1151,88 @@ export default function CrmPage() {
             </div>
           </section>
 
-          {/* Conversão por origem: qual canal fecha mais */}
+          {/* Conversão por origem (lib/crm/taxas.ts): leads → oportunidades (chegaram a Proposta) → contratos.
+              A fração é sobre as oportunidades; com menos de 5, "1 de 2" e sem barra cheia. */}
           <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none">
             <h2 className="text-lone-h2 text-foreground">Conversão por origem</h2>
-            <p className="mb-4 text-lone-caption text-muted-foreground">Quantos leads cada canal trouxe e quantos viraram contrato</p>
+            <p className="mb-4 text-lone-caption text-muted-foreground">Desde o início: quantos leads cada canal trouxe, quantos chegaram a proposta e quantos fecharam</p>
             {relatorio.porOrigem.length === 0 ? <p className="text-lone-caption text-muted-foreground">Sem leads ainda.</p> : (
               <div className="space-y-3">
-                {relatorio.porOrigem.map(([k, g]) => {
-                  const pct = g.total ? Math.round((g.ganhos / g.total) * 100) : 0;
+                {relatorio.porOrigem.map((g) => {
+                  const larg = (n: number) => `${g.leads ? (n / g.leads) * 100 : 0}%`;
                   return (
-                    <div key={k}>
+                    <div key={g.chave}>
                       <div className="mb-1 flex items-baseline justify-between gap-2 text-lone-caption">
-                        <span className="min-w-0 truncate text-foreground">{k}</span>
-                        <span className="shrink-0 tabular-nums text-muted-foreground">{g.ganhos} de {g.total} · <span className="font-semibold text-foreground">{pct}%</span></span>
+                        <span className="min-w-0 truncate text-foreground">{g.chave}</span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">
+                          {g.leads} {g.leads === 1 ? "lead" : "leads"} · {g.oportunidades} {g.oportunidades === 1 ? "oportunidade" : "oportunidades"} · <span className="font-semibold text-foreground">{g.ganhos} {g.ganhos === 1 ? "contrato" : "contratos"}</span>
+                          {g.fracao.pct !== null ? ` (${g.fracao.pct}% das oportunidades)` : ""}
+                        </span>
                       </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-muted-foreground/15"><div className="h-full rounded-full bg-lone-success" style={{ width: `${Math.max(g.ganhos ? 3 : 0, pct)}%` }} /></div>
+                      <div className="flex h-2 gap-[2px] overflow-hidden rounded-full bg-muted-foreground/15" role="img" aria-label={`${g.chave}: ${g.leads} leads, ${g.oportunidades} oportunidades, ${g.ganhos} contratos`}>
+                        {g.ganhos > 0 && <div className="h-full bg-lone-success" style={{ width: larg(g.ganhos) }} />}
+                        {g.oportunidades - g.ganhos > 0 && <div className="h-full bg-primary" style={{ width: larg(g.oportunidades - g.ganhos) }} />}
+                      </div>
                     </div>
                   );
                 })}
+                <p className="flex flex-wrap gap-x-3 pt-1 text-lone-caption text-muted-foreground">
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-lone-success" aria-hidden="true" />contrato</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary" aria-hidden="true" />oportunidade em aberto ou perdida</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground/30" aria-hidden="true" />lead que não chegou a proposta</span>
+                </p>
               </div>
             )}
           </section>
 
           {/* Por responsável */}
           <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none">
-            <h2 className="mb-3 text-sm font-semibold text-foreground">Por responsável</h2>
-            {relatorio.porResponsavel.length === 0 ? <p className="text-xs text-muted-foreground">Sem leads ainda.</p> : (
-              <table className="w-full text-xs">
-                <thead><tr className="text-left text-muted-foreground"><th className="py-1 font-medium">Responsável</th><th className="py-1 font-medium">Leads</th><th className="py-1 font-medium">Ganhos</th></tr></thead>
+            <h2 className="text-lone-h2 text-foreground">Por responsável</h2>
+            <p className="mb-3 text-lone-caption text-muted-foreground">Desde o início</p>
+            {relatorio.porResponsavel.length === 0 ? <p className="text-lone-caption text-muted-foreground">Sem leads ainda.</p> : (
+              <table className="w-full text-lone-body">
+                <thead><tr className="text-left text-lone-caption text-muted-foreground"><th className="py-1 font-medium">Responsável</th><th className="py-1 text-right font-medium">Leads</th><th className="py-1 text-right font-medium">Oportunidades</th><th className="py-1 text-right font-medium">Contratos</th></tr></thead>
                 <tbody>
-                  {relatorio.porResponsavel.map(([k, g]) => (
-                    <tr key={k} className="border-t border-border text-foreground">
-                      <td className="py-1.5">{k}</td><td className="py-1.5">{g.total}</td>
-                      <td className="py-1.5">{g.ganhos}{g.total ? ` (${Math.round((g.ganhos / g.total) * 100)}%)` : ""}</td>
+                  {relatorio.porResponsavel.map((g) => (
+                    <tr key={g.chave} className="border-t border-border text-foreground">
+                      <td className="py-1.5">{g.chave}</td>
+                      <td className="py-1.5 text-right tabular-nums">{g.leads}</td>
+                      <td className="py-1.5 text-right tabular-nums">{g.oportunidades}</td>
+                      <td className="py-1.5 text-right tabular-nums">{g.ganhos}{g.oportunidades ? <span className="text-muted-foreground"> · {textoFracao(g.fracao)}</span> : null}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            )}
+          </section>
+
+          {/* Coorte por mês de entrada: dos leads que entraram em cada mês, onde estão hoje */}
+          <section className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:shadow-none lg:col-span-2">
+            <h2 className="text-lone-h2 text-foreground">Onde estão os leads de cada mês</h2>
+            <p className="mb-4 text-lone-caption text-muted-foreground">Dos que entraram no mês: quantos chegaram a proposta, fecharam, se perderam ou seguem em aberto</p>
+            {historico === null ? <p className="text-lone-caption text-lone-warning">{historicoErro ?? "Histórico de etapas indisponível agora."}</p> : (
+              <div className="space-y-3">
+                {relatorio.coorte.map((c) => (
+                  <div key={c.ym}>
+                    <div className="mb-1 flex items-baseline justify-between gap-2 text-lone-caption">
+                      <span className="font-medium capitalize text-foreground">{nomeDoMes(c.ym)}</span>
+                      <span className="tabular-nums text-muted-foreground">{c.entraram} entraram · {c.oportunidade} chegaram a proposta · <span className="text-lone-success">{c.ganharam} fecharam</span> · {c.perderam} perdidos · {c.abertos} em aberto</span>
+                    </div>
+                    <div className="flex h-3 gap-[2px] overflow-hidden rounded-full bg-muted-foreground/15" role="img" aria-label={`${nomeDoMes(c.ym)}: ${c.ganharam} fecharam, ${c.perderam} perdidos, ${c.abertos} em aberto de ${c.entraram}`}>
+                      {c.entraram > 0 && [
+                        { n: c.ganharam, cor: "bg-lone-success" },
+                        { n: c.perderam, cor: "bg-lone-danger" },
+                        { n: c.abertos, cor: "bg-primary/50" },
+                      ].filter((x) => x.n > 0).map((x, i) => <div key={i} className={`h-full ${x.cor}`} style={{ flexGrow: x.n }} />)}
+                    </div>
+                  </div>
+                ))}
+                <p className="flex flex-wrap gap-x-3 pt-1 text-lone-caption text-muted-foreground">
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-lone-success" aria-hidden="true" />fecharam</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-lone-danger" aria-hidden="true" />perdidos</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary/50" aria-hidden="true" />em aberto</span>
+                </p>
+              </div>
             )}
           </section>
 

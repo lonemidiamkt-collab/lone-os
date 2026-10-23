@@ -75,6 +75,16 @@ export default function HojeComercial<L extends LeadDoHoje>({
     toast.success(acao === "feito" ? `${ok} marcado(s) como feito.` : `${ok} adiado(s) para amanhã.`);
   }
 
+  // Régua encerrada sem resposta: decidir em bloco (23/10/2026 — ninguém marcava perdido e a taxa de fechamento
+  // ficava 100% para sempre). Confirma mostrando a lista; dá para reabrir depois pela ficha.
+  async function perderEmLote(lista: ItemHoje<L>[]) {
+    const nomes = lista.map((i) => `• ${i.lead.empresa || i.lead.contatoNome}`).join("\n");
+    if (!window.confirm(`Marcar como perdido (sem resposta)?\n\n${nomes}\n\nDá para reabrir depois pela ficha.`)) return;
+    setEmMassa(true);
+    for (const i of lista) await onPatch(i.lead, { estagio: "perdido", motivoPerdaCodigo: "sem_resposta", origemEtapa: "lote" }, `${i.lead.empresa || i.lead.contatoNome}: perdido (sem resposta).`);
+    setEmMassa(false);
+  }
+
   const pctMeta = resumoMeta.progresso != null ? Math.round(resumoMeta.progresso * 100) : null;
   const itensReuniao = itensDeReuniao(reunioes, new Date());
   const leadPorId = new Map(leads.map((l) => [l.id, l]));
@@ -203,6 +213,15 @@ export default function HojeComercial<L extends LeadDoHoje>({
               <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${g === "responder" ? "bg-lone-warning-bg text-lone-warning" : "bg-muted text-muted-foreground"}`}>{itens.length}</span>
               <span className="ml-auto hidden truncate text-lone-caption text-muted-foreground md:block">{ROTULO_GRUPO[g].dica}</span>
             </button>
+            {!recolhido && g === "fim" && itens.length > 1 && (
+              <div className="flex flex-wrap items-center gap-2 border-t border-border bg-muted/30 px-5 py-2">
+                <span className="text-lone-caption text-muted-foreground">Régua encerrada e sem resposta: decida em bloco.</span>
+                <button disabled={emMassa} onClick={() => perderEmLote(itens)}
+                  className="ml-auto inline-flex h-8 items-center rounded-lg border border-lone-danger-border px-3 text-[13px] text-lone-danger hover:bg-lone-danger-bg disabled:opacity-50">
+                  Marcar os {itens.length} como perdido: sem resposta
+                </button>
+              </div>
+            )}
             {!recolhido && (
               <ul className="divide-y divide-border border-t border-border">
                 {ordenados.map((item, idx) => {
