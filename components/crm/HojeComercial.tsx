@@ -10,9 +10,11 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CalendarClock, Check, ChevronDown, Copy, MapPin, MessageCircle, MoreHorizontal, Phone, SkipForward, Target } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
+  DropdownMenuSubTrigger, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Anel, Cartao } from "@/components/crm/graficos";
+import { Anel, BarraMeta, Cartao, TEXTO_TOM } from "@/components/crm/graficos";
+import { tomDoRitmo } from "@/lib/crm/graficos";
 import { ORDEM_GRUPOS, ROTULO_GRUPO, type GrupoHoje, type ItemHoje, type LeadHoje } from "@/lib/crm/hoje";
 import { waComTexto } from "@/lib/crm/modelos";
 import { ROTULO_ETAPA, normalizarEtapa } from "@/lib/crm/etapas";
@@ -86,6 +88,8 @@ export default function HojeComercial<L extends LeadDoHoje>({
   }
 
   const pctMeta = resumoMeta.progresso != null ? Math.round(resumoMeta.progresso * 100) : null;
+  const fracaoMes = resumoMeta.diasUteisMes ? Math.min(1, resumoMeta.decorridos / resumoMeta.diasUteisMes) : 0;
+  const tomMeta = tomDoRitmo(resumoMeta.progresso, fracaoMes);
   const itensReuniao = itensDeReuniao(reunioes, new Date());
   const leadPorId = new Map(leads.map((l) => [l.id, l]));
   const temReuniao = itensReuniao.hoje.length + itensReuniao.confirmarAmanha.length + itensReuniao.comoFoi.length > 0;
@@ -116,8 +120,11 @@ export default function HojeComercial<L extends LeadDoHoje>({
           ) : (
             <button onClick={onVerDashboard} className="mt-1.5 block w-full text-left">
               <p className="text-lone-body text-foreground"><span className="font-semibold">{brl(resumoMeta.vendido)}</span> de {brl(resumoMeta.meta)} · {pctMeta}%</p>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted-foreground/15"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, pctMeta ?? 0)}%` }} /></div>
-              <p className="mt-1.5 text-lone-caption text-muted-foreground">{resumoMeta.bateu ? "Meta batida." : `Faltam ${brl(resumoMeta.falta ?? 0)}`} · ver no dashboard →</p>
+              <div className="mt-2"><BarraMeta progresso={resumoMeta.progresso ?? 0} fracaoDoMes={fracaoMes} tom={tomMeta} /></div>
+              <p className="mt-1.5 text-lone-caption text-muted-foreground">
+                <span className={`font-medium ${TEXTO_TOM[tomMeta]}`}>{resumoMeta.bateu ? "Meta batida" : tomMeta === "success" ? "No ritmo" : "Atrás do ritmo"}</span>
+                {resumoMeta.bateu ? "" : ` · faltam ${brl(resumoMeta.falta ?? 0)}`} · ver no dashboard →
+              </p>
             </button>
           )}
         </Cartao>
@@ -240,7 +247,9 @@ export default function HojeComercial<L extends LeadDoHoje>({
                     if (g === "reuniao") return <button onClick={() => onAbrir(l)} className={`${cls} bg-primary/10 text-primary hover:opacity-80`}>Abrir</button>;
                     if (canal === "ligacao" && l.telefone) return <a href={`tel:${l.telefone.replace(/\D/g, "")}`} className={`${cls} bg-primary/10 text-primary hover:opacity-80`}><Phone size={14} /> Ligar</a>;
                     if (canal === "visita") return <button disabled={busy} onClick={() => onRegistrar(l, "visita", `Visita (${item.passo?.objetivo ?? "follow-up"})`)} className={`${cls} bg-primary/10 text-primary hover:opacity-80`}><MapPin size={14} /> Registrar visita</button>;
-                    if (ehMensagem && temZap) return <button disabled={busy} onClick={() => onEnviarWhatsApp(l, texto)} className={`${cls} bg-lone-success-bg text-lone-success hover:opacity-80`}><MessageCircle size={14} /> Enviar no WhatsApp</button>;
+                    if (ehMensagem && temZap) return g === "responder"
+                      ? <button disabled={busy} onClick={() => onEnviarWhatsApp(l, texto)} className={`${cls} bg-lone-success text-background hover:opacity-90`}><MessageCircle size={14} /> Enviar no WhatsApp</button>
+                      : <button disabled={busy} onClick={() => onEnviarWhatsApp(l, texto)} className={`${cls} border border-border text-foreground hover:bg-accent`}><MessageCircle size={14} className="text-lone-success" aria-hidden="true" /> Enviar no WhatsApp</button>;
                     if (ehMensagem) return <button onClick={() => { navigator.clipboard?.writeText(texto).catch(() => {}); toast.success("Texto copiado — este lead está sem WhatsApp."); }} className={`${cls} border border-border text-foreground hover:bg-accent`}><Copy size={14} /> Copiar texto</button>;
                     return <button onClick={() => onAbrir(l)} className={`${cls} border border-border text-foreground hover:bg-accent`}>Abrir</button>;
                   })();
@@ -272,14 +281,16 @@ export default function HojeComercial<L extends LeadDoHoje>({
                             {ehMensagem && <DropdownMenuItem disabled={busy} onSelect={() => onRegistrar(l, "whatsapp", "Contato feito por outro caminho (registrado no Hoje)")}><Check size={14} className="mr-2" />Já falei por outro caminho</DropdownMenuItem>}
                             {canal === "ligacao" && <DropdownMenuItem disabled={busy} onSelect={() => onRegistrar(l, "ligacao", `Ligação (${item.passo?.objetivo ?? "follow-up"})`)}><Phone size={14} className="mr-2" />Registrar ligação</DropdownMenuItem>}
                             {g !== "fim" && g !== "reuniao" && (
-                              <>
-                                <DropdownMenuSeparator />
-                                {[1, 3, 7].map((d) => (
-                                  <DropdownMenuItem key={d} disabled={busy} onSelect={() => onPatch(l, { retomarEm: somaDias(hoje, d) }, `Volta para o Hoje em ${d === 1 ? "1 dia" : `${d} dias`}.`)}>
-                                    <CalendarClock size={14} className="mr-2" />Adiar {d === 1 ? "1 dia" : `${d} dias`}
-                                  </DropdownMenuItem>
-                                ))}
-                              </>
+                              <DropdownMenuSub>
+                                <DropdownMenuSubTrigger disabled={busy}><CalendarClock size={14} className="mr-2" />Adiar</DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                  {[1, 3, 7].map((d) => (
+                                    <DropdownMenuItem key={d} disabled={busy} onSelect={() => onPatch(l, { retomarEm: somaDias(hoje, d) }, `Volta para o Hoje em ${d === 1 ? "1 dia" : `${d} dias`}.`)}>
+                                      {d === 1 ? "Para amanhã" : `Por ${d} dias`}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
                             )}
                             {item.passo && item.toque && item.toque.total != null && (
                               <DropdownMenuItem disabled={busy} onSelect={() => onRegistrar(l, "pulado", `Toque pulado: ${item.passo!.objetivo}`)}><SkipForward size={14} className="mr-2" />Pular este passo</DropdownMenuItem>

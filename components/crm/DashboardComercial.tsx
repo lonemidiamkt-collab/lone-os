@@ -7,7 +7,7 @@
 // lib/crm/painel.ts e lib/crm/pipeline.ts (testadas); aqui é só desenho.
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowRight, CheckCircle2, Clock, MessageCircleOff, PhoneOff, Repeat, Target, UserPlus } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, MessageCircleOff, PhoneOff, Repeat, Target, Trophy, UserPlus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Anel, BarraMeta, Cartao, Rosca, SeloVariacao, TEXTO_TOM, TituloBloco } from "@/components/crm/graficos";
 import { montarFatias, tomDaTaxa, tomDoRitmo, type FatiaDesenhada } from "@/lib/crm/graficos";
@@ -134,6 +134,7 @@ export default function DashboardComercial<L extends LeadDash>({
   const convAnterior = useMemo(() => (historico ? oportunidadesParaContrato(leads, historico, { ini: iv.antIni, fim: iv.antFim }) : null), [leads, historico, iv]);
   const convTotal = useMemo(() => (historico ? oportunidadesParaContrato(leads, historico, null) : null), [leads, historico]);
   const fechamento = useMemo(() => taxaDeFechamento(leads, { ini: iv.ini, fim: iv.fim }), [leads, iv]);
+  const vendasDoPeriodo = useMemo(() => leads.filter((l) => l.estagio === "ganho" && l.fechadoEm && l.fechadoEm.slice(0, 10) >= iv.ini && l.fechadoEm.slice(0, 10) <= iv.fim), [leads, iv]);
   const emDia = useMemo(() => followUpEmDia(leads, hoje), [leads, hoje]);
   const novos = useMemo(() => leadsNovos(leads, iv), [leads, iv]);
   const atencao = useMemo(() => precisaDeAtencao(leads, hoje, agora), [leads, hoje]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -184,6 +185,17 @@ export default function DashboardComercial<L extends LeadDash>({
           {acao}
         </div>
       </header>
+
+      {/* Vendas do período em destaque (23/10/2026: a primeira venda aparecia só como pendência âmbar). */}
+      {vendasDoPeriodo.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-lone-success-border bg-lone-success-bg px-5 py-3">
+          <Trophy size={16} className="shrink-0 text-lone-success" aria-hidden="true" />
+          <span className="text-lone-body font-semibold text-foreground">
+            {vendasDoPeriodo.length === 1 ? "1 venda fechada" : `${vendasDoPeriodo.length} vendas fechadas`} {periodo === "mes" ? "este mês" : periodo === "mes_passado" ? `em ${nomeDoMes(iv.mes)}` : "nos últimos 30 dias"}:
+          </span>
+          <span className="text-lone-body text-foreground">{vendasDoPeriodo.map((l) => l.empresa || l.contatoNome).join(" · ")}</span>
+        </div>
+      )}
 
       {/* ── Faixa 1: meta + 4 números ── */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -325,6 +337,9 @@ export default function DashboardComercial<L extends LeadDash>({
       <div className="grid gap-4 lg:grid-cols-3">
         <Cartao>
           <TituloBloco titulo="Contatos da semana" apoio="WhatsApp, ligação, visita e reunião registrados" />
+          {semana.total === 0 ? (
+            <p className="rounded-xl border border-dashed border-border p-4 text-lone-body text-muted-foreground">Ainda sem contatos registrados esta semana{metaContatosSemana ? ` · meta ${metaContatosSemana}` : ""}.</p>
+          ) : (<>
           <div className="relative flex h-32 items-end gap-2 border-b border-border pb-px">
             {metaDia != null && (
               <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-lone-warning"
@@ -346,6 +361,7 @@ export default function DashboardComercial<L extends LeadDash>({
             <span className="font-semibold text-foreground">{semana.total}</span> {semana.total === 1 ? "contato" : "contatos"} esta semana
             {metaContatosSemana ? <> · meta {metaContatosSemana}{metaDia ? ` (${Math.round(metaDia)} por dia útil)` : ""}</> : " · sem meta de contatos"}
           </p>
+          </>)}
         </Cartao>
 
         <Cartao>

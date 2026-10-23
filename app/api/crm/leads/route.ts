@@ -12,6 +12,7 @@ import { PAPEIS_COMERCIAL } from "@/lib/crm/acesso";
 import { DIAS_REATIVACAO_SEM_VERBA, ROTULO_ETAPA, motivoValido, normalizarEtapa } from "@/lib/crm/etapas";
 import { hojeSP } from "@/lib/crm/meta";
 import { lerHistoricoDeEtapas, registrarEtapa } from "@/lib/crm/etapas-historico";
+import { normalizarCidade } from "@/lib/crm/cidade";
 
 // CRM comercial — CRUD dos leads.
 // ESCOPO: só quem entra no comercial (lib/crm/acesso.ts → admin). O comercial guarda a mensalidade
@@ -40,6 +41,7 @@ function sanear(body: Record<string, unknown>): Record<string, unknown> {
     }
   }
   if ("motivoPerdaCodigo" in out && out.motivoPerdaCodigo != null && !motivoValido(out.motivoPerdaCodigo)) out.motivoPerdaCodigo = null;
+  if ("cidade" in out) out.cidade = normalizarCidade(out.cidade as string | null);
   if ("temperatura" in out && !["quente", "morno", "frio", null, ""].includes(out.temperatura as string)) out.temperatura = null;
   for (const k of ["retomarEm", "previsaoFechamento", "proximoContato", "reuniaoData"]) {
     if (k in out && out[k] != null && out[k] !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(String(out[k]))) out[k] = null;

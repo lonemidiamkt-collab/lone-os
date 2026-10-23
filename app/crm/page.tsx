@@ -175,6 +175,16 @@ export default function CrmPage() {
   // Filtro que vem do dashboard ("Negócios parados", uma fatia da rosca…) para o Funil.
   const [filtroFunil, setFiltroFunil] = useState<FiltroFunil | null>(null);
   const [verTodosFechados, setVerTodosFechados] = useState(false);
+  // Funil no celular: uma etapa por vez com seletor (23/10/2026 — eram 1.344px de rolagem lateral e o arrastar brigava com ela).
+  const [ehCelular, setEhCelular] = useState(false);
+  const [etapaCelular, setEtapaCelular] = useState<string | null>(null);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const atualizar = () => setEhCelular(mq.matches);
+    atualizar();
+    mq.addEventListener("change", atualizar);
+    return () => mq.removeEventListener("change", atualizar);
+  }, []);
   const [abaFicha, setAbaFicha] = useState<"resumo" | "historico" | "dados">("resumo");
   // Reuniões de venda (lib/crm/reunioes.ts) + o resto do Google Agenda da Lone, e a janela de marcar.
   type ReuniaoTela = ReuniaoBase & { googleEventId: string | null; pauta: string | null };
@@ -398,6 +408,9 @@ export default function CrmPage() {
   async function salvar() {
     if (!draft?.contatoNome?.trim()) { toast.error("Informe o nome do contato."); return; }
     // Motivo da perda é obrigatório ao fechar como perdido (senão o relatório de perda esvazia).
+    // Mensalidade baixa demais costuma ser zero faltando ("R$ 2/mês" apareceu num lead em Diagnóstico).
+    const mensalidade = Number(draft.valorOrcamento ?? 0);
+    if (mensalidade > 0 && mensalidade < 300 && !confirm(`Mensalidade de ${brl(mensalidade)}? Parece baixa — confira se não faltou um zero.`)) return;
     if (draft.estagio === "perdido" && !draft.motivoPerdaCodigo && !draft.motivoPerda?.trim()) {
       toast.error("Informe o motivo da perda antes de salvar.");
       return;
@@ -790,6 +803,7 @@ export default function CrmPage() {
       {tab === "funil" && (() => {
         const campo = "h-9 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none";
         const fechadosFunil = separarFechados(filtrados, hoje.slice(0, 7));
+        const colunaCelular = etapaCelular && columns.some((c) => c.id === etapaCelular) ? etapaCelular : (columns.find((c) => c.items.length > 0) ?? columns[0])?.id ?? "";
         return (
         <>
           {/* Filtros numa linha só */}
@@ -815,16 +829,31 @@ export default function CrmPage() {
             {(busca || fResp || fOrigem || filtroFunil) && (
               <button className="text-xs text-muted-foreground underline" onClick={() => { setBusca(""); setFResp(""); setFOrigem(""); setFiltroFunil(null); }}>limpar</button>
             )}
-            <span className="ml-auto text-lone-caption text-muted-foreground">{filtrados.filter((l) => ABERTOS.includes(l.estagio)).length} abertos · arraste o cartão para mudar de etapa</span>
+            <span className="ml-auto text-lone-caption text-muted-foreground">{filtrados.filter((l) => ABERTOS.includes(l.estagio)).length} abertos · {ehCelular ? "toque no cartão para abrir; “…” → Mover para" : "arraste o cartão para mudar de etapa"}</span>
+            <Link href="/crm/importar" className="inline-flex h-9 items-center rounded-lg border border-border bg-card px-3 text-sm text-foreground hover:bg-accent">Importar planilha</Link>
           </div>
+          {ehCelular && (
+            <div className="flex items-center gap-2">
+              <label htmlFor="etapa-celular" className="text-lone-caption text-muted-foreground">Etapa</label>
+              <select id="etapa-celular" className={`${campo} flex-1`} value={colunaCelular} onChange={(e) => setEtapaCelular(e.target.value)}>
+                {columns.map((c) => <option key={c.id} value={c.id}>{c.title} · {c.items.length}</option>)}
+              </select>
+            </div>
+          )}
 
           <KanbanBoard<Lead>
-            columns={columns}
+            columns={ehCelular ? columns.filter((c) => c.id === colunaCelular) : columns}
             classeColuna="w-64 shrink-0 xl:w-auto xl:min-w-0 xl:flex-1"
             destinosExtras={[{ id: "ganho", title: ESTAGIO_META.ganho.title, color: ESTAGIO_META.ganho.color }, { id: "perdido", title: ESTAGIO_META.perdido.title, color: ESTAGIO_META.perdido.color }]}
             cabecalhoExtra={(col) => {
               const soma = col.items.reduce((s2, l) => s2 + (l.valorOrcamento ?? 0), 0);
-              return soma > 0 ? <span className="ml-auto mr-1 text-lone-caption font-medium tabular-nums text-muted-foreground">{brl(soma)}</span> : null;
+              const atrasados = col.items.filter((l) => toqueDo(l, hoje)?.situacao === "atrasado").length;
+              return (
+                <span className="ml-auto mr-1 flex items-center gap-2">
+                  {atrasados > 0 && <span className="rounded-full bg-lone-warning-bg px-2 py-0.5 text-lone-caption font-medium tabular-nums text-lone-warning">{atrasados} {atrasados === 1 ? "atrasado" : "atrasados"}</span>}
+                  {soma > 0 && <span className="text-lone-caption font-medium tabular-nums text-muted-foreground">{brl(soma)}</span>}
+                </span>
+              );
             }}
             onMove={moverEstagio}
             onAdd={(colId) => setDraft({ estagio: colId as CrmEstagio, responsavel: currentUser ?? undefined })}
@@ -833,12 +862,14 @@ export default function CrmPage() {
             renderCard={(l) => {
               const passo = proximoPasso(l);
               const toque = toqueDo(l, hoje);
-              const atrasoForte = !!toque && toque.situacao === "atrasado" && toque.diasAtraso > 3;
-              const corPasso = atrasoForte ? "bg-lone-danger-bg text-lone-danger" : passo.alerta ? "bg-lone-warning-bg text-lone-warning" : "bg-muted text-muted-foreground";
+              const atrasoForte = !!toque && toque.situacao === "atrasado" && toque.diasAtraso >= 7;
+              const atrasoLeve = !!toque && toque.situacao === "atrasado" && !atrasoForte;
+              const corPasso = atrasoForte ? "bg-lone-danger-bg text-lone-danger" : atrasoLeve || passo.alerta ? "bg-lone-warning-bg text-lone-warning" : "bg-muted text-muted-foreground";
               const reuniaoPassou = l.reuniaoData && l.reuniaoData < hoje;
               return (
-                <div onClick={() => setDraft({ ...l })}
-                  className="cursor-pointer rounded-xl border border-border bg-background p-3 shadow-sm transition-colors hover:border-primary/40 dark:shadow-none">
+                <div onClick={() => setDraft({ ...l })} role="button" tabIndex={0} aria-label={`Abrir ${l.empresa || l.contatoNome}`}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDraft({ ...l }); } }}
+                  className="cursor-pointer rounded-xl border border-border bg-background p-3 shadow-sm outline-none transition-colors hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring dark:shadow-none">
                   <div className="flex items-start justify-between gap-2 pr-5">
                     <div className="min-w-0">
                       <div className="truncate text-lone-body font-medium text-foreground">{l.empresa || l.contatoNome}</div>

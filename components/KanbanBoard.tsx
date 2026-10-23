@@ -133,9 +133,10 @@ export default function KanbanBoard<T extends { id: string }>({
                   <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10">
                     <button
                       onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === item.id ? null : item.id); }}
-                      className="w-6 h-6 rounded-md flex items-center justify-center bg-card/80 backdrop-blur-sm text-muted-foreground hover:text-foreground transition-all"
+                      aria-label="Ações do cartão" aria-expanded={menuOpen === item.id}
+                      className="w-8 h-8 rounded-md flex items-center justify-center bg-card/80 backdrop-blur-sm text-muted-foreground hover:text-foreground transition-all"
                     >
-                      <MoreHorizontal size={12} />
+                      <MoreHorizontal size={14} />
                     </button>
 
                     {menuOpen === item.id && (
