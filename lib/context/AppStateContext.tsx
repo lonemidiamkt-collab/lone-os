@@ -179,7 +179,6 @@ interface AppStateContextValue {
   rejectContent: (cardId: string, reviewer: string, reason: string) => void;
   pushNotification: (type: NotificationType, title: string, body: string, clientId?: string) => void;
   markNotificationRead: (id: string) => void;
-  markAllNotificationsRead: () => void;
   addQuinzReport: (report: Omit<QuinzReport, "id" | "createdAt">) => void;
   addCardComment: (cardId: string, author: string, role: Role, text: string) => void;
   deleteNotice: (id: string) => void;
@@ -739,11 +738,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
     db.markNotificationReadDb(id).catch(() => {});
-  }, []);
-
-  const markAllNotificationsRead = useCallback(() => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    db.markAllNotificationsReadDb().catch(() => {});
   }, []);
 
   // ---------- Actions (same interface, now with DB persistence) ----------
@@ -1782,7 +1776,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         rejectContent,
         pushNotification,
         markNotificationRead,
-        markAllNotificationsRead,
         addQuinzReport,
         addCardComment,
         deleteNotice,

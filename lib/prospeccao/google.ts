@@ -242,10 +242,20 @@ export async function listarEventos(deIso: string, ateIso: string): Promise<{ ok
   return { ok: true, eventos };
 }
 
-export async function cancelarEvento(eventId: string): Promise<boolean> {
+/**
+ * Cancela o evento (sendUpdates=all: o Google avisa os convidados). Evento já apagado (404/410) conta
+ * como cancelado. Devolve o motivo da falha — quem cancela uma reunião precisa saber que NÃO cancelou
+ * (21/10/2026: a falha era engolida e o lead seguia com convite e Meet valendo).
+ */
+export async function cancelarEventoComMotivo(eventId: string): Promise<{ ok: boolean; error?: string }> {
   const cal = await calendarioId();
   const r = await gapi(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal)}/events/${encodeURIComponent(eventId)}?sendUpdates=all`, { method: "DELETE" });
-  return r.ok || r.status === 404 || r.status === 410;
+  if (r.ok || r.status === 404 || r.status === 410) return { ok: true };
+  return { ok: false, error: r.error ?? "sem resposta do Google" };
+}
+
+export async function cancelarEvento(eventId: string): Promise<boolean> {
+  return (await cancelarEventoComMotivo(eventId)).ok;
 }
 
 // ─── Sheets ──────────────────────────────────────────────────────────────────

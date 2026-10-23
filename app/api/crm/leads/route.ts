@@ -11,6 +11,8 @@ import { carregarConfig } from "@/lib/prospeccao/config";
 import { PAPEIS_COMERCIAL } from "@/lib/crm/acesso";
 import { DIAS_REATIVACAO_SEM_VERBA, ROTULO_ETAPA, motivoValido, normalizarEtapa } from "@/lib/crm/etapas";
 import { hojeSP } from "@/lib/crm/meta";
+import { cancelarReunioesDoLead, reunioesFuturasDoLead } from "@/lib/crm/reunioes-server";
+import { textoExcluirComReuniao } from "@/lib/crm/reunioes";
 
 // CRM comercial — CRUD dos leads.
 // ESCOPO: só quem entra no comercial (lib/crm/acesso.ts → admin). O comercial guarda a mensalidade
@@ -19,7 +21,8 @@ import { hojeSP } from "@/lib/crm/meta";
 //   GET                       → lista os leads
 //   POST   { ...campos }      → cria um lead (contatoNome obrigatório)
 //   PATCH  { id, ...campos }  → atualiza (ex.: mover de etapa, marcar reunião)
-//   DELETE ?id=…              → apaga
+//   DELETE ?id=…              → apaga (com reunião futura: 409 pedindo confirmação; com
+//                               &cancelarReunioes=1, cancela no Google antes e só então apaga)
 
 const somaDias = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
@@ -162,8 +165,28 @@ export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
   try {
+    // LEAD COM REUNIÃO MARCADA (21/10/2026). Excluir apaga as reuniões em cascata e o evento do Google
+    // ficava de pé: o lead seguia com o convite e o Meet. Agora a reunião futura é cancelada ANTES
+    // (Google primeiro, mesmo caminho do botão Cancelar) e, se o Google não confirmar, o lead não é
+    // excluído. Sem `cancelarReunioes=1` (a tela não sabia da reunião — outra aba, aba antiga, ou
+    // marcada para além do que a tela carregou) devolve 409 com o texto da confirmação, e a tela pergunta.
+    const futuras = await reunioesFuturasDoLead(id);
+    if (!futuras.ok) return NextResponse.json({ error: `${futuras.erro} O lead não foi excluído.` }, { status: 500 });
+    let canceladas = 0;
+    if (futuras.reunioes.length) {
+      if (req.nextUrl.searchParams.get("cancelarReunioes") !== "1") {
+        return NextResponse.json({ error: textoExcluirComReuniao(futuras.reunioes) }, { status: 409 });
+      }
+      const autor = req.nextUrl.searchParams.get("autor")?.slice(0, 80) || null;
+      const c = await cancelarReunioesDoLead(id, autor);
+      if (!c.ok) {
+        const ja = c.canceladas.length ? ` ${c.canceladas.length === 1 ? "Uma reunião já foi cancelada" : `${c.canceladas.length} reuniões já foram canceladas`}.` : "";
+        return NextResponse.json({ error: `O lead não foi excluído: ${c.erro}${ja}` }, { status: 502 });
+      }
+      canceladas = c.canceladas.length;
+    }
     await db.deleteCrmLead(id);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, reunioesCanceladas: canceladas });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "erro" }, { status: 500 });
   }

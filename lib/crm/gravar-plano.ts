@@ -6,8 +6,6 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import * as db from "@/lib/supabase/queries";
 import type { LinhaPlano } from "@/lib/crm/importar";
 
-const CAMPOS_DE_NEGOCIACAO = ["valorOrcamento", "estagio", "probabilidade", "retomarEm", "etapaDesde"];
-
 export interface ResultadoGravacao {
   criados: number;
   atualizados: number;
@@ -27,7 +25,12 @@ export async function gravarPlano(linhas: LinhaPlano[]): Promise<ResultadoGravac
         resultado.criados++;
         resultado.criadas.push({ linha, leadId: lead.id });
       } else if (leadId) {
-        const patch = Object.fromEntries(Object.entries(linha.campos).filter(([k]) => CAMPOS_DE_NEGOCIACAO.includes(k)));
+        // Grava SÓ o que a prévia mostrou como "de → para" (21/10/2026). Antes ia a negociação inteira
+        // do arquivo por cima — lead Ganho voltava para Negociação. A regra está em compararNegociacao.
+        const patch: Record<string, unknown> = Object.fromEntries(linha.mudancas.map((m) => [m.campo, m.valor]));
+        if (!Object.keys(patch).length) continue;
+        // Etapa avançou: a régua da etapa nova conta de hoje. Sem mudar de etapa, o "desde" fica.
+        if ("estagio" in patch) patch.etapaDesde = typeof linha.campos.etapaDesde === "string" ? linha.campos.etapaDesde : new Date().toISOString();
         await db.updateCrmLead(leadId, patch);
         resultado.atualizados++;
       }

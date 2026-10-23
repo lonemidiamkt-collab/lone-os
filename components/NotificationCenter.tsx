@@ -14,7 +14,9 @@ import { ABRIR_NOTIFICACOES } from "@/components/TopActions";
 import MedievalAvatar, { getUserAvatar, type AvatarType } from "@/components/MedievalAvatars";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import AvatarGroup, { type ItemDoGrupo } from "@/components/ui/avatar-group";
+import { toast } from "sonner";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
+import { idsNaoLidos, textoMarcadas } from "@/lib/notificacoes/lidas";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useRole, type UserProfile } from "@/lib/context/RoleContext";
@@ -237,6 +239,8 @@ export default function NotificationCenter({ filtro: filtroDeAvisos }: {
   const notifications = useMemo(() => (filtroDeAvisos ? todas.filter(filtroDeAvisos) : todas), [todas, filtroDeAvisos]);
   const markRead = useNotificationsStore((s) => s.markRead);
   const markAllRead = useNotificationsStore((s) => s.markAllRead);
+  const desmarcarLidas = useNotificationsStore((s) => s.desmarcarLidas);
+  const [marcandoTodas, setMarcandoTodas] = useState(false);
   const clientes = useClientsStore((s) => s.clients);
   const cards = useContentStore((s) => s.contentCards);
   const demandas = useContentStore((s) => s.designRequests);
@@ -304,6 +308,33 @@ export default function NotificationCenter({ filtro: filtroDeAvisos }: {
     visiveis.forEach((l) => { const b = blocoDoTempo(l.n.createdAt); m.set(b, [...(m.get(b) ?? []), l]); });
     return ordem.filter((o) => m.has(o)).map((o) => ({ titulo: o, blocos: empilhar(m.get(o)!) }));
   }, [visiveis]);
+
+  // "MARCAR TODAS" = AS DA TELA (21/10/2026). Só os não lidos que a pessoa está vendo agora (o filtro
+  // de área e o casco do comercial recortam a lista); o servidor ainda confere que são dela ou do
+  // time. Deu certo → "Desfazer" por alguns segundos; falhou → diz que continuam não lidas.
+  const idsNaTela = idsNaoLidos(visiveis.map((l) => l.n));
+  const marcarTodasDaTela = async () => {
+    if (marcandoTodas || !idsNaTela.length) return;
+    setMarcandoTodas(true);
+    const r = await markAllRead(idsNaTela);
+    setMarcandoTodas(false);
+    if (!r.ok) {
+      toast.error(r.erro ?? "Não consegui marcar como lidas — os avisos continuam não lidos. Tente de novo.");
+      return;
+    }
+    if (!r.marcadas.length) return;
+    const marcadas = r.marcadas;
+    toast.success(textoMarcadas(marcadas.length), {
+      duration: 8000,
+      action: {
+        label: "Desfazer",
+        onClick: async () => {
+          const d = await desmarcarLidas(marcadas);
+          if (!d.ok) toast.error(d.erro ?? "Não consegui desfazer: os avisos continuam como lidos. Tente de novo.");
+        },
+      },
+    });
+  };
 
   const abrir = (l: Lida) => {
     if (!l.n.read) markRead(l.n.id);
@@ -552,10 +583,11 @@ export default function NotificationCenter({ filtro: filtroDeAvisos }: {
                       {fala ? <Volume2 size={14} /> : <VolumeX size={14} />} {erroVoz ? "Não gravou — tente de novo" : fala ? "Voz ligada" : "Voz desligada"}
                     </button>
                   )}
-                  {naoLidas > 0 && (
-                    <button type="button" onClick={() => markAllRead()}
-                      className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
-                      <CheckCheck size={14} /> Marcar todas como lidas
+                  {idsNaTela.length > 0 && (
+                    <button type="button" onClick={marcarTodasDaTela} disabled={marcandoTodas}
+                      title={filtro === "todas" || filtro === "nao_lidas" ? undefined : "Marca só os avisos deste filtro"}
+                      className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-60">
+                      <CheckCheck size={14} /> {marcandoTodas ? "Marcando…" : filtro === "todas" || filtro === "nao_lidas" ? "Marcar todas como lidas" : "Marcar estas como lidas"}
                     </button>
                   )}
                   <button type="button" onClick={() => setOpen(false)} aria-label="Fechar"

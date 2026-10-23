@@ -29,7 +29,7 @@ import { eventosDaAgenda, ROTULO_EVENTO, type Evento } from "@/lib/crm/agenda";
 import MarcarReuniao from "@/components/crm/MarcarReuniao";
 import ConectarGoogle from "@/components/crm/ConectarGoogle";
 import { motivoLegivel } from "@/lib/google/credencial";
-import { diaCurto, horaCurta, inicioDe, duracaoMin, mensagemVesperaLead, type ReuniaoBase, type Formato } from "@/lib/crm/reunioes";
+import { diaCurto, horaCurta, inicioDe, duracaoMin, mensagemVesperaLead, textoExcluirComReuniao, type ReuniaoBase, type Formato } from "@/lib/crm/reunioes";
 import { Anel } from "@/components/crm/graficos";
 import { useCascoComercial } from "@/lib/navegacao/use-casco";
 import type { CrmMeta } from "@/lib/types";
@@ -375,18 +375,32 @@ export default function CrmPage() {
     }
   }
 
+  // LEAD COM REUNIÃO MARCADA (21/10/2026): a confirmação diz qual reunião vai ser cancelada, e o
+  // servidor cancela no Google ANTES de excluir — se o Google não confirmar, o lead fica e a tela diz
+  // por quê. Se o servidor achar reunião que esta tela não tinha (409), pergunta de novo com a lista dele.
   async function excluir(id: string) {
-    if (!confirm("Excluir este lead? Essa ação não tem volta.")) return;
-    const snapshot = leads;
-    setLeads((prev) => prev.filter((l) => l.id !== id));
-    try {
-      const r = await authedFetch(`/api/crm/leads?id=${id}`, { method: "DELETE" });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      toast.success("Lead excluído.");
-    } catch {
-      setLeads(snapshot); // volta o lead pra lista se o delete falhou
-      toast.error("Não foi possível excluir. Tente de novo.");
+    const marcadas = reunioes.filter((r) => r.leadId === id && r.estado === "agendada" && Date.parse(r.fim) >= Date.now());
+    const sobreReuniao = marcadas.length ? `\n\n${textoExcluirComReuniao(marcadas)}` : "";
+    if (!confirm(`Excluir este lead? Essa ação não tem volta.${sobreReuniao}`)) return;
+    const url = (cancelar: boolean) =>
+      `/api/crm/leads?id=${encodeURIComponent(id)}${cancelar ? `&cancelarReunioes=1&autor=${encodeURIComponent(currentUser ?? "")}` : ""}`;
+    const aviso = toast.loading(marcadas.length ? "Cancelando a reunião e excluindo…" : "Excluindo…");
+    let r = await chamar<{ ok: boolean; reunioesCanceladas?: number }>(url(marcadas.length > 0), undefined, { method: "DELETE" });
+    if (r.status === 409) {
+      toast.dismiss(aviso);
+      if (!confirm(`${r.erro}\n\nExcluir o lead e cancelar?`)) return;
+      toast.loading("Cancelando a reunião e excluindo…", { id: aviso });
+      r = await chamar<{ ok: boolean; reunioesCanceladas?: number }>(url(true), undefined, { method: "DELETE" });
     }
+    if (!r.ok) {
+      toast.error(r.erro ?? "Não foi possível excluir. Tente de novo.", { id: aviso, duration: 12000 });
+      carregarReunioes(); // alguma pode ter sido cancelada antes da que falhou
+      return;
+    }
+    setLeads((prev) => prev.filter((l) => l.id !== id));
+    const n = r.data?.reunioesCanceladas ?? 0;
+    toast.success(n ? `Lead excluído e ${n === 1 ? "reunião cancelada" : `${n} reuniões canceladas`}.` : "Lead excluído.", { id: aviso });
+    if (n) carregarReunioes();
   }
 
   async function salvar() {
@@ -568,7 +582,8 @@ export default function CrmPage() {
   async function reuniaoAcao(id: string, acao: "remarcar" | "cancelar" | "realizada" | "nao_veio", extra: Record<string, unknown> = {}) {
     if (acao === "cancelar" && !window.confirm("Cancelar esta reunião? O convite é cancelado no Google Agenda e o grupo é avisado.")) return false;
     const r = await chamar("/api/crm/reunioes", { id, acao, autor: currentUser ?? null, ...extra }, { method: "PATCH" });
-    if (!r.ok) { toast.error(r.erro ?? "Não consegui atualizar a reunião."); return false; }
+    // Cancelar que o Google não confirmou volta com o porquê e a reunião fica marcada: tempo de ler.
+    if (!r.ok) { toast.error(r.erro ?? "Não consegui atualizar a reunião.", acao === "cancelar" ? { duration: 12000 } : undefined); return false; }
     toast.success(acao === "remarcar" ? "Reunião remarcada e avisada no grupo." : acao === "cancelar" ? "Reunião cancelada." : acao === "realizada" ? "Registrado: a reunião aconteceu." : "Registrado: não compareceu.");
     carregarReunioes(); recarregarLeads();
     return true;

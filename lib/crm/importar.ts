@@ -10,7 +10,8 @@
 
 import { createHash } from "node:crypto";
 import { avaliarLead, ROTULO_DESCARTE } from "@/lib/crm/filtro-lead";
-import { normalizarEtapa } from "@/lib/crm/etapas";
+import { ETAPAS_ABERTAS, ROTULO_ETAPA, normalizarEtapa } from "@/lib/crm/etapas";
+import { brl } from "@/lib/crm/meta";
 import type { CrmEstagio } from "@/lib/types";
 
 // ─── Formatos de entrada ───────────────────────────────────────────────
@@ -52,11 +53,22 @@ export interface LeadExistente {
   telefone: string | null;
   rotaLojaId: number | null;
   externoId: string | null;
+  // A negociação ATUAL do lead: sem ela não dá pra mostrar "de → para" nem proteger quem já avançou.
+  // Opcionais só porque o cron da rota (que só cria lead novo) não manda; sem eles nada é atualizado.
+  estagio?: string | null;
+  valorOrcamento?: number | null;
+  probabilidade?: number | null;
+  retomarEm?: string | null;
 }
 
 export interface ClienteExistente { nome: string; telefones: (string | null)[] }
 
 export interface AtividadePlanejada { tipo: string; texto: string; quando: string | null; autor: string | null }
+
+/** Um campo que a importação VAI mudar num lead que já existe: o que a prévia mostra e o que é gravado. */
+export interface Mudanca { campo: CampoNegociacao; rotulo: string; de: string; para: string; valor: unknown }
+/** O que o arquivo trazia e NÃO vai ser aplicado, com o porquê (aparece na prévia). */
+export interface NaoAplicado { campo: CampoNegociacao; rotulo: string; atual: string; arquivo: string; motivo: string }
 
 export interface LinhaPlano {
   chave: string;
@@ -67,6 +79,10 @@ export interface LinhaPlano {
   leadId: string | null;   // quando atualiza
   campos: Record<string, unknown>; // camelCase (CRM_FIELD_MAP)
   atividades: AtividadePlanejada[];
+  /** Lead que já existe: campo a campo, de → para. Só isto é gravado (lib/crm/gravar-plano.ts). */
+  mudancas: Mudanca[];
+  /** Lead que já existe: o que o arquivo pedia e ficou de fora, com o motivo. */
+  naoAplicado: NaoAplicado[];
 }
 
 export interface Plano {
@@ -113,6 +129,75 @@ export function lerCsv(texto: string): string[][] {
   }
   if (campo || row.length) { row.push(campo); rows.push(row); }
   return rows.filter((r) => r.some((x) => x.trim()));
+}
+
+// ─── Lead que já existe: o que muda e o que fica ───────────────────────
+
+export type CampoNegociacao = "estagio" | "valorOrcamento" | "probabilidade" | "retomarEm";
+const CAMPOS_NEGOCIACAO: CampoNegociacao[] = ["estagio", "valorOrcamento", "probabilidade", "retomarEm"];
+const ROTULO_CAMPO: Record<CampoNegociacao, string> = { estagio: "Etapa", valorOrcamento: "Mensalidade", probabilidade: "Chance", retomarEm: "Retomar em" };
+
+const vazio = (v: unknown) => v == null || v === "";
+
+function mostrar(campo: CampoNegociacao, v: unknown): string {
+  if (vazio(v)) return "—";
+  if (campo === "estagio") return ROTULO_ETAPA[normalizarEtapa(v)];
+  if (campo === "valorOrcamento") return `${brl(Number(v))}/mês`;
+  if (campo === "probabilidade") return `${Math.round(Number(v) * 100)}%`;
+  return String(v).split("-").reverse().join("/");
+}
+
+const mesmoValor = (a: unknown, b: unknown) =>
+  typeof a === "number" || typeof b === "number" ? Number(a) === Number(b) : String(a) === String(b);
+
+/**
+ * REIMPORTAR NÃO DESFAZ O TRABALHO DO FUNIL (21/10/2026). Antes, a negociação do arquivo era gravada
+ * por cima: lead Ganho voltava para Negociação, a mensalidade acertada voltava para a do arquivo e a
+ * prévia só dizia "atualizar". Agora, para lead que já existe:
+ *  - etapa só AVANÇA, nunca volta; negócio fechado (Ganho/Perdido) não muda pela importação;
+ *  - fechar como Ganho/Perdido é na ficha (carimba a data e pede o motivo), não pelo arquivo;
+ *  - mensalidade, chance e "retomar em" só PREENCHEM campo vazio;
+ *  - o que não entra vai para `naoAplicado`, com o motivo, e aparece na prévia.
+ */
+export function compararNegociacao(atual: LeadExistente | undefined, arquivo: Record<string, unknown>): { mudancas: Mudanca[]; naoAplicado: NaoAplicado[] } {
+  const mudancas: Mudanca[] = [];
+  const naoAplicado: NaoAplicado[] = [];
+  const etapaAtual = atual && atual.estagio !== undefined ? normalizarEtapa(atual.estagio) : null;
+  const fechado = etapaAtual === "ganho" || etapaAtual === "perdido";
+  const pular = (campo: CampoNegociacao, valorAtual: unknown, motivo: string) =>
+    naoAplicado.push({ campo, rotulo: ROTULO_CAMPO[campo], atual: mostrar(campo, valorAtual), arquivo: mostrar(campo, arquivo[campo]), motivo });
+
+  for (const campo of CAMPOS_NEGOCIACAO) {
+    const novo = arquivo[campo];
+    if (vazio(novo)) continue;
+    const valorAtual = atual?.[campo];
+    if (valorAtual === undefined) { pular(campo, null, "Não li o valor atual do lead: este campo não foi mexido."); continue; }
+
+    if (campo === "estagio") {
+      const para = normalizarEtapa(novo);
+      if (!etapaAtual || para === etapaAtual) continue;
+      if (fechado) { pular(campo, etapaAtual, `Negócio já fechado (${ROTULO_ETAPA[etapaAtual]}): a importação não reabre. Se precisar, mude na ficha.`); continue; }
+      if (para === "ganho" || para === "perdido") {
+        pular(campo, etapaAtual, `Fechar como ${ROTULO_ETAPA[para]} é na ficha do lead (registra a data${para === "perdido" ? " e o motivo" : ""}).`);
+        continue;
+      }
+      if (ETAPAS_ABERTAS.indexOf(para) < ETAPAS_ABERTAS.indexOf(etapaAtual)) {
+        pular(campo, etapaAtual, `O lead já está em ${ROTULO_ETAPA[etapaAtual]}: a importação não volta etapa.`);
+        continue;
+      }
+      mudancas.push({ campo, rotulo: ROTULO_CAMPO[campo], de: mostrar(campo, etapaAtual), para: mostrar(campo, para), valor: para });
+      continue;
+    }
+
+    if (mesmoValor(valorAtual, novo)) continue;
+    if (fechado) { pular(campo, valorAtual, `Negócio já fechado (${ROTULO_ETAPA[etapaAtual!]}): a importação não mexe nele.`); continue; }
+    if (!vazio(valorAtual)) {
+      pular(campo, valorAtual, `O funil já tem ${mostrar(campo, valorAtual)}: a importação só preenche campo vazio. Para trocar, mude na ficha.`);
+      continue;
+    }
+    mudancas.push({ campo, rotulo: ROTULO_CAMPO[campo], de: "—", para: mostrar(campo, novo), valor: novo });
+  }
+  return { mudancas, naoAplicado };
 }
 
 // ─── Planejamento ──────────────────────────────────────────────────────
@@ -168,6 +253,7 @@ export function planejarImportacao(p: {
         observacoes: obs || null,
       },
       atividades: visitaIso ? [{ tipo: "visita", texto: `Visita presencial (Rota Lagos)${loja.visitada_por ? ` — ${loja.visitada_por}` : ""}.`, quando: visitaIso, autor: loja.visitada_por ?? null }] : [],
+      mudancas: [], naoAplicado: [],
     };
     linhas.push(linha);
     porRota.set(loja.rota_loja_id, linha);
@@ -202,6 +288,7 @@ export function planejarImportacao(p: {
         observacoes: o.obs ?? null,
       },
       atividades: [{ tipo: "nota", texto: notaSituacao, quando: null, autor: "Roberto Lino" }],
+      mudancas: [], naoAplicado: [],
     });
   }
 
@@ -220,7 +307,7 @@ export function planejarImportacao(p: {
       const empresa = (r[iEmp] ?? "").trim();
       const titulo = empresa || nome || "(sem nome)";
       const chave = `planilha:${createHash("sha1").update(`${r[iT]}|${r[iW]}|${nome}`).digest("hex").slice(0, 16)}`;
-      const ignora = (motivo: string) => linhas.push({ chave, fonte: "planilha", acao: "ignorar", motivo, titulo, leadId: null, campos: {}, atividades: [] });
+      const ignora = (motivo: string) => linhas.push({ chave, fonte: "planilha", acao: "ignorar", motivo, titulo, leadId: null, campos: {}, atividades: [], mudancas: [], naoAplicado: [] });
       if (!iso) { ignora("Data do cadastro ilegível."); continue; }
       const v = avaliarLead({ nome, empresa, email: r[iE], telefone: r[iW], desafio: r[iD] });
       if (!v.ok) { ignora(`Descartado: ${ROTULO_DESCARTE[v.motivo].toLowerCase()}.`); continue; }
@@ -246,15 +333,38 @@ export function planejarImportacao(p: {
           cadenciaInicio: diaSP(iso), etapaDesde: iso, observacoes: obs || null,
         },
         atividades: [{ tipo: "nota", texto: "Formulário do site (importado da planilha).", quando: iso, autor: "Site" }],
+        mudancas: [], naoAplicado: [],
       });
     }
   }
 
+  // 4) Lead que já existe: entra só o que avança ou preenche vazio (compararNegociacao). Sem nada a
+  //    mudar, a linha vira "ignorar" — e continua na prévia se algo do arquivo ficou de fora, com o
+  //    motivo. Também deixa a reimportação idempotente: a nota de situação não se repete a cada rodada.
+  for (const l of linhas) {
+    if (l.acao !== "atualizar" || !l.leadId) continue;
+    const { mudancas, naoAplicado } = compararNegociacao(p.existentes.find((e) => e.id === l.leadId), l.campos);
+    l.mudancas = mudancas;
+    l.naoAplicado = naoAplicado;
+    if (!mudancas.length) {
+      l.acao = "ignorar";
+      l.atividades = [];
+      l.motivo = naoAplicado.length ? "Já está no funil: nada do arquivo foi aplicado (veja o porquê)." : "Já está no funil e o arquivo não muda nada.";
+    } else if (naoAplicado.length) {
+      l.motivo = "Já está no funil: entra só parte da negociação (veja o que fica de fora).";
+    }
+  }
+
+  // Mensalidade que ENTRA: a de quem é criado e a que vai preencher lead existente (não a do arquivo).
+  const mensalidadeQueEntra = (l: LinhaPlano): number => {
+    const v = l.acao === "criar" ? l.campos.valorOrcamento : l.acao === "atualizar" ? l.mudancas.find((m) => m.campo === "valorOrcamento")?.valor : null;
+    return typeof v === "number" ? v : 0;
+  };
   const totais = {
     criar: linhas.filter((l) => l.acao === "criar").length,
     atualizar: linhas.filter((l) => l.acao === "atualizar").length,
     ignorar: linhas.filter((l) => l.acao === "ignorar").length,
-    mensalidade: linhas.filter((l) => l.acao !== "ignorar").reduce((s, l) => s + (typeof l.campos.valorOrcamento === "number" ? (l.campos.valorOrcamento as number) : 0), 0),
+    mensalidade: linhas.reduce((s, l) => s + mensalidadeQueEntra(l), 0),
   };
   return { linhas, totais };
 }

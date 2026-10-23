@@ -7,12 +7,12 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import * as db from "@/lib/supabase/queries";
-import { atualizarEvento, cancelarEvento, criarEvento, estadoGoogle } from "@/lib/prospeccao/google";
+import { atualizarEvento, cancelarEvento, cancelarEventoComMotivo, criarEvento, estadoGoogle } from "@/lib/prospeccao/google";
 import { mandarNoGrupoVendas } from "@/lib/crm/grupo-vendas-envio";
 import { registrarAtividade } from "@/lib/crm/registrar-atividade";
 import { waComTexto } from "@/lib/crm/modelos";
 import {
-  descricaoDoEvento, diaCurto, fimDe, horaCurta, mensagemConfirmacaoLead, textoCanceladaGrupo, textoMarcadaGrupo,
+  descricaoDoEvento, diaCurto, erroCancelarNoGoogle, fimDe, horaCurta, mensagemConfirmacaoLead, textoCanceladaGrupo, textoMarcadaGrupo,
   textoRemarcadaGrupo, tituloDoEvento, validarMarcacao, type EstadoReuniao, type Formato, type ReuniaoBase,
 } from "@/lib/crm/reunioes";
 import type { CrmLead } from "@/lib/types";
@@ -132,11 +132,30 @@ export async function remarcarReuniao(id: string, novoInicio: string, duracao: n
   return { ok: true, reuniao };
 }
 
+/**
+ * Cancela o evento no Google e só diz "ok" se o Google confirmou (evento já apagado, 404/410, conta como
+ * cancelado). Reunião sem evento (marcada com o Google desconectado) não tem o que cancelar lá.
+ */
+export async function cancelarNoGoogle(r: Pick<Reuniao, "inicio" | "meetUrl" | "googleEventId">): Promise<{ ok: true } | { ok: false; erro: string }> {
+  if (!r.googleEventId) return { ok: true };
+  let g: { ok: boolean; error?: string };
+  try { g = await cancelarEventoComMotivo(r.googleEventId); } catch (e) { g = { ok: false, error: e instanceof Error ? e.message : "erro de conexão" }; }
+  return g.ok ? { ok: true } : { ok: false, erro: erroCancelarNoGoogle(r, g.error ?? "sem resposta do Google") };
+}
+
+// GOOGLE PRIMEIRO, PAINEL DEPOIS (21/10/2026). Antes a falha do Google era engolida (.catch(() => false))
+// e a reunião virava "cancelada" mesmo assim: o lead seguia com o convite e o Meet valendo, e o grupo
+// recebia "o convite foi cancelado". Agora, sem confirmação do Google, nada muda e a tela diz o porquê.
 export async function cancelarReuniao(id: string, autor: string | null): Promise<{ ok: boolean; erro?: string }> {
   const atual = await carregar(id);
   if (!atual || atual.r.estado !== "agendada") return { ok: false, erro: "Reunião não encontrada ou já encerrada." };
-  if (atual.r.googleEventId) await cancelarEvento(atual.r.googleEventId).catch(() => false);
-  await supabaseAdmin.from("crm_reunioes").update({ estado: "cancelada", atualizado_em: new Date().toISOString() }).eq("id", id);
+  const g = await cancelarNoGoogle(atual.r);
+  if (!g.ok) return { ok: false, erro: g.erro };
+  const { error } = await supabaseAdmin.from("crm_reunioes").update({ estado: "cancelada", atualizado_em: new Date().toISOString() }).eq("id", id);
+  if (error) {
+    // O Google já cancelou; repetir o clique é seguro (o evento apagado responde 410 = cancelado).
+    return { ok: false, erro: `O evento foi cancelado no Google Agenda, mas não consegui marcar a reunião como cancelada no painel (${error.message}). Clique em Cancelar de novo.` };
+  }
   await sincronizarReuniaoDoLead(atual.lead.id);
   await db.insertLeadActivity({ leadId: atual.lead.id, tipo: "nota", autor, texto: `Reunião de ${diaCurto(atual.r.inicio)} cancelada` }).catch(() => {});
   await mandarNoGrupoVendas(textoCanceladaGrupo(atual.r, atual.lead), "crm-reuniao:cancelada");
@@ -155,4 +174,30 @@ export async function registrarResultado(id: string, estado: "realizada" | "nao_
     await db.insertLeadActivity({ leadId: atual.lead.id, tipo: "nota", autor, texto: `Não compareceu à reunião de ${diaCurto(atual.r.inicio)}. Remarcar.` }).catch(() => {});
   }
   return { ok: true };
+}
+
+/** Reuniões que ainda vão acontecer (agendadas e não terminadas) de um lead — as que têm convite valendo. */
+export async function reunioesFuturasDoLead(leadId: string, agora: Date = new Date()): Promise<{ ok: true; reunioes: Reuniao[] } | { ok: false; erro: string }> {
+  const { data, error } = await supabaseAdmin.from("crm_reunioes").select("*").eq("lead_id", leadId).eq("estado", "agendada")
+    .gte("fim", agora.toISOString()).order("inicio");
+  if (error) return { ok: false, erro: `Não consegui conferir as reuniões do lead (${error.message}).` };
+  return { ok: true, reunioes: (data ?? []).map(deLinha) };
+}
+
+/**
+ * Antes de EXCLUIR um lead (21/10/2026): a exclusão apaga as reuniões em cascata e o evento do Google
+ * ficava de pé — o lead continuava com o convite e o Meet de uma reunião que ninguém ia fazer. Cancela
+ * cada reunião futura pelo mesmo caminho do botão Cancelar (Google primeiro) e para na primeira que o
+ * Google não confirmar: quem chama não exclui e mostra o erro.
+ */
+export async function cancelarReunioesDoLead(leadId: string, autor: string | null): Promise<{ ok: true; canceladas: Reuniao[] } | { ok: false; erro: string; canceladas: Reuniao[] }> {
+  const futuras = await reunioesFuturasDoLead(leadId);
+  if (!futuras.ok) return { ok: false, erro: futuras.erro, canceladas: [] };
+  const canceladas: Reuniao[] = [];
+  for (const r of futuras.reunioes) {
+    const c = await cancelarReuniao(r.id, autor).catch((e: unknown) => ({ ok: false, erro: e instanceof Error ? e.message : "erro" }));
+    if (!c.ok) return { ok: false, erro: c.erro ?? "Não consegui cancelar a reunião.", canceladas };
+    canceladas.push(r);
+  }
+  return { ok: true, canceladas };
 }

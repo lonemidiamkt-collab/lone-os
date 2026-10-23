@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowLeft, FileJson, FileSpreadsheet, Upload } from "lucide-react";
@@ -9,7 +9,7 @@ import { chamar } from "@/lib/api/chamar";
 import { useRole } from "@/lib/context/RoleContext";
 import { podeVerComercial } from "@/lib/crm/acesso";
 import { brl } from "@/lib/crm/meta";
-import type { Plano } from "@/lib/crm/importar";
+import type { LinhaPlano, Plano } from "@/lib/crm/importar";
 
 // /crm/importar — põe no funil as lojas da rota, as oportunidades (com mensalidade) e os cadastros
 // recentes da planilha do site. Prévia linha a linha antes de gravar; rodar de novo não duplica.
@@ -60,7 +60,13 @@ export default function ImportarComercialPage() {
     }
   }
 
-  const linhasVisiveis = plano ? plano.linhas.filter((l) => verIgnorados || l.acao !== "ignorar") : [];
+  // Lead que já existe e tem algo do arquivo que NÃO entra aparece sempre, mesmo "ignorado": é a
+  // linha que explica por que o Ganho não voltou para Negociação (21/10/2026).
+  const linhasVisiveis = plano ? plano.linhas.filter((l) => verIgnorados || l.acao !== "ignorar" || (l.naoAplicado ?? []).length > 0) : [];
+  const mensalidadeQueEntra = (l: LinhaPlano): number | null => {
+    const v = l.acao === "criar" ? l.campos.valorOrcamento : l.acao === "atualizar" ? (l.mudancas ?? []).find((m) => m.campo === "valorOrcamento")?.valor : null;
+    return typeof v === "number" ? v : null;
+  };
 
   return (
     <div className="space-y-5 p-6">
@@ -68,7 +74,7 @@ export default function ImportarComercialPage() {
         <div>
           <Link href="/crm" className="mb-1 inline-flex items-center gap-1 text-lone-caption text-muted-foreground hover:text-foreground"><ArrowLeft size={13} /> Comercial</Link>
           <h1 className="text-lone-h1 tracking-tight text-foreground">Importar para o comercial</h1>
-          <p className="text-lone-caption text-muted-foreground">Lojas da rota, oportunidades e cadastros do site. Prévia antes de gravar; rodar de novo não duplica.</p>
+          <p className="text-lone-caption text-muted-foreground">Lojas da rota, oportunidades e cadastros do site. Prévia antes de gravar; rodar de novo não duplica nem volta a etapa de quem já avançou.</p>
         </div>
       </header>
 
@@ -136,15 +142,41 @@ export default function ImportarComercialPage() {
                 </tr>
               </thead>
               <tbody>
-                {linhasVisiveis.map((l) => (
-                  <tr key={l.chave} className="border-t border-border text-foreground">
-                    <td className="py-1.5 pr-3 text-muted-foreground">{ROTULO_FONTE[l.fonte]}</td>
-                    <td className="py-1.5 pr-3">{l.titulo}</td>
-                    <td className="py-1.5 pr-3"><span className={`rounded border px-1.5 py-0.5 ${COR_ACAO[l.acao]}`}>{l.acao}</span></td>
-                    <td className="py-1.5 pr-3 text-muted-foreground">{l.motivo}</td>
-                    <td className="py-1.5 text-right">{typeof l.campos.valorOrcamento === "number" ? brl(l.campos.valorOrcamento) : ""}</td>
-                  </tr>
-                ))}
+                {linhasVisiveis.map((l) => {
+                  const mudancas = l.mudancas ?? [];
+                  const naoAplicado = l.naoAplicado ?? [];
+                  const valor = mensalidadeQueEntra(l);
+                  return (
+                    <Fragment key={l.chave}>
+                      <tr className="border-t border-border text-foreground">
+                        <td className="py-1.5 pr-3 text-muted-foreground">{ROTULO_FONTE[l.fonte]}</td>
+                        <td className="py-1.5 pr-3">{l.titulo}</td>
+                        <td className="py-1.5 pr-3"><span className={`rounded border px-1.5 py-0.5 ${COR_ACAO[l.acao]}`}>{l.acao}</span></td>
+                        <td className="py-1.5 pr-3 text-muted-foreground">{l.motivo}</td>
+                        <td className="py-1.5 text-right">{valor != null ? brl(valor) : ""}</td>
+                      </tr>
+                      {(mudancas.length > 0 || naoAplicado.length > 0) && (
+                        <tr className="text-foreground">
+                          <td />
+                          <td colSpan={4} className="pb-2 pr-3">
+                            <ul className="space-y-0.5">
+                              {mudancas.map((m) => (
+                                <li key={`m-${m.campo}`}>
+                                  <span className="text-muted-foreground">{m.rotulo}:</span> {m.de} <span aria-hidden>→</span><span className="sr-only">para</span> <strong className="font-medium">{m.para}</strong>
+                                </li>
+                              ))}
+                              {naoAplicado.map((n) => (
+                                <li key={`n-${n.campo}`} className="text-lone-warning">
+                                  {n.rotulo}: fica {n.atual} (o arquivo diz {n.arquivo}). {n.motivo}
+                                </li>
+                              ))}
+                            </ul>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

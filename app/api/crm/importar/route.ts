@@ -31,7 +31,12 @@ export async function POST(req: NextRequest) {
   const plano = planejarImportacao({
     dados: body.dados ?? null,
     csvPlanilha: body.csv ?? null,
-    existentes: existentes.map((l) => ({ id: l.id, empresa: l.empresa, contatoNome: l.contatoNome, telefone: l.telefone, rotaLojaId: l.rotaLojaId, externoId: l.externoId })),
+    // A negociação atual vai junto: é por ela que a prévia mostra "de → para" e que reimportar não
+    // regride etapa nem troca valor já acertado (compararNegociacao, 21/10/2026).
+    existentes: existentes.map((l) => ({
+      id: l.id, empresa: l.empresa, contatoNome: l.contatoNome, telefone: l.telefone, rotaLojaId: l.rotaLojaId, externoId: l.externoId,
+      estagio: l.estagio, valorOrcamento: l.valorOrcamento, probabilidade: l.probabilidade, retomarEm: l.retomarEm,
+    })),
     clientes: (clientesQ.data ?? []).map((c) => ({ nome: c.name as string, telefones: [c.phone, c.contact_phone, c.company_phone, c.whatsapp_team_phone] as (string | null)[] })),
     hoje: hojeSP(),
   });
