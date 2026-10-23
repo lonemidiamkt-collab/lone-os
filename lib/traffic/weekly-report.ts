@@ -10,6 +10,7 @@ import { janelaDoRelatorio, janelaDosUltimosDias } from "@/lib/reports/relatorio
 import { lerRelatorioAnuncios } from "@/lib/reports/relatorioClienteDados";
 import { relatorioClienteHtml } from "@/lib/reports/relatorioClientePdf";
 import { loadLoneLogo } from "@/lib/cs/roteiro-pdf";
+import { podeFalarDeAnuncio } from "@/lib/clients/servico";
 
 export interface ReportClientRow {
   id: string;
@@ -138,14 +139,34 @@ export async function selectReportClient(id: string): Promise<ReportClientRow | 
 
 const contaGraph = (id: string) => (id.startsWith("act_") ? id : `act_${id}`);
 
+/**
+ * A conta de anúncios que ENTRA no relatório — só com contrato de tráfego (21/10/2026).
+ *
+ * O mensal sai pra todo cliente com conta OU Instagram vinculado, e a folha de anúncios era montada
+ * sempre que havia conta. Cliente só de social com conta vinculada (o caso do Dumar) recebia, no
+ * relatório do mês, a página de campanhas que ele não contratou. A conta viabiliza; quem autoriza é
+ * o contrato (lib/clients/servico.ts).
+ */
+export function contaDeAnunciosDoRelatorio(c: Pick<ReportClientRow, "service_type" | "meta_ad_account_id">): string | null {
+  if (!c.meta_ad_account_id) return null;
+  return podeFalarDeAnuncio(c) ? c.meta_ad_account_id : null;
+}
+
+/** Por que não há relatório quando não sobra nem anúncio nem Instagram. */
+export function motivoSemRelatorio(c: Pick<ReportClientRow, "service_type" | "meta_ad_account_id">): string {
+  if (contaDeAnunciosDoRelatorio(c)) return "sem veiculação nem Instagram no período";
+  if (c.meta_ad_account_id) return "sem Instagram vinculado — e os anúncios ficam de fora, porque o contrato não inclui tráfego";
+  return "cliente sem tráfego nem Instagram";
+}
+
 function baseUrlPublica(): string {
   return process.env.NEXT_PUBLIC_PORTAL_DOMAIN || process.env.NEXT_PUBLIC_SITE_URL || "https://painel.lonemidia.com";
 }
 
 /**
  * Monta o HTML do relatório de UM cliente. Nunca lança. Monta o que o cliente tiver: anúncios
- * (Meta) + Instagram orgânico. Tem os dois → uma folha de anúncios e uma de Instagram. Só um → só ele.
- * O IG vem do cache (evita rate limit).
+ * (Meta, só com contrato de tráfego) + Instagram orgânico. Tem os dois → uma folha de anúncios e uma
+ * de Instagram. Só um → só ele. O IG vem do cache (evita rate limit).
  *
  * Desenho e contas: lib/reports/relatorioCliente*.ts (24/09 — comparação com o período anterior,
  * público corrigido, conjunto com nome, gráfico honesto).
@@ -162,7 +183,8 @@ export async function montarHtmlRelatorioCliente(
   dateFrom?: string,
   dateTo?: string,
 ): Promise<{ ok: boolean; html?: string; error?: string }> {
-  const accountId = client.meta_ad_account_id;
+  // Só com contrato de tráfego — ver contaDeAnunciosDoRelatorio.
+  const accountId = contaDeAnunciosDoRelatorio(client);
   const clientName = clientDisplayName(client);
   const intervaloExato = !!(dateFrom && dateTo);
   const hoje = hojeSP();
@@ -199,7 +221,7 @@ export async function montarHtmlRelatorioCliente(
     }
   }
   if (!anuncios && !igSnap) {
-    return { ok: false, error: accountId ? "sem veiculação nem Instagram no período" : "cliente sem tráfego nem Instagram" };
+    return { ok: false, error: motivoSemRelatorio(client) };
   }
 
   const logo = (await loadLoneLogo().catch(() => "")) || `${baseUrlPublica()}/logo.png`;

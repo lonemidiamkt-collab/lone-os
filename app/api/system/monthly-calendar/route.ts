@@ -6,7 +6,8 @@
 //
 // Regra de data: dispara no DIA 20; se 20 cair em fim de semana, envia no próximo
 // dia útil (segunda). O cron cobre os dias 20,21,22 às 08:00 BRT e a rota só envia
-// no "dia efetivo" do mês — idempotente por cliente/dia (não duplica).
+// no "dia efetivo" do mês — idempotente por GRUPO/dia (não duplica). Cadastros que dividem o
+// grupo (Bazar Ribeiro, Veneza) recebem UM calendário, com as lojas citadas juntas (21/10/2026).
 //   0 11 20,21,22 * * cron-call.sh monthly-calendar POST
 //
 // Trava global: traffic_monthly_calendar_enabled (default false).
@@ -33,6 +34,8 @@ import { holidaysPdfFilename } from "@/lib/holidays/pdf-server";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { sendMediaDocument } from "@/lib/whatsapp/evolution";
 import { csSendGroupDocument } from "@/lib/cs/notify";
+import { bloqueiaReenvio, erroParaLog, podeTrocarDeNumero } from "@/lib/whatsapp/desfecho-envio";
+import { agruparPorGrupo, juntarNomes } from "@/lib/whatsapp/grupo-compartilhado";
 
 import { conferirEAvisar } from "@/lib/cs/entregas";
 
@@ -40,10 +43,13 @@ import { conferirEAvisar } from "@/lib/cs/entregas";
  * O calendário do mês passa a sair pelo LONINHO (decisão do Roberto, 27/07): a pergunta da
  * promoção é CONVERSA — quem manda precisa entender a resposta, e o agente lê o grupo.
  * Se o agente não estiver naquele grupo, cai pro número do gestor em vez de o cliente ficar sem.
+ *
+ * Só cai pro gestor quando é CERTO que não saiu (21/10/2026): o PDF que estoura os 60 s costuma ter
+ * chegado, e mandar de novo pelo gestor punha dois calendários no grupo.
  */
 async function enviarCalendario(jid: string, b64: string, fileName: string, caption: string) {
   const r = await csSendGroupDocument(jid, b64, fileName, caption);
-  if (r.ok) return r;
+  if (!podeTrocarDeNumero(r)) return r;
   return sendMediaDocument(jid, b64, fileName, caption);
 }
 
@@ -92,15 +98,20 @@ function renderCaption(tpl: string, cliente: string, mes: string): string {
   const Mes = mes.charAt(0).toUpperCase() + mes.slice(1);
   return tpl.replace(/\{cliente\}/g, cliente).replace(/\{Mes\}/g, Mes).replace(/\{mes\}/g, mes);
 }
-async function alreadySent(clientId: string, dateKey: string): Promise<boolean> {
+/** O GRUPO já recebeu o calendário hoje? Basta um cadastro do grupo ter recebido — ou ter envio
+ *  incerto (pode ter chegado; reenviar às cegas é o que manda em dobro). */
+async function grupoJaRecebeu(clientIdsDoGrupo: string[], dateKey: string): Promise<boolean> {
   const { data } = await supabaseAdmin
     .from("client_group_message_log")
-    .select("id").eq("client_id", clientId).eq("date_key", dateKey).eq("kind", "calendar").eq("status", "sent").limit(1);
-  return !!(data && data.length > 0);
+    .select("status, error").in("client_id", clientIdsDoGrupo).eq("date_key", dateKey).eq("kind", "calendar").in("status", ["sent", "failed"]);
+  return (data ?? []).some((l) => bloqueiaReenvio(l as { status: string; error: string | null }));
 }
-async function logMsg(clientId: string, dateKey: string, status: string, error?: string | null) {
-  await supabaseAdmin.from("client_group_message_log")
-    .insert({ client_id: clientId, date_key: dateKey, kind: "calendar", status, error: error ?? null });
+/** Grava o desfecho pra CADA loja do grupo: todas receberam (ou não) o mesmo envio — e o sinal de
+ *  "promoção do mês sem resposta" (lib/cs/mensagem-cliente.ts) lê o calendário por cliente. */
+async function logMsg(clientIds: string[], dateKey: string, status: string, error?: string | null) {
+  const { error: e } = await supabaseAdmin.from("client_group_message_log")
+    .insert(clientIds.map((id) => ({ client_id: id, date_key: dateKey, kind: "calendar", status, error: error ?? null })));
+  if (e) console.error(`[monthly-calendar] não registrou ${status} de ${clientIds.join(",")}:`, e.message);
 }
 async function notifyAdminFailure(subject: string, detail: string) {
   try {
@@ -194,20 +205,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, status: "skipped", message: "Nenhum cliente com grupo confirmado", semGrupo });
     }
 
-    let sent = 0, failed = 0;
+    // UM ENVIO POR GRUPO (21/10/2026). O dedup era por cliente: Bazar Ribeiro Maricá e Saquarema,
+    // que dividem o grupo, recebiam o calendário duas vezes — cada um com o próprio nome na legenda.
+    // Agora o grupo recebe um só, citando as lojas juntas ("Oi, Bazar Ribeiro Maricá e Bazar
+    // Ribeiro Saquarema!"). Mesma ideia do dedup por grupo do client-messages.
+    let sent = 0, failed = 0, incertos = 0;
     const errors: string[] = [];
-    for (let i = 0; i < withGroup.length; i++) {
-      const c = withGroup[i];
-      const name = clientDisplayName(c);
-      const jid = c.whatsapp_group_jid!;
-      if (!force && (await alreadySent(c.id, dateKey))) continue;
-      const res = await enviarCalendario(jid, pdf.toString("base64"), fileName, renderCaption(template, name, mesNome));
-      if (res.ok) { sent++; await logMsg(c.id, dateKey, "sent"); }
-      else { failed++; errors.push(`${name}: ${res.error}`); await logMsg(c.id, dateKey, "failed", res.error); }
-      if (i < withGroup.length - 1) await sleep(2500);
+    const grupos = agruparPorGrupo(withGroup);
+    for (let i = 0; i < grupos.length; i++) {
+      const g = grupos[i];
+      const ids = g.clientes.map((c) => c.id);
+      const name = juntarNomes(g.clientes.map(clientDisplayName));
+      if (!force && (await grupoJaRecebeu(ids, dateKey))) continue;
+      const res = await enviarCalendario(g.jid, pdf.toString("base64"), fileName, renderCaption(template, name, mesNome));
+      if (res.ok) { sent++; await logMsg(ids, dateKey, "sent"); }
+      else {
+        if (res.incerto) incertos++; else failed++;
+        errors.push(`${name}: ${res.error}`);
+        await logMsg(ids, dateKey, "failed", erroParaLog(res));
+      }
+      if (i < grupos.length - 1) await sleep(2500);
     }
 
-    if (failed > 0) await notifyAdminFailure(`Calendário mensal (${mesNome}): ${failed} falha(s)`, errors.join("\n") || "—");
+    if (failed + incertos > 0) await notifyAdminFailure(`Calendário mensal (${mesNome}): ${failed} falha(s), ${incertos} incerto(s)`, errors.join("\n") || "—");
 
     // Confere no grupo interno quem ficou sem o calendário (o e-mail acima ninguém lê).
     const conferencia = onlyClientId ? null : await conferirEAvisar(
@@ -216,7 +236,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: sent > 0, status: sent > 0 ? "sent" : "failed",
-      mes: `${mesNome}/${target.year}`, sent, failed, semGrupo, conferencia, errors,
+      mes: `${mesNome}/${target.year}`, sent, failed, incertos, grupos: grupos.length, lojas: withGroup.length,
+      semGrupo, conferencia, errors,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

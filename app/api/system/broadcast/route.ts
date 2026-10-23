@@ -4,16 +4,21 @@
 // (broadcast-agosto). Aqui o texto e o público vêm por parâmetro, com as mesmas travas de sempre.
 //
 //   ?dryRun=1        → mostra quem receberia e o texto, não envia
-//   ?audiencia=      → trafego (só quem tem conta de anúncio) | social | todos   [padrão: todos]
+//   ?audiencia=      → trafego (quem CONTRATOU anúncios) | social (quem não contratou) | todos
+//                      [padrão: todos]. Pelo contrato, não pela conta vinculada (21/10/2026).
+//                      Valor desconhecido é recusado — erro de digitação não vira "todos".
 //   ?excluir=        → nomes a tirar da lista, separados por vírgula (casa por trecho do nome).
-//                      Ex: excluir=Dumar,Bruno Tintas Iguaba — porque "tem conta de anúncio" não é
-//                      o mesmo que "faz tráfego com a gente", e conferir a lista antes de disparar
-//                      é a regra da casa.
+//                      Ex: excluir=Bruno Tintas Iguaba — conferir a lista antes de disparar é a
+//                      regra da casa.
 //   ?chave=          → identificador do disparo (idempotência). Ex: "fim-de-mes-2026-07"
 //   body { texto }   → a mensagem
 //
-// Trava dupla: idempotência por `chave` (não manda duas vezes) e dedup por grupo (clientes que
-// dividem grupo recebem uma vez só). Registra em client_group_message_log e em cs_outbound.
+// Travas (21/10/2026):
+//   • a chave vale PRA SEMPRE, não por dia: a mesma chave rodada amanhã só completa quem ficou de fora;
+//   • dedup por GRUPO (cadastros que dividem grupo recebem uma vez só, também entre rodadas);
+//   • uma rodada por chave de cada vez (reservarRodada): duas chamadas juntas não mandam em dobro;
+//   • envio incerto (o WhatsApp não confirmou a tempo) conta como recebido e vai pro time conferir.
+// Registra em client_group_message_log (date_key = "broadcast:<chave>") e em cs_outbound.
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,14 +30,22 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { selectActiveClientsWithGroup, clientDisplayName } from "@/lib/traffic/weekly-report";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { sendGroupText } from "@/lib/whatsapp/evolution";
+import { erroParaLog, podeTrocarDeNumero, textoEnviosIncertos } from "@/lib/whatsapp/desfecho-envio";
+import { agruparPorGrupo, juntarNomes } from "@/lib/whatsapp/grupo-compartilhado";
+import { chaveDoRegistro, filtrarAudiencia, gruposJaAtendidos, lerAudiencia, AUDIENCIAS } from "@/lib/system/broadcast";
+import { reservarRodada, fecharRodada } from "@/lib/system/trava-rodada";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const hojeBRT = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 
-/** Sai pelo agente; se ele não estiver no grupo, cai pro gestor em vez de o cliente ficar sem. */
+/**
+ * Sai pelo agente; se ele não estiver no grupo, cai pro gestor em vez de o cliente ficar sem.
+ * Só cai pro gestor quando é CERTO que não saiu (21/10/2026): timeout do agente pode ter entregado,
+ * e mandar de novo pelo gestor punha o recado duas vezes no grupo.
+ */
 async function enviar(jid: string, texto: string, clientId: string, origem: string) {
   const r = await csSendGroupText(jid, texto, undefined, { origem, destino: "cliente", clientId });
-  if (r.ok) return r;
+  if (!podeTrocarDeNumero(r)) return r;
   return sendGroupText(jid, texto, `${origem}-fallback-gestor`);
 }
 
@@ -41,13 +54,16 @@ export async function POST(req: NextRequest) {
 
   const url = new URL(req.url);
   const dryRun = url.searchParams.get("dryRun") === "1";
-  const audiencia = url.searchParams.get("audiencia") || "todos";
+  const audiencia = lerAudiencia(url.searchParams.get("audiencia"));
   const excluir = (url.searchParams.get("excluir") || "")
     .split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
   const chave = (url.searchParams.get("chave") || "").trim();
   const body = await req.json().catch(() => ({}));
   const texto = ((body?.texto as string) || "").trim();
 
+  if (!audiencia) {
+    return NextResponse.json({ error: `audiencia inválida — use ${AUDIENCIAS.join(", ")}.` }, { status: 400 });
+  }
   if (!texto || texto.length < 20) {
     return NextResponse.json({ error: "Texto vazio ou curto demais." }, { status: 400 });
   }
@@ -57,83 +73,117 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Informe ?chave= (identificador do disparo, p/ não repetir)." }, { status: 400 });
   }
 
-  const dateKey = `${hojeBRT()}-${chave}`;
+  const chaveLog = chaveDoRegistro(chave);
   const clientes = await selectActiveClientsWithGroup();
   const comGrupo = clientes.filter((c) => c.whatsapp_group_jid);
+  const porAudiencia = filtrarAudiencia(comGrupo, audiencia);
 
-  const porAudiencia = audiencia === "trafego" ? comGrupo.filter((c) => c.meta_ad_account_id)
-    : audiencia === "social" ? comGrupo.filter((c) => !c.meta_ad_account_id)
-    : comGrupo;
-
-  // Tira quem foi excluído na mão. O filtro de audiência é grosso por natureza — "tem conta de
-  // anúncio" pega cliente de social que tem conta parada, e cliente pausado há semanas. Quem
-  // dispara confere a lista e nomeia as exceções.
+  // Tira quem foi excluído na mão. Quem dispara confere a lista e nomeia as exceções.
   const alvo = excluir.length
     ? porAudiencia.filter((c) => !excluir.some((e) => clientDisplayName(c).toLowerCase().includes(e)))
     : porAudiencia;
   const excluidos = porAudiencia.length - alvo.length;
 
-  // Duas fichas podem apontar pro MESMO grupo (Bazar Ribeiro Maricá e Saquarema dividem um só). O
-  // envio real já cobre isso mais abaixo, com `gruposFalados` — mas a prévia contava FICHAS, e é a
-  // prévia que alguém lê pra autorizar o disparo. Anunciar 42 e entregar 41 faz o relatório final
-  // parecer uma falha que não houve; pior, esconde que duas contas dividem um grupo.
+  // Duas fichas podem apontar pro MESMO grupo (Bazar Ribeiro Maricá e Saquarema dividem um só). A
+  // prévia conta GRUPOS, que é o que alguém lê pra autorizar o disparo.
+  const grupos = agruparPorGrupo(alvo);
   if (dryRun) {
-    const porJid = new Map<string, string[]>();
-    for (const c of alvo) {
-      const jid = c.whatsapp_group_jid!;
-      porJid.set(jid, [...(porJid.get(jid) ?? []), clientDisplayName(c)]);
-    }
-    const compartilhados = [...porJid.values()].filter((nomes) => nomes.length > 1);
+    const compartilhados = grupos.filter((g) => g.clientes.length > 1);
     return NextResponse.json({
       ok: true, status: "dry_run", audiencia, chave,
-      receberiam: porJid.size,          // grupos que recebem a mensagem — o número que importa
+      receberiam: grupos.length,        // grupos que recebem a mensagem — o número que importa
       fichas: alvo.length,              // cadastros na audiência, pode ser maior
-      grupos_compartilhados: compartilhados.map((nomes) => nomes.join(" + ")),
+      excluidos,
+      grupos_compartilhados: compartilhados.map((g) => g.clientes.map(clientDisplayName).join(" + ")),
       clientes: alvo.map(clientDisplayName), texto,
     });
   }
 
-  // Quem já recebeu ESTE disparo.
-  const { data: ja } = await supabaseAdmin
-    .from("client_group_message_log").select("client_id").eq("date_key", dateKey).eq("status", "sent");
-  const jaRecebeu = new Set((ja ?? []).map((r) => r.client_id as string));
+  // UMA RODADA POR CHAVE DE CADA VEZ. Duas chamadas juntas liam "ninguém recebeu" ao mesmo tempo e
+  // as duas mandavam. Terminada a rodada, a próxima com a mesma chave pode rodar (completa quem falhou).
+  const rotinaTrava = chaveLog;
+  const diaTrava = hojeBRT();
+  const reserva = await reservarRodada(rotinaTrava, diaTrava, { permitirNovaRodada: true });
+  if (!reserva.conseguiu) {
+    return NextResponse.json({ ok: false, status: "em_andamento", motivo: reserva.motivo, chave }, { status: 409 });
+  }
 
-  let enviados = 0, falhas = 0;
-  const gruposFalados = new Set<string>();
+  let enviados = 0, falhas = 0, jaTinham = 0;
   const erros: string[] = [];
-
-  for (let i = 0; i < alvo.length; i++) {
-    const c = alvo[i];
-    const jid = c.whatsapp_group_jid!;
-    if (jaRecebeu.has(c.id)) continue;
-    if (gruposFalados.has(jid)) {
-      await supabaseAdmin.from("client_group_message_log").insert({
-        client_id: c.id, date_key: dateKey, kind: "support", status: "skipped",
-        error: "grupo já recebeu (cliente compartilha grupo)",
-      });
-      continue;
+  const incertos: { cliente: string; erro?: string }[] = [];
+  const semRegistro: string[] = [];
+  try {
+    // Quem já recebeu ESTE recado, em qualquer dia — por grupo.
+    const { data: ja, error: eJa } = await supabaseAdmin
+      .from("client_group_message_log").select("client_id, status, error")
+      .eq("date_key", chaveLog).in("status", ["sent", "failed"]);
+    if (eJa) {
+      // Sem saber quem já recebeu, não manda: repetir recado pro cliente é pior que esperar.
+      await fecharRodada(rotinaTrava, diaTrava, false, `não leu o registro: ${eJa.message}`);
+      return NextResponse.json({ ok: false, error: `Não consegui conferir quem já recebeu este recado (${eJa.message}) — nada foi enviado.` }, { status: 500 });
     }
-    const r = await enviar(jid, texto, c.id, `broadcast:${chave}`);
-    if (r.ok) {
-      enviados++; gruposFalados.add(jid);
-      await supabaseAdmin.from("client_group_message_log").insert({ client_id: c.id, date_key: dateKey, kind: "support", status: "sent" });
-    } else {
-      falhas++; erros.push(`${clientDisplayName(c)}: ${r.error}`);
-      await supabaseAdmin.from("client_group_message_log").insert({ client_id: c.id, date_key: dateKey, kind: "support", status: "failed", error: r.error ?? null });
+    const jidPorCliente = new Map(comGrupo.map((c) => [c.id, c.whatsapp_group_jid as string]));
+    const jaAtendidos = gruposJaAtendidos(
+      (ja ?? []) as { client_id: string; status: string; error: string | null }[], jidPorCliente);
+
+    for (let i = 0; i < grupos.length; i++) {
+      const g = grupos[i];
+      const nome = juntarNomes(g.clientes.map(clientDisplayName));
+      if (jaAtendidos.has(g.jid)) { jaTinham++; continue; }
+
+      const [principal, ...mesmoGrupo] = g.clientes;
+      const r = await enviar(g.jid, texto, principal.id, `broadcast:${chave}`);
+      if (r.ok) enviados++;
+      else if (r.incerto) incertos.push({ cliente: nome, erro: r.error });
+      else { falhas++; erros.push(`${nome}: ${r.error}`); }
+
+      const linhas = [
+        { client_id: principal.id, date_key: chaveLog, kind: "support", status: r.ok ? "sent" : "failed", error: r.ok ? null : erroParaLog(r) },
+        ...(r.ok ? mesmoGrupo.map((c) => ({
+          client_id: c.id, date_key: chaveLog, kind: "support", status: "skipped",
+          error: "grupo já recebeu (cliente compartilha grupo)",
+        })) : []),
+      ];
+      // O registro é o que impede a repetição: se ele falhar depois de um envio, o time precisa saber.
+      const { error: eLog } = await supabaseAdmin.from("client_group_message_log").insert(linhas);
+      if (eLog) {
+        console.error(`[broadcast] ${nome}: registro falhou:`, eLog.message);
+        if (r.ok || r.incerto) semRegistro.push(nome);
+      }
+      if (i < grupos.length - 1) await sleep(2500);
     }
-    if (i < alvo.length - 1) await sleep(2500);
-  }
 
-  // O time precisa saber o que foi dito ao cliente — senão é pego de surpresa na resposta.
-  const jidInterno = process.env.CS_INTERNAL_GROUP_JID;
-  if (jidInterno) {
-    const resumo = falhas ? `⚠️ *${falhas}* não receberam:\n${erros.slice(0, 8).map((e) => `• ${e}`).join("\n")}` : "✅ Todos receberam.";
-    await csSendGroupText(jidInterno,
-      `📣 *Mandei um recado pros clientes* (${audiencia === "trafego" ? "só tráfego pago" : audiencia})\n\n` +
-      `_"${texto.slice(0, 220)}${texto.length > 220 ? "…" : ""}"_\n\n` +
-      `Foi pra *${enviados}* grupos. ${resumo}`,
-      undefined, { origem: "broadcast-aviso-interno", destino: "interno" });
-  }
+    // O time precisa saber o que foi dito ao cliente — senão é pego de surpresa na resposta.
+    const jidInterno = process.env.CS_INTERNAL_GROUP_JID;
+    const tentou = enviados + falhas + incertos.length > 0;
+    if (jidInterno && tentou) {
+      const partes: string[] = [
+        `📣 *Mandei um recado pros clientes* (${audiencia === "trafego" ? "só tráfego pago" : audiencia})\n\n` +
+        `_"${texto.slice(0, 220)}${texto.length > 220 ? "…" : ""}"_\n\n` +
+        `Foi pra *${enviados}* grupos.` + (jaTinham ? ` ${jaTinham} já tinham recebido este recado e ficaram de fora.` : "") +
+        (falhas
+          ? `\n\n⚠️ *${falhas}* não receberam:\n${erros.slice(0, 8).map((e) => `• ${e}`).join("\n")}\n_Rodar de novo com a mesma chave manda só pra eles._`
+          : incertos.length ? "" : "\n\n✅ Todos receberam."),
+      ];
+      if (incertos.length) partes.push(textoEnviosIncertos("o recado", incertos, "mande o recado na mão no grupo"));
+      if (semRegistro.length) {
+        partes.push(`⚠️ *Saiu, mas não consegui registrar* — ${semRegistro.map((n) => `*${n}*`).join(", ")}.\n`
+          + `_Se rodar de novo com a mesma chave, ${semRegistro.length === 1 ? "esse grupo recebe" : "esses grupos recebem"} duas vezes._`);
+      }
+      await csSendGroupText(jidInterno, partes.join("\n\n"),
+        undefined, { origem: "broadcast-aviso-interno", destino: "interno" });
+    }
 
-  return NextResponse.json({ ok: enviados > 0, enviados, falhas, erros: erros.slice(0, 15) });
+    await fecharRodada(rotinaTrava, diaTrava, falhas === 0,
+      `enviados ${enviados} · falhas ${falhas} · incertos ${incertos.length} · já tinham ${jaTinham}`);
+    return NextResponse.json({
+      ok: enviados > 0 || (falhas === 0 && incertos.length === 0),
+      enviados, falhas, jaTinham, incertos, semRegistro, erros: erros.slice(0, 15),
+    });
+  } catch (err) {
+    // Fecha a reserva mesmo com exceção — senão a chave fica trancada até o destrave de 90 min.
+    const msg = err instanceof Error ? err.message : String(err);
+    await fecharRodada(rotinaTrava, diaTrava, false, msg);
+    return NextResponse.json({ ok: false, error: msg, enviados, falhas, incertos }, { status: 500 });
+  }
 }

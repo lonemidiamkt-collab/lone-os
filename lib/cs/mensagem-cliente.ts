@@ -17,6 +17,7 @@
 import { statusNaEtapa } from "@/lib/conteudo/etapas";
 import { chatJson } from "@/lib/ai/openai";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { podeFalarDeAnuncio } from "@/lib/clients/servico";
 import { getEstiloCliente } from "./estilo";
 
 export interface SinaisCliente {
@@ -46,6 +47,12 @@ export interface SinaisCliente {
   conversasDoAnuncio: number | null;
   /** Dia da semana com mais conversas, quando há um pico claro. Assunto melhor que o total. */
   melhorDia: { dia: string; conversas: number } | null;
+  /**
+   * O CONTRATO inclui tráfego? (21/10/2026) Sem isso, nenhum sinal de anúncio vira assunto e a
+   * mensagem não pode falar de anúncio/campanha. A conta vinculada não autoriza: o metric_snapshots
+   * é gravado pra todo cliente com conta de anúncio — inclusive o Dumar, que é só social.
+   */
+  contratoDeAnuncio: boolean;
 }
 
 /** Engajamento mínimo (curtidas + comentários) pra um post virar "destaque da semana". */
@@ -55,6 +62,7 @@ const VAZIO: SinaisCliente = {
   aguardandoAprovacao: 0, aprovouRecentemente: false, esperandoDesde: null, entreguesNaSemana: 0, diasSemFalar: null,
   promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: null, pedirProdutosHoje: false,
   conversasDoAnuncio: null, melhorDia: null,
+  contratoDeAnuncio: false, // na dúvida, sem anúncio — ver lib/clients/servico.ts
 };
 
 /** Abaixo disso não vira assunto: "tivemos 2 conversas essa semana" soa a desculpa, não a resultado. */
@@ -71,7 +79,7 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
       supabaseAdmin.from("content_cards")
         .select("status, designer_delivered_at, client_approved_at, status_changed_at")
         .eq("client_id", clientId).is("archived_at", null),
-      supabaseAdmin.from("clients").select("last_client_msg_at, pergunta_produtos_semana").eq("id", clientId).maybeSingle(),
+      supabaseAdmin.from("clients").select("last_client_msg_at, pergunta_produtos_semana, service_type").eq("id", clientId).maybeSingle(),
       supabaseAdmin.from("client_ig_snapshots").select("data").eq("client_id", clientId).eq("period_kind", "7d").maybeSingle(),
       supabaseAdmin.from("client_group_message_log")
         .select("sent_at").eq("client_id", clientId).eq("kind", "calendar").eq("status", "sent")
@@ -97,7 +105,10 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
     // ── Resultado do anúncio ──────────────────────────────────────────────────
     // O sistema sabia quantas conversas o anúncio gerou e escrevia ao cliente sem citar. Agora o
     // número entra como FATO — e só quando é grande o bastante pra ser notícia boa.
-    const dias = (metricas.data ?? []) as { metric_date: string; conversions: number | null }[];
+    // SÓ COM CONTRATO DE TRÁFEGO (21/10/2026): cliente só de social com conta vinculada também tem
+    // linha no metric_snapshots, e a IA escrevia "os anúncios geraram X conversas" pra ele.
+    const contratoDeAnuncio = podeFalarDeAnuncio({ service_type: (cli.data?.service_type as string | null) ?? null });
+    const dias = contratoDeAnuncio ? ((metricas.data ?? []) as { metric_date: string; conversions: number | null }[]) : [];
     const totalConversas = dias.reduce((acc, d) => acc + (Number(d.conversions) || 0), 0);
     const conversasDoAnuncio = totalConversas >= CONVERSAS_MINIMO ? totalConversas : null;
 
@@ -136,7 +147,7 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
       aguardandoAprovacao, aprovouRecentemente, esperandoDesde, entreguesNaSemana, diasSemFalar, promoDoMesSemResposta, destaqueIg,
       postsNaSemana: ig?.resumo?.postsNoPeriodo ?? null,
       pedirProdutosHoje: ehSegunda && !!cli.data?.pergunta_produtos_semana,
-      conversasDoAnuncio, melhorDia,
+      conversasDoAnuncio, melhorDia, contratoDeAnuncio,
     };
   } catch {
     return VAZIO;
@@ -208,6 +219,10 @@ missão, ele não entra — mesmo que seja verdade.
 - Inventar gíria. Escreva português normal do dia a dia; na dúvida, seja simples.
 
 Responda APENAS no JSON do schema (campo "mensagem").`;
+
+// Cliente SEM contrato de tráfego não lê nada sobre anúncio, campanha ou tráfego — nem sem número
+// ("os anúncios trouxeram bastante gente"). Foi assim que o Dumar recebeu "de olho nas campanhas".
+const FALA_DE_ANUNCIO = /(\ban[úu]nci|\bcampanha|\btr[áa]fego|\bimpulsion|\bpatrocinad|\bads\b)/i;
 
 // Sinais de que a IA escorregou num guarda-corpo. Se bater, joga fora e usa o texto neutro —
 // mensagem errada pro cliente é pior que mensagem genérica.
@@ -397,7 +412,8 @@ export async function escolherFoco(s: SinaisCliente, clientId?: string): Promise
   }
   // 3. RESULTADO DO ANÚNCIO. Vem antes do post porque conversa gerada é dinheiro entrando; curtida
   // é sinal. O número sai do que a varredura mediu — se não houver, este bloco nem existe.
-  if (s.conversasDoAnuncio !== null) {
+  // E só com contrato de tráfego (21/10/2026): o sinal pode existir sem o contrato.
+  if (s.contratoDeAnuncio && s.conversasDoAnuncio !== null) {
     const fatos = [`os anúncios geraram ${s.conversasDoAnuncio} conversas no WhatsApp nos últimos 7 dias`];
     if (s.melhorDia) fatos.push(`o melhor dia foi ${s.melhorDia.dia}, com ${s.melhorDia.conversas} conversas`);
     return {
@@ -462,6 +478,10 @@ export function revisarMensagem(texto: string, s: SinaisCliente): RevisaoMensage
   for (const re of PROIBIDO) {
     const m = t.match(re);
     if (m) return { ok: false, motivo: `assunto proibido: "${m[0]}"` };
+  }
+  if (!s.contratoDeAnuncio) {
+    const m = t.match(FALA_DE_ANUNCIO);
+    if (m) return { ok: false, motivo: `fala de anúncio ("${m[0]}") e o contrato não inclui tráfego` };
   }
   const permitidos = numerosPermitidos(s);
   for (const n of t.match(/\d+/g) ?? []) {
@@ -539,6 +559,9 @@ export async function montarMensagemCliente(
     `fim de semana — abra pelo assunto. Só mencione o dia se ele fizer diferença pro que você tem a dizer.`,
     "",
     "Escreva SÓ sobre a missão. Nenhum outro assunto entra.",
+    sinais.contratoDeAnuncio
+      ? ""
+      : "Este cliente NÃO contratou anúncios: não fale de anúncio, campanha, tráfego nem impulsionamento.",
     estilo ? `\nComo o cliente costuma falar (use SÓ pra calibrar formalidade — não copie gírias): ${estilo.slice(0, 300)}` : "",
   ].filter(Boolean).join("\n");
 

@@ -39,3 +39,27 @@ describe("textoConferencia", () => {
     expect(m).toContain("erro não registrado");
   });
 });
+
+// 21/10/2026 (item 5.2): o envio que estoura o tempo pode ter chegado. A conferência mandava
+// "vale reenviar" pra ele — e reenviar às cegas era justamente o que punha a mensagem em dobro.
+describe("textoConferencia — envio incerto", () => {
+  it("só incertos → diz que não sabe, e manda CONFERIR, não reenviar", () => {
+    const m = textoConferencia({ ...base, entregues: 36, incertos: ["Bazar Ribeiro"] });
+    expect(m).toContain("não sei se chegou em 1 de 37");
+    expect(m).toContain("Bazar Ribeiro");
+    expect(m).toContain("Confira no grupo antes de reenviar");
+    expect(m).not.toContain("Vale reenviar");
+  });
+
+  it("misturado → falha pede reenvio, incerto pede conferência, cada um no seu bloco", () => {
+    const m = textoConferencia({
+      ...base, entregues: 35,
+      falharam: [{ cliente: "Dumar", motivo: "HTTP 400" }],
+      incertos: ["Veneza Estofados"],
+    });
+    expect(m).toContain("não chegou em 1 de 37");
+    expect(m).toContain("Vale reenviar");
+    expect(m).toContain("Não sei se chegou");
+    expect(m).toContain("Veneza Estofados");
+  });
+});

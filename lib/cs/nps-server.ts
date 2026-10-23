@@ -89,11 +89,22 @@ export async function montarRodada(agora = new Date()): Promise<{ envios: EnvioN
   return selecionarEnvios({ reunioes: lista, clientes, anteriores, agora });
 }
 
-export interface ResultadoEnvio { cliente: string; ok: boolean; erro?: string }
+export interface ResultadoEnvio {
+  cliente: string;
+  ok: boolean;
+  erro?: string;
+  /** O WhatsApp não confirmou a tempo: a pergunta pode ter chegado. A linha fica — ver abaixo. */
+  incerto?: boolean;
+}
 
 /**
  * Manda a pergunta. A linha nasce ANTES do envio (o índice único por reunião impede pergunta dupla
  * se duas rodadas se cruzarem); envio que falha apaga a linha, e a próxima rodada tenta de novo.
+ *
+ * ENVIO INCERTO NÃO APAGA A LINHA (21/10/2026). Timeout não quer dizer que a pergunta não chegou —
+ * apagar fazia a rodada da hora seguinte perguntar a nota de novo no mesmo grupo. A linha fica em
+ * "aguardando": se chegou, a resposta é lida normalmente; se não chegou, vence em 72h como
+ * "sem_resposta". O time é avisado para conferir.
  */
 export async function enviarPerguntas(envios: readonly EnvioNps[]): Promise<ResultadoEnvio[]> {
   const out: ResultadoEnvio[] = [];
@@ -107,6 +118,10 @@ export async function enviarPerguntas(envios: readonly EnvioNps[]): Promise<Resu
       continue;
     }
     const r = await csSendGroupText(e.groupJid, e.texto, undefined, { origem: "cs-nps", destino: "cliente", clientId: e.clientId });
+    if (!r.ok && r.incerto) {
+      out.push({ cliente: e.cliente, ok: false, incerto: true, erro: r.error ?? "o WhatsApp não confirmou o envio" });
+      continue;
+    }
     if (!r.ok || r.error) {
       await supabaseAdmin.from(TABELA_NPS).delete().eq("id", linha?.id as string);
       out.push({ cliente: e.cliente, ok: false, erro: r.error ?? "WhatsApp não confirmou o envio" });
