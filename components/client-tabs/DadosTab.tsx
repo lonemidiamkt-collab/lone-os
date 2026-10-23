@@ -12,7 +12,12 @@ import {
   Pencil, Check, Loader2, AlertTriangle, Send, ExternalLink,
   Link as LinkIcon, Clock, CheckCircle, Mail, Settings,
   Facebook, Instagram, Search, Smartphone,
+  Trash2, RefreshCw, Plus, Image as ImageIcon, X,
 } from "lucide-react";
+import { listaDocs, adicionarDoc, removerDocDaLista } from "@/lib/onboarding/docs";
+import { limiteDoDocumento, MB } from "@/lib/onboarding/etapas";
+import { trocarDocNaLista, cabeMaisUmDoc, descreverDoc, rotuloDoc } from "@/lib/clients/documentos-legais";
+import { rotuloDoCampo } from "@/lib/cofre/versoes";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import MarcaDoCliente from "@/components/clients/MarcaDoCliente";
 import CofreStatus from "@/components/client/ficha/CofreStatus";
@@ -149,18 +154,24 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assinaturaSensivel]);
 
+  // 21/10/2026 (auditoria 3.6): erro ao ler o contrato aparecia como "Nenhum contrato" + "Gerar
+  // Contrato" — convite a gerar um repetido. Agora diz que não leu e oferece tentar de novo.
+  const [contratoErro, setContratoErro] = useState(false);
+  const [contratoTentativa, setContratoTentativa] = useState(0);
   useEffect(() => {
     let mounted = true;
+    setContratoErro(false);
     import("@/lib/supabase/client").then(({ supabase }) => {
       supabase.from("contracts").select("status, end_date, version")
         .eq("client_id", client.id).order("created_at", { ascending: false }).limit(1).maybeSingle()
         .then(({ data, error }) => {
-          if (!mounted || error) return;
-          if (data) setLatestContract({ status: data.status as string, endDate: data.end_date as string, version: data.version as number });
+          if (!mounted) return;
+          if (error) { setContratoErro(true); return; }
+          setLatestContract(data ? { status: data.status as string, endDate: data.end_date as string, version: data.version as number } : null);
         });
-    });
+    }).catch(() => { if (mounted) setContratoErro(true); });
     return () => { mounted = false; };
-  }, [client.id]);
+  }, [client.id, contratoTentativa]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -202,19 +213,30 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       if (form.instagramPassword && form.instagramPassword !== "••••••••") pwUpdates.push({ field: "instagram_password", value: form.instagramPassword });
       if (form.googleAdsPassword && form.googleAdsPassword !== "••••••••") pwUpdates.push({ field: "google_ads_password", value: form.googleAdsPassword });
 
+      // 21/10/2026 (auditoria 3.5): a rota guarda a senha anterior e devolve o id dela (→ "Desfazer"),
+      // e diz quando a troca não chegou ao cofre do social — antes isso falhava calado.
       const falhas: string[] = [];
+      const avisosEspelho: string[] = [];
+      const trocadas: { field: string; versaoId: string }[] = [];
       for (const u of pwUpdates) {
-        const r = await chamar("/api/client-vault", { clientId: client.id, table: "clients", field: u.field, value: u.value });
-        if (!r.ok) falhas.push(`${u.field.replace("_password", "")}: ${r.erro}`);
+        const r = await chamar<{ historicoId?: string | null; aviso?: string | null }>("/api/client-vault", { clientId: client.id, table: "clients", field: u.field, value: u.value });
+        if (!r.ok) { falhas.push(`${rotuloDoCampo(u.field)}: ${r.erro}`); continue; }
+        if (r.data?.historicoId) trocadas.push({ field: u.field, versaoId: r.data.historicoId });
+        if (r.data?.aviso) avisosEspelho.push(r.data.aviso);
       }
+      if (avisosEspelho.length) toast.warning(avisosEspelho.join(" "), { duration: 20000 });
+      const ofereceDesfazer = trocadas.length
+        ? { action: { label: "Desfazer troca de senha", onClick: () => { void desfazerSenhas(trocadas); } }, duration: 15000 }
+        : undefined;
       if (falhas.length) {
         // Os dados foram salvos; a senha não. Mantém em edição para não perder o que foi digitado.
-        toast.error(`Dados salvos, mas a senha não: ${falhas.join(" · ")}`);
+        toast.error(`Dados salvos, mas a senha não: ${falhas.join(" · ")}`, ofereceDesfazer);
         return;
       }
 
       setEditing(false);
-      toast.success("Dados do cliente salvos.");
+      if (ofereceDesfazer) toast.success("Dados salvos. A senha anterior ficou guardada.", ofereceDesfazer);
+      else toast.success("Dados do cliente salvos.");
     } catch (e) {
       toast.error(e instanceof Error && e.message ? e.message : "Não foi possível salvar. Tente de novo.");
     } finally { setSaving(false); }
@@ -232,6 +254,27 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   const [revealingPw, setRevealingPw] = useState<string | null>(null);
   // Sem a revelação não dá pra saber se há senha no cofre — "Armazenada" era chute.
   const [semSenha, setSemSenha] = useState<Record<string, boolean>>({});
+
+  // "Desfazer" do toast: volta cada senha trocada para a versão guardada pela rota (21/10/2026, 3.5).
+  // A restauração também guarda a que sai — dá para desfazer o desfazer pelo mesmo caminho.
+  async function desfazerSenhas(itens: { field: string; versaoId: string }[]) {
+    const erros: string[] = [];
+    const avisos: string[] = [];
+    for (const it of itens) {
+      const r = await chamar<{ aviso?: string | null }>("/api/client-vault", {
+        acao: "restaurar", clientId: client.id, table: "clients", field: it.field, versaoId: it.versaoId,
+      });
+      if (!r.ok) erros.push(`${rotuloDoCampo(it.field)}: ${r.erro}`);
+      else if (r.data?.aviso) avisos.push(r.data.aviso);
+    }
+    // A tela mostrava a senha nova: limpa para quem precisar revelar a que vale agora.
+    const chaves = Object.entries(pwFieldMap).filter(([, col]) => itens.some((i) => i.field === col)).map(([k]) => k);
+    setForm((p) => { const n = { ...p }; for (const k of chaves) n[k] = ""; return n; });
+    setSemSenha((p) => { const n = { ...p }; for (const k of chaves) delete n[k]; return n; });
+    if (erros.length) toast.error(`Não consegui voltar a senha anterior: ${erros.join(" · ")}`);
+    else toast.success(itens.length > 1 ? "Senhas anteriores restauradas." : "Senha anterior restaurada.");
+    if (avisos.length) toast.warning(avisos.join(" "), { duration: 20000 });
+  }
   const revealPassword = async (pwKey: string): Promise<void> => {
     const field = pwFieldMap[pwKey];
     if (!field) return;
@@ -244,29 +287,72 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
     setForm((p) => ({ ...p, [pwKey]: valor }));
   };
 
-  const handleDocUpload = async (file: File, docType: string) => {
-    setUploading(docType);
+  // ── Documentos: um campo guarda VÁRIOS arquivos ("url\nurl", lib/onboarding/docs.ts) ─────────────
+  // 21/10/2026 (auditoria 3.4): a ficha tratava a lista como um arquivo só — "Visualizar" quebrava com
+  // 2+, "Substituir" deixava só o novo e as outras páginas sumiam, e não havia Remover. Agora cada
+  // arquivo tem Ver / Trocar / Remover, e "Adicionar" acrescenta sem apagar nada.
+  const CAMPO_DOC: Record<string, "docContratoSocial" | "docIdentidade" | "docLogo"> = {
+    contrato_social: "docContratoSocial", identidade: "docIdentidade", logo: "docLogo",
+  };
+  // A rota de upload grava SÓ o arquivo novo na coluna; quem completa a lista é o salvamento daqui.
+  // Se ele falhar, a ficha ficaria só com o novo: guardamos o valor certo para "Tentar salvar de novo".
+  const [salvarPendente, setSalvarPendente] = useState<{ field: "docContratoSocial" | "docIdentidade" | "docLogo"; valor: string | null; rotulo: string } | null>(null);
+  const [salvandoDoc, setSalvandoDoc] = useState(false);
+
+  const gravarCampoDoc = async (field: "docContratoSocial" | "docIdentidade" | "docLogo", valor: string | null, rotulo: string): Promise<boolean> => {
+    setSalvandoDoc(true);
+    try {
+      await updateClientData(client.id, { [field]: valor });
+      setSalvarPendente(null);
+      return true;
+    } catch (e) {
+      setSalvarPendente({ field, valor, rotulo });
+      setUploadError(`${rotulo}: a ficha não foi atualizada (${e instanceof Error && e.message ? e.message : "erro"}). Use "Tentar salvar de novo" — sem isso a ficha pode ficar só com o último arquivo.`);
+      return false;
+    } finally { setSalvandoDoc(false); }
+  };
+
+  /** Envia um arquivo. `substituir` = url do arquivo que este troca (mesma posição na lista). */
+  const handleDocUpload = async (file: File, docType: string, substituir?: string) => {
+    const field = CAMPO_DOC[docType];
+    if (!field) return;
+    const rotulo = docType === "contrato_social" ? "Contrato Social" : docType === "identidade" ? "Documento c/ Foto" : "Logo";
+    const antes = (client[field] as string | undefined) ?? null; // ANTES do upload: a rota sobrescreve a coluna
+    if (docType !== "logo" && !substituir && !cabeMaisUmDoc(antes, client.id, docType)) {
+      setUploadError(`${rotulo}: não cabe mais um arquivo neste campo. Junte as páginas num PDF só, ou remova uma antes.`);
+      return;
+    }
+    setUploading(substituir ? `troca:${substituir}` : docType);
     setUploadError(null);
     try {
       const fd = new FormData();
       fd.append("file", file); fd.append("clientId", client.id); fd.append("docType", docType);
-      const res = await authedFetch("/api/onboarding/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (res.ok && data.url) {
-        const field = docType === "contrato_social" ? "docContratoSocial" : docType === "identidade" ? "docIdentidade" : "docLogo";
-        try {
-          await updateClientData(client.id, { [field]: data.url });
-        } catch (e) {
-          setUploadError(`Arquivo subiu, mas não ficou salvo na ficha: ${e instanceof Error ? e.message : "erro"}`);
-        }
-      } else {
-        setUploadError(data.error ?? "Falha no upload");
-        setTimeout(() => setUploadError(null), 5000);
+      const r = await chamar<{ url?: string }>("/api/onboarding/upload", fd);
+      if (!r.ok || !r.data?.url) {
+        setUploadError(`${rotulo} (${file.name}): ${r.erro ?? "o arquivo não subiu"}. Nada mudou na ficha.`);
+        return;
       }
-    } catch {
-      setUploadError("Erro de conexão no upload");
-      setTimeout(() => setUploadError(null), 5000);
+      const url = r.data.url;
+      const novo = docType === "logo" ? url
+        : substituir ? trocarDocNaLista(antes, substituir, url)
+        : adicionarDoc(antes, url);
+      if (await gravarCampoDoc(field, novo, rotulo)) {
+        toast.success(substituir ? `${rotulo}: arquivo trocado.` : `${rotulo}: arquivo adicionado.`);
+      }
     } finally { setUploading(null); }
+  };
+
+  const [removendoDoc, setRemovendoDoc] = useState<string | null>(null);
+  const removerDoc = async (docType: string, rotulo: string, url: string, indice: number, total: number) => {
+    const field = CAMPO_DOC[docType];
+    if (!field) return;
+    const qual = rotuloDoc(url, indice, total);
+    const resto = total > 1 ? `Os outros ${total - 1 === 1 ? "1 arquivo continua" : `${total - 1} arquivos continuam`} na ficha.` : "O campo fica pendente.";
+    if (!window.confirm(`Remover este arquivo de ${rotulo}?\n\n${qual}\n\n${resto}`)) return;
+    setRemovendoDoc(url); setUploadError(null);
+    const ok = await gravarCampoDoc(field, removerDocDaLista((client[field] as string | undefined) ?? null, url), rotulo);
+    setRemovendoDoc(null);
+    if (ok) toast.success(`${rotulo}: arquivo removido da ficha.`);
   };
 
   const copyToClip = (text: string) => { navigator.clipboard.writeText(text).catch(() => {}); };
@@ -498,7 +584,12 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           <div>
             <p className="text-xs text-muted-foreground">Status Jurídico</p>
             <p className="text-sm font-medium text-foreground">
-              {!latestContract ? "Nenhum contrato" :
+              {contratoErro ? (
+                <span className="text-lone-warning flex items-center gap-1.5">
+                  Não consegui ler o contrato
+                  <button onClick={() => setContratoTentativa((n) => n + 1)} className="text-[11px] underline hover:text-foreground">Tentar de novo</button>
+                </span>
+              ) : !latestContract ? "Nenhum contrato" :
                latestContract.status === "active" ? `Contrato Ativo (V${latestContract.version})` :
                latestContract.status === "expired" ? `Contrato Vencido (V${latestContract.version})` :
                `Rascunho (V${latestContract.version})`}
@@ -507,7 +598,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         </div>
         <button onClick={() => onNavigateTab("contratos")}
           className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-primary/30 hover:text-primary">
-          <FileText size={11} /> {latestContract ? "Ver Contratos" : "Gerar Contrato"}
+          <FileText size={11} /> {latestContract || contratoErro ? "Ver Contratos" : "Gerar Contrato"}
         </button>
       </div>
       )}
@@ -666,53 +757,84 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             </div>
           </div>
           {(uploadError || openError) && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-              <AlertTriangle size={13} className="text-destructive shrink-0" />
-              <span className="text-xs text-destructive">{uploadError ?? openError}</span>
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-lone-danger-bg border border-lone-danger-border">
+              <AlertTriangle size={13} className="text-lone-danger shrink-0 mt-0.5" />
+              <span className="text-xs text-lone-danger flex-1">{uploadError ?? openError}</span>
+              {salvarPendente && (
+                <button onClick={() => gravarCampoDoc(salvarPendente.field, salvarPendente.valor, salvarPendente.rotulo).then((ok) => { if (ok) { setUploadError(null); toast.success(`${salvarPendente.rotulo}: ficha atualizada.`); } })}
+                  disabled={salvandoDoc}
+                  className="text-[11px] px-2.5 py-1 rounded-lg border border-lone-danger-border text-lone-danger hover:bg-card flex items-center gap-1 shrink-0 disabled:opacity-50">
+                  {salvandoDoc ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />} Tentar salvar de novo
+                </button>
+              )}
+              {!salvarPendente && (
+                <button onClick={() => { setUploadError(null); setOpenError(null); }} className="text-lone-danger hover:text-foreground shrink-0" aria-label="Fechar aviso"><X size={12} /></button>
+              )}
             </div>
           )}
+          <p className="text-[10px] text-muted-foreground">JPG, PNG, WEBP, HEIC ou PDF · até {limiteDoDocumento("contrato_social") / MB} MB por arquivo · cada página pode ser um arquivo.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {([
-              { label: "Contrato Social", url: client.docContratoSocial, docType: "contrato_social" },
-              { label: "Documento c/ Foto (RG/CNH)", url: client.docIdentidade, docType: "identidade" },
-            ]).map(({ label, url, docType }) => (
+              { label: "Contrato Social", valor: client.docContratoSocial, docType: "contrato_social" },
+              { label: "Documento c/ Foto (RG/CNH)", valor: client.docIdentidade, docType: "identidade" },
+            ]).map(({ label, valor, docType }) => {
+              const arquivos = listaDocs(valor);
+              const ocupado = !!uploading || !!removendoDoc || salvandoDoc;
+              return (
               <div key={docType} className="rounded-xl border border-border bg-surface p-4 space-y-3">
-                <p className="text-xs font-medium text-foreground">{label}</p>
-                {url ? (
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-foreground">{label}</p>
+                  {arquivos.length > 0 && (
+                    <span className="text-[10px] text-muted-foreground">{arquivos.length} {arquivos.length === 1 ? "arquivo" : "arquivos"}</span>
+                  )}
+                </div>
+                {arquivos.length ? (
                   <>
-                    {!isPrivateRef(url) && url.match(/\.(jpg|jpeg|png|webp|heic)$/i) && (
-                      <div className="relative w-full h-28 rounded-lg overflow-hidden bg-card border border-border">
-                        <img src={url} alt={label} className="w-full h-full object-cover" />
-                      </div>
-                    )}
-                    {isPrivateRef(url) && (
-                      <div className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border">
-                        <Shield size={16} className="text-lone-warning" />
-                        <span className="text-xs text-muted-foreground">Arquivo privado — gere link para visualizar</span>
-                      </div>
-                    )}
-                    {!isPrivateRef(url) && url.match(/\.pdf$/i) && (
-                      <div className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border">
-                        <FileText size={18} className="text-primary" /><span className="text-xs text-muted-foreground">PDF</span>
-                      </div>
-                    )}
-                    <div className="flex gap-1.5">
-                      <button onClick={() => handleSecureOpen(url, docType, false)}
-                        disabled={opening === `${docType}-view`}
-                        className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all disabled:opacity-50">
-                        {opening === `${docType}-view` ? <Loader2 size={10} className="animate-spin" /> : <Eye size={10} />} Visualizar
-                      </button>
-                      <button onClick={() => handleSecureOpen(url, docType, true)}
-                        disabled={opening === `${docType}-dl`}
-                        className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all disabled:opacity-50">
-                        {opening === `${docType}-dl` ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />} Baixar
-                      </button>
-                    </div>
-                    {/* Substituir — admin pode enviar versão recebida via WhatsApp */}
-                    <label className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-border text-[10px] text-muted-foreground hover:text-muted-foreground hover:border-border transition-all cursor-pointer">
-                      {uploading === docType ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
-                      {uploading === docType ? "Substituindo..." : "Substituir arquivo"}
-                      <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => {
+                    <ul className="space-y-2">
+                      {arquivos.map((url, i) => {
+                        const d = descreverDoc(url);
+                        const trocando = uploading === `troca:${url}`;
+                        return (
+                          <li key={url} className="rounded-lg border border-border bg-card p-2.5 space-y-2">
+                            <div className="flex items-start gap-2 min-w-0">
+                              {d.tipo === "imagem" ? <ImageIcon size={16} className="text-primary shrink-0 mt-0.5" aria-hidden="true" />
+                                : <FileText size={16} className="text-primary shrink-0 mt-0.5" aria-hidden="true" />}
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs text-foreground">{rotuloDoc(url, i, arquivos.length)}</p>
+                                <p className="text-[10px] text-muted-foreground truncate" title={d.nome}>
+                                  {d.nome}{d.privado ? " · privado" : ""}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button onClick={() => handleSecureOpen(url, url, false)} disabled={opening === `${url}-view`}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors disabled:opacity-50">
+                                {opening === `${url}-view` ? <Loader2 size={10} className="animate-spin" /> : <Eye size={10} />} Ver
+                              </button>
+                              <button onClick={() => handleSecureOpen(url, url, true)} disabled={opening === `${url}-dl`}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors disabled:opacity-50">
+                                {opening === `${url}-dl` ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />} Baixar
+                              </button>
+                              <label className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors ${ocupado ? "opacity-50 pointer-events-none" : "cursor-pointer"}`}>
+                                {trocando ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />} {trocando ? "Trocando..." : "Trocar"}
+                                <input type="file" accept="image/*,.pdf" className="hidden" disabled={ocupado} onChange={(e) => {
+                                  const f = e.target.files?.[0]; if (f) handleDocUpload(f, docType, url); e.target.value = "";
+                                }} />
+                              </label>
+                              <button onClick={() => removerDoc(docType, label, url, i, arquivos.length)} disabled={ocupado}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border text-[11px] text-muted-foreground hover:text-lone-danger hover:border-lone-danger-border transition-colors disabled:opacity-50">
+                                {removendoDoc === url ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />} Remover
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {/* Mais uma página (verso do RG, outra folha do contrato) — acrescenta, não substitui. */}
+                    <label className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors ${ocupado ? "opacity-50 pointer-events-none" : "cursor-pointer"}`}>
+                      {uploading === docType ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
+                      {uploading === docType ? "Enviando..." : "Adicionar outro arquivo"}
+                      <input type="file" accept="image/*,.pdf" className="hidden" disabled={ocupado} onChange={(e) => {
                         const f = e.target.files?.[0]; if (f) handleDocUpload(f, docType); e.target.value = "";
                       }} />
                     </label>
@@ -722,17 +844,18 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                     <div className="flex items-center gap-2 p-4 rounded-lg border border-dashed border-border bg-card">
                       <AlertTriangle size={14} className="text-lone-warning" /><span className="text-xs text-lone-warning">Pendente</span>
                     </div>
-                    <label className="flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all cursor-pointer">
+                    <label className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors ${ocupado ? "opacity-50 pointer-events-none" : "cursor-pointer"}`}>
                       {uploading === docType ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
                       {uploading === docType ? "Enviando..." : "Enviar arquivo do WhatsApp"}
-                      <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => {
+                      <input type="file" accept="image/*,.pdf" className="hidden" disabled={ocupado} onChange={(e) => {
                         const f = e.target.files?.[0]; if (f) handleDocUpload(f, docType); e.target.value = "";
                       }} />
                     </label>
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

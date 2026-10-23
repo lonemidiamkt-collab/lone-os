@@ -8,6 +8,9 @@ import type { ContractData, ContractRecord } from "@/lib/contracts/types";
 import type { Client } from "@/lib/types";
 import { supabase } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
+import { somarMesesIso } from "@/lib/contracts/registro";
+import { toast } from "sonner";
 import {
   FileText, Plus, Download, Eye, Loader2, Check, X,
   Calendar, DollarSign, Clock, AlertTriangle,
@@ -32,9 +35,8 @@ interface ContractFull extends ContractRecord {
 interface AuditEntry { id: string; action: string; actor: string; details: string; createdAt: string; }
 interface Addendum { id: string; changeType: string; description: string; oldValue: string; newValue: string; effectiveDate: string; generatedBy: string; createdAt: string; }
 
-function addMonths(date: string, months: number): string {
-  const d = new Date(date); d.setMonth(d.getMonth() + months); return d.toISOString().slice(0, 10);
-}
+// Mesmo cálculo da rota que grava (lib/contracts/registro.ts): o PDF e o registro mostram a mesma data final.
+const addMonths = somarMesesIso;
 function formatCurrency(v: number): string {
   return `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
 }
@@ -62,6 +64,13 @@ export default function ContractGenerator({ client, currentUser }: Props) {
   const [renewFrom, setRenewFrom] = useState<ContractFull | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [showLegacyModal, setShowLegacyModal] = useState(false);
+  // 21/10/2026 (auditoria 3.6): falha de leitura/gravação aparece como falha, no lugar onde nasceu.
+  const [listaErro, setListaErro] = useState<string | null>(null);
+  const [formErro, setFormErro] = useState<string | null>(null);
+  const [auditErro, setAuditErro] = useState<string | null>(null);
+  const [adendosErro, setAdendosErro] = useState<string | null>(null);
+  const [adendoErro, setAdendoErro] = useState<string | null>(null);
+  const [salvandoAdendo, setSalvandoAdendo] = useState(false);
 
   const [serviceType, setServiceType] = useState(client.serviceType || "lone_growth");
   const [valor, setValor] = useState("");
@@ -99,8 +108,16 @@ export default function ContractGenerator({ client, currentUser }: Props) {
   }, [client.id]);
 
   const loadContracts = async () => {
-    const { data } = await supabase.from("contracts").select("*").eq("client_id", client.id).order("created_at", { ascending: false });
-    if (data) setContracts(data.map((r) => ({
+    setLoading(true);
+    const { data, error } = await supabase.from("contracts").select("*").eq("client_id", client.id).order("created_at", { ascending: false });
+    // Erro NÃO vira "Nenhum contrato gerado": mantém o que já estava na tela e diz que não leu.
+    if (error || !data) {
+      setListaErro(`Não consegui carregar os contratos${error?.message ? ` (${error.message})` : ""}.`);
+      setLoading(false);
+      return;
+    }
+    setListaErro(null);
+    setContracts(data.map((r) => ({
       id: r.id as string, clientId: r.client_id as string, version: r.version as number,
       serviceType: r.service_type as string, monthlyValue: Number(r.monthly_value),
       startDate: r.start_date as string, endDate: r.end_date as string,
@@ -117,13 +134,17 @@ export default function ContractGenerator({ client, currentUser }: Props) {
   };
 
   const loadAudit = async (contractId: string) => {
-    const { data } = await supabase.from("contract_audit_log").select("*").eq("contract_id", contractId).order("created_at", { ascending: false });
+    setAuditErro(null);
+    const { data, error } = await supabase.from("contract_audit_log").select("*").eq("contract_id", contractId).order("created_at", { ascending: false });
+    if (error) { setAuditEntries([]); setAuditErro("Não consegui carregar o histórico deste contrato."); return; }
     setAuditEntries((data || []).map((r) => ({ id: r.id, action: r.action, actor: r.actor, details: r.details || "", createdAt: r.created_at })));
   };
 
   const loadAddendums = async (contractId: string) => {
+    setAdendosErro(null);
     const { data, error } = await supabase.from("contract_addendums").select("*").eq("contract_id", contractId).order("created_at", { ascending: false });
-    if (error) { console.error("[Addendums]", error); return; }
+    // Antes o erro só ia pro console e a lista ficava com os adendos de OUTRO contrato aberto antes.
+    if (error) { setAddendums([]); setAdendosErro("Não consegui carregar os adendos deste contrato."); return; }
     setAddendums((data || []).map((r) => ({ id: r.id, changeType: r.change_type, description: r.description, oldValue: r.old_value || "", newValue: r.new_value || "", effectiveDate: r.effective_date, generatedBy: r.generated_by, createdAt: r.created_at })));
   };
 
@@ -153,6 +174,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
     }
     const errs = validateClientData();
     setValidationErrors(errs);
+    setFormErro(null);
     setShowForm(true);
     setPreviewUrl(null);
   };
@@ -175,43 +197,47 @@ export default function ContractGenerator({ client, currentUser }: Props) {
     setPreviewUrl(URL.createObjectURL(blob));
   };
 
+  // 21/10/2026 (auditoria 3.6): a gravação mora em /api/contracts/gerar (só gestão). A versão sai do
+  // banco, não de `contracts.length` — lista que falhou ao carregar fazia o próximo sair V1 de novo.
+  // A janela SÓ fecha com a gravação confirmada; erro fica dentro dela, com o que foi digitado.
   const handleGenerate = async () => {
-    if (!valor || Number(valor) <= 0) return;
-    setGenerating(true);
+    if (!valor || Number(valor) <= 0) { setFormErro("Informe o valor mensal."); return; }
+    if (hasRenewal && !(Number(renewalValue) > 0)) { setFormErro("Informe o novo valor do reajuste ou desmarque o reajuste."); return; }
+    setGenerating(true); setFormErro(null);
     try {
-      const blob = await pdf(<ContractPDF data={buildContractData()} />).toBlob();
-      const version = contracts.length + 1;
-      const fileName = `${client.id}/contrato-v${version}-${Date.now()}.pdf`;
-      await supabase.storage.from("contracts").upload(fileName, await blob.arrayBuffer(), { contentType: "application/pdf", upsert: true });
-      const pdfUrl = `/storage/v1/object/public/contracts/${fileName}`;
-
-      const { data: inserted } = await supabase.from("contracts").insert({
-        client_id: client.id, version, service_type: serviceType,
-        monthly_value: Number(valor), start_date: dataInicio,
-        end_date: addMonths(dataInicio, duracao), duration_months: duracao,
-        status: "draft", pdf_url: pdfUrl, generated_by: currentUser,
-        payment_day: paymentDay,
-        previous_contract_id: renewFrom?.id || null,
-        has_renewal: hasRenewal,
-        renewal_value: hasRenewal && renewalValue ? Number(renewalValue) : null,
-      }).select("id").single();
-
-      if (inserted) {
-        await logAudit(inserted.id, "generated", `Contrato V${version} gerado — ${SERVICE_LABELS[serviceType]} — ${formatCurrency(Number(valor))}/mes`);
-        if (renewFrom) {
-          await logAudit(inserted.id, "renewal", `Renovacao do Contrato V${renewFrom.version}`);
-        }
+      let blob: Blob;
+      try {
+        blob = await pdf(<ContractPDF data={buildContractData()} />).toBlob();
+      } catch {
+        setFormErro("Não consegui montar o PDF do contrato. Confira os dados e tente de novo.");
+        return;
       }
+      const fd = new FormData();
+      fd.append("file", new File([blob], "contrato.pdf", { type: "application/pdf" }));
+      fd.append("clientId", client.id);
+      fd.append("serviceType", serviceType);
+      fd.append("monthlyValue", String(Number(valor)));
+      fd.append("startDate", dataInicio);
+      fd.append("durationMonths", String(duracao));
+      fd.append("paymentDay", String(paymentDay));
+      if (renewFrom?.id) fd.append("previousContractId", renewFrom.id);
+      fd.append("hasRenewal", hasRenewal ? "true" : "false");
+      if (hasRenewal) fd.append("renewalValue", String(Number(renewalValue)));
 
-      await supabase.from("timeline_entries").insert({
-        client_id: client.id, type: "manual", actor: currentUser,
-        description: `Contrato V${version} (${SERVICE_LABELS[serviceType]}) ${renewFrom ? "renovado" : "gerado"} — ${formatCurrency(Number(valor))}/mes`,
-        timestamp: new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
-      });
+      const r = await chamar<{ ok: boolean; version: number; avisos?: string[] }>("/api/contracts/gerar", fd);
+      if (!r.ok || !r.data) { setFormErro(r.erro ?? "Não consegui gravar o contrato. Nada foi salvo — tente de novo."); return; }
 
       setShowForm(false); setPreviewUrl(null); setRenewFrom(null);
+      const avisos = r.data.avisos ?? [];
+      if (avisos.length) toast.warning(`Contrato V${r.data.version} gravado, mas ${avisos.join(" e ")}.`);
+      else toast.success(`Contrato V${r.data.version} gravado.`);
       await loadContracts();
-    } catch (err) { console.error(err); } finally { setGenerating(false); }
+    } finally { setGenerating(false); }
+  };
+
+  const fecharForm = () => {
+    if (generating) return; // gravando: fechar agora esconderia o resultado
+    setShowForm(false); setPreviewUrl(null); setRenewFrom(null); setFormErro(null);
   };
 
   const handleDownloadDocx = async (c: ContractFull) => {
@@ -334,18 +360,20 @@ export default function ContractGenerator({ client, currentUser }: Props) {
     }
   };
 
+  // 21/10/2026 (auditoria 3.6): grava pela rota e SÓ limpa o texto quando gravou. Antes o insert
+  // falhava calado e o formulário era zerado do mesmo jeito — o adendo e o texto sumiam juntos.
   const handleAddendum = async (contractId: string) => {
-    if (!addendumForm.description) return;
-    await supabase.from("contract_addendums").insert({
-      contract_id: contractId, change_type: addendumForm.changeType,
-      description: addendumForm.description, old_value: addendumForm.oldValue,
-      new_value: addendumForm.newValue, effective_date: addendumForm.effectiveDate,
-      generated_by: currentUser,
-    });
-    await logAudit(contractId, "addendum", `Adendo: ${addendumForm.changeType} — ${addendumForm.description}`);
+    if (!addendumForm.description.trim()) { setAdendoErro("Descreva a alteração do adendo."); return; }
+    if (salvandoAdendo) return;
+    setSalvandoAdendo(true); setAdendoErro(null);
+    const r = await chamar<{ ok: boolean; avisos?: string[] }>("/api/contracts/adendo", { contractId, ...addendumForm });
+    setSalvandoAdendo(false);
+    if (!r.ok) { setAdendoErro(r.erro ?? "Não consegui gravar o adendo. Seu texto continua aqui — tente de novo."); return; }
     setAddendumForm({ changeType: "valor", description: "", oldValue: "", newValue: "", effectiveDate: new Date().toISOString().slice(0, 10) });
-    setShowAddendum(null);
-    await loadAddendums(contractId);
+    const avisos = r.data?.avisos ?? [];
+    if (avisos.length) toast.warning(`Adendo gravado, mas ${avisos.join(" e ")}.`);
+    else toast.success("Adendo registrado.");
+    await loadAddendums(contractId); // a seção fica aberta: dá para ver o adendo que acabou de entrar
   };
 
   // Find expiring contracts (within 30 days)
@@ -417,8 +445,24 @@ export default function ContractGenerator({ client, currentUser }: Props) {
         </div>
       )}
 
+      {/* Falha ao listar: aparece como falha, com "tentar de novo" — nunca como "nenhum contrato". */}
+      {listaErro && !loading && (
+        <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg p-4 flex items-start gap-2">
+          <AlertTriangle size={14} className="text-lone-warning mt-0.5 shrink-0" />
+          <div className="flex-1 space-y-1">
+            <p className="text-xs font-medium text-lone-warning">{listaErro}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {contracts.length ? "A lista abaixo pode estar desatualizada." : "Isso não quer dizer que o cliente não tem contrato."}
+            </p>
+          </div>
+          <button onClick={() => loadContracts()} className="text-[11px] px-2.5 py-1 rounded-lg border border-lone-warning-border text-lone-warning hover:bg-card flex items-center gap-1 shrink-0">
+            <RefreshCw size={10} /> Tentar de novo
+          </button>
+        </div>
+      )}
+
       {/* Contract list */}
-      {loading ? <div className="flex justify-center py-10"><Loader2 size={20} className="text-primary animate-spin" /></div> : contracts.length === 0 ? (
+      {loading && contracts.length === 0 ? <div className="flex justify-center py-10"><Loader2 size={20} className="text-primary animate-spin" /></div> : listaErro && contracts.length === 0 ? null : contracts.length === 0 ? (
         <div className="text-center py-16 space-y-3">
           <FileText size={32} className="text-muted-foreground mx-auto" />
           <p className="text-sm text-muted-foreground">Nenhum contrato gerado</p>
@@ -470,7 +514,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                   )}
                   <button onClick={() => { setShowAudit(showAudit === c.id ? null : c.id); if (showAudit !== c.id) loadAudit(c.id); }}
                     className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-border"><History size={11} /> Histórico</button>
-                  <button onClick={() => { setShowAddendum(showAddendum === c.id ? null : c.id); if (showAddendum !== c.id) loadAddendums(c.id); }}
+                  <button onClick={() => { setAdendoErro(null); setShowAddendum(showAddendum === c.id ? null : c.id); if (showAddendum !== c.id) loadAddendums(c.id); }}
                     className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-border"><PenLine size={11} /> Adendo</button>
 
                   <div className="ml-auto flex items-center gap-1.5">
@@ -518,7 +562,12 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                 {showAudit === c.id && (
                   <div className="border-t border-border pt-3 space-y-2">
                     <p className="text-[10px] text-muted-foreground font-medium uppercase">Histórico de Ações</p>
-                    {auditEntries.length === 0 ? <p className="text-[10px] text-muted-foreground">Nenhum registro</p> : auditEntries.map((a) => (
+                    {auditErro ? (
+                      <p className="text-[10px] text-lone-warning flex items-center gap-1.5">
+                        <AlertTriangle size={10} /> {auditErro}
+                        <button onClick={() => loadAudit(c.id)} className="underline hover:text-foreground">Tentar de novo</button>
+                      </p>
+                    ) : auditEntries.length === 0 ? <p className="text-[10px] text-muted-foreground">Nenhum registro</p> : auditEntries.map((a) => (
                       <div key={a.id} className="flex items-start gap-2 text-[10px]">
                         <span className="text-muted-foreground shrink-0">{new Date(a.createdAt).toLocaleDateString("pt-BR")}</span>
                         <span className="text-muted-foreground">{a.actor}</span>
@@ -532,6 +581,12 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                 {showAddendum === c.id && (
                   <div className="border-t border-border pt-3 space-y-3">
                     <p className="text-[10px] text-muted-foreground font-medium uppercase">Adendos Contratuais</p>
+                    {adendosErro && (
+                      <p className="text-[10px] text-lone-warning flex items-center gap-1.5">
+                        <AlertTriangle size={10} /> {adendosErro}
+                        <button onClick={() => loadAddendums(c.id)} className="underline hover:text-foreground">Tentar de novo</button>
+                      </p>
+                    )}
                     {addendums.map((a) => (
                       <div key={a.id} className="rounded-lg border border-border bg-surface p-3 space-y-1">
                         <div className="flex justify-between">
@@ -565,9 +620,12 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                         <input type="date" value={addendumForm.effectiveDate} onChange={(e) => setAddendumForm((p) => ({ ...p, effectiveDate: e.target.value }))}
                           className="bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none" />
                       </div>
-                      <button onClick={() => handleAddendum(c.id)} disabled={!addendumForm.description}
+                      {adendoErro && (
+                        <p className="text-[11px] text-destructive flex items-start gap-1.5"><AlertTriangle size={11} className="mt-0.5 shrink-0" /> {adendoErro}</p>
+                      )}
+                      <button onClick={() => handleAddendum(c.id)} disabled={!addendumForm.description.trim() || salvandoAdendo}
                         className="w-full flex items-center justify-center gap-1 py-2 rounded-lg bg-primary/10 text-primary text-xs hover:bg-primary/20 border border-primary/20 disabled:opacity-50">
-                        <Plus size={11} /> Registrar Adendo
+                        {salvandoAdendo ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />} {salvandoAdendo ? "Registrando..." : "Registrar Adendo"}
                       </button>
                     </div>
                   </div>
@@ -580,11 +638,11 @@ export default function ContractGenerator({ client, currentUser }: Props) {
 
       {/* Generator Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 bg-overlay flex items-center justify-center p-4" onClick={() => { setShowForm(false); setPreviewUrl(null); setRenewFrom(null); }}>
+        <div className="fixed inset-0 z-50 bg-overlay flex items-center justify-center p-4" onClick={fecharForm}>
           <div className="bg-card border border-border rounded-xl max-w-lg w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-foreground text-sm">{renewFrom ? `Renovar Contrato V${renewFrom.version}` : "Gerar Contrato"}</h3>
-              <button onClick={() => { setShowForm(false); setPreviewUrl(null); setRenewFrom(null); }} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
+              <button onClick={fecharForm} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
             </div>
 
             <div className="p-5 space-y-4">
@@ -726,8 +784,16 @@ export default function ContractGenerator({ client, currentUser }: Props) {
 
             {previewUrl && <div className="px-5 pb-3"><iframe src={previewUrl} className="w-full h-[400px] rounded-lg border border-border bg-card" /></div>}
 
+            {/* Erro de gravação junto do botão: a janela continua aberta com tudo que foi preenchido. */}
+            {formErro && (
+              <div className="mx-5 rounded-lg border border-lone-danger-border bg-lone-danger-bg p-3 flex items-start gap-2">
+                <AlertTriangle size={13} className="text-lone-danger mt-0.5 shrink-0" />
+                <p className="text-xs text-lone-danger">{formErro}</p>
+              </div>
+            )}
+
             <div className="p-5 border-t border-border flex gap-2">
-              <button onClick={() => { setShowForm(false); setPreviewUrl(null); setRenewFrom(null); }} className="btn-ghost flex-1 text-sm border border-border">Cancelar</button>
+              <button onClick={fecharForm} disabled={generating} className="btn-ghost flex-1 text-sm border border-border disabled:opacity-50">Cancelar</button>
               <button onClick={handlePreview} disabled={!valor || Number(valor) <= 0}
                 className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-primary/20 text-primary text-sm hover:bg-primary/10 disabled:opacity-50 py-2.5"><Eye size={13} /> Preview</button>
               <button onClick={handleGenerate} disabled={generating || !valor || Number(valor) <= 0}
