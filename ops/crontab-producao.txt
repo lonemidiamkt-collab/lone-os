@@ -1,5 +1,6 @@
 */15 * * * * /opt/loneos/scripts/cron-call.sh defense-scan POST >> /var/log/loneos-defense.log 2>&1
 */15 11-20 * * 1-5 /opt/loneos/scripts/cron-call.sh cs-sem-resposta POST >> /var/log/loneos-cs-sem-resposta.log 2>&1
+*/15 * * * * /opt/loneos/scripts/cron-call.sh cs-nao-lidas POST >> /var/log/loneos-cs-nao-lidas.log 2>&1
 */5 * * * * /opt/loneos/scripts/healthcheck.sh
 0 * * * * /opt/loneos/scripts/cron-call.sh historico-cliente POST >> /var/log/loneos-historico.log 2>&1
 0 10 * * 0 /opt/loneos/scripts/cron-call.sh cs-briefing-update POST >> /var/log/loneos-cs-briefing-update.log 2>&1

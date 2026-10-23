@@ -40,7 +40,7 @@ function dueDatePorUrgencia(tipo: string | undefined, urgencia: string): string 
   return emDiasUteis(3);
 }
 
-export async function criarCardDemanda(opts: {
+export interface OpcoesCardDemanda {
   clientId: string; clienteNome: string; responsavel?: string | null;
   titulo: string; urgencia: string; briefing: string; tipo?: string;
   /** Data de postagem explícita (YYYY-MM-DD) — ex.: item de pauta. Sobrepõe a heurística. */
@@ -49,11 +49,23 @@ export async function criarCardDemanda(opts: {
   ajusteCardId?: string | null;
   /** Decisão estratégica (Fase 3): grava pilar/objetivo/ângulo/por que agora no card (loop de aprendizado). */
   decisao?: { pilar?: string; objetivo?: string; posicao_funil?: string; angulo?: string; dor_alvo?: string; por_que_agora?: string } | null;
-}): Promise<string | null> {
+}
+
+export async function criarCardDemanda(opts: OpcoesCardDemanda): Promise<string | null> {
+  return (await criarCardDemandaDetalhado(opts)).id;
+}
+
+/**
+ * Igual a `criarCardDemanda`, mas diz POR QUE não criou. 21/10/2026 (auditoria 5.9): o null sem
+ * motivo fazia a demanda virar "confirmada" sem card, e ninguém sabia o que tinha dado errado.
+ */
+export async function criarCardDemandaDetalhado(opts: OpcoesCardDemanda): Promise<{ id: string | null; erro: string | null }> {
   // Edição de arte existente: não abre card novo — aplica o ajuste no card que o cliente está corrigindo.
   if (opts.tipo === "ajuste_arte" && opts.ajusteCardId) {
     const ok = await aplicarAjusteNoCard({ cardId: opts.ajusteCardId, correcao: opts.briefing, clientId: opts.clientId, clienteNome: opts.clienteNome });
-    return ok ? opts.ajusteCardId : null;
+    return ok
+      ? { id: opts.ajusteCardId, erro: null }
+      : { id: null, erro: "não consegui aplicar o ajuste no card da arte (ele pode ter sido arquivado)" };
   }
   const pilot = csIsPilot();
   const { data: cli } = await supabaseAdmin.from("clients").select("assigned_social").eq("id", opts.clientId).maybeSingle();
@@ -80,19 +92,18 @@ export async function criarCardDemanda(opts: {
     })
     .select("id")
     .maybeSingle();
-  if (error) { console.error("[CS] criar card:", error.message); return null; }
+  if (error) { console.error("[CS] criar card:", error.message); return { id: null, erro: error.message }; }
+  if (!card?.id) return { id: null, erro: "o banco não devolveu o card criado" };
   // Deixa o RESPONSÁVEL do cliente ciente: notificação por client_id (quem atende o cliente vê no
   // painel/sino). Ex.: card da WT → Carlos; card da Farmácia → Pedro. Falha aqui não quebra o card.
-  if (card?.id) {
-    await supabaseAdmin.from("notifications").insert({
-      type: "content",
-      title: "🤖 Nova demanda do Agente CS",
-      body: `"${opts.titulo.slice(0, 60)}" (${opts.clienteNome}) já está no seu board.`,
-      client_id: opts.clientId,
-      card_id: card.id,
-    });
-  }
-  return (card?.id as string) ?? null;
+  await supabaseAdmin.from("notifications").insert({
+    type: "content",
+    title: "🤖 Nova demanda do Agente CS",
+    body: `"${opts.titulo.slice(0, 60)}" (${opts.clienteNome}) já está no seu board.`,
+    client_id: opts.clientId,
+    card_id: card.id,
+  });
+  return { id: card.id as string, erro: null };
 }
 
 /** Roteia um AJUSTE pra uma arte JÁ EXISTENTE (em vez de criar card novo): anexa a correção ao
@@ -130,21 +141,30 @@ export async function aplicarAjusteNoCard(opts: {
   return true;
 }
 
-/** Cria os cards de uma PAUTA confirmada (1 por item, com a data do item). Retorna os ids criados. */
-export async function criarCardsPauta(opts: {
+interface OpcoesPauta {
   clientId: string; clienteNome: string; responsavel?: string | null;
   itens: Array<{ dia: string; titulo: string; descricao: string; formato: string }>;
   /** Nota humana (ex.: ajuste da equipe) anexada ao briefing de cada card. */
   notaExtra?: string | null;
-}): Promise<string[]> {
+}
+
+/** Cria os cards de uma PAUTA confirmada (1 por item, com a data do item). Retorna os ids criados. */
+export async function criarCardsPauta(opts: OpcoesPauta): Promise<string[]> {
+  return (await criarCardsPautaDetalhado(opts)).ids;
+}
+
+/** Igual a `criarCardsPauta`, com os itens que NÃO viraram card e o motivo de cada um. */
+export async function criarCardsPautaDetalhado(opts: OpcoesPauta): Promise<{ ids: string[]; erros: string[] }> {
   const ids: string[] = [];
+  const erros: string[] = [];
   for (const item of opts.itens) {
     const briefing = `${item.descricao}\n\n_Formato: ${item.formato}_${opts.notaExtra ? `\n\n---\n✏️ ${opts.notaExtra}` : ""}`;
-    const id = await criarCardDemanda({
+    const r = await criarCardDemandaDetalhado({
       clientId: opts.clientId, clienteNome: opts.clienteNome, responsavel: opts.responsavel,
       titulo: item.titulo, urgencia: "media", briefing, tipo: "arte_nova", dueDate: item.dia,
     });
-    if (id) ids.push(id);
+    if (r.id) ids.push(r.id);
+    else erros.push(`${item.titulo}: ${r.erro ?? "não criado"}`);
   }
-  return ids;
+  return { ids, erros };
 }
