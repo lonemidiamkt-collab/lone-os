@@ -11,13 +11,16 @@ export interface LeadFechado {
   id: string;
   estagio: string;
   clienteId?: string | null;
+  cadastroPendente?: boolean;
   fechadoEm?: string | null;
   updatedAt?: string | null;
 }
 
 export interface Fechados<L> {
-  /** Ganhos que ainda não viraram cliente — todos, de qualquer mês (pendência). */
+  /** Ganhos sem cadastro no Lone OS — todos, de qualquer mês (pendência: falta enviar o link de cadastro). */
   converter: L[];
+  /** Ganhos com o link de cadastro enviado e o cliente ainda sem preencher — todos, de qualquer mês. */
+  aguardando: L[];
   /** Ganhos que já viraram cliente (do período). */
   clientes: L[];
   /** Perdidos (do período). */
@@ -32,7 +35,8 @@ export function separarFechados<L extends LeadFechado>(leads: L[], mes: string |
   const doPeriodo = (l: L) => mes === null || quando(l).slice(0, 7) === mes;
   return {
     converter: leads.filter((l) => l.estagio === "ganho" && !l.clienteId).sort(recentesPrimeiro),
-    clientes: leads.filter((l) => l.estagio === "ganho" && !!l.clienteId && doPeriodo(l)).sort(recentesPrimeiro),
+    aguardando: leads.filter((l) => l.estagio === "ganho" && !!l.clienteId && !!l.cadastroPendente).sort(recentesPrimeiro),
+    clientes: leads.filter((l) => l.estagio === "ganho" && !!l.clienteId && !l.cadastroPendente && doPeriodo(l)).sort(recentesPrimeiro),
     perdidos: leads.filter((l) => l.estagio === "perdido" && doPeriodo(l)).sort(recentesPrimeiro),
   };
 }

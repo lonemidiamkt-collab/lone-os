@@ -9,6 +9,8 @@ import type { Classe } from "@/lib/prospeccao/tipos";
 
 export interface ExtrasLead {
   clienteId: string | null;
+  /** O cadastro ligado ainda é rascunho: o link foi enviado e o cliente não preencheu (23/10/2026). */
+  cadastroPendente: boolean;
   nota: Classe | null;
   notaScore: number | null;
   /** De onde veio a nota: a leitura completa da prospecção ou a qualificação à mão. */
@@ -24,7 +26,7 @@ export interface ExtrasLead {
 }
 
 export const EXTRAS_VAZIOS: ExtrasLead = {
-  clienteId: null, nota: null, notaScore: null, notaOrigem: null, qualificacao: null, cadenciaInicio: null, prospectId: null, toques: [], avancos: [],
+  clienteId: null, cadastroPendente: false, nota: null, notaScore: null, notaOrigem: null, qualificacao: null, cadenciaInicio: null, prospectId: null, toques: [], avancos: [],
 };
 
 export async function carregarExtras(leadIds: string[]): Promise<Map<string, ExtrasLead>> {
@@ -33,7 +35,7 @@ export async function carregarExtras(leadIds: string[]): Promise<Map<string, Ext
 
   const [colsQ, cliQ, atvQ] = await Promise.all([
     supabaseAdmin.from("crm_leads").select("id, nota, nota_score, qualificacao, cadencia_inicio, prospect_id").in("id", leadIds),
-    supabaseAdmin.from("clients").select("id, source_lead_id").in("source_lead_id", leadIds),
+    supabaseAdmin.from("clients").select("id, source_lead_id, draft_status").in("source_lead_id", leadIds),
     supabaseAdmin.from("crm_lead_activities").select("lead_id, tipo, created_at").in("lead_id", leadIds).in("tipo", [...TIPOS_AVANCO]).limit(10000),
   ]);
 
@@ -65,7 +67,7 @@ export async function carregarExtras(leadIds: string[]): Promise<Map<string, Ext
   }
   for (const c of cliQ.data ?? []) {
     const e = out.get(c.source_lead_id as string);
-    if (e) e.clienteId = c.id as string;
+    if (e) { e.clienteId = c.id as string; e.cadastroPendente = c.draft_status === "pending_invite"; }
   }
   for (const a of atvQ.data ?? []) {
     const e = out.get(a.lead_id as string);

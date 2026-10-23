@@ -28,6 +28,8 @@ export const RASCUNHO_PARA_FICHA: Record<string, string[]> = {
   contact_phone: ["contact_phone"],
   instagram_user: ["instagram_user"],
   endereco_rua: ["endereco_rua"],
+  endereco_numero: ["endereco_numero"],
+  endereco_complemento: ["endereco_complemento"],
   endereco_bairro: ["endereco_bairro"],
   endereco_cidade: ["endereco_cidade"],
   endereco_estado: ["endereco_estado"],

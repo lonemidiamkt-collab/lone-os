@@ -350,6 +350,9 @@ export default function ExternalOnboardingPage() {
   const [cnpj, setCnpj] = useState("");
   const [nicho, setNicho] = useState("");
   const [enderecoRua, setEnderecoRua] = useState("");
+  // Número e complemento (23/10/2026): o CEP preenche a rua, mas o número nunca era pedido — quase todo cliente ficava sem.
+  const [enderecoNumero, setEnderecoNumero] = useState("");
+  const [enderecoComplemento, setEnderecoComplemento] = useState("");
   const [enderecoBairro, setEnderecoBairro] = useState("");
   const [enderecoCidade, setEnderecoCidade] = useState("");
   const [enderecoEstado, setEnderecoEstado] = useState("");
@@ -388,6 +391,7 @@ export default function ExternalOnboardingPage() {
     contactWhatsapp: !contactWhatsapp.trim() || !validatePhone(contactWhatsapp),
     enderecoCep: !enderecoCep.trim() || enderecoCep.replace(/\D/g, "").length !== 8,
     enderecoRua: !enderecoRua.trim(),
+    enderecoNumero: !enderecoNumero.trim(),
     enderecoBairro: !enderecoBairro.trim(),
     enderecoCidade: !enderecoCidade.trim(),
     faturamentoFaixa: !faturamentoFaixa,
@@ -413,7 +417,7 @@ export default function ExternalOnboardingPage() {
   const rascunho = {
     contactName, contactCpf, contactWhatsapp, contactEmail, contactPhone,
     nomeFantasia, razaoSocial, cnpj, nicho, faturamentoFaixa, companyPhone, instagramUser,
-    enderecoRua, enderecoBairro, enderecoCidade, enderecoEstado, enderecoCep,
+    enderecoRua, enderecoNumero, enderecoComplemento, enderecoBairro, enderecoCidade, enderecoEstado, enderecoCep,
     metaLogin, metaPassword, metaStatus,
     instagramLogin: instaLogin, instagramPassword: instaPassword, instagramStatus: instaStatus,
     googleLogin, googlePassword, googleStatus,
@@ -455,7 +459,7 @@ export default function ExternalOnboardingPage() {
       ["contact_email", setContactEmail], ["contact_phone", setContactPhone],
       ["nome_fantasia", setNomeFantasia], ["razao_social", setRazaoSocial], ["cnpj", setCnpj], ["nicho", setNicho],
       ["company_phone", setCompanyPhone], ["instagram_user", setInstagramUser],
-      ["endereco_rua", setEnderecoRua], ["endereco_bairro", setEnderecoBairro], ["endereco_cidade", setEnderecoCidade],
+      ["endereco_rua", setEnderecoRua], ["endereco_numero", setEnderecoNumero], ["endereco_complemento", setEnderecoComplemento], ["endereco_bairro", setEnderecoBairro], ["endereco_cidade", setEnderecoCidade],
       ["endereco_estado", setEnderecoEstado], ["endereco_cep", setEnderecoCep],
       ["doc_contrato_social", setDocContrato], ["doc_identidade", setDocIdentidade], ["doc_logo", setDocLogo],
       ["notes", setNotes], ["faturamento_faixa", setFaturamentoFaixa],
@@ -655,7 +659,7 @@ export default function ExternalOnboardingPage() {
     contactName: contactName.trim(), contactCpf: contactCpf.trim(), contactWhatsapp: contactWhatsapp.trim(),
     contactPhone: contactPhone.trim(),
     contactEmail: contactEmail.trim().toLowerCase(),
-    enderecoRua: enderecoRua.trim(), enderecoBairro: enderecoBairro.trim(),
+    enderecoRua: enderecoRua.trim(), enderecoNumero: enderecoNumero.trim(), enderecoComplemento: enderecoComplemento.trim(), enderecoBairro: enderecoBairro.trim(),
     enderecoCidade: enderecoCidade.trim(), enderecoEstado: enderecoEstado.trim(), enderecoCep: enderecoCep.trim(),
     metaLogin, metaPassword, metaStatus,
     instagramLogin: instaLogin, instagramPassword: instaPassword, instagramStatus: instaStatus,
@@ -671,7 +675,7 @@ export default function ExternalOnboardingPage() {
       // Jump to first step with missing field for UX
       if (missingRequired.nomeFantasia || missingRequired.cnpj || missingRequired.faturamentoFaixa || missingRequired.contactName ||
           missingRequired.contactEmail || missingRequired.contactWhatsapp ||
-          missingRequired.enderecoCep || missingRequired.enderecoRua ||
+          missingRequired.enderecoCep || missingRequired.enderecoRua || missingRequired.enderecoNumero ||
           missingRequired.enderecoBairro || missingRequired.enderecoCidade) {
         setStep("dados");
       } else if (missingRequired.docLogo || missingRequired.docContrato) {
@@ -917,8 +921,13 @@ export default function ExternalOnboardingPage() {
                 <InputField label="Bairro" value={enderecoBairro} onChange={setEnderecoBairro} placeholder="Ex: Centro" required
                   error={showValidation && missingRequired.enderecoBairro ? REQUIRED_ERROR : undefined} />
               </div>
-              <InputField label="Rua / Logradouro" value={enderecoRua} onChange={setEnderecoRua} placeholder="Ex: Rua das Flores, 123" required
+              <InputField label="Rua / Logradouro" value={enderecoRua} onChange={setEnderecoRua} placeholder="Ex: Rua das Flores" required
                 error={showValidation && missingRequired.enderecoRua ? REQUIRED_ERROR : undefined} />
+              <div className="grid grid-cols-2 gap-3">
+                <InputField label="Número" value={enderecoNumero} onChange={setEnderecoNumero} placeholder="Ex: 123 (ou S/N)" required
+                  error={showValidation && missingRequired.enderecoNumero ? REQUIRED_ERROR : undefined} />
+                <InputField label="Complemento" value={enderecoComplemento} onChange={setEnderecoComplemento} placeholder="Ex: Loja 2, sala 101" />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <InputField label="Cidade" value={enderecoCidade} onChange={setEnderecoCidade} placeholder="Ex: São Paulo" required
                   error={showValidation && missingRequired.enderecoCidade ? REQUIRED_ERROR : undefined} />

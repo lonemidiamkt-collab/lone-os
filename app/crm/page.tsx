@@ -490,10 +490,10 @@ export default function CrmPage() {
     if (status < 200 || status >= 300 || !corpo.clientId) { toast.error(corpo.error ?? (status ? "Não foi possível converter em cliente." : "Sem conexão com o servidor.")); return; }
     const clienteId = corpo.clientId;
     await registrarAtividade("nota", "Convertido em cliente — link de onboarding gerado, checklist e tarefas do grupo criados.", draft.id);
-    setLeads((prev) => prev.map((l) => (l.id === draft.id ? { ...l, clienteId } : l)));
+    setLeads((prev) => prev.map((l) => (l.id === draft.id ? { ...l, clienteId, cadastroPendente: true } : l)));
     const url = `${window.location.origin}${corpo.url ?? ""}`;
     navigator.clipboard?.writeText(url).catch(() => {});
-    toast.success("Cliente criado! Link de onboarding copiado.");
+    toast.success("Link de cadastro copiado. Quando o cliente preencher, ele entra no sistema sozinho.");
     if (corpo.avisos?.length) toast.warning(`Parte do setup falhou: ${corpo.avisos.join(" · ")}`);
     const wa = waLink(draft.telefone);
     if (wa) window.open(`${wa}${wa.includes("?") ? "&" : "?"}text=${encodeURIComponent("Boas-vindas! Pra começarmos, preencha seu onboarding: " + url)}`, "_blank");
@@ -664,10 +664,10 @@ export default function CrmPage() {
   }
   /** Venda fechada sem cliente: o aviso já leva ao próximo passo (antes o lead sumia do Funil sem dizer para onde). */
   function avisarGanho(l: Lead) {
+    abrirConversao(l);
     toast.success(`Venda fechada: ${l.empresa || l.contatoNome}`, {
-      description: "Falta transformar em cliente. Ela fica na aba Fechados até lá.",
-      action: { label: "Transformar em cliente", onClick: () => abrirConversao(l) },
-      duration: 12000,
+      description: "Agora envie o link de cadastro (a ficha já abriu nisso). Até lá ela fica na aba Fechados.",
+      duration: 10000,
     });
   }
   // Esc fecha a ficha — sem jogar fora o que foi digitado (23/10/2026: o Esc de um seletor ou calendário dentro da
@@ -749,7 +749,7 @@ export default function CrmPage() {
                 : <><strong className="font-medium">{paraConverter.length} vendas fechadas</strong> ainda não viraram cliente.</>}
             </span>
             <div className="ml-auto flex gap-2">
-              {paraConverter.length === 1 && <Button size="sm" onClick={() => abrirConversao(paraConverter[0])}>Transformar em cliente</Button>}
+              {paraConverter.length === 1 && <Button size="sm" onClick={() => abrirConversao(paraConverter[0])}>Enviar link de cadastro</Button>}
               <Button size="sm" variant="outline" onClick={() => setTab("fechados")}>Ver fechados</Button>
             </div>
           </div>
@@ -890,6 +890,11 @@ export default function CrmPage() {
                     <CalendarClock size={11} className="shrink-0" aria-hidden="true" />
                     <span className="truncate">{reuniaoPassou ? `Reunião de ${fmtData(l.reuniaoData)} passou` : passo.texto}</span>
                   </div>
+                  {l.clienteId && (
+                    <div className={`ml-1 mt-2 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-lone-caption ${l.cadastroPendente ? "bg-muted text-muted-foreground" : "bg-lone-success-bg text-lone-success"}`}>
+                      <Trophy size={11} className="shrink-0" aria-hidden="true" /> {l.cadastroPendente ? "Cadastro enviado" : "Cadastrado"}
+                    </div>
+                  )}
                   <div className="mt-2 flex items-center justify-between gap-2">
                     {l.responsavel ? (
                       <span className="inline-flex min-w-0 items-center gap-1.5 text-[10.5px] text-muted-foreground" title={l.responsavel}>
@@ -963,13 +968,20 @@ export default function CrmPage() {
                 </button>
               ))}
             </div>
-            {secao("Falta virar cliente", "venda ganha sem cadastro no Lone OS — fica aqui até converter, de qualquer mês", f.converter,
+            {secao("Falta enviar o cadastro", "venda fechada sem cadastro no Lone OS — fica aqui até enviar o link, de qualquer mês", f.converter,
               "Nenhuma venda esperando. Quando marcar um negócio como Ganho, ele aparece aqui.",
               (l) => linha(l, <>
-                <Button size="sm" onClick={() => abrirConversao(l)} className="gap-1.5"><Trophy size={14} /> Transformar em cliente</Button>
+                <Button size="sm" onClick={() => abrirConversao(l)} className="gap-1.5"><Trophy size={14} /> Enviar link de cadastro</Button>
                 <Button size="sm" variant="outline" onClick={() => setDraft({ ...l })}>Abrir</Button>
               </>, `Ganho em ${fmtData(l.fechadoEm)}${l.contatoNome && l.contatoNome !== l.empresa ? ` · ${l.contatoNome}` : ""}`), true)}
-            {secao("Viraram cliente", verTodosFechados ? "todos" : "este mês", f.clientes,
+            {secao("Cadastro enviado", "o link foi enviado e o cliente ainda não preencheu — quando preencher, entra no Lone OS sozinho", f.aguardando,
+              "Nenhum cadastro esperando o cliente.",
+              (l) => linha(l, <>
+                <a href={linkDoCliente(l.clienteId!, host)} target={casco ? "_blank" : undefined} rel={casco ? "noreferrer" : undefined}
+                  className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm text-foreground hover:bg-accent">Ver o cadastro</a>
+                <Button size="sm" variant="outline" onClick={() => setDraft({ ...l })}>Abrir</Button>
+              </>, `Ganho em ${fmtData(l.fechadoEm)} · esperando o cliente preencher`))}
+            {secao("Cadastrados", verTodosFechados ? "todos" : "este mês", f.clientes,
               verTodosFechados ? "Nenhuma venda virou cliente ainda." : "Nenhuma venda virou cliente este mês.",
               (l) => linha(l, <>
                 <a href={linkDoCliente(l.clienteId!, host)} target={casco ? "_blank" : undefined} rel={casco ? "noreferrer" : undefined}
@@ -1667,7 +1679,7 @@ export default function CrmPage() {
                 <p className="text-lone-caption text-muted-foreground">Cria o cliente, o link de cadastro, o checklist de onboarding e as tarefas do grupo do WhatsApp.</p>
                 <div className="flex gap-2">
                   <Button size="sm" disabled={!conversao.pacote || !conversao.nicho || convertendo} onClick={converterEmCliente}>
-                    {convertendo ? "Convertendo…" : "Converter"}
+                    {convertendo ? "Criando…" : "Criar cadastro e enviar link"}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => setConversao(null)}>Cancelar</Button>
                 </div>
@@ -1726,20 +1738,21 @@ export default function CrmPage() {
 
               <footer className="border-t border-border px-5 py-3">
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {draft.id && draft.estagio === "ganho" && (draft.clienteId ? (
+              {draft.id && (draft.clienteId ? (
+                // Cadastro ligado (criado aqui ou ligado pelo nome): em qualquer etapa mostra em que pé está.
                 <a href={linkDoCliente(draft.clienteId, typeof window !== "undefined" ? window.location.host : null)}
                   target={casco ? "_blank" : undefined} rel={casco ? "noreferrer" : undefined}
-                  className="mr-auto inline-flex h-9 items-center gap-1.5 rounded-md border border-lone-success-border px-3 text-sm text-lone-success hover:bg-lone-success-bg">
-                  <Trophy size={14} /> Já é cliente — abrir ficha
+                  className={`mr-auto inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm ${draft.cadastroPendente ? "border-border text-foreground hover:bg-accent" : "border-lone-success-border text-lone-success hover:bg-lone-success-bg"}`}>
+                  <Trophy size={14} /> {draft.cadastroPendente ? "Cadastro enviado — ver" : "Já é cliente — abrir ficha"}
                 </a>
-              ) : (
+              ) : draft.estagio === "ganho" && (
                 <Button
                   variant="outline"
                   onClick={() => abrirConversao(draft as Lead)}
                   disabled={convertendo}
                   className="mr-auto flex items-center gap-1.5 border-lone-success-border text-lone-success hover:bg-lone-success-bg"
                 >
-                  <Trophy size={14} /> {convertendo ? "Convertendo…" : "Converter em cliente"}
+                  <Trophy size={14} /> {convertendo ? "Criando…" : "Enviar link de cadastro"}
                 </Button>
               ))}
               <Button variant="ghost" onClick={() => setDraft(null)}>Cancelar</Button>

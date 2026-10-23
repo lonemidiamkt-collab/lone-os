@@ -359,6 +359,10 @@ export const AUTOMACOES: Automacao[] = [
     nome: "Relatório mensal de vendas", descricao: "No 1º dia útil do mês, o PDF do mês que fechou (vendas, oportunidades → contrato, funil, origem, perdas, ritmo do time, Rota e o que vem) no grupo de vendas, sem valor; a versão com valores vai só para o WhatsApp do Roberto. Uma vez por mês.",
     familia: "Prospecção", destino: "grupo de vendas", cron: "0 11 1-5 * *", agendaBRT: "dias 1 a 5, 8h (envia só no 1º dia útil)", maxSilencioHoras: 28 * 24, ensaio: "dry=1",
   }),
+  ep("crm-ligar-cadastros", {
+    nome: "Cadastro ligado ao funil", descricao: "Liga o cadastro do Lone OS (link de cadastro) ao lead de mesmo nome no Comercial quando o par é único, e avisa uma vez cada rascunho pendente que parece duplicado de um cadastro já preenchido. Não muda etapa nem apaga nada. A ligação também acontece na hora em que o cadastro é criado ou preenchido.",
+    familia: "Prospecção", destino: "admin", cron: "0 12 * * *", agendaBRT: "todo dia, 9h", maxSilencioHoras: 72, ensaio: "dry=1",
+  }),
   ep("crm-rota", {
     nome: "Visitas da rota no funil", descricao: "Loja marcada como visitada no app da Rota de Prospecção vira lead em Contato feito (régua contando do dia da visita) e vai para o grupo de vendas com o WhatsApp. Revisita entra no histórico.",
     familia: "Prospecção", destino: "grupo de vendas", cron: "*/30 11-23 * * *", agendaBRT: "todo dia, a cada 30 min das 8h às 20h30", maxSilencioHoras: 26, ensaio: "dry=1",

@@ -1,5 +1,6 @@
 export const runtime = "nodejs"; // vault usa crypto nativo de Node
 
+import { aoConcluirCadastro, ligarCadastroNovo } from "@/lib/crm/ligar-cadastro";
 import { NextRequest, NextResponse } from "next/server";
 import { faixaValida } from "@/lib/empresa/receita";
 import { listaDocs, removerDocDaLista } from "@/lib/onboarding/docs";
@@ -64,7 +65,7 @@ function safeEncrypt(value: string | null | undefined): string | null {
 // plaintext) pra qualquer portador do token. Allowlist explícita fecha isso.
 const ONBOARDING_PUBLIC_COLS =
   "id, client_id, token, status, submitted_at, created_at, contact_name, contact_cpf, contact_email, " +
-  "contact_whatsapp, company_phone, contact_phone, instagram_user, nome_fantasia, razao_social, cnpj, nicho, endereco_rua, endereco_bairro, " +
+  "contact_whatsapp, company_phone, contact_phone, instagram_user, nome_fantasia, razao_social, cnpj, nicho, endereco_rua, endereco_numero, endereco_complemento, endereco_bairro, " +
   "endereco_cidade, endereco_estado, endereco_cep, doc_contrato_social, doc_identidade, doc_logo, " +
   "notes, meta_status, instagram_status, google_status, faturamento_faixa, porte_receita, cnae_principal, " +
   "cnae_descricao, situacao_cadastral, receita_consultada_em, clients(name, industry, service_type)";
@@ -238,6 +239,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ token, url: `/onboarding/${token}`, clientId: client.id, avisos });
     }
 
+    // Cadastro aberto fora do Comercial (23/10/2026): liga ao lead de mesmo nome, se for único, e avisa no sino.
+    await ligarCadastroNovo(client.id as string);
     return NextResponse.json({ token, url: `/onboarding/${token}`, clientId: client.id });
   }
 
@@ -338,6 +341,8 @@ export async function POST(req: NextRequest) {
       nicho: fields.nicho || null,
       faturamento_faixa: faixaValida(fields.faturamentoFaixa) ? fields.faturamentoFaixa : null,
       endereco_rua: fields.enderecoRua || null,
+      endereco_numero: fields.enderecoNumero || null,
+      endereco_complemento: fields.enderecoComplemento || null,
       endereco_bairro: fields.enderecoBairro || null,
       endereco_cidade: fields.enderecoCidade || null,
       endereco_estado: fields.enderecoEstado || null,
@@ -429,6 +434,8 @@ export async function POST(req: NextRequest) {
         nicho: formData.nicho || null,
         faturamento_faixa: faixaValida(formData.faturamentoFaixa) ? formData.faturamentoFaixa : null,
         endereco_rua: formData.enderecoRua || null,
+        endereco_numero: formData.enderecoNumero || null,
+        endereco_complemento: formData.enderecoComplemento || null,
         endereco_bairro: formData.enderecoBairro || null,
         endereco_cidade: formData.enderecoCidade || null,
         endereco_estado: formData.enderecoEstado || null,
@@ -485,6 +492,8 @@ export async function POST(req: NextRequest) {
         email: formData.contactEmail || null,
         email_corporativo: formData.contactEmail || null,
         endereco_rua: formData.enderecoRua || null,
+        endereco_numero: formData.enderecoNumero || null,
+        endereco_complemento: formData.enderecoComplemento || null,
         endereco_bairro: formData.enderecoBairro || null,
         endereco_cidade: formData.enderecoCidade || null,
         endereco_estado: formData.enderecoEstado || null,
@@ -500,6 +509,9 @@ export async function POST(req: NextRequest) {
         doc_logo: formData.docLogo || null,
         notes: formData.notes || null,
       }).eq("id", clientId);
+
+      // Cadastro preenchido: liga ao lead do Comercial (se ainda não) e avisa se sobrou rascunho duplicado.
+      if (clientId) await aoConcluirCadastro(clientId);
 
       // Send notification to admins
       await supabase.from("notifications").insert({
@@ -609,6 +621,8 @@ export async function POST(req: NextRequest) {
         updatePayload.email_corporativo = subRow.contact_email;
       }
       if (subRow.endereco_rua) updatePayload.endereco_rua = subRow.endereco_rua;
+      if (subRow.endereco_numero) updatePayload.endereco_numero = subRow.endereco_numero;
+      if (subRow.endereco_complemento) updatePayload.endereco_complemento = subRow.endereco_complemento;
       if (subRow.endereco_bairro) updatePayload.endereco_bairro = subRow.endereco_bairro;
       if (subRow.endereco_cidade) updatePayload.endereco_cidade = subRow.endereco_cidade;
       if (subRow.endereco_estado) updatePayload.endereco_estado = subRow.endereco_estado;
