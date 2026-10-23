@@ -232,15 +232,16 @@ export default function HojeComercial<L extends LeadDoHoje>({
                           <MapPin size={11} aria-hidden="true" /> {l.cidade || "Sem cidade"}
                         </p>
                       )}
-                      <div className="flex items-center gap-3 px-5 py-2.5">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-2.5 sm:flex-nowrap">
                         <input type="checkbox" checked={selecionados.has(l.id)} onChange={() => alternarSelecao(l.id)} disabled={g === "fim"}
                           aria-label={`Selecionar ${l.empresa || l.contatoNome}`} className="h-4 w-4 shrink-0 accent-primary disabled:opacity-30" />
-                        <button onClick={() => setAberto(abertoAqui ? null : l.id)} aria-expanded={abertoAqui} className="min-w-0 flex-1 text-left">
+                        <button onClick={() => setAberto(abertoAqui ? null : l.id)} aria-expanded={abertoAqui} className="min-w-0 flex-1 basis-[calc(100%-1.75rem)] text-left sm:basis-0">
                           <span className="block truncate text-lone-body font-medium text-foreground">{l.empresa || l.contatoNome}</span>
                           <span className="block truncate text-lone-caption text-muted-foreground">
                             {[l.empresa && l.contatoNome !== l.empresa ? l.contatoNome : null, ROTULO_ETAPA[normalizarEtapa(l.estagio)], item.motivo].filter(Boolean).join(" · ")}
                           </span>
                         </button>
+                        <div className="ml-auto flex shrink-0 items-center gap-2">
                         {acaoPrincipal}
                         <DropdownMenu>
                           <DropdownMenuTrigger aria-label="Mais ações" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
@@ -272,6 +273,7 @@ export default function HojeComercial<L extends LeadDoHoje>({
                             <DropdownMenuItem onSelect={() => onAbrir(l)}>Abrir a ficha</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
+                        </div>
                       </div>
                       {abertoAqui && (
                         <div className="space-y-2 bg-muted/30 px-5 pb-4 pl-12 pt-1">

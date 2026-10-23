@@ -333,12 +333,35 @@
     --input: #26355a;
     --muted-foreground: #aab4ca;
     --muted-foreground-rgb: 170 180 202;
-    --primary: #4b64ff;
-    --primary-rgb: 75 100 255;
+    /* Botão cheio: branco sobre #3f57f0 dá 5,5:1 (o #4b64ff dava 4,6, no limite). */
+    --primary: #3f57f0;
+    --primary-rgb: 63 87 240;
     --ring: #4b64ff;
     --chart-2: #a7b1ff;
     --chart-2-rgb: 167 177 255;
   }
+
+  /* ─── COMERCIAL · legibilidade (23/10/2026) ────────────────────────────────────────────────
+     Roberto: "alguns lugares é ruim de observar". Medição em 676 textos: no claro, 89 abaixo de 4,5:1 — o verde
+     #16a34a e o âmbar #d97706 usados como TEXTO sobre fundo tingido (selo WhatsApp 2,66; "Enviar no WhatsApp"
+     3,02; "atrasado" 3,19); no escuro, 56 — o azul da marca como TEXTO sobre o cartão (3,4–3,8; "ver lista"
+     com opacidade 2,50). E 56% do texto com menos de 12px (iniciais de 9px no Funil).
+     Só no casco do comercial; o painel da operação não muda. tests/comercial-contraste.test.ts confere os pares. */
+  html.casco-comercial:not(.dark) {
+    --lone-success: #157038;
+    --lone-warning: #92400e;
+    --lone-danger:  #b91c1c;
+  }
+  html.casco-comercial:not(.dark) ::placeholder { color: #6b7280; opacity: 1; }
+  html.dark.casco-comercial ::placeholder { color: #93a0bd; opacity: 1; }
+  /* Escuro: o azul cheio segue nos botões; como cor de TEXTO (link, selo, chip) ele vira este azul claro. */
+  html.dark.casco-comercial .text-primary { color: #8da4ff; }
+  /* Tamanho mínimo: legenda e rótulos pequenos sobem para 12px; iniciais de avatar para 11px. */
+  html.casco-comercial .text-lone-caption,
+  html.casco-comercial .text-\[11px\],
+  html.casco-comercial .text-\[10\.5px\],
+  html.casco-comercial .text-\[10px\] { font-size: 12px; }
+  html.casco-comercial .text-\[9px\] { font-size: 11px; }
 
   /* Brilho radial azul no tema escuro — toque da marca sobre o grafite; fraco de propósito,
      senão o fundo volta a puxar pro navy. */

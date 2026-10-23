@@ -199,7 +199,7 @@ export default function CrmPage() {
     carregarReunioes();
     chamar<{ leads?: Lead[]; segmentosIcp?: string[] }>("/api/crm/leads").then((r) => {
       // Falha não vira funil vazio: mostra o erro no lugar dos números.
-      if (!r.ok) { setErroCarga(r.erro); toast.error(r.erro ?? "Não consegui carregar os leads."); }
+      if (!r.ok) { console.error("[crm] carga dos leads falhou:", r.erro); setErroCarga(r.erro ?? "erro"); }
       else { setLeads(r.data?.leads ?? []); setSegmentosIcp(r.data?.segmentosIcp ?? []); }
       setLoading(false);
     });
@@ -656,18 +656,39 @@ export default function CrmPage() {
       duration: 12000,
     });
   }
-  // Esc fecha a ficha.
+  // Esc fecha a ficha — sem jogar fora o que foi digitado (23/10/2026: o Esc de um seletor ou calendário dentro da
+  // ficha fechava a ficha inteira e descartava a edição em silêncio). Esc num campo só tira o foco do campo; com
+  // alteração não salva, pergunta antes de descartar.
   const fichaAberta = !!draft;
+  const fichaAoAbrir = useRef<string | null>(null);
+  const assinaturaFicha = (d: Draft | null) => (d ? JSON.stringify([d.empresa, d.contatoNome, d.telefone, d.email, d.cidade, d.endereco, d.segmento, d.origem, d.responsavel, d.estagio, d.valorOrcamento, d.valorImplantacao, d.probabilidade, d.previsaoFechamento, d.reuniaoData, d.retomarEm, d.observacoes, d.motivoPerda, d.motivoPerdaCodigo]) : null);
+  useEffect(() => { fichaAoAbrir.current = assinaturaFicha(draft); }, [fichaAberta, draft?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const draftAtual = useRef<Draft | null>(null);
+  draftAtual.current = draft;
   useEffect(() => {
     if (!fichaAberta) return;
-    const fechar = (e: KeyboardEvent) => { if (e.key === "Escape") setDraft(null); };
+    const fechar = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const alvo = e.target as HTMLElement | null;
+      // Menu, lista ou calendário aberto por cima da ficha: o Esc é deles.
+      if (alvo?.closest("[data-radix-popper-content-wrapper], [role=menu], [role=listbox]")) return;
+      if (alvo?.closest("input, textarea, select, [contenteditable=true]")) { alvo.blur(); return; }
+      if (assinaturaFicha(draftAtual.current) !== fichaAoAbrir.current && !confirm("Descartar as alterações desta ficha?")) return;
+      setDraft(null);
+    };
     window.addEventListener("keydown", fechar);
     return () => window.removeEventListener("keydown", fechar);
-  }, [fichaAberta]);
+  }, [fichaAberta]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!podeVer) return <div className="p-8 text-sm text-destructive">Esta área é do time comercial.</div>;
   if (loading) return <div className="p-8 text-sm text-muted-foreground">Carregando o funil…</div>;
-  if (erroCarga) return <div className="p-8 text-sm text-lone-danger">Não consegui carregar os leads: {erroCarga}</div>;
+  if (erroCarga) return (
+    <div className="m-6 flex flex-col items-start gap-3 rounded-2xl border border-lone-danger-border bg-lone-danger-bg p-5">
+      <p className="text-lone-body font-medium text-foreground">Não consegui carregar os leads agora.</p>
+      <p className="text-lone-caption text-muted-foreground">Pode ser a conexão ou o servidor reiniciando. Nada foi perdido.</p>
+      <Button size="sm" onClick={() => window.location.reload()}>Tentar de novo</Button>
+    </div>
+  );
 
   const hoje = hojeYmd();
 
@@ -1029,7 +1050,7 @@ export default function CrmPage() {
                     return (
                       <button key={i} type="button" disabled={passado} onClick={() => setMarcando({ dia: ymd })}
                         title={[...chips.map((c) => c.txt), ...evs.map((e) => `${e.rotulo}: ${e.lead.empresa || e.lead.contatoNome}`)].join("\n") || (passado ? undefined : "Marcar reunião neste dia")}
-                        className={`flex min-h-[78px] flex-col gap-0.5 rounded-xl border p-1.5 text-left transition-colors ${isHoje ? "border-primary bg-primary/5" : "border-border"} ${passado ? "cursor-default opacity-60" : "hover:border-primary/50"}`}>
+                        className={`flex min-h-[78px] flex-col gap-0.5 rounded-xl border p-1.5 text-left transition-colors ${isHoje ? "border-primary bg-primary/5" : "border-border"} ${passado ? "cursor-default bg-muted/40" : "hover:border-primary/50"}`}>
                         <span className={`text-lone-caption tabular-nums ${isHoje ? "font-semibold text-primary" : "text-foreground"}`}>{d}</span>
                         {chips.slice(0, 2).map((c) => <span key={c.k} className={`truncate rounded px-1 py-px text-[10px] font-medium ${c.cls}`}>{c.txt}</span>)}
                         {chips.length > 2 && <span className="text-[10px] text-muted-foreground">+{chips.length - 2}</span>}

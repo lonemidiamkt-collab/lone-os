@@ -233,7 +233,7 @@ export default function DashboardComercial<L extends LeadDash>({
                   </div>
                   <p className="mt-2 text-lone-body font-medium text-foreground">{a.rotulo}</p>
                   <p className="text-lone-caption text-muted-foreground">{a.dica}</p>
-                  <p className="mt-1.5 text-lone-caption font-medium text-primary opacity-70 transition-opacity group-hover:opacity-100">ver lista →</p>
+                  <p className="mt-1.5 text-lone-caption font-medium text-primary underline-offset-2 group-hover:underline">ver lista →</p>
                 </button>
               );
             })}
