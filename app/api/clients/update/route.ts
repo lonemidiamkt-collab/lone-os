@@ -7,6 +7,9 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { dispararLinkDoPortal } from "@/lib/portal/link-automatico";
+import { decidirVinculo, normalizarContaMeta, type DonoConta } from "@/lib/clients/conta-meta";
+import { devolverConta, donosDaConta, espelharConta, soltarConta } from "@/lib/clients/conta-meta-server";
+import { registrarHistorico } from "@/lib/clients/historico";
 
 // camelCase → snake_case mapping for Client fields
 const FIELD_MAP: Record<string, string> = {
@@ -106,6 +109,8 @@ const ClientUpdateSchema = z.object({
   companyPhone: txt(32),
   contactPhone: txt(32),
   lastKanbanActivity: z.string().max(64).optional(),
+  // Não é campo: é a confirmação de "esta conta é do cliente X — transferir para cá" (21/10/2026).
+  transferirContaMeta: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -121,7 +126,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { id, ...updates } = parsed.data;
+  const { id, transferirContaMeta, ...updates } = parsed.data;
 
   // Campos SENSÍVEIS (credenciais, financeiro/PII, lifecycle) só admin altera. Os operacionais
   // (notes, conta Meta, briefings, posts, assigned…) seguem liberados — tráfego/design editam esses.
@@ -165,7 +170,54 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Nenhum campo válido para salvar." }, { status: 400 });
   }
 
+  // CONTA META NÃO MUDA DE DONO EM SILÊNCIO (21/10/2026). Antes, vincular uma conta que já era de
+  // outro cliente passava a linha de ad_accounts para este (upsert + gatilho): alerta de verba,
+  // digest e portal de um cliente iam para o outro, e o antigo seguia com a conta na ficha. Agora:
+  // mesma conta = não mexe em ninguém; conta de outro = 409 com o nome dele, a menos que a tela
+  // mande `transferirContaMeta` depois de mostrar isso a quem clicou.
+  let transferidaDe: DonoConta[] = [];
+  let contaParaEspelhar: string | null = null;
+  if (typeof row.meta_ad_account_id === "string") {
+    const conta = normalizarContaMeta(row.meta_ad_account_id as string)!;
+    const { data: atual, error: errAtual } = await supabaseAdmin
+      .from("clients").select("meta_ad_account_id").eq("id", id).maybeSingle();
+    if (errAtual) return NextResponse.json({ error: `Não consegui conferir a conta atual do cliente: ${errAtual.message}` }, { status: 500 });
+    if (!atual) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+    let donos: DonoConta[];
+    try {
+      donos = await donosDaConta(conta);
+    } catch (e) {
+      // Sem saber de quem é, não vincula: "não consegui ler" não pode virar "está livre".
+      console.error("[clients/update] dono da conta:", e instanceof Error ? e.message : e);
+      return NextResponse.json({ error: "Não consegui conferir de quem é esta conta de anúncio agora. Nada foi salvo — tente de novo em instantes." }, { status: 503 });
+    }
+    const decisao = decidirVinculo({ clientId: id, contaAtual: atual.meta_ad_account_id as string | null, contaNova: conta, donos, transferir: transferirContaMeta === true });
+    if (decisao.acao === "recusar") {
+      return NextResponse.json({
+        error: decisao.erro, codigo: "conta_de_outro_cliente",
+        donos: decisao.donos.map((d) => ({ clientId: d.clientId, nome: d.nome, ativo: d.ativo })),
+      }, { status: 409 });
+    }
+    if (decisao.acao === "manter") {
+      // Fora do UPDATE: com a coluna no SET, o gatilho rodava de novo e tomava a linha de quem a tivesse.
+      delete row.meta_ad_account_id;
+    } else {
+      row.meta_ad_account_id = conta;
+      contaParaEspelhar = conta;
+      // Conta nova sem nome vindo junto: o nome da antiga não pode ficar contando outra história.
+      if (updates.metaAdAccountName === undefined) row.meta_ad_account_name = null;
+      if (decisao.acao === "transferir") transferidaDe = decisao.de;
+    }
+    // Só a conta (repetida) veio: já está gravada — dizer "salvo" é verdade.
+    if (Object.keys(row).length === 0) return NextResponse.json({ success: true, semMudanca: true });
+  }
+
   try {
+    if (transferidaDe.length && contaParaEspelhar) {
+      const erroSoltar = await soltarConta(contaParaEspelhar, transferidaDe);
+      if (erroSoltar) return NextResponse.json({ error: `Não consegui tirar a conta de ${transferidaDe.map((d) => d.nome).join(" e ")}: ${erroSoltar}. Nada foi transferido.` }, { status: 500 });
+    }
+
     const { data: updated, error } = await supabaseAdmin
       .from("clients")
       .update(row)
@@ -173,7 +225,12 @@ export async function POST(req: NextRequest) {
       .select("*")
       .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      if (transferidaDe.length) await devolverConta(transferidaDe);
+      // 23505 = o gatilho (20261021150000) recusou: a conta é de outro cliente ativo.
+      if (error.code === "23505") return NextResponse.json({ error: error.message, codigo: "conta_de_outro_cliente" }, { status: 409 });
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
     // Desvincular: o gatilho trg_sincronizar_ad_account só espelha conta preenchida, então a linha
     // em ad_accounts (que o alerta de verba e o digest leem) sai aqui.
@@ -182,23 +239,39 @@ export async function POST(req: NextRequest) {
       if (unlinkErr) return NextResponse.json({ error: `Conta desvinculada do cliente, mas não da carteira de tráfego: ${unlinkErr.message}` }, { status: 500 });
     }
 
-    // Sincroniza ad_accounts quando meta_ad_account_id muda
-    if (row.meta_ad_account_id) {
-      const accountId = String(row.meta_ad_account_id);
-      // Remove entradas antigas deste cliente (evita duplicatas que quebram .single())
-      await supabaseAdmin.from("ad_accounts").delete().eq("client_id", id).neq("meta_account_id", accountId);
-      // Upsert da entrada correta
-      await supabaseAdmin.from("ad_accounts").upsert(
-        { client_id: id, meta_account_id: accountId },
-        { onConflict: "meta_account_id" },
-      );
+    // Conta nova (já liberada acima): o espelho em ad_accounts fica com este cliente. Antes os dois
+    // passos aqui não conferiam erro — a ficha dizia "vinculada" e o alerta de verba não sabia.
+    if (contaParaEspelhar) {
+      const erroEspelho = await espelharConta(id, contaParaEspelhar, (row.meta_ad_account_name as string | null) ?? null);
+      if (erroEspelho) {
+        return NextResponse.json({ error: `Conta gravada na ficha, mas não entrou no alerta de verba/saldo: ${erroEspelho}. Vincule de novo.` }, { status: 500 });
+      }
+    }
+
+    if (transferidaDe.length && contaParaEspelhar) {
+      const para = ((updated?.nome_fantasia as string) || (updated?.name as string) || "outro cliente");
+      const ator = user.email ?? "alguém";
+      console.warn(`[clients/update] ${ator} transferiu ${contaParaEspelhar} de ${transferidaDe.map((d) => d.nome).join(", ")} para ${para}`);
+      await Promise.all([
+        ...transferidaDe.map((d) => registrarHistorico({
+          clientId: d.clientId, tipo: "manual", ator,
+          descricao: `Conta de anúncio ${contaParaEspelhar} transferida para ${para}`,
+        })),
+        registrarHistorico({
+          clientId: id, tipo: "manual", ator,
+          descricao: `Conta de anúncio ${contaParaEspelhar} veio de ${transferidaDe.map((d) => d.nome).join(" e ")}`,
+        }),
+      ]);
     }
 
     // Rascunho saindo (draft_status apagado) = o cliente virou cliente: link do portal + aviso no grupo
     // de cadastro. A função manda uma vez só por cliente — cliente que já era ativo não recebe de novo.
     if ("draft_status" in row && row.draft_status === null) dispararLinkDoPortal(id, "aprovacao");
 
-    return NextResponse.json({ success: true, client: updated });
+    return NextResponse.json({
+      success: true, client: updated,
+      ...(transferidaDe.length ? { transferidaDe: transferidaDe.map((d) => ({ clientId: d.clientId, nome: d.nome })) } : {}),
+    });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

@@ -12,7 +12,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import Skeleton from "@/components/ui/Skeleton";
 import { chamar } from "@/lib/api/chamar";
 import { cn } from "@/lib/utils";
-import type { RespostaVendasCarteira } from "@/lib/trafego/vendas";
+import { INVESTIMENTO_NAO_APURADO, type RespostaVendasCarteira } from "@/lib/trafego/vendas";
 import VendasDoCliente from "./VendasDoCliente";
 
 const brl = (n: number | null | undefined, casas = 0) =>
@@ -112,7 +112,12 @@ export default function VendasCarteira({ clientes }: { clientes: { id: string; n
                     </div>
                     <div><p className="text-[11px] text-muted-foreground">Vendas</p><p className="text-sm font-semibold tabular-nums text-foreground">{l.resumo.vendas}</p></div>
                     <div><p className="text-[11px] text-muted-foreground">Custo/venda</p><p className="text-sm font-semibold tabular-nums text-foreground">{brl(l.resumo.custoPorVenda, 2)}</p></div>
-                    <div><p className="text-[11px] text-muted-foreground">Investido</p><p className="text-sm tabular-nums text-foreground">{brl(l.resumo.investimento)}</p></div>
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">Investido</p>
+                      <p className="text-sm tabular-nums text-foreground">{brl(l.resumo.investimento)}</p>
+                      {/* null = nenhum gasto lido no mês (dia 1º, mês sem métrica) — não é R$ 0 (21/10/2026). */}
+                      {l.resumo.investimento == null && <p className="text-[10px] leading-tight text-muted-foreground">{INVESTIMENTO_NAO_APURADO}</p>}
+                    </div>
                     <div><p className="text-[11px] text-muted-foreground">Retorno</p><p className="text-sm tabular-nums text-foreground">{l.resumo.retorno != null ? `${l.resumo.retorno.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}x` : "—"}</p></div>
                     <ChevronDown size={16} className={cn("hidden text-muted-foreground transition-transform sm:block", ab && "rotate-180")} aria-hidden="true" />
                   </button>
