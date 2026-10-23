@@ -34,17 +34,12 @@ import AbaRelacionamento from "@/components/client/ficha/AbaRelacionamento";
 import AbaAdmin from "@/components/client/ficha/AbaAdmin";
 import { ABAS_FICHA, resolverAba, type AbaFicha } from "@/components/client/ficha/abas";
 import type { FichaCtx, ResumoCliente } from "@/components/client/ficha/tipos";
+import { mesclarFicha, separarPatchFicha } from "@/lib/clients/ficha-sensiveis";
 
 // A lista (useClientsStore) vem MAGRA por segurança — sem logins, tokens de link público nem PII
 // (cpf/endereço/docs). Esses campos são puxados 1x, gated, por /api/clients/[id], e mesclados só
-// nas chaves sensíveis (pra não sobrescrever updates realtime dos campos comuns).
-const SENSIVEIS: (keyof Client)[] = [
-  "cpfCnpj", "birthDate", "idade", "docIdentidade", "docContratoSocial",
-  "endereco", "enderecoRua", "enderecoNumero", "enderecoBairro", "enderecoCidade", "enderecoEstado", "enderecoCep",
-  "facebookLogin", "googleAdsLogin", "instagramLogin",
-  "publicReportToken", "publicReportTokenCreatedAt", "publicReportTokenRevokedAt",
-  "fichaVivaToken", "fichaVivaRaioxToken", "fichaVivaTokenCreatedAt", "fichaVivaTokenRevokedAt",
-];
+// nas chaves sensíveis (pra não sobrescrever updates realtime dos campos comuns). A regra da junção
+// mora em lib/clients/ficha-sensiveis.ts.
 
 /** O que falta no cadastro (mesma lista da antiga aba Dados) — só faz sentido com os dados completos. */
 function faltaNoCadastro(c: Client): string[] {
@@ -114,15 +109,7 @@ export default function ClientDetailPage() {
     });
     return () => { vivo = false; };
   }, [clientId]);
-  const client = useMemo(() => {
-    if (!baseClient) return undefined;
-    const merged = { ...baseClient };
-    for (const k of SENSIVEIS) {
-      const v = (clientExtra as Record<string, unknown>)[k as string];
-      if (v !== undefined) (merged as Record<string, unknown>)[k as string] = v;
-    }
-    return merged;
-  }, [baseClient, clientExtra]);
+  const client = useMemo(() => (baseClient ? mesclarFicha(baseClient, clientExtra) : undefined), [baseClient, clientExtra]);
 
   // ── Resumo (saúde com o porquê, pendências, NPS, check-ins) ───────────────
   const [resumo, setResumo] = useState<ResumoCliente | null>(null);
@@ -180,12 +167,14 @@ export default function ClientDetailPage() {
   // Portal: o painel abre sozinho quando o link é ?tab=portal (o antigo endereço da seção do portal).
   const [portalAberto, setPortalAberto] = useState(() =>
     typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "portal");
-  // O token e as datas do link são campos sensíveis (clientExtra): mudar só no store não aparecia,
-  // porque o merge lá em cima dá a palavra final ao clientExtra. Os comuns vão também pro store.
-  const aoMudarPortal = useCallback((patch: Partial<Client>) => {
-    setClientExtra((e) => ({ ...e, ...patch }));
-    const comuns = Object.fromEntries(Object.entries(patch).filter(([k]) => !SENSIVEIS.includes(k as keyof Client)));
-    if (Object.keys(comuns).length) patchClientLocal(clientId, comuns as Partial<Client>);
+  // O token e as datas do link (portal e Ficha Viva) são campos sensíveis (clientExtra): mudar só no
+  // store não aparecia, porque o merge lá em cima dá a palavra final ao clientExtra. Os comuns vão
+  // também pro store. A Ficha Viva passou a usar este mesmo caminho em 21/10/2026 — antes o "Novo
+  // link" ia só pro store e o cartão seguia mostrando (e copiando) o link velho, já morto.
+  const aoMudarLinkPublico = useCallback((patch: Partial<Client>) => {
+    const { extra, comuns } = separarPatchFicha(patch);
+    setClientExtra((e) => ({ ...e, ...extra }));
+    if (Object.keys(comuns).length) patchClientLocal(clientId, comuns);
   }, [clientId, patchClientLocal]);
   const fecharPortal = useCallback(() => {
     setPortalAberto(false);
@@ -315,7 +304,8 @@ export default function ClientDetailPage() {
             faltaNoCadastro={isAdmin && dadosCompletos ? faltaNoCadastro(client) : null} />
         )}
         {aba === "marca" && (
-          <AbaMarca ctx={ctx} dadosCompletos={dadosCompletos} updateClientData={updateClientData} onNavigateTab={irParaAntiga} />
+          <AbaMarca ctx={ctx} dadosCompletos={dadosCompletos} updateClientData={updateClientData} onNavigateTab={irParaAntiga}
+            aoMudarLinkPublico={aoMudarLinkPublico} />
         )}
         {aba === "entregas" && <AbaEntregas ctx={ctx} cards={cards} pedidos={pedidos} tarefas={tarefas} />}
         {aba === "resultados" && <AbaResultados ctx={ctx} />}
@@ -328,7 +318,7 @@ export default function ClientDetailPage() {
 
       {veLinkPortal && (
         <PainelPortal client={client} aberto={portalAberto} aoFechar={fecharPortal}
-          podeGerir={isAdmin} dados={extraStatus} onMudou={aoMudarPortal} />
+          podeGerir={isAdmin} dados={extraStatus} onMudou={aoMudarLinkPublico} />
       )}
       {pedindoArte && <PedirArteModal client={client} currentUser={currentUser} aoFechar={() => setPedindoArte(false)} />}
       {editando && <EditClientModal client={client} onClose={() => setEditando(false)} />}

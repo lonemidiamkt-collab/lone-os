@@ -5,6 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { fetchAccountBalances, detectAccountType } from "@/lib/meta/account-balance";
 import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { descreverDono, type DonoConta } from "@/lib/clients/conta-meta";
+import { donosDaConta } from "@/lib/clients/conta-meta-server";
 
 async function getMetaToken(): Promise<string | null> {
   const { data } = await supabaseAdmin
@@ -100,15 +102,23 @@ export async function POST(req: NextRequest) {
     // e o alerta de saldo procura por uma chave que não existe.
     const conta = metaAccountId.startsWith("act_") ? metaAccountId : `act_${metaAccountId}`;
 
-    // Check for duplicates
-    const { data: existing } = await supabaseAdmin
-      .from("ad_accounts")
-      .select("id")
-      .eq("meta_account_id", conta)
-      .single();
-
-    if (existing) {
-      return NextResponse.json({ error: "Conta já cadastrada no sistema" }, { status: 409 });
+    // Duplicata e dono (21/10/2026): olha a carteira de tráfego E a ficha de todos os clientes, e diz
+    // de quem é. Antes só olhava ad_accounts (com `.single()`, que esconde erro de leitura como "livre").
+    let donos: DonoConta[];
+    try {
+      donos = await donosDaConta(conta);
+    } catch {
+      return NextResponse.json({ error: "Não consegui conferir se a conta já está cadastrada. Nada foi salvo — tente de novo." }, { status: 503 });
+    }
+    const outros = donos.filter((d) => d.clientId !== clientId);
+    if (outros.length) {
+      return NextResponse.json({
+        error: `Conta já cadastrada: ${conta} ${outros.map((d) => descreverDono(d)).join("; ")}. Para mudar de cliente, use a ficha (Admin › Conta Meta Ads) e confirme a transferência.`,
+        codigo: "conta_de_outro_cliente",
+      }, { status: 409 });
+    }
+    if (donos.some((d) => d.noEspelho)) {
+      return NextResponse.json({ error: "Esta conta já está na carteira de tráfego deste cliente." }, { status: 409 });
     }
 
     // Try to auto-detect billing type from Meta if we have a token

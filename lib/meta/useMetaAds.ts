@@ -243,10 +243,15 @@ function isMetaAuthError(status: number, body: { error?: { code?: number } }): b
   return status === 401 || status === 400 && body?.error?.code === 190;
 }
 
-// Fetch ALL ad accounts — personal + business manager
+// Fetch ALL ad accounts — personal + business manager.
+// Falha da Meta LANÇA quando nada pôde ser lido (21/10/2026): antes voltava lista vazia e a ficha
+// dizia "Nenhuma conta disponível. Conecte a Meta" com a Meta conectada — o erro virava vazio.
 export async function fetchAdAccounts(token: string) {
   const allAccounts: any[] = [];
   const seenIds = new Set<string>();
+  const falhas: string[] = [];
+  const motivo = (status: number, err: { error?: { message?: string } } | null) =>
+    err?.error?.message ? `${err.error.message} (HTTP ${status})` : `HTTP ${status}`;
 
   // 1. Fetch personal ad accounts (/me/adaccounts)
   const personalParams = new URLSearchParams({
@@ -260,6 +265,7 @@ export async function fetchAdAccounts(token: string) {
     if (isMetaAuthError(personalRes.status, err)) {
       throw new TokenExpiredError(`Token inválido ou sem permissão (code ${err?.error?.code ?? personalRes.status})`);
     }
+    falhas.push(`contas pessoais: ${motivo(personalRes.status, err)}`);
   } else {
     const personalData = await personalRes.json();
     for (const acc of personalData.data ?? []) {
@@ -318,9 +324,14 @@ export async function fetchAdAccounts(token: string) {
           } catch {}
         })
       );
+    } else {
+      falhas.push(`Business Managers: ${motivo(bizRes.status, await bizRes.json().catch(() => null))}`);
     }
-  } catch {}
+  } catch {
+    falhas.push("Business Managers: sem resposta");
+  }
 
+  if (!allAccounts.length && falhas.length) throw new Error(`A Meta não respondeu ao listar as contas — ${falhas.join("; ")}`);
   return allAccounts;
 }
 

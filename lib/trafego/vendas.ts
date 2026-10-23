@@ -64,6 +64,7 @@ export interface ResumoVendas {
   faturamento: number | null;
   /** Vendas que vieram com valor. */
   vendasComValor: number;
+  /** `null` = ainda não apurado (nenhum dia fechado ou nenhuma métrica lida). 0 = gastou zero de verdade. */
   investimento: number | null;
   custoPorVenda: number | null;
   /** Faturamento ÷ investimento (só com valor informado). */
@@ -71,13 +72,57 @@ export interface ResumoVendas {
   ticketMedio: number | null;
 }
 
-/** `gastoPorDia`: investimento do cliente por dia (uma entrada por dia fechado do período). */
+/** O que a tela diz quando `investimento` é null (portal e aba Vendas do tráfego). */
+export const INVESTIMENTO_NAO_APURADO = "investimento ainda não apurado";
+
+/**
+ * Janela em que o investimento é lido: só dias FECHADOS (até ontem). `null` quando o período ainda
+ * não tem nenhum dia fechado — todo dia 1º, o mês corrente vai de hoje a hoje e "ontem" é do mês
+ * passado. Sem janela não há o que somar: o investimento fica "não apurado", nunca R$ 0 (21/10/2026).
+ */
+export function janelaDoInvestimento(desde: string, ate: string, hoje: string): { desde: string; ate: string } | null {
+  const d = new Date(`${hoje}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  const ontem = d.toISOString().slice(0, 10);
+  const fim = ate < hoje ? ate : ontem;
+  return fim < desde ? null : { desde, ate: fim };
+}
+
+/**
+ * Gasto por dia de cada cliente a partir das linhas do metric_snapshots (dia repetido vale a última).
+ * Cliente SEM linha fica fora do mapa — e `resumoVendas` recebe `null`, não `[]`: "não li gasto" é
+ * diferente de "gastou zero" (21/10/2026).
+ */
+export function gastoPorDiaDosClientes(
+  linhas: { client_id: string; metric_date: string; spend: number | string | null }[],
+  clientId?: string,
+): Map<string, number[]> {
+  const porDia = new Map<string, number>();
+  for (const l of linhas) {
+    if (clientId && l.client_id !== clientId) continue;
+    porDia.set(`${l.client_id}|${String(l.metric_date).slice(0, 10)}`, Number(l.spend) || 0);
+  }
+  const out = new Map<string, number[]>();
+  for (const [chave, gasto] of porDia) {
+    const id = chave.split("|")[0];
+    const lista = out.get(id) ?? [];
+    lista.push(gasto);
+    out.set(id, lista);
+  }
+  return out;
+}
+
+/**
+ * `gastoPorDia`: investimento do cliente por dia (uma entrada por dia fechado do período).
+ * `null` ou lista vazia = nenhuma linha de métrica lida → investimento `null` ("ainda não apurado").
+ * Antes a lista vazia somava 0 e o portal mostrava "Custo por venda R$ 0,00" todo dia 1º (21/10/2026).
+ */
 export function resumoVendas(vendas: Pick<VendaRegistro, "quantity" | "amount">[], gastoPorDia: number[] | null): ResumoVendas {
   const total = vendas.reduce((s, v) => s + (v.quantity || 0), 0);
   const comValor = vendas.filter((v) => v.amount != null);
   const faturamento = comValor.length ? comValor.reduce((s, v) => s + Number(v.amount), 0) : null;
   const vendasComValor = comValor.reduce((s, v) => s + (v.quantity || 0), 0);
-  const investimento = gastoPorDia ? gastoPorDia.reduce((s, g) => s + g, 0) : null;
+  const investimento = gastoPorDia && gastoPorDia.length ? gastoPorDia.reduce((s, g) => s + g, 0) : null;
   return {
     vendas: total,
     faturamento,

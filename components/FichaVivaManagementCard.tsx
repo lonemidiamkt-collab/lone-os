@@ -3,13 +3,19 @@
 // components/FichaVivaManagementCard.tsx — gestão da Ficha Viva na ficha do cliente (admin).
 // Gera/copia/revoga o link do cliente (crescimento + diagnóstico) e mostra o diagnóstico que o
 // cliente respondeu + o botão "Analisar com IA" (SWOT / prioridades / scripts pro time comercial).
+//
+// 21/10/2026 (auditoria de erro recuperável, 3.2): "Novo link" trocava em um clique, sem confirmar,
+// e o link enviado ao cliente morria na hora. Agora pede confirmação (como o portal) dizendo isso.
+// O `onUpdate` precisa chegar ao extra da página (token é campo sensível) — ver AbaMarca.
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   ClipboardList, Copy, Check, X, Link2, MessageSquare, Sparkles, Loader2, RotateCcw, Pencil, Save, FileDown,
 } from "lucide-react";
+import { toast } from "sonner";
 import type { Client } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { supabase } from "@/lib/supabase/client";
 import { DIAG_QUESTIONS } from "@/lib/fichaViva/questions";
 
@@ -36,7 +42,8 @@ interface DiagRow {
 
 export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
   const [busy, setBusy] = useState(false);
-  const [confirmRevoke, setConfirmRevoke] = useState(false);
+  // Trocar e revogar matam o link que o cliente tem: os dois pedem confirmação antes.
+  const [confirmar, setConfirmar] = useState<null | "novo" | "revogar">(null);
   const [copied, setCopied] = useState(false);
   const [copiedRaiox, setCopiedRaiox] = useState(false);
   const [copiedWa, setCopiedWa] = useState(false);
@@ -81,29 +88,27 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diag]);
 
-  async function callAction(endpoint: string) {
+  async function callAction(endpoint: "generate-token" | "revoke") {
+    const trocando = endpoint === "generate-token" && active;
     setBusy(true);
     setError("");
-    try {
-      const res = await authedFetch(`/api/clients/${client.id}/ficha-viva/${endpoint}`, { method: "POST" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Erro");
-      if (json.token) {
-        onUpdate({
-          fichaVivaToken: json.token,
-          fichaVivaRaioxToken: json.raioxToken,
-          fichaVivaTokenCreatedAt: new Date().toISOString(),
-          fichaVivaTokenRevokedAt: undefined,
-          fichaVivaEnabled: true,
-        });
-      } else {
-        onUpdate({ fichaVivaTokenRevokedAt: new Date().toISOString(), fichaVivaEnabled: false });
-      }
-      setConfirmRevoke(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao executar ação");
-    } finally {
-      setBusy(false);
+    const r = await chamar<{ token?: string; raioxToken?: string }>(`/api/clients/${client.id}/ficha-viva/${endpoint}`, undefined, { method: "POST" });
+    setBusy(false);
+    setConfirmar(null);
+    if (!r.ok) { setError(r.erro ?? "Não consegui completar agora."); return; }
+    if (endpoint === "generate-token") {
+      if (!r.data?.token) { setError("O link foi gerado, mas a resposta veio sem ele. Recarregue a página para ver o link atual."); return; }
+      onUpdate({
+        fichaVivaToken: r.data.token,
+        fichaVivaRaioxToken: r.data.raioxToken,
+        fichaVivaTokenCreatedAt: new Date().toISOString(),
+        fichaVivaTokenRevokedAt: undefined,
+        fichaVivaEnabled: true,
+      });
+      toast.success(trocando ? "Link trocado. O antigo não abre mais — mande o novo ao cliente." : "Ficha Viva ativada. Mande o link ao cliente.");
+    } else {
+      onUpdate({ fichaVivaTokenRevokedAt: new Date().toISOString(), fichaVivaEnabled: false });
+      toast.success("Link revogado. Ele não abre mais.");
     }
   }
 
@@ -239,23 +244,36 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
             <button onClick={copyWa} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-lone-success-bg text-lone-success text-[11px] font-semibold hover:opacity-90 border border-lone-success-border transition-colors">
               {copiedWa ? <><Check size={12} /> Copiado!</> : <><MessageSquare size={12} /> Copiar mensagem WhatsApp</>}
             </button>
-            {confirmRevoke ? (
-              <span className="flex items-center gap-2">
-                <span className="text-[11px] text-destructive">Revogar o link?</span>
-                <button onClick={() => callAction("revoke")} disabled={busy} className="px-2 py-1 rounded-md bg-destructive/20 text-destructive text-[11px] font-semibold">Sim</button>
-                <button onClick={() => setConfirmRevoke(false)} className="px-2 py-1 rounded-md bg-surface text-muted-foreground text-[11px]">Não</button>
-              </span>
-            ) : (
+            {!confirmar && (
               <>
-                <button onClick={() => callAction("generate-token")} disabled={busy} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface text-muted-foreground text-[11px] hover:bg-muted/20 border border-border transition-colors disabled:opacity-50">
+                <button type="button" onClick={() => setConfirmar("novo")} disabled={busy} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface text-muted-foreground text-[11px] hover:bg-muted/20 border border-border transition-colors disabled:opacity-50">
                   <RotateCcw size={11} /> Novo link
                 </button>
-                <button onClick={() => setConfirmRevoke(true)} disabled={busy} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface text-destructive text-[11px] hover:bg-destructive/10 border border-border transition-colors disabled:opacity-50">
+                <button type="button" onClick={() => setConfirmar("revogar")} disabled={busy} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface text-destructive text-[11px] hover:bg-destructive/10 border border-border transition-colors disabled:opacity-50">
                   <X size={11} /> Revogar
                 </button>
               </>
             )}
           </div>
+          {confirmar && (
+            <div className="space-y-2 rounded-lg border border-border bg-muted p-3" role="alertdialog" aria-label={confirmar === "novo" ? "Trocar o link da Ficha Viva" : "Revogar o link da Ficha Viva"}>
+              <p className="text-[11px] leading-relaxed text-foreground">
+                {confirmar === "novo"
+                  ? "O link enviado ao cliente deixa de abrir na hora (o do Raio-X dos vendedores também). Nascem links novos — quem tem o antigo precisa receber o novo."
+                  : "O link enviado ao cliente deixa de abrir (o do Raio-X dos vendedores também). Para voltar, só gerando um link novo."}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => callAction(confirmar === "novo" ? "generate-token" : "revoke")} disabled={busy}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-50 ${confirmar === "novo" ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-destructive/20 text-destructive"}`}>
+                  {busy && <Loader2 size={11} className="animate-spin" />}
+                  {confirmar === "novo" ? "Trocar o link" : "Revogar o link"}
+                </button>
+                <button type="button" onClick={() => setConfirmar(null)} disabled={busy} className="px-3 py-1.5 rounded-lg bg-surface text-muted-foreground text-[11px] hover:text-foreground">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

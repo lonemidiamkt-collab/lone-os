@@ -6,30 +6,20 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { faltaNoBanco } from "@/lib/trafego/anuncios-server";
 import { lerMetricasJanela } from "@/lib/traffic/referencia-nicho-server";
 import {
-  resumoVendas, type LinhaVendasCarteira, type NovaVenda, type RespostaVendasCarteira, type RespostaVendasCliente, type VendaRegistro,
+  gastoPorDiaDosClientes, janelaDoInvestimento, resumoVendas,
+  type LinhaVendasCarteira, type NovaVenda, type RespostaVendasCarteira, type RespostaVendasCliente, type VendaRegistro,
 } from "@/lib/trafego/vendas";
 
 const COLS = "id, client_id, sold_on, quantity, amount, channel, note, source, created_by, created_at";
 
-const ontemDe = (hoje: string) => { const d = new Date(`${hoje}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
-
-/** Investimento por cliente por dia (dias fechados; uma entrada por dia). */
-async function gastoPorCliente(desde: string, ate: string, clientId?: string): Promise<Map<string, number[]>> {
-  const out = new Map<string, number[]>();
-  if (ate < desde) return out;
-  const linhas = await lerMetricasJanela(desde, ate);
-  const porDia = new Map<string, number>();
-  for (const l of linhas) {
-    if (clientId && l.client_id !== clientId) continue;
-    porDia.set(`${l.client_id}|${String(l.metric_date).slice(0, 10)}`, Number(l.spend) || 0);
-  }
-  for (const [chave, gasto] of porDia) {
-    const id = chave.split("|")[0];
-    const lista = out.get(id) ?? [];
-    lista.push(gasto);
-    out.set(id, lista);
-  }
-  return out;
+/**
+ * Investimento por cliente por dia (dias fechados; uma entrada por dia). Cliente sem linha de métrica
+ * não entra no mapa — quem lê usa `?? null` (não apurado), nunca `?? []` (que somava R$ 0) (21/10/2026).
+ */
+async function gastoPorCliente(desde: string, ate: string, hoje: string, clientId?: string): Promise<Map<string, number[]>> {
+  const janela = janelaDoInvestimento(desde, ate, hoje);
+  if (!janela) return new Map();
+  return gastoPorDiaDosClientes(await lerMetricasJanela(janela.desde, janela.ate), clientId);
 }
 
 export async function vendasDoCliente(clientId: string, desde: string, ate: string, hoje: string): Promise<RespostaVendasCliente> {
@@ -40,9 +30,9 @@ export async function vendasDoCliente(clientId: string, desde: string, ate: stri
     if (faltaNoBanco(error)) return { disponivel: false, desde, ate, vendas: [], resumo: resumoVendas([], null) };
     throw new Error(error.message);
   }
-  const gasto = await gastoPorCliente(desde, ate < hoje ? ate : ontemDe(hoje), clientId);
+  const gasto = await gastoPorCliente(desde, ate, hoje, clientId);
   const vendas = (data ?? []) as unknown as VendaRegistro[];
-  return { disponivel: true, desde, ate, vendas, resumo: resumoVendas(vendas, gasto.get(clientId) ?? []) };
+  return { disponivel: true, desde, ate, vendas, resumo: resumoVendas(vendas, gasto.get(clientId) ?? null) };
 }
 
 export async function vendasDaCarteira(desde: string, ate: string, hoje: string): Promise<RespostaVendasCarteira> {
@@ -61,7 +51,7 @@ export async function vendasDaCarteira(desde: string, ate: string, hoje: string)
   if (!ids.length) return { disponivel: true, desde, ate, linhas: [] };
   const [{ data: clientes }, gasto] = await Promise.all([
     supabaseAdmin.from("clients").select("id, name, nome_fantasia, assigned_traffic").in("id", ids),
-    gastoPorCliente(desde, ate < hoje ? ate : ontemDe(hoje)),
+    gastoPorCliente(desde, ate, hoje),
   ]);
   const info = new Map((clientes ?? []).map((c) => [c.id as string, c]));
   const linhas: LinhaVendasCarteira[] = ids.map((id) => {
@@ -71,7 +61,7 @@ export async function vendasDaCarteira(desde: string, ate: string, hoje: string)
       clientId: id,
       nome: ((c?.nome_fantasia as string) || (c?.name as string) || "(sem nome)"),
       gestor: (c?.assigned_traffic as string) ?? null,
-      resumo: resumoVendas(doCliente, gasto.get(id) ?? []),
+      resumo: resumoVendas(doCliente, gasto.get(id) ?? null),
       ultimaVenda: doCliente.map((v) => v.sold_on).sort().pop() ?? null,
     };
   });

@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 import { cn } from "@/lib/utils";
-import { CANAIS_VENDA, ROTULO_CANAL, type CanalVenda, type RespostaVendasCliente } from "@/lib/trafego/vendas";
+import { CANAIS_VENDA, INVESTIMENTO_NAO_APURADO, ROTULO_CANAL, type CanalVenda, type RespostaVendasCliente } from "@/lib/trafego/vendas";
 
 export interface VendasDoClienteProps {
   /** Link do portal (público). Use ESTE ou `clientId`, nunca os dois. */
@@ -194,9 +194,12 @@ export default function VendasDoCliente({ token, clientId, permitirLancar = true
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Kpi rotulo="Vendas" valor={res.vendas.toLocaleString("pt-BR")} apoio={nomeDoMes(mes)} />
-            <Kpi rotulo="Custo por venda" valor={brl(res.custoPorVenda)} apoio={res.investimento != null ? `${brl(res.investimento, 0)} investidos em anúncio` : undefined} />
+            {/* Investimento null = nenhum gasto lido ainda (todo dia 1º, ou mês sem métrica): "—", nunca R$ 0,00 (21/10/2026). */}
+            <Kpi rotulo="Custo por venda" valor={brl(res.custoPorVenda)}
+              apoio={res.investimento != null ? `${brl(res.investimento, 0)} investidos em anúncio` : INVESTIMENTO_NAO_APURADO} />
             <Kpi rotulo="Faturamento" valor={brl(res.faturamento, 0)} apoio={res.ticketMedio != null ? `ticket médio ${brl(res.ticketMedio, 0)}` : "informe o valor para ver"} />
-            <Kpi rotulo="Retorno" valor={res.retorno != null ? `${res.retorno.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}x` : "—"} apoio="faturamento ÷ investimento" />
+            <Kpi rotulo="Retorno" valor={res.retorno != null ? `${res.retorno.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}x` : "—"}
+              apoio={res.investimento == null && res.faturamento != null ? INVESTIMENTO_NAO_APURADO : "faturamento ÷ investimento"} />
           </div>
           {dados.vendas.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">

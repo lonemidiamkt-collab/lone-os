@@ -15,8 +15,8 @@ import ClientCsRules from "@/components/cs/ClientCsRules";
 import EstiloVisual from "@/components/clients/EstiloVisual";
 import CatalogoProdutos from "@/components/clients/CatalogoProdutos";
 import FichaViva360Tab from "@/components/fichaviva/FichaViva360Tab";
-import { useClientsStore } from "@/stores/useClientsStore";
 import type { ClientPatch } from "@/stores/useClientsStore";
+import type { Client } from "@/lib/types";
 import CreativeWallet from "./CreativeWallet";
 import FichaUmaPagina from "./FichaUmaPagina";
 import { Secao, Vazio } from "./Secao";
@@ -25,14 +25,15 @@ import type { FichaCtx } from "./tipos";
 
 const TOM: Record<string, string> = { formal: "Formal", funny: "Engraçado", authoritative: "Autoritário", casual: "Casual" };
 
-export default function AbaMarca({ ctx, dadosCompletos, updateClientData, onNavigateTab }: {
+export default function AbaMarca({ ctx, dadosCompletos, updateClientData, onNavigateTab, aoMudarLinkPublico }: {
   ctx: FichaCtx;
   dadosCompletos: boolean;
   updateClientData: (id: string, data: ClientPatch) => Promise<void>;
   onNavigateTab: (tab: string) => void;
+  /** Token/datas da Ficha Viva são campos sensíveis: a mudança precisa chegar à junção da página. */
+  aoMudarLinkPublico: (patch: Partial<Client>) => void;
 }) {
   const { client: c, role, currentUser, isAdmin, naMinhaCarteira } = ctx;
-  const patchClientLocal = useClientsStore((s) => s.patchClientLocal);
   const podeEditarMarca = ["admin", "manager", "social", "designer", "traffic"].includes(role);
   const temDossie = !!(c.toneOfVoice || c.instagramUser || c.driveLink || c.fixedBriefing || c.campaignBriefing);
 
@@ -126,7 +127,8 @@ export default function AbaMarca({ ctx, dadosCompletos, updateClientData, onNavi
           </Secao>
           <Secao id={SECAO.fichaViva} titulo="Ficha Viva" semCard
             descricao="O link do cliente com crescimento e diagnóstico comercial (Raio-X).">
-            <FichaViva360Tab client={c} onUpdate={(patch) => patchClientLocal(c.id, patch)} />
+            {/* Não é patchClientLocal: o token vai para o extra da página (21/10/2026), senão o link velho (morto) seguia na tela. */}
+            <FichaViva360Tab client={c} onUpdate={aoMudarLinkPublico} />
           </Secao>
         </>
       )}
