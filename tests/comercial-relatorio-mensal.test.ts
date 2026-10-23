@@ -76,6 +76,8 @@ describe("o grupo nunca recebe valor", () => {
     expect(grupo).not.toMatch(/1\.997|1\.500|1\.797|6\.000/);
     expect(grupo).toContain("Relatório de vendas — outubro de 2026");
     expect(grupo).toContain("Loja A");
+    // setembro sem venda: o cartão de vendas não mostra "+2 vs setembro" (comparação sem base)
+    expect(grupo).toMatch(/Vendas fechadas<\/div><div class="num">2<\/div><div class="sub">&nbsp;<\/div>/);
   });
   it("versão do Roberto: a mesma coisa + a página Dinheiro com R$", () => {
     expect(roberto).toMatch(/Dinheiro — só para você/);

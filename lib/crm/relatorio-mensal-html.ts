@@ -13,7 +13,8 @@ const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um :
 
 function variacao(atual: number, anterior: number, mes: string): string {
   const d = atual - anterior;
-  if (anterior === 0 && atual === 0) return "";
+  // Sem base no mês anterior (ex.: o primeiro mês do Comercial), "+32 vs setembro" não diz nada.
+  if (anterior === 0) return "";
   if (d === 0) return `igual a ${nomeDoMes(mesAnterior(mes))}`;
   return `${d > 0 ? "+" : "−"}${Math.abs(d)} vs ${nomeDoMes(mesAnterior(mes))}`;
 }
