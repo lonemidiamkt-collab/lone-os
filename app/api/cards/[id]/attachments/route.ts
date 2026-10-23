@@ -27,7 +27,8 @@ export async function GET(
 
   const { data, error } = await supabaseAdmin
     .from("card_attachments")
-    .select("id, card_id, url, path, position, created_at, tipo")
+    // delivery_id: a tela de entrega separa a versão NOVA (ainda não entregue) da anterior (21/10/2026).
+    .select("id, card_id, url, path, position, created_at, tipo, delivery_id")
     .eq("card_id", cardId)
     .order("position", { ascending: true });
 

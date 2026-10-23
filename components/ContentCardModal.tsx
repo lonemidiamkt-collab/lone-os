@@ -17,6 +17,8 @@ import type { ContentCard, CardAttachment } from "@/lib/types";
 import CardArtAttachments, { MAX_ARTES } from "@/components/kanban/CardArtAttachments";
 import EtapaDesign from "@/components/conteudo/EtapaDesign";
 import EntregarArteModal from "@/components/conteudo/EntregarArteModal";
+import EnviarProClienteModal from "@/components/conteudo/EnviarProClienteModal";
+import { podeEnviarAoCliente } from "@/lib/cs/envio-aprovacao";
 import MotivoModal from "@/components/conteudo/MotivoModal";
 import { useProducao, type Pendencia } from "@/components/conteudo/useProducao";
 import PreviaInstagram from "@/components/conteudo/PreviaInstagram";
@@ -119,26 +121,14 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
     resumo: string;
     legenda_corrigida: string | null;
   } | null>(null);
-  const [enviandoCliente, setEnviandoCliente] = useState(false); // mandando as artes pro grupo do cliente aprovar
-
-  // 📤 Envia as artes ENTREGUES pro grupo do cliente aprovar (mensagem padronizada, pelo CS).
-  // Disparo humano — o social/gestor clica. Confirma antes (é mensagem pra fora).
-  async function enviarProCliente() {
-    if (!window.confirm(`Enviar as artes de "${card.title}" pro grupo do WhatsApp de ${card.clientName} pedir aprovação?`)) return;
-    setEnviandoCliente(true);
-    try {
-      const r = await authedFetch("/api/cs/enviar-aprovacao", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: card.id }),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (r.ok && d.ok) {
-        toast.success(`Enviei ${d.enviadas}/${d.total} arte(s) pro grupo de ${card.clientName} aprovar.`);
-      } else {
-        toast.error(d.error || d.falhas?.join("; ") || "Não deu pra enviar pro cliente.");
-      }
-    } catch { toast.error("Falha de conexão ao enviar pro cliente."); }
-    finally { setEnviandoCliente(false); }
-  }
+  // 📤 Enviar as artes ENTREGUES pro grupo do cliente aprovar (pelo CS). Disparo humano, com PRÉVIA
+  // (21/10/2026): era um window.confirm só com o nome do cliente — sem ver artes, texto nem grupo,
+  // e clicar de novo duplicava no grupo. Agora abre EnviarProClienteModal. Arte não entregue ou com
+  // alteração pedida não vai (a versão reprovada ia ao cliente) — o botão diz o porquê.
+  const [enviarAberto, setEnviarAberto] = useState(false);
+  const permissaoEnvio = podeEnviarAoCliente({
+    entregueEm: card.designerDeliveredAt, alteracaoPendenteEm: card.alteracaoPendenteEm, arquivadoEm: card.archivedAt,
+  });
 
   // ✍️ Legenda pronta por IA: usa o briefing do cliente pra escrever gancho+corpo+CTA+hashtags.
   async function gerarLegendaIA() {
@@ -412,18 +402,23 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
             </div>
 
             {/* 📤 Rodapé FIXO da coluna: enviar as artes pro grupo do cliente aprovar (pelo CS).
-                Sempre visível (não rola), em qualquer status, quando há arte e não pro designer. */}
+                Sempre visível (não rola) quando há arte e não pro designer. Só habilita com a arte
+                ENTREGUE e sem alteração pedida — desabilitado, diz o porquê (21/10/2026). */}
             {(((attachments?.length ?? 0) > 0) || card.imageUrl) && role !== "designer" && (
-              <div className="shrink-0 border-t border-border p-3">
+              <div className="shrink-0 border-t border-border p-3 space-y-1.5">
                 <button
                   type="button"
-                  onClick={enviarProCliente}
-                  disabled={enviandoCliente}
-                  className="w-full flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg bg-lone-success-bg border border-lone-success-border hover:brightness-105 transition-all text-xs font-semibold text-lone-success disabled:opacity-50"
-                  title="O CS manda as artes deste card no grupo do WhatsApp do cliente com uma mensagem pedindo aprovação"
+                  onClick={() => setEnviarAberto(true)}
+                  disabled={!permissaoEnvio.ok}
+                  aria-describedby={!permissaoEnvio.ok ? "motivo-envio-cliente" : undefined}
+                  className="w-full flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg bg-lone-success-bg border border-lone-success-border hover:brightness-105 transition-all text-xs font-semibold text-lone-success disabled:opacity-50 disabled:hover:brightness-100"
+                  title="Mostra a prévia (artes, texto e grupo) antes de o CS mandar no grupo do WhatsApp do cliente"
                 >
-                  <Send size={13} /> {enviandoCliente ? "Enviando…" : "Enviar pro cliente"}
+                  <Send size={13} /> Enviar pro cliente
                 </button>
+                {!permissaoEnvio.ok && (
+                  <p id="motivo-envio-cliente" className="text-[10px] leading-snug text-muted-foreground text-center">{permissaoEnvio.motivo}</p>
+                )}
               </div>
             )}
           </div>
@@ -911,6 +906,7 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
           </Button>
         </DialogFooter>
         {pendencia?.tipo === "entregar" && <EntregarArteModal card={pendencia.card} onClose={() => setPendencia(null)} />}
+        {enviarAberto && <EnviarProClienteModal card={card} onClose={() => setEnviarAberto(false)} />}
         {pendencia?.tipo === "alteracao" && (
           <MotivoModal tipo="alteracao" tituloCard={pendencia.card.title} onClose={() => setPendencia(null)}
             onConfirmar={async (motivo) => {

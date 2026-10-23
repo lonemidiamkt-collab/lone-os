@@ -6,6 +6,11 @@
 // A entrega é UMA operação no servidor (/api/ops/entregar-arte → entregar_arte + a transição
 // "entregue"): anexos viram entrega, a versão é registrada, o pedido de arte fecha e o card vai pra
 // "Revisão interna". O estado final vem do servidor; o store só reflete.
+//
+// O QUE ENTRA NA ENTREGA (21/10/2026, auditoria 2.1): antes iam os ids de TODOS os anexos — o print
+// de referência do social e a versão anterior viravam "entrega" e podiam ir ao grupo do cliente.
+// Agora a regra é a do Modo foco (lib/conteudo/entrega-anexos.ts): vai só a versão nova; a anterior
+// sai do card (o arquivo fica para comparar); referência e anexo sem classificação ficam de fora.
 
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle, ExternalLink, FileText, FolderOpen, Clock, Upload, User } from "lucide-react";
@@ -20,6 +25,7 @@ import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { chamar } from "@/lib/api/chamar";
 import { trilha } from "@/lib/obs/trilha";
 import { entregarArte, novoOperationId } from "@/lib/ops/entregar-arte";
+import { faltaParaEntregar, planejarEntrega, resumoDaEntrega } from "@/lib/conteudo/entrega-anexos";
 import { aplicarEntregaNoStore, depoisDaEntrega } from "@/components/conteudo/entrega";
 import { infoEtapa, statusNaEtapa } from "@/lib/conteudo/etapas";
 import type { CardAttachment, ContentCard } from "@/lib/types";
@@ -32,7 +38,9 @@ export default function EntregarArteModal({ card, onClose }: { card: ContentCard
   const [attachments, setAttachments] = useState<CardAttachment[] | null>(null); // null = carregando
   const [erroAnexos, setErroAnexos] = useState<string | null>(null);
   const [tentativaAnexos, setTentativaAnexos] = useState(0);
-  const [initialRefs, setInitialRefs] = useState<CardAttachment[]>([]); // o que já estava no card = referência do social
+  const [initialRefs, setInitialRefs] = useState<CardAttachment[]>([]); // referências do social (tipo "referencia")
+  // Versão nova chegando com uma anterior no card: a anterior sai (padrão do Modo foco).
+  const [substituir, setSubstituir] = useState(true);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   // Um id por clique em "Entregar": repetição (rede caiu, clique duplo) reaproveita o mesmo id → mesma entrega.
@@ -51,7 +59,9 @@ export default function EntregarArteModal({ card, onClose }: { card: ContentCard
       if (!r.ok) { setErroAnexos(r.erro); return; }
       const list = r.data?.attachments ?? [];
       setAttachments(list);
-      setInitialRefs((prev) => (prev.length ? prev : list.filter((a) => a.id !== "legacy" && a.tipo !== "entrega")));
+      // Só o que É referência. Anexo sem classificação não é "do social" por palpite: aparece na grade
+      // com o "?" para o designer marcar.
+      setInitialRefs((prev) => (prev.length ? prev : list.filter((a) => a.id !== "legacy" && a.tipo === "referencia")));
     });
     return () => { alive = false; };
   }, [card.id, tentativaAnexos]);
@@ -72,13 +82,18 @@ export default function EntregarArteModal({ card, onClose }: { card: ContentCard
     }
   };
 
+  const plano = planejarEntrega((attachments ?? []).filter((a) => a.id !== "legacy"), { substituirAnterior: substituir });
+
   const handleDeliver = async () => {
     setError("");
     const link = artLink.trim();
-    const real = (attachments ?? []).filter((a) => a.id !== "legacy");
-    trilha("entregar:clique", { card: card.id, artes: real.length, link: !!link, dr: card.designRequestId ?? null });
-    if (real.length === 0 && !link) { setError("Anexe pelo menos uma arte ou cole o link da arte."); return; }
-    if (real.length === 0 && link) {
+    trilha("entregar:clique", { card: card.id, artes: plano.entregar.length, refs: plano.referencias, anteriores: plano.anteriores, link: !!link, dr: card.designRequestId ?? null });
+    const falta = faltaParaEntregar(plano, link);
+    if (falta) { setError(falta); return; }
+    // O link só vai quando não há anexo a entregar (como antes) — e agora isso inclui o card que só
+    // tem a referência do social: antes a referência ia como entrega e o link colado era ignorado.
+    const usaLink = plano.entregar.length === 0 && !!link;
+    if (usaLink) {
       try {
         const url = new URL(link);
         if (!url.protocol.startsWith("http")) { setError("Link inválido — tem que começar com https://"); return; }
@@ -92,7 +107,7 @@ export default function EntregarArteModal({ card, onClose }: { card: ContentCard
       if (!operationIdRef.current) operationIdRef.current = novoOperationId();
       const r = await entregarArte({
         cardId: card.id, designRequestId: card.designRequestId ?? null,
-        attachmentIds: real.map((a) => a.id), urlsExternas: real.length === 0 && link ? [link] : [],
+        attachmentIds: plano.entregar, urlsExternas: usaLink ? [link] : [],
         operationId: operationIdRef.current,
       });
       if (!r.ok || !r.data?.card) throw new Error(r.erro ?? r.data?.error ?? "não entregou");
@@ -100,6 +115,28 @@ export default function EntregarArteModal({ card, onClose }: { card: ContentCard
       operationIdRef.current = null;
       aplicarEntregaNoStore(card, estado);
       trilha("entregar:ok", { card: card.id, artes: estado.delivery.urls.length });
+      // A versão anterior sai do card, como no Modo foco (o arquivo fica para a comparação de versões).
+      // Falha aqui não desfaz a entrega — mas é dita: senão as duas versões iriam ao cliente.
+      const aRemover = plano.remover;
+      if (aRemover.length) {
+        const removidos: string[] = [];
+        const falhas: string[] = [];
+        for (const id of aRemover) {
+          const r = await chamar(`/api/cards/${card.id}/attachments/${id}`, undefined, { method: "DELETE" });
+          if (r.ok) removidos.push(id); else falhas.push(r.erro ?? "erro");
+        }
+        if (removidos.length) {
+          marcarMutacao();
+          useContentStore.setState((s) => ({
+            contentCards: s.contentCards.map((c) => c.id === card.id
+              ? { ...c, imageUrl: estado.delivery.urls[0] ?? c.imageUrl, cardAttachments: (c.cardAttachments ?? []).filter((x) => !removidos.includes(x.id)) }
+              : c),
+          }));
+        }
+        if (falhas.length) {
+          toast.warning(`Arte entregue, mas ${falhas.length} arte${falhas.length > 1 ? "s" : ""} da versão anterior não saiu do card (${falhas[0]}). Remova na grade de artes.`);
+        }
+      }
       pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para conferir.`, card.clientId, card.id);
       // Revisão automática por IA contra o briefing (preço, texto, regras) e o som. Best-effort.
       depoisDaEntrega(card);
@@ -116,7 +153,9 @@ export default function EntregarArteModal({ card, onClose }: { card: ContentCard
     }
   };
 
-  const podeEntregar = (attachments ?? []).filter((a) => a.id !== "legacy").length > 0 || !!artLink.trim();
+  const falta = faltaParaEntregar(plano, artLink);
+  const podeEntregar = !falta;
+  const resumo = attachments ? resumoDaEntrega(plano, artLink) : [];
 
   // Dialog do Radix: abre por cima do card aberto (camadas empilhadas) sem perder foco nem clique.
   return (
@@ -156,6 +195,12 @@ export default function EntregarArteModal({ card, onClose }: { card: ContentCard
                 onAttachmentsChange={handleAttachmentsChange}
                 tipo="entrega"
               />
+            )}
+            {plano.novas > 0 && plano.anteriores > 0 && (
+              <label className="flex items-start gap-2 pt-1 text-xs text-muted-foreground cursor-pointer">
+                <input type="checkbox" checked={substituir} onChange={(e) => setSubstituir(e.target.checked)} className="mt-0.5 w-4 h-4 accent-primary" />
+                <span>Substituir a versão anterior no card ({plano.anteriores} arte{plano.anteriores > 1 ? "s" : ""}) — ela continua guardada para a comparação</span>
+              </label>
             )}
           </div>
 
@@ -217,16 +262,26 @@ export default function EntregarArteModal({ card, onClose }: { card: ContentCard
           </div>
         </div>
 
-        <div className="p-5 border-t border-border flex gap-2">
-          <button onClick={onClose} className="flex-1 h-9 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">Cancelar</button>
-          <button
-            type="button"
-            onClick={handleDeliver}
-            disabled={saved || saving || !podeEntregar}
-            className="flex-1 flex items-center justify-center gap-2 h-9 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
-          >
-            {saved ? <><CheckCircle size={14} /> Entregue</> : saving ? <><Upload size={14} className="animate-pulse" /> Entregando…</> : <><Upload size={14} /> Entregar arte</>}
-          </button>
+        <div className="p-5 border-t border-border space-y-3">
+          {/* O que vai antes do clique (21/10/2026): a entrega decide o que o cliente vai receber. */}
+          {podeEntregar && resumo.length > 0 && (
+            <ul className="space-y-0.5 text-[11px] text-muted-foreground" aria-label="O que vai nesta entrega">
+              {resumo.map((linha) => <li key={linha}>{linha}</li>)}
+            </ul>
+          )}
+          {/* Botão desabilitado diz o que falta (só depois de carregar as artes, para não assustar à toa). */}
+          {attachments && falta && <p className="text-[11px] text-lone-warning">{falta}</p>}
+          <div className="flex gap-2">
+            <button onClick={onClose} className="flex-1 h-9 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">Cancelar</button>
+            <button
+              type="button"
+              onClick={handleDeliver}
+              disabled={saved || saving || !podeEntregar}
+              className="flex-1 flex items-center justify-center gap-2 h-9 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
+            >
+              {saved ? <><CheckCircle size={14} /> Entregue</> : saving ? <><Upload size={14} className="animate-pulse" /> Entregando…</> : <><Upload size={14} /> Entregar arte</>}
+            </button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
