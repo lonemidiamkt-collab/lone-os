@@ -341,11 +341,29 @@ export function planejarMovimento(
 }
 
 /**
+ * A troca de etapa desfaz a aprovação do cliente?
+ *
+ * 21/10/2026 (auditoria de erro recuperável, 2.4): o agente marcava "Cliente aprovou" e movia para
+ * Agendado; quando era a arte errada, o comentário dizia "é só voltar o status" — mas voltar não
+ * limpava `client_approved_at` e o selo "Cliente aprovou — pode agendar/postar!" ficava no card.
+ *
+ * - Antes de "Com o cliente" não existe aprovação possível (o cliente não viu a arte).
+ * - Voltar de Agendado/No ar para "Com o cliente" é dizer que a arte espera o cliente de novo.
+ *   (Ir PARA a frente até "Com o cliente" não mexe: o portal aprova sem mover o card.)
+ */
+export function trocaDesfazAprovacao(de: string | null | undefined, para: string | null | undefined): boolean {
+  const ordem = (s: string | null | undefined) => infoEtapa(etapaDoStatus(s)).ordem;
+  const oPara = ordem(para);
+  if (oPara < infoEtapa("com_cliente").ordem) return true;
+  return oPara < infoEtapa("agendado").ordem && oPara < ordem(de);
+}
+
+/**
  * Campos que acompanham uma troca SIMPLES de etapa (sem arte envolvida), em camelCase para o store.
  * Sair da Revisão interna para a frente é o social dizendo "conferi": marca a arte como confirmada.
  */
 export function camposDaTroca(
-  card: { status: StatusDoCard; columnEnteredAt?: Record<string, string> | null; socialConfirmedAt?: string | null; scheduledAt?: string | null; publishVerifiedAt?: string | null; designerDeliveredAt?: string | null },
+  card: { status: StatusDoCard; columnEnteredAt?: Record<string, string> | null; socialConfirmedAt?: string | null; scheduledAt?: string | null; publishVerifiedAt?: string | null; designerDeliveredAt?: string | null; clientApprovedAt?: string | null },
   status: StatusDoCard,
   quem: string,
   agora: string,
@@ -360,6 +378,7 @@ export function camposDaTroca(
   if (de === "revisao" && infoEtapa(para).ordem > infoEtapa("revisao").ordem && card.designerDeliveredAt && !card.socialConfirmedAt) {
     Object.assign(campos, { socialConfirmedAt: agora, socialConfirmedBy: quem });
   }
+  if (card.clientApprovedAt && trocaDesfazAprovacao(card.status, status)) campos.clientApprovedAt = null;
   if (para === "agendado" && !card.scheduledAt) campos.scheduledAt = agora;
   if (para === "no_ar" && !card.publishVerifiedAt) Object.assign(campos, { publishVerifiedAt: agora, publishVerifiedBy: quem });
   return campos;

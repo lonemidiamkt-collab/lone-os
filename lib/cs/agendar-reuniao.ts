@@ -431,8 +431,9 @@ export function textoOfertaTentativa(cliente: string, opcoes: string[], tentativ
 
 /** O agente levando o horário do cliente para o social decidir. */
 export function textoPerguntaAoSocial(cliente: string, quandoExtenso: string, mencao: string): string {
+  // "Responde NESTA mensagem": desde 21/10/2026 o agente só aceita a resposta que cita a pergunta.
   return `📅 ${mencao || ""} a *${cliente}* quer a reunião em *${quandoExtenso}*.\n\n`.trimStart()
-    + `Responde aqui: *ok* — ou manda outro horário que eu levo pra ele.`;
+    + `Responde *nesta mensagem*: *ok* — ou manda outro horário que eu levo pra ele.`;
 }
 
 /** O agente levando a contraproposta do social de volta ao cliente. */
@@ -450,7 +451,7 @@ export function textoPassarProSocial(cliente: string, motivo: string, mencao: st
 /** Cobrança do social que não respondeu ao horário pedido pelo cliente. */
 export function textoCobrarSocial(cliente: string, quandoExtenso: string, dias: number, mencao: string): string {
   return `⏳ ${mencao || ""} a *${cliente}* está esperando resposta há ${dias} dia${dias === 1 ? "" : "s"} `.trimStart()
-    + `sobre a reunião em *${quandoExtenso}*.\n\nResponde *ok* que eu confirmo com ele, ou manda outro horário.`;
+    + `sobre a reunião em *${quandoExtenso}*.\n\nResponde *nesta mensagem*: *ok* que eu confirmo com ele, ou manda outro horário.`;
 }
 
 /** Lembretes NO GRUPO DO CLIENTE — o que faz a reunião acontecer, não só existir na agenda. */
@@ -543,10 +544,102 @@ export function acharLinkChamada(texto: string): string | null {
 
 /** O pedido do link, junto do "fechado". Uma mensagem só: pedir depois vira outra notificação. */
 export function textoPedeLink(mencao: string): string {
-  return `\n🔗 ${mencao ? `${mencao} ` : ""}manda o link da chamada aqui que eu levo pro cliente e ponho nos lembretes.`;
+  return `\n🔗 ${mencao ? `${mencao} ` : ""}manda o link da chamada *respondendo esta mensagem* que eu levo pro cliente e ponho nos lembretes.`;
 }
 
 /** O aviso de que o link foi recebido e repassado. */
 export function textoLinkRecebido(cliente: string): string {
   return `🔗 Link guardado e enviado pra *${cliente}*. Vai junto nos lembretes.`;
+}
+
+// ── A QUE MENSAGEM A RESPOSTA RESPONDE, E QUEM PODE RESPONDER ─────────────────
+//
+// 21/10/2026 (auditoria de erro recuperável, 5.1). Com UMA reunião esperando o social, qualquer
+// "ok/sim/show/👍" no grupo interno a confirmava — de qualquer pessoa, sobre qualquer assunto — e o
+// cliente recebia "📅 Confirmado!". Um "ok" para aprovar card marcava a reunião. E qualquer link de
+// Meet colado ia para o cliente da única reunião sem link. Agora só vale a resposta que CITA a
+// mensagem do agente (pelo id dela, ou pelo texto citado, que o webhook também entrega), e só do
+// responsável pelo cliente ou da gestão.
+
+const normCitacao = (s: string | null | undefined) =>
+  (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * O texto citado é a pergunta do agente sobre o horário da reunião DESTE cliente? Serve para as
+ * quatro mensagens que esperam a resposta do social: a pergunta, a cobrança do cron, a revalidação
+ * de proposta vencida e o aviso de conflito. Todas trazem o cliente entre asteriscos.
+ */
+export function citaPerguntaDaReuniao(citado: string | null | undefined, cliente: string): boolean {
+  const q = normCitacao(citado), c = normCitacao(cliente);
+  if (!q || !c || !q.includes(`*${c}*`)) return false;
+  if (!/reuniao|horario/.test(q)) return false;
+  return /\bresponde\b.{0,30}\bok\b|\bmanda outro horario\b/.test(q);
+}
+
+/** O texto citado é o pedido do link da chamada (a mensagem "📅 Fechado!") DESTE cliente? */
+export function citaPedidoDeLink(citado: string | null | undefined, cliente: string): boolean {
+  const q = normCitacao(citado), c = normCitacao(cliente);
+  return !!q && !!c && q.includes(`*${c}*`) && q.includes("manda o link da chamada");
+}
+
+export type Citada<T> = { tipo: "uma"; item: T } | { tipo: "varias"; itens: T[] } | { tipo: "nenhuma" };
+
+/**
+ * Qual item (reunião) a mensagem cita: pelo id da mensagem do agente primeiro; senão pelo texto
+ * citado. Mais de um casando pelo texto → "varias" (o chamador pergunta em vez de escolher).
+ */
+export function acharCitada<T extends { cliente: string; msgId?: string | null }>(
+  itens: T[],
+  citadaId: string | null | undefined,
+  citadoTexto: string | null | undefined,
+  casaTexto: (citado: string | null | undefined, cliente: string) => boolean,
+): Citada<T> {
+  if (citadaId) {
+    const porId = itens.filter((r) => !!r.msgId && r.msgId === citadaId);
+    if (porId.length === 1) return { tipo: "uma", item: porId[0] };
+  }
+  const porTexto = itens.filter((r) => casaTexto(citadoTexto, r.cliente));
+  if (porTexto.length === 1) return { tipo: "uma", item: porTexto[0] };
+  if (porTexto.length > 1) return { tipo: "varias", itens: porTexto };
+  return { tipo: "nenhuma" };
+}
+
+/**
+ * Quem pode confirmar (ou mudar) o horário: o responsável pelo cliente — é a agenda dele — ou a
+ * gestão. Sem responsável cadastrado, qualquer pessoa do operacional. Cliente, comercial e número
+ * fora do time nunca.
+ */
+export function podeResponderPelaReuniao(
+  autor: { nome: string; papel: string } | null | undefined,
+  responsavel: string | null | undefined,
+): boolean {
+  if (!autor) return false;
+  if (autor.papel === "admin" || autor.papel === "manager") return true;
+  if (!["social", "traffic", "designer"].includes(autor.papel)) return false;
+  const r = normCitacao(responsavel);
+  if (!r) return true;
+  const a = normCitacao(autor.nome);
+  return a === r || a.split(" ")[0] === r.split(" ")[0];
+}
+
+/** Respondeu a pergunta da reunião sem ser o responsável. */
+export function textoSemAutoridadeReuniao(cliente: string, responsavel: string | null | undefined): string {
+  return `Quem confirma o horário da *${cliente}* é ${responsavel ? `*${responsavel}*` : "quem cuida do cliente"} (ou a gestão) — é a agenda dessa pessoa. `
+    + `Pede pra responder aqui, na minha mensagem. Não mandei nada pro cliente.`;
+}
+
+/** Citou a pergunta, mas não deu pra entender se é sim ou outro horário. */
+export function textoRespostaReuniaoNaoEntendida(cliente: string): string {
+  return `Não entendi 🤔 Pra reunião da *${cliente}*: responde *ok* pra confirmar ou manda outro horário (ex.: *sexta 15h*). Não mandei nada pro cliente.`;
+}
+
+/** Recusou o horário sem dizer outro. */
+export function textoRecusaSemHorario(cliente: string): string {
+  return `Beleza, esse horário não dá. Me manda outro dia e hora pra *${cliente}* (ex.: *quinta 10h*) que eu levo pra ele.`;
+}
+
+/** Link colado sem citar o pedido: não adivinha de qual reunião é. */
+export function textoLinkSemCitacao(clientes: string[]): string {
+  const lista = clientes.length ? ` Tenho sem link: ${clientes.map((n) => `*${n}*`).join(", ")}.` : "";
+  return `🔗 Vi um link de chamada. Se é de reunião com cliente, responde *na minha mensagem que pediu o link* (a do 📅 Fechado!) que eu sei de qual cliente é.${lista}`;
 }

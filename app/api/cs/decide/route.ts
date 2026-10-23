@@ -4,8 +4,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
-import { criarCardDemanda, criarCardsPauta } from "@/lib/cs/card";
-import { parsePautaItens } from "@/lib/cs/pauta";
+import { confirmarDemanda } from "@/lib/cs/confirmar-demanda-server";
+import { textoPautaParcial } from "@/lib/cs/confirmar-demanda";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { papelDoUsuario } from "@/lib/api/require-role";
 
@@ -82,41 +82,35 @@ export async function POST(req: NextRequest) {
   }
 
   // confirmar → cria o card (ajuste opcional entra no briefing antes).
-  const clientId = (d.client_id as string) || process.env.CS_TEST_CLIENT_ID || null;
-  if (!clientId) return NextResponse.json({ error: "demanda sem cliente pra criar o card" }, { status: 400 });
+  // 21/10/2026 (auditoria 5.9): só vira "confirmada" com card criado. Antes, card que falhava deixava
+  // a demanda confirmada sem card — a nova tentativa dava "já foi decidida" e o pedido sumia. E a
+  // demanda sem cliente virava card no cliente de TESTE; agora é recusada.
   let briefing = (d.briefing as string) || (d.message_text as string) || "";
   if (ajuste) briefing = `${briefing}\n\n---\n✏️ ${quem}: ${ajuste}`.trim();
 
-  // PAUTA SEMANAL confirmada pelo painel → um card por item (com a data).
-  if (d.tipo === "pauta_semanal") {
-    const itens = parsePautaItens((d.message_text as string) || "") ?? [];
-    if (!itens.length) return NextResponse.json({ error: "pauta sem itens recuperáveis" }, { status: 400 });
-    const ids = await criarCardsPauta({
-      clientId, clienteNome: (d.cliente_nome as string) || "Cliente",
-      responsavel: d.responsavel as string | null, itens, notaExtra: ajuste || null,
-    });
-    await supabaseAdmin.from("cs_demandas").update({
-      status: "confirmada", content_card_id: ids[0] ?? null, briefing,
-      decided_at: new Date().toISOString(), decided_by: quem,
-    }).eq("id", id);
-    if (internalJid) await csSendGroupText(internalJid, `✅ Pauta da *${resumo.replace("Pauta da semana ", "semana ")}* de *${d.cliente_nome}* aprovada por ${quem} (pela plataforma) — ${ids.length} cards no board. 📅`, sug);
-    console.log(`[CS/decide] pauta ${d.codigo} confirmada por ${quem} → ${ids.length} cards`);
-    return NextResponse.json({ ok: ids.length > 0, decision: "confirmada", cards: ids.length });
+  const r = await confirmarDemanda(d, {
+    quem, titulo: resumo, briefing, notaPauta: ajuste || null, gravar: { briefing },
+  });
+  if (!r.ok) {
+    console.error(`[CS/decide] ${d.codigo} NÃO confirmada (${r.motivo}): ${r.erro}`);
+    const erro = r.motivo === "sem_cliente"
+      ? "Essa demanda não tem cliente vinculado — não dá pra criar o card. Descarte e peça de novo dizendo o cliente."
+      : r.motivo === "pauta_sem_itens"
+        ? "Não consegui recuperar os itens dessa pauta. Ela continua pendente — monte direto no board ou descarte."
+        : `Não consegui criar o card (${r.erro}). A demanda continua pendente — tente de novo.`;
+    return NextResponse.json({ error: erro, motivo: r.motivo }, { status: r.motivo === "card_falhou" ? 502 : 409 });
   }
 
-  const cardId = await criarCardDemanda({
-    clientId, clienteNome: (d.cliente_nome as string) || "Cliente", responsavel: d.responsavel as string | null,
-    titulo: resumo, urgencia: d.urgencia as string, briefing, tipo: d.tipo as string,
-  });
-  await supabaseAdmin.from("cs_demandas").update({
-    status: "confirmada", content_card_id: cardId, briefing,
-    decided_at: new Date().toISOString(), decided_by: quem,
-  }).eq("id", id);
+  const ehPauta = d.tipo === "pauta_semanal";
+  const parcial = textoPautaParcial(r.criados, r.total, r.falhas);
   if (internalJid) {
-    await csSendGroupText(internalJid, cardId
-      ? `✅ *${resumo}* — card criado por ${quem} (pela plataforma).`
-      : `⚠️ ${quem} confirmou *${resumo}* na plataforma, mas o card falhou — dá uma olhada.`, sug);
+    await csSendGroupText(internalJid, ehPauta
+      ? `✅ Pauta da *${resumo.replace("Pauta da semana ", "semana ")}* de *${d.cliente_nome}* aprovada por ${quem} (pela plataforma) — ${r.criados} cards no board. 📅${parcial}`
+      : `✅ *${resumo}* — card criado por ${quem} (pela plataforma).`, sug);
   }
-  console.log(`[CS/decide] ${d.codigo} confirmada por ${quem} → card ${cardId}`);
-  return NextResponse.json({ ok: cardId != null, decision: "confirmada", cardId });
+  console.log(`[CS/decide] ${d.codigo} confirmada por ${quem} → ${r.criados}/${r.total} card(s)`);
+  return NextResponse.json({
+    ok: true, decision: "confirmada", cardId: r.cardId, cards: r.criados,
+    ...(r.falhas.length ? { falhas: r.falhas } : {}),
+  });
 }

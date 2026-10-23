@@ -186,6 +186,13 @@ export const AUTOMACOES: Automacao[] = [
     familia: "CS / time", destino: "grupo do time", cron: "*/15 11-20 * * 1-5",
     agendaBRT: "seg a sex, a cada 15 min das 8h às 17h45", maxSilencioHoras: 64, ensaio: "dry=1",
   }),
+  // 21/10/2026 (auditoria de erro recuperável, 5.10): a falha da IA não some mais com a mensagem.
+  ep("cs-nao-lidas", {
+    nome: "Mensagens de cliente não lidas",
+    descricao: "Relê a mensagem de cliente que a IA não conseguiu ler na hora (a sugestão nasce quando a IA volta) e avisa o time quando um grupo fica com mensagem sem leitura. Depois de 48h, pede pra ler à mão.",
+    familia: "CS / time", destino: "grupo do time", cron: "*/15 * * * *",
+    agendaBRT: "a cada 15 min, o dia todo (avisos só das 8h às 20h)", maxSilencioHoras: 2, ensaio: "dry=1",
+  }),
   ep("cs-pauta", {
     nome: "Pauta da semana seguinte", descricao: "Propõe a pauta da próxima semana por cliente; o time responde \"ok\" e os cards nascem no board.",
     familia: "CS / time", destino: "grupo do time", cron: "0 17 * * 5", agendaBRT: "sexta, 14h", maxSilencioHoras: 8 * 24, ensaio: "preview=1",

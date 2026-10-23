@@ -88,10 +88,15 @@ import { spNow, ymd } from "@/lib/cs/vigilancia";
 import { loadBriefingForClient, loadRoteiroPrefs, loadBriefingCombinado } from "@/lib/cs/load-briefing";
 import { ehComandoAusencia, parseAusencia } from "@/lib/cs/ausencia";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
-import { criarCardDemanda, criarCardsPauta } from "@/lib/cs/card";
+import { confirmarDemanda } from "@/lib/cs/confirmar-demanda-server";
+import { textoFalhaConfirmacao, textoPautaParcial } from "@/lib/cs/confirmar-demanda";
+import { escolherCardAprovado, textoAprovacaoAmbigua } from "@/lib/cs/aprovacao-cliente";
+import { trocaDesfazAprovacao } from "@/lib/conteudo/producao";
+import { chaveCobrancaPendencias } from "@/lib/cs/envio-cliente";
+import { notaLeituraAtrasada } from "@/lib/cs/nao-lidas";
 import { ETAPAS_DE_APROVACAO, infoEtapa, rotuloCompleto, statusDaEtapa, statusDasEtapas, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { executarTransicao } from "@/lib/conteudo/producao-server";
-import { parsePautaItens, gerarPautaSemanal, datasProximaSemana, formatPauta } from "@/lib/cs/pauta";
+import { gerarPautaSemanal, datasProximaSemana, formatPauta } from "@/lib/cs/pauta";
 import { proximasDatas, formatDataCurta, tagsDoNicho, dataEncaixa } from "@/lib/cs/datas";
 import type { CsDemandType } from "@/lib/cs/taxonomy";
 
@@ -550,6 +555,14 @@ async function autoAvancarPorArteNoGrupo(groupJid: string, autorNome?: string | 
   }
 }
 
+// 21/10/2026 (auditoria 5.1): a resposta do social só vale CITANDO a pergunta do agente. O id da
+// pergunta fica na reunião para casar pelo id; sem a migration 20261021130000 a coluna não existe e
+// a citação casa pelo texto citado (o webhook entrega os dois) — por isso a falha aqui só avisa.
+async function guardarIdPerguntaReuniao(meetingId: string, msgId: string): Promise<void> {
+  const { error } = await supabaseAdmin.from("meetings").update({ msg_id_pergunta_social: msgId }).eq("id", meetingId);
+  if (error) console.warn("[CS/inbound] msg_id_pergunta_social não gravado (migration 20261021130000?):", error.message);
+}
+
 // Processa o papo (após o debounce): responde UMA vez, com memória curta do grupo. Roda fora do
 // ciclo do webhook (o reply sai pela Evolution), então nunca segura a resposta HTTP.
 async function responderPapo(p: {
@@ -942,11 +955,18 @@ async function processarInbound(req: NextRequest) {
   // Cap defensivo: texto gigante (colado/encaminhado) viraria milhares de tokens em cada estágio.
   if (msg.text.length > 4000) msg.text = msg.text.slice(0, 4000);
 
+  // ─── RELEITURA (21/10/2026, auditoria 5.10): a rotina cs-nao-lidas manda de volta, com este
+  // cabeçalho, a mensagem de cliente que a IA não conseguiu ler na primeira vez. O que já aconteceu
+  // na primeira passada (claim, corpus, onboarding, NPS, "última fala do cliente", captura de
+  // check-in) não se repete, e nada é dito ao cliente fora de hora. Só chega aqui quem passou pelo
+  // segredo do webhook (POST → authorized). ───
+  const releitura = req.headers.get("x-cs-releitura") === "1";
+
   // ─── Claim ATÔMICO por message_id: a Evolution reenvia o webhook enquanto os handlers lentos
   // (IA, 5-20s) ainda rodam — o check-then-insert antigo deixava passar duplicata (2 sugestões,
   // 2 cards, tokens 2x). Insert-first: o reenvio conflita no PK (23505) e morre aqui, antes de
   // gastar 1 token. Fail-open se a tabela não existir (migration 058 ainda não aplicada). ───
-  if (msg.messageId) {
+  if (msg.messageId && !releitura) {
     const { error: claimErr } = await supabaseAdmin
       .from("cs_processed_messages")
       .insert({ message_id: msg.messageId, group_jid: msg.groupJid });
@@ -977,7 +997,7 @@ async function processarInbound(req: NextRequest) {
   // CORPUS: cliente que fala por áudio ficava invisível pro aprendizado de estilo e de briefing (que
   // exigem volume mínimo de mensagens), e a transcrição — paga — era descartada se não virasse
   // demanda. Agora é uma função chamada nos 3 momentos, com guarda pra não duplicar.
-  let corpusGravado = false;
+  let corpusGravado = releitura; // na releitura a mensagem já entrou no corpus da primeira vez
   const gravarNoCorpus = (texto: string) => {
     if (corpusGravado || !texto || texto.trim().length < 3) return;
     corpusGravado = true;
@@ -1000,7 +1020,7 @@ async function processarInbound(req: NextRequest) {
 
   // ─── Onboarding em andamento neste grupo? A mensagem do cliente é uma RESPOSTA do onboarding. ───
   // Vem ANTES da allowlist: o grupo do cliente novo pode ainda não estar na allowlist.
-  {
+  if (!releitura) {
     const { data: sess } = await supabaseAdmin
       .from("cs_onboarding_sessions").select("*").eq("group_jid", msg.groupJid).eq("status", "coletando").maybeSingle();
     // Resposta de onboarding por NOTA DE VOZ (comum em briefing longo): transcreve AQUI — o bloco
@@ -1041,7 +1061,7 @@ async function processarInbound(req: NextRequest) {
   // allowlist pelo mesmo motivo do onboarding: a pergunta vai ao grupo do cliente, que pode não
   // estar nela. E antes do isTrivial, que descartaria um "9" (1 caractere). Só a nota → para aqui;
   // nota com pedido junto, ou o motivo → grava e segue o fluxo normal. ───
-  if (msg.text && !isLoneTeam(msg.authorJid, equipeJids)) {
+  if (msg.text && !releitura && !isLoneTeam(msg.authorJid, equipeJids)) {
     const nps = await tratarRespostaNps({
       groupJid: msg.groupJid, texto: msg.text, messageId: msg.messageId,
       citadaId: msg.quotedMsgId ?? null, autor: msg.authorName || msg.authorJid || null,
@@ -1094,79 +1114,66 @@ async function processarInbound(req: NextRequest) {
   // ─── Reply direto numa SUGESTÃO do agente? Então é resposta de DEMANDA (ok/não/ajustar/
   // linguagem natural) — nunca roteiro/comando. Sem esta guarda, "ajustar <instrução>" era
   // sequestrado pelo handler de ajuste de roteiro (ehAjusteRoteiro casa ajusta/muda/troca em
+  // qualquer posição) e o ajuste da demanda se perdia em silêncio. ───
+  let demandaDaSugestao: Record<string, unknown> | null = null;
+  // A demanda casou pelo ID da mensagem citada (sinal exato), não pelo texto citado (aproximado)?
+  let sugestaoPeloId = false;
+  if (msg.quotedMsgId && isInternalCmdGroup(msg.groupJid)) {
+    const { data } = await supabaseAdmin.from("cs_demandas").select("*")
+      .eq("msg_id_sugestao", msg.quotedMsgId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    demandaDaSugestao = data ?? null;
+    sugestaoPeloId = !!data;
+  }
+  // Fallback por TEXTO citado: o id do quote MUITAS vezes não bate (COMPLEMENTO troca o
+  // msg_id_sugestao; ou o id de envio difere do stanzaId do reply). Reencontra a demanda pendente
+  // pelo cliente/resumo citado — corrige "dei ok num reply de ontem e ele ignorou".
+  if (!demandaDaSugestao && msg.quotedText && isInternalCmdGroup(msg.groupJid)) {
+    demandaDaSugestao = await acharDemandaPorTexto(msg.quotedText);
+  }
+
   // ─── RESPOSTA DO SOCIAL À REUNIÃO PROPOSTA PELO CLIENTE ──────────────────
   //
   // Roberto: "se o social mídia pedir outro horário, ele manda ao cliente e negocia, e depois
   // avisa ao social mídia o horário."
   //
-  // Vem cedo no fluxo porque "ok" e "pode ser 16h" são frases curtas que qualquer handler abaixo
-  // engoliria — o de decisão de demanda, o de papo. Só age quando existe UMA reunião esperando
-  // resposta deste grupo; havendo mais de uma, não adivinha qual.
-  // ─── O LINK DA CHAMADA COLADO NO GRUPO DA EQUIPE ──────────────────────────
-  //
-  // O agente pediu o link ao fechar a reunião. Quando ele aparece, guarda e leva ao cliente — que
-  // até aqui recebia "confirmado, online" e nenhum endereço.
-  if (isInternalCmdGroup(msg.groupJid) && msg.text) {
-    const { acharLinkChamada, textoLinkRecebido } = await import("@/lib/cs/agendar-reuniao");
-    const link = acharLinkChamada(msg.text);
-    if (link) {
-      // Só as que estão marcadas, ainda vão acontecer e não têm link. Duas ou mais e o link é
-      // ambíguo: colar no cliente errado é convidar gente para a chamada de outro.
-      const { data: semLink } = await supabaseAdmin
-        .from("meetings")
-        .select("id, client_id, group_jid, start_at, clients(name, nome_fantasia)")
-        .eq("estado", "agendada")
-        .is("link_reuniao", null)
-        .gte("start_at", new Date().toISOString())
-        .order("start_at", { ascending: true })
-        .limit(2);
-
-      if (semLink?.length === 1) {
-        const r = semLink[0];
-        const cli = r.clients as unknown as { name?: string; nome_fantasia?: string } | null;
-        const nome = cli?.nome_fantasia || cli?.name || "o cliente";
-        await supabaseAdmin.from("meetings").update({ link_reuniao: link }).eq("id", r.id as string);
-        if (r.group_jid) {
-          const { porExtenso } = await import("@/lib/cs/parse-horario");
-          await csSendGroupText(r.group_jid as string,
-            `🔗 Aqui o link da nossa reunião de *${porExtenso(r.start_at as string)}*:\n${link}`,
-            undefined, { origem: "cs-reuniao-link", destino: "cliente", clientId: r.client_id as string });
-        }
-        await csSendGroupText(msg.groupJid, textoLinkRecebido(nome), msg.messageId,
-          { origem: "cs-reuniao-link", destino: "interno" });
-        console.log(`[CS/inbound] link da reunião ${nome} guardado`);
-        return NextResponse.json({ ok: true, reuniao_link: nome });
-      }
-      if ((semLink?.length ?? 0) > 1) {
-        const nomes = (semLink ?? []).map((r) => {
-          const c = r.clients as unknown as { name?: string; nome_fantasia?: string } | null;
-          return c?.nome_fantasia || c?.name || "cliente";
-        });
-        await csSendGroupText(msg.groupJid,
-          `🔗 Esse link é de qual reunião? Tenho ${nomes.map((n) => `*${n}*`).join(" e ")} sem link. Me diz o nome que eu guardo.`,
-          msg.messageId, { origem: "cs-reuniao-link", destino: "interno" });
-        return NextResponse.json({ ok: true, reuniao_link: "ambiguo" });
-      }
-    }
-  }
-
-  if (isInternalCmdGroup(msg.groupJid) && msg.text) {
+  // 21/10/2026 (auditoria de erro recuperável, 5.1). Este bloco rodava ANTES de tudo e, com UMA
+  // reunião esperando, qualquer "ok/sim/👍" do grupo interno — de qualquer pessoa, sobre qualquer
+  // assunto, até o "ok" que aprova card — a confirmava, e o cliente recebia "📅 Confirmado!".
+  // Agora só age quando a mensagem CITA a pergunta do agente sobre aquela reunião (pelo id gravado
+  // em meetings.msg_id_pergunta_social ou pelo texto citado) e quem responde é o responsável ou a
+  // gestão. Vem depois de achar a demanda citada: reply exato numa sugestão nunca é sobre reunião.
+  // Citou a pergunta da reunião, a resposta é CONSUMIDA aqui: o fallback por texto da demanda
+  // (acharDemandaPorTexto) casaria a demanda pendente do mesmo cliente.
+  if (isInternalCmdGroup(msg.groupJid) && msg.text && msg.quotedMsgId && !sugestaoPeloId) {
+    const ar = await import("@/lib/cs/agendar-reuniao");
     const { data: esperando } = await supabaseAdmin
       .from("meetings")
-      .select("id, client_id, horario_proposto, responsavel, group_jid, rodadas_negociacao, mes_referencia, link_reuniao, clients(name, nome_fantasia)")
+      .select("*, clients(name, nome_fantasia)")
       .eq("estado", "aguardando_social")
       .eq("meeting_type", "mensal")
       .order("perguntado_social_em", { ascending: false })
-      .limit(2);
-
-    // Uma só: dá para saber de qual reunião a pessoa está falando. Duas ou mais, o "ok" é ambíguo
-    // e responder no escuro marcaria a reunião errada.
-    if (esperando?.length === 1) {
-      const reu = esperando[0];
-      const cli = reu.clients as unknown as { name?: string; nome_fantasia?: string } | null;
-      const nomeCli = cli?.nome_fantasia || cli?.name || "o cliente";
-      const { lerRespostaSocial, textoFechado, textoContraproposta } = await import("@/lib/cs/agendar-reuniao");
+      .limit(20);
+    const candidatas = (esperando ?? []).map((r) => {
+      const cli = r.clients as unknown as { name?: string; nome_fantasia?: string } | null;
+      return { r, cliente: cli?.nome_fantasia || cli?.name || "o cliente", msgId: (r.msg_id_pergunta_social as string) || null };
+    });
+    const citada = ar.acharCitada(candidatas, msg.quotedMsgId, msg.quotedText, ar.citaPerguntaDaReuniao);
+    if (citada.tipo === "varias") {
+      await csSendGroupText(msg.groupJid,
+        `Essa resposta é de qual reunião? Tenho ${citada.itens.map((x) => `*${x.cliente}*`).join(" e ")} esperando. Responde na pergunta mais recente da que você quer. Não mandei nada pro cliente.`,
+        msg.messageId, { origem: "cs-reuniao-ambigua", destino: "interno" });
+      return NextResponse.json({ ok: true, reuniao: "ambigua" });
+    }
+    if (citada.tipo === "uma") {
+      const reu = citada.item.r;
+      const nomeCli = citada.item.cliente;
+      const { lerRespostaSocial, textoFechado, textoContraproposta } = ar;
       const { porExtenso } = await import("@/lib/cs/parse-horario");
+      if (!ar.podeResponderPelaReuniao(autoridade.autor, (reu.responsavel as string) || null)) {
+        await csSendGroupText(msg.groupJid, ar.textoSemAutoridadeReuniao(nomeCli, (reu.responsavel as string) || null),
+          msg.messageId, { origem: "cs-reuniao-sem-autoridade", destino: "interno" });
+        return NextResponse.json({ ok: true, reuniao: "sem_autoridade", cliente: nomeCli });
+      }
       // O horário proposto entra como referência: "pode ser 16h?" só vira contraproposta
       // quando se sabe de qual DIA se está falando.
       const resp = lerRespostaSocial(msg.text, new Date(), (reu.horario_proposto as string) || undefined);
@@ -1187,9 +1194,11 @@ async function processarInbound(req: NextRequest) {
           const { porExtenso: pe } = await import("@/lib/cs/parse-horario");
           const { mencionar: men } = await import("@/lib/cs/mencao");
           const mc = await men((reu.responsavel as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
-          await csSendGroupText(msg.groupJid,
+          const rConf = await csSendGroupText(msg.groupJid,
             textoConflito(nomeCli, pe(iso), conf, mc.trecho), msg.messageId,
             { origem: "cs-reuniao-conflito", destino: "interno" }, mc.jids);
+          // O aviso de conflito pede outro horário: a resposta a ELE também vale (5.1).
+          if (rConf.ok && rConf.id) await guardarIdPerguntaReuniao(reu.id as string, rConf.id);
           console.log(`[CS/inbound] conflito: ${nomeCli} ${iso} choca com ${conf.cliente}`);
           return NextResponse.json({ ok: true, reuniao_conflito: conf.cliente, cliente: nomeCli });
         }
@@ -1198,7 +1207,7 @@ async function processarInbound(req: NextRequest) {
           estado: "agendada", start_at: iso,
           end_at: new Date(new Date(iso).getTime() + 3600_000).toISOString(),
           confirmado_em: new Date().toISOString(),
-          confirmado_por: msg.authorName || "social",
+          confirmado_por: autoridade.autor?.nome || msg.authorName || "social",
         }).eq("id", reu.id as string);
 
         // A FICHA DO CLIENTE PRECISA SABER. `client_journey.proxima_reuniao` existia e só era
@@ -1220,8 +1229,13 @@ async function processarInbound(req: NextRequest) {
           const mm = await mencionar((reu.responsavel as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
           fechado += textoPedeLink(mm.trecho);
         }
-        await csSendGroupText(msg.groupJid, fechado, msg.messageId,
+        const rFechado = await csSendGroupText(msg.groupJid, fechado, msg.messageId,
           { origem: "cs-reuniao-fechada", destino: "interno" });
+        // O link colado depois precisa CITAR este pedido (5.1) — guarda o id para casar.
+        if (!linkJa && rFechado.ok && rFechado.id) {
+          void supabaseAdmin.from("meetings").update({ msg_id_pedido_link: rFechado.id }).eq("id", reu.id as string)
+            .then(({ error }) => { if (error) console.warn("[CS/inbound] msg_id_pedido_link (migration 20261021130000?):", error.message); });
+        }
         // E o cliente precisa saber que está confirmado — ele ficou esperando desde a proposta.
         if (reu.group_jid) {
           await csSendGroupText(reu.group_jid as string,
@@ -1259,21 +1273,124 @@ async function processarInbound(req: NextRequest) {
         console.log(`[CS/inbound] contraproposta do social p/ ${nomeCli}: ${resp.iso}`);
         return NextResponse.json({ ok: true, contraproposta: resp.iso, cliente: nomeCli });
       }
+
+      // Citou a pergunta mas não aceitou nem deu horário: responde em vez de deixar a mensagem cair
+      // num handler de demanda (ou no silêncio).
+      await csSendGroupText(msg.groupJid,
+        resp.tipo === "recusa" ? ar.textoRecusaSemHorario(nomeCli) : ar.textoRespostaReuniaoNaoEntendida(nomeCli),
+        msg.messageId, { origem: "cs-reuniao-nao-entendi", destino: "interno" });
+      return NextResponse.json({ ok: true, reuniao: resp.tipo === "recusa" ? "recusa_sem_horario" : "nao_entendi", cliente: nomeCli });
     }
   }
 
-  // qualquer posição) e o ajuste da demanda se perdia em silêncio. ───
-  let demandaDaSugestao: Record<string, unknown> | null = null;
-  if (msg.quotedMsgId && isInternalCmdGroup(msg.groupJid)) {
-    const { data } = await supabaseAdmin.from("cs_demandas").select("*")
-      .eq("msg_id_sugestao", msg.quotedMsgId).order("created_at", { ascending: false }).limit(1).maybeSingle();
-    demandaDaSugestao = data ?? null;
+  // ─── O LINK DA CHAMADA COLADO NO GRUPO DA EQUIPE ──────────────────────────
+  //
+  // O agente pede o link ao fechar a reunião. Quando ele aparece, guarda e leva ao cliente — que
+  // antes recebia "confirmado, online" e nenhum endereço.
+  // 21/10/2026 (auditoria 5.1): qualquer link de Meet colado ia para o cliente da ÚNICA reunião sem
+  // link — o link de outra conversa virava convite para o cliente. Agora o link precisa CITAR o
+  // pedido do agente (a mensagem "📅 Fechado!"), pelo id gravado em meetings.msg_id_pedido_link ou
+  // pelo texto citado. Sem citar, o agente diz como fazer em vez de adivinhar.
+  if (isInternalCmdGroup(msg.groupJid) && msg.text && !sugestaoPeloId) {
+    const ar = await import("@/lib/cs/agendar-reuniao");
+    const link = ar.acharLinkChamada(msg.text);
+    if (link) {
+      // Só as que estão marcadas, ainda vão acontecer e não têm link.
+      const { data: semLink } = await supabaseAdmin
+        .from("meetings")
+        .select("*, clients(name, nome_fantasia)")
+        .eq("estado", "agendada")
+        .is("link_reuniao", null)
+        .gte("start_at", new Date().toISOString())
+        .order("start_at", { ascending: true })
+        .limit(20);
+      const candidatas = (semLink ?? []).map((r) => {
+        const c = r.clients as unknown as { name?: string; nome_fantasia?: string } | null;
+        return { r, cliente: c?.nome_fantasia || c?.name || "o cliente", msgId: (r.msg_id_pedido_link as string) || null };
+      });
+      const citada = msg.quotedMsgId
+        ? ar.acharCitada(candidatas, msg.quotedMsgId, msg.quotedText, ar.citaPedidoDeLink)
+        : { tipo: "nenhuma" as const };
+
+      if (citada.tipo === "uma") {
+        const r = citada.item.r;
+        const nome = citada.item.cliente;
+        const { error: errLink } = await supabaseAdmin.from("meetings").update({ link_reuniao: link }).eq("id", r.id as string);
+        if (errLink) {
+          await csSendGroupText(msg.groupJid, `Não consegui guardar o link da *${nome}* (${errLink.message}) — não mandei pro cliente. Cola de novo daqui a pouco?`,
+            msg.messageId, { origem: "cs-reuniao-link", destino: "interno" });
+          return NextResponse.json({ ok: true, reuniao_link: "erro", cliente: nome });
+        }
+        let foiProCliente = true;
+        if (r.group_jid) {
+          const { porExtenso } = await import("@/lib/cs/parse-horario");
+          const envio = await csSendGroupText(r.group_jid as string,
+            `🔗 Aqui o link da nossa reunião de *${porExtenso(r.start_at as string)}*:\n${link}`,
+            undefined, { origem: "cs-reuniao-link", destino: "cliente", clientId: r.client_id as string });
+          foiProCliente = envio.ok;
+        }
+        await csSendGroupText(msg.groupJid,
+          foiProCliente
+            ? ar.textoLinkRecebido(nome)
+            : `🔗 Guardei o link da *${nome}* (vai nos lembretes), mas *não consegui mandar no grupo do cliente* agora — manda lá à mão?`,
+          msg.messageId, { origem: "cs-reuniao-link", destino: "interno" });
+        console.log(`[CS/inbound] link da reunião ${nome} guardado (cliente avisado=${foiProCliente})`);
+        return NextResponse.json({ ok: true, reuniao_link: nome, enviado: foiProCliente });
+      }
+      if (citada.tipo === "varias" || candidatas.length) {
+        const nomes = citada.tipo === "varias" ? citada.itens.map((x) => x.cliente) : candidatas.map((x) => x.cliente);
+        await csSendGroupText(msg.groupJid, ar.textoLinkSemCitacao(nomes), msg.messageId,
+          { origem: "cs-reuniao-link", destino: "interno" });
+        return NextResponse.json({ ok: true, reuniao_link: citada.tipo === "varias" ? "ambiguo" : "sem_citacao" });
+      }
+      // Nenhuma reunião esperando link: é link de outra conversa — segue o fluxo normal.
+    }
   }
-  // Fallback por TEXTO citado: o id do quote MUITAS vezes não bate (COMPLEMENTO troca o
-  // msg_id_sugestao; ou o id de envio difere do stanzaId do reply). Reencontra a demanda pendente
-  // pelo cliente/resumo citado — corrige "dei ok num reply de ontem e ele ignorou".
-  if (!demandaDaSugestao && msg.quotedText && isInternalCmdGroup(msg.groupJid)) {
-    demandaDaSugestao = await acharDemandaPorTexto(msg.quotedText);
+
+  // ─── "ok" NA PRÉVIA DE UMA MENSAGEM PRO CLIENTE (cobrança / check-in "pro cliente") ───
+  // 21/10/2026 (auditoria 5.7): o pedido ao Loninho mandava direto no grupo do cliente. Agora ele
+  // mostra a prévia (cliente + texto) e só manda com o "ok" CITANDO a prévia (lib/cs/envio-cliente).
+  // Citou a prévia, a resposta é consumida aqui — "ok" ou "não", nunca vira decisão de demanda.
+  // Vale em todo grupo nosso: o comando que gera a prévia também vale no grupo da equipe.
+  if (grupoNosso && msg.text && msg.quotedMsgId && !sugestaoPeloId) {
+    const { acharEnvioCitado, executarEnvioAoCliente, cancelarEnvioAoCliente } = await import("@/lib/cs/envio-cliente-server");
+    const envio = await acharEnvioCitado(msg.groupJid, msg.quotedMsgId, msg.quotedText);
+    if (envio) {
+      const { lerDecisaoEnvio, RESPOSTA } = await import("@/lib/cs/envio-cliente");
+      const responder = (texto: string) => csSendGroupText(msg.groupJid, texto, msg.messageId,
+        { origem: "envio-cliente-decisao", destino: "interno", clientId: envio.client_id });
+      const decisao = lerDecisaoEnvio(msg.text);
+      if (envio.status !== "aguardando") {
+        await responder(RESPOSTA.jaDecidida(envio.cliente_nome, envio.status));
+        return NextResponse.json({ ok: true, envio_cliente: "ja_decidido", status: envio.status });
+      }
+      if (!decisao) {
+        await responder(RESPOSTA.naoEntendi());
+        return NextResponse.json({ ok: true, envio_cliente: "nao_entendi" });
+      }
+      if (!podeAgirC) {
+        await responder(RESPOSTA.semAutoridade());
+        return NextResponse.json({ ok: true, envio_cliente: "sem_autoridade" });
+      }
+      const quemDecide = autoridade.autor?.nome || msg.authorName || "equipe";
+      if (decisao === "cancelar") {
+        const cancelou = await cancelarEnvioAoCliente(envio, quemDecide);
+        await responder(cancelou ? RESPOSTA.cancelado(envio.cliente_nome) : RESPOSTA.jaDecidida(envio.cliente_nome, "decidido"));
+        return NextResponse.json({ ok: true, envio_cliente: cancelou ? "cancelado" : "ja_decidido" });
+      }
+      const r = await executarEnvioAoCliente(envio, quemDecide);
+      const texto = r.tipo === "enviado" ? RESPOSTA.enviado(envio.tipo, envio.cliente_nome)
+        : r.tipo === "falhou" ? RESPOSTA.falhou(envio.cliente_nome, r.erro)
+        : r.tipo === "incerto" ? RESPOSTA.incerto(envio.cliente_nome)
+        : r.tipo === "nao_conferiu" ? RESPOSTA.naoConferiu(r.erro)
+        : r.tipo === "vencida" ? RESPOSTA.vencida(envio.cliente_nome)
+        : r.tipo === "ja_enviado_hoje" ? RESPOSTA.jaEnviadoHoje(envio.cliente_nome)
+        : r.tipo === "checkin_aberto" ? RESPOSTA.checkinAberto(envio.cliente_nome)
+        : RESPOSTA.jaDecidida(envio.cliente_nome, "decidido");
+      await responder(texto);
+      console.log(`[CS/inbound] envio ao cliente ${envio.cliente_nome} (${envio.tipo}) → ${r.tipo} por ${quemDecide}`);
+      return NextResponse.json({ ok: true, envio_cliente: r.tipo, cliente: envio.cliente_nome });
+    }
   }
 
   // ─── PEDIDOS DO LONINHO (lib/loninho/pedidos): "Loninho, me manda os clientes que precisam da minha
@@ -1616,10 +1733,25 @@ async function processarInbound(req: NextRequest) {
       const { data: cli } = await supabaseAdmin.from("clients").select("whatsapp_group_jid").eq("id", alvo.id).maybeSingle();
       const gj = (cli?.whatsapp_group_jid as string) || null;
       if (!gj) { await csSendGroupText(msg.groupJid, `O *${alvo.nome}* não tem grupo de WhatsApp mapeado — não consigo perguntar direto pro cliente. Quer que eu pergunte pro time?`); return NextResponse.json({ ok: true, checkin: "sem_grupo" }); }
-      await csSendGroupText(gj, textoParaEnvio(p, "cliente", alvo.nome));
-      await registrarEnvio(alvo.id, "cliente", p, gj);
-      await csSendGroupText(msg.groupJid, `✅ Mandei o check-in pro grupo do *${alvo.nome}*. Quando ele responder, eu registro na ficha (aba *Jornada CS*).`);
-      return NextResponse.json({ ok: true, checkin: "cliente", cliente: alvo.nome });
+      // 21/10/2026 (auditoria 5.7): não manda mais direto. O cliente é achado por nome aproximado —
+      // a prévia mostra QUEM recebe e O QUE vai; só sai com o "ok" citando a prévia.
+      const { temCheckinAguardando } = await import("@/lib/cs/checkin");
+      const { RESPOSTA } = await import("@/lib/cs/envio-cliente");
+      if (await temCheckinAguardando(alvo.id, "cliente")) {
+        await csSendGroupText(msg.groupJid, RESPOSTA.checkinAberto(alvo.nome));
+        return NextResponse.json({ ok: true, checkin: "ja_aguardando", cliente: alvo.nome });
+      }
+      const { prepararEnvioAoCliente } = await import("@/lib/cs/envio-cliente-server");
+      const prep = await prepararEnvioAoCliente({
+        tipo: "checkin", clientId: alvo.id, clienteNome: alvo.nome, grupoCliente: gj, grupoInterno: msg.groupJid,
+        texto: textoParaEnvio(p, "cliente", alvo.nome), dados: { pergunta: p },
+        pedidoPor: autoridade.autor?.nome || msg.authorName || msg.authorJid || null,
+      });
+      if (!prep.ok) {
+        await csSendGroupText(msg.groupJid, `Não consegui preparar o check-in pro *${alvo.nome}* (${prep.erro}) — *não mandei nada* pro cliente. Tenta de novo daqui a pouco?`);
+        return NextResponse.json({ ok: true, checkin: "erro_previa", erro: prep.erro });
+      }
+      return NextResponse.json({ ok: true, checkin: "previa", cliente: alvo.nome });
     }
     await csSendGroupText(msg.groupJid, textoParaEnvio(p, "time", alvo.nome));
     await registrarEnvio(alvo.id, "time", p, msg.groupJid);
@@ -1662,29 +1794,46 @@ async function processarInbound(req: NextRequest) {
 
   // ─── Agente "Lone": COBRANÇA de pendências do cliente ("Lone, cobra as pendências do X") ───
   // Lê as pendências do cliente (ficha Jornada) e gera cobrança COM IMPACTO. Draft no interno, ou
-  // "…pro cliente" manda direto no grupo dele. Não cobra pagamento (SEM financeiro).
+  // "…pro cliente": prévia no interno e envio no grupo dele só com o "ok" citado (21/10/2026, 5.7).
+  // Não cobra pagamento (SEM financeiro).
   if (!demandaDaSugestao && podeAgirC && ehPedidoCobranca(msg.text)) {
     const alvo = await resolveClientePorNome(msg.text);
     if (!alvo) { await csSendGroupText(msg.groupJid, "Cobrar as pendências de qual cliente? Me diz o nome."); return NextResponse.json({ ok: true, cobranca: "sem_cliente" }); }
     const { data: jr } = await supabaseAdmin.from("client_journey").select("pendencias_cliente").eq("client_id", alvo.id).maybeSingle();
     const pend = (jr?.pendencias_cliente as { item: string; impacto?: string }[]) || [];
     if (!pend.length) { await csSendGroupText(msg.groupJid, `Não tem pendência do *${alvo.nome}* registrada. Cadastra as pendências dele na ficha (*Jornada CS*) que eu cobro com o impacto.`); return NextResponse.json({ ok: true, cobranca: "sem_pendencia" }); }
+    // "…pro cliente": a chave do dia é CONSULTADA antes de gastar IA (antes era gravada e nunca lida —
+    // dava pra cobrar o mesmo cliente 3× no mesmo dia). Confere de novo na hora de mandar.
+    const proCliente = checkinProCliente(msg.text);
+    const chaveCobranca = chaveCobrancaPendencias(alvo.id, ymd(spNow()));
+    if (proCliente) {
+      const { cobrancaJaFeita } = await import("@/lib/cs/envio-cliente-server");
+      if (await cobrancaJaFeita(chaveCobranca) === "sim") {
+        const { RESPOSTA } = await import("@/lib/cs/envio-cliente");
+        await csSendGroupText(msg.groupJid, RESPOSTA.jaEnviadoHoje(alvo.nome));
+        return NextResponse.json({ ok: true, cobranca: "ja_cobrado_hoje", cliente: alvo.nome });
+      }
+    }
     if (!isOpenAIConfigured()) { await csSendGroupText(msg.groupJid, "Tô sem IA agora pra escrever a cobrança 😕 já já volto."); return NextResponse.json({ ok: true, cobranca: "sem_ia" }); }
     const r = await gerarCobrancaPendencias(alvo.nome, alvo.nicho, pend);
     if (!r.ok || !r.data) { await csSendGroupText(msg.groupJid, `Não consegui montar a cobrança do *${alvo.nome}* agora 😕 tenta de novo?`); return NextResponse.json({ ok: true, cobranca: "erro" }); }
-    if (checkinProCliente(msg.text)) {
+    if (proCliente) {
       const { data: cli } = await supabaseAdmin.from("clients").select("whatsapp_group_jid").eq("id", alvo.id).maybeSingle();
       const gj = (cli?.whatsapp_group_jid as string) || null;
       if (!gj) { await csSendGroupText(msg.groupJid, `O *${alvo.nome}* não tem grupo mapeado — segue o texto pra você mandar:\n\n${r.data.mensagem}`); return NextResponse.json({ ok: true, cobranca: "sem_grupo" }); }
-      await csSendGroupText(gj, r.data.mensagem);
-      // REGISTRA que cobrou. Sem isto não havia timestamp nenhum: dava pra cobrar o mesmo cliente 3×
-      // no mesmo dia sem o sistema saber, e era impossível medir se cobrança funciona.
-      void supabaseAdmin.from("cs_cobrancas").insert({
-        vigilancia: 0, client_id: alvo.id, card_id: null,
-        pessoa_cobrada: alvo.nome, chave: `pendencias:${alvo.id}:${ymd(spNow())}`,
-        mensagem: r.data.mensagem.slice(0, 1000), dry_run: false,
-      }).then(() => {}, () => {});
-      await csSendGroupText(msg.groupJid, `✅ Mandei a cobrança das pendências pro grupo do *${alvo.nome}*.`);
+      // 21/10/2026 (auditoria 5.7): o texto é da IA e o cliente vem de nome aproximado — nada sai
+      // sem prévia. O envio (com a chave reservada e o resultado conferido) acontece no "ok" citado.
+      const { prepararEnvioAoCliente } = await import("@/lib/cs/envio-cliente-server");
+      const prep = await prepararEnvioAoCliente({
+        tipo: "cobranca_pendencias", clientId: alvo.id, clienteNome: alvo.nome, grupoCliente: gj,
+        grupoInterno: msg.groupJid, texto: r.data.mensagem, chave: chaveCobranca,
+        pedidoPor: autoridade.autor?.nome || msg.authorName || msg.authorJid || null,
+      });
+      if (!prep.ok) {
+        await csSendGroupText(msg.groupJid, `Não consegui preparar o envio pro *${alvo.nome}* (${prep.erro}) — *não mandei nada*. Segue o texto pra você mandar se quiser:\n\n${r.data.mensagem}`);
+        return NextResponse.json({ ok: true, cobranca: "erro_previa", erro: prep.erro });
+      }
+      return NextResponse.json({ ok: true, cobranca: "previa", cliente: alvo.nome });
     } else {
       await csSendGroupText(msg.groupJid, `📋 *Cobrança de pendências — ${alvo.nome}* (revisa e manda, ou fala _"Lone, cobra as pendências do ${alvo.nome} pro cliente"_):\n\n${r.data.mensagem}`);
     }
@@ -2080,32 +2229,29 @@ async function processarInbound(req: NextRequest) {
     if (!temConteudoColado) {
       const d7 = new Date(Date.now() - 2 * 864e5).toISOString(); // 2 dias: pega o que a X pediu recente, sem confirmar pendente velho
       const { data: jaPend } = await supabaseAdmin.from("cs_demandas")
-        .select("id, resumo, tipo, urgencia, briefing, message_text, responsavel, content_card_id")
+        .select("*")
         .eq("client_id", c.id as string).eq("status", "pendente")
         .gte("created_at", d7).order("created_at", { ascending: false }).limit(6);
       if (jaPend && jaPend.length > 0) {
+        // 21/10/2026 (auditoria 5.9): só vira "confirmada" a demanda cujo card nasceu; a que falhou
+        // continua pendente e aparece aqui com o motivo.
         const criados: string[] = [];
+        const falharam: string[] = [];
         for (const d of jaPend) {
-          let cardId: string | null = null;
-          if (d.tipo === "pauta_semanal") {
-            const itens = parsePautaItens((d.message_text as string) || "") ?? [];
-            const ids = await criarCardsPauta({ clientId: c.id as string, clienteNome, responsavel: d.responsavel as string | null, itens });
-            cardId = ids[0] ?? null;
-          } else {
-            cardId = await criarCardDemanda({
-              clientId: c.id as string, clienteNome, responsavel: d.responsavel as string | null,
-              titulo: (d.resumo as string) || (d.message_text as string), urgencia: d.urgencia as string,
-              briefing: (d.briefing as string) || (d.message_text as string), tipo: d.tipo as string,
-              ajusteCardId: (d.content_card_id as string) ?? null,
-            });
-          }
-          await supabaseAdmin.from("cs_demandas").update({ status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: quem }).eq("id", d.id as string);
-          if (cardId) criados.push((d.resumo as string) || "card");
+          const rc = await confirmarDemanda({ ...d, cliente_nome: d.cliente_nome || clienteNome }, { quem });
+          if (rc.ok) criados.push((d.resumo as string) || "card");
+          else falharam.push(`${(d.resumo as string) || "pedido"} (${rc.erro})`);
         }
-        await csSendGroupText(msg.groupJid,
-          `Boa! A *${clienteNome}* tinha ${criados.length} pedido(s) que peguei do grupo — criei ${criados.length === 1 ? "o card" : `os ${criados.length} cards`}:\n${criados.map((x) => `• ${x}`).join("\n")}\n\nSe algum não era pra criar, me fala que eu arquivo. 🚀`);
-        console.log(`[CS/inbound] comando "que a X pediu" → criou ${criados.length} cards capturados de ${clienteNome}`);
-        return NextResponse.json({ ok: true, demanda_cmd: "criou_capturadas", cliente: clienteNome, cards: criados.length });
+        const partes = [
+          criados.length
+            ? `Boa! A *${clienteNome}* tinha ${jaPend.length} pedido(s) que peguei do grupo — criei ${criados.length === 1 ? "o card" : `os ${criados.length} cards`}:\n${criados.map((x) => `• ${x}`).join("\n")}`
+            : `A *${clienteNome}* tinha ${jaPend.length} pedido(s) que peguei do grupo, mas *não consegui criar nenhum card*.`,
+          falharam.length ? `❌ Não criei (continua aberto — responde *ok* na sugestão pra tentar de novo):\n${falharam.map((x) => `• ${x}`).join("\n")}` : "",
+          criados.length ? "Se algum não era pra criar, me fala que eu arquivo. 🚀" : "",
+        ].filter(Boolean);
+        await csSendGroupText(msg.groupJid, partes.join("\n\n"));
+        console.log(`[CS/inbound] comando "que a X pediu" → criou ${criados.length}, falhou ${falharam.length} (${clienteNome})`);
+        return NextResponse.json({ ok: true, demanda_cmd: "criou_capturadas", cliente: clienteNome, cards: criados.length, falhas: falharam.length });
       }
       await csSendGroupText(msg.groupJid, `Não achei nenhum pedido aberto da *${clienteNome}* que eu tenha pego do grupo. Me cola aqui o que ela pediu que eu monto certinho. 😉`);
       return NextResponse.json({ ok: true, demanda_cmd: "sem_pedido_capturado", cliente: clienteNome });
@@ -2151,7 +2297,12 @@ async function processarInbound(req: NextRequest) {
       if (!r.ok) erroM = r.erro;
     } else {
       const agoraM = new Date().toISOString();
-      await supabaseAdmin.from("content_cards").update({ status: cmdMover.status, status_changed_at: agoraM }).eq("id", cardM.id as string);
+      // Voltar o card desfaz a aprovação do cliente (21/10/2026, auditoria 2.4) — a mesma regra da tela.
+      const desfaz = trocaDesfazAprovacao(cardM.status as string, cmdMover.status);
+      const { error: errM } = await supabaseAdmin.from("content_cards")
+        .update({ status: cmdMover.status, status_changed_at: agoraM, ...(desfaz ? { client_approved_at: null } : {}) })
+        .eq("id", cardM.id as string);
+      if (errM) erroM = errM.message;
     }
     if (erroM) {
       await csSendGroupText(msg.groupJid, `Não consegui mover *${cardM.title}*: ${erroM}`);
@@ -2238,33 +2389,23 @@ async function processarInbound(req: NextRequest) {
       const escolhidas = sel === "todas" ? pend : (Array.isArray(sel) ? sel : []);
       if (escolhidas.length) {
         const decidedBy = msg.authorName || msg.authorJid;
+        // 21/10/2026 (auditoria 5.9): "confirmada" só com card; sem cliente, nada de cliente de teste.
         const criados: string[] = [];
+        const falharam: string[] = [];
         for (const d of escolhidas) {
-          const clientId = (d.client_id as string) || process.env.CS_TEST_CLIENT_ID || null;
-          if (!clientId) continue;
-          let cardId: string | null = null;
-          if (d.tipo === "pauta_semanal") {
-            const itens = parsePautaItens((d.message_text as string) || "") ?? [];
-            const ids = await criarCardsPauta({ clientId, clienteNome: (d.cliente_nome as string) || "Cliente", responsavel: d.responsavel as string | null, itens });
-            cardId = ids[0] ?? null;
-          } else {
-            cardId = await criarCardDemanda({
-              clientId, clienteNome: (d.cliente_nome as string) || "Cliente", responsavel: d.responsavel as string | null,
-              titulo: (d.resumo as string) || (d.message_text as string), urgencia: d.urgencia as string,
-              briefing: (d.briefing as string) || (d.message_text as string), tipo: d.tipo as string,
-              ajusteCardId: (d.content_card_id as string) ?? null,
-            });
-          }
-          await supabaseAdmin.from("cs_demandas").update({ status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: decidedBy }).eq("id", d.id);
-          if (cardId) criados.push((d.resumo as string) || "card");
+          const rc = await confirmarDemanda(d, { quem: decidedBy });
+          if (rc.ok) criados.push((d.resumo as string) || "card");
+          else falharam.push(`*${(d.resumo as string) || "pedido"}* (${rc.motivo === "sem_cliente" ? "sem cliente vinculado" : rc.erro})`);
         }
-        await csSendGroupText(msg.groupJid, criados.length === 1
+        const okTxt = criados.length === 1
           ? ackCriado(criados[0], null)
-          : criados.length
-            ? `Fechou! Criei ${criados.length} cards: ${criados.map((r) => `*${r}*`).join(", ")}. 🚀`
-            : `Eita, não consegui criar os cards — algum sem cliente vinculado? Confere aí 🤔`);
-        console.log(`[CS/inbound] multi-confirm → ${criados.length} cards`);
-        return NextResponse.json({ ok: true, decision: "multi_confirmada", cards: criados.length });
+          : criados.length ? `Fechou! Criei ${criados.length} cards: ${criados.map((r) => `*${r}*`).join(", ")}. 🚀` : "";
+        const falhaTxt = falharam.length
+          ? `❌ Não consegui criar: ${falharam.join(", ")}. ${falharam.length === 1 ? "Continua aberto" : "Continuam abertos"} — responde *ok* na sugestão pra tentar de novo, ou *não* pra descartar.`
+          : "";
+        await csSendGroupText(msg.groupJid, [okTxt, falhaTxt].filter(Boolean).join("\n\n"));
+        console.log(`[CS/inbound] multi-confirm → ${criados.length} cards, ${falharam.length} falha(s)`);
+        return NextResponse.json({ ok: true, decision: "multi_confirmada", cards: criados.length, falhas: falharam.length });
       }
       if (ehConfirmacaoLivre(msg.text)) {
         await csSendGroupText(msg.groupJid, listarPendentes(pend));
@@ -2338,46 +2479,27 @@ async function processarInbound(req: NextRequest) {
       await csSendGroupText(msg.groupJid, ackDescartado(d.resumo as string), sug);
       return NextResponse.json({ ok: true, decision: "descartada" });
     }
-    const clientId = (d.client_id as string) || process.env.CS_TEST_CLIENT_ID || null;
-    if (!clientId) {
-      await csSendGroupText(msg.groupJid, `⚠️ Sem cliente pra criar o card de *${d.resumo}*.`, sug);
-      return NextResponse.json({ ok: true, decision: "sem_cliente" });
-    }
-    // PAUTA SEMANAL: o "ok" cria UM card POR ITEM (com a data), não um card único.
-    if (d.tipo === "pauta_semanal") {
-      const itens = parsePautaItens((d.message_text as string) || "") ?? [];
-      if (!itens.length) {
-        await csSendGroupText(msg.groupJid, `Eita, não consegui recuperar os itens da pauta 😕 monta direto no board?`, sug);
-        return NextResponse.json({ ok: true, decision: "pauta_sem_itens" });
-      }
-      const nota = ((d.briefing as string) || "").split("---").slice(1).join(" ").replace(/✏️/g, "").trim() || null;
-      const ids = await criarCardsPauta({
-        clientId, clienteNome: (d.cliente_nome as string) || "Cliente",
-        responsavel: d.responsavel as string | null, itens, notaExtra: nota,
-      });
-      await supabaseAdmin.from("cs_demandas").update({
-        status: "confirmada", content_card_id: ids[0] ?? null, decided_at: new Date().toISOString(), decided_by: decidedBy,
-      }).eq("id", d.id);
-      await csSendGroupText(msg.groupJid, ids.length
-        ? `Fechou! Criei os ${ids.length} cards da pauta da *${d.cliente_nome}* no board, já com as datas. 📅`
-        : `Eita, deu ruim pra criar os cards da pauta — tenta de novo?`, sug);
-      console.log(`[CS/inbound] pauta ${d.codigo} confirmada → ${ids.length} cards`);
-      return NextResponse.json({ ok: true, decision: "pauta_confirmada", cards: ids.length });
-    }
-    const cardId = await criarCardDemanda({
-      clientId, clienteNome: (d.cliente_nome as string) || "Cliente", responsavel: d.responsavel as string | null,
-      titulo: (d.resumo as string) || (d.message_text as string), urgencia: d.urgencia as string,
-      briefing: (d.briefing as string) || (d.message_text as string), tipo: d.tipo as string,
-      ajusteCardId: (d.content_card_id as string) ?? null,
+    // 21/10/2026 (auditoria 5.9): a demanda só vira "confirmada" quando o card nasce. Antes ela era
+    // marcada mesmo com o card falhando — o "ok" seguinte dava "essa eu já tinha criado" e o pedido
+    // sumia. Sem cliente, recusa (não cai mais no cliente de teste). Pauta cria um card por item.
+    const ehPauta = d.tipo === "pauta_semanal";
+    const rc = await confirmarDemanda(d, {
+      quem: decidedBy,
+      notaPauta: ehPauta ? (((d.briefing as string) || "").split("---").slice(1).join(" ").replace(/✏️/g, "").trim() || null) : null,
     });
-    await supabaseAdmin.from("cs_demandas").update({
-      status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: decidedBy,
-    }).eq("id", d.id);
-    await csSendGroupText(msg.groupJid, cardId
-      ? ackCriado(d.resumo as string, d.responsavel as string | null)
-      : `Eita, deu ruim pra criar o card de *${d.resumo}* — pode tentar de novo?`, sug);
-    console.log(`[CS/inbound] demanda ${d.codigo} confirmada → card ${cardId}`);
-    return NextResponse.json({ ok: true, decision: "confirmada", cardId });
+    if (!rc.ok) {
+      await csSendGroupText(msg.groupJid, textoFalhaConfirmacao((d.resumo as string) || "pedido", rc.motivo, rc.erro), sug);
+      return NextResponse.json({ ok: true, decision: "nao_confirmada", motivo: rc.motivo, erro: rc.erro });
+    }
+    if (ehPauta) {
+      await csSendGroupText(msg.groupJid,
+        `Fechou! Criei os ${rc.criados} cards da pauta da *${d.cliente_nome}* no board, já com as datas. 📅${textoPautaParcial(rc.criados, rc.total, rc.falhas)}`, sug);
+      console.log(`[CS/inbound] pauta ${d.codigo} confirmada → ${rc.criados}/${rc.total} cards`);
+      return NextResponse.json({ ok: true, decision: "pauta_confirmada", cards: rc.criados });
+    }
+    await csSendGroupText(msg.groupJid, ackCriado(d.resumo as string, d.responsavel as string | null), sug);
+    console.log(`[CS/inbound] demanda ${d.codigo} confirmada → card ${rc.cardId}`);
+    return NextResponse.json({ ok: true, decision: "confirmada", cardId: rc.cardId });
   }
 
   // ─── Ajuste humano: RESPONDA a sugestão com "ajustar <o que mudar>" → enriquece o briefing ───
@@ -2475,28 +2597,20 @@ async function processarInbound(req: NextRequest) {
           return NextResponse.json({ ok: true, interp: "descartada" });
         }
         if (i.acao === "confirmar") {
-          const clientId = (alvo.client_id as string) || process.env.CS_TEST_CLIENT_ID || null;
           const tituloFinal = (i.titulo as string) || (alvo.resumo as string) || (alvo.message_text as string);
-          let cardId: string | null = null;
-          if (clientId && alvo.tipo === "pauta_semanal") {
-            // Resposta natural confirmando uma PAUTA → cria um card por item.
-            const itensPauta = parsePautaItens((alvo.message_text as string) || "") ?? [];
-            const idsPauta = await criarCardsPauta({
-              clientId, clienteNome: (alvo.cliente_nome as string) || "Cliente",
-              responsavel: alvo.responsavel as string | null, itens: itensPauta,
-              notaExtra: i.complemento || null,
-            });
-            cardId = idsPauta[0] ?? null;
-          } else if (clientId) cardId = await criarCardDemanda({
-            clientId, clienteNome: (alvo.cliente_nome as string) || "Cliente", responsavel: alvo.responsavel as string | null,
-            titulo: tituloFinal, urgencia: alvo.urgencia as string,
-            briefing: briefingFinal, tipo: alvo.tipo as string,
-            ajusteCardId: (alvo.content_card_id as string) ?? null,
+          // 21/10/2026 (auditoria 5.9): "confirmada" só com card, e a resposta da IA ("criei!") só
+          // sai quando o card nasceu — antes ela saía mesmo com o card falhando.
+          const rc = await confirmarDemanda(alvo, {
+            quem, titulo: tituloFinal, briefing: briefingFinal, notaPauta: i.complemento || null,
+            gravar: { resumo: tituloFinal },
           });
-          await supabaseAdmin.from("cs_demandas").update({ status: "confirmada", content_card_id: cardId, resumo: tituloFinal, decided_at: new Date().toISOString(), decided_by: quem }).eq("id", alvo.id);
-          await csSendGroupText(msg.groupJid, i.resposta, sug);
-          console.log(`[CS/inbound] interp ${alvo.codigo} → confirmada, card ${cardId}`);
-          return NextResponse.json({ ok: true, interp: "confirmada", cardId });
+          if (!rc.ok) {
+            await csSendGroupText(msg.groupJid, textoFalhaConfirmacao(tituloFinal || "pedido", rc.motivo, rc.erro), sug);
+            return NextResponse.json({ ok: true, interp: "nao_confirmada", motivo: rc.motivo, erro: rc.erro });
+          }
+          await csSendGroupText(msg.groupJid, `${i.resposta}${textoPautaParcial(rc.criados, rc.total, rc.falhas)}`, sug);
+          console.log(`[CS/inbound] interp ${alvo.codigo} → confirmada, card ${rc.cardId}`);
+          return NextResponse.json({ ok: true, interp: "confirmada", cardId: rc.cardId });
         }
         // ajustar → segue pendente; manda o ack (a IA já frasou "anotei, e aí?")
         const r = await csSendGroupText(msg.groupJid, i.resposta, sug);
@@ -2751,10 +2865,11 @@ async function processarInbound(req: NextRequest) {
   if (c.agente_ativo === false) return NextResponse.json({ ok: true, skip: "agente pausado p/ este cliente" }); // S8
   // Carimba a última atividade do CLIENTE no grupo → detector de "cliente esfriando" (churn precoce).
   // Best-effort, não bloqueia (só falha se a migration 063 não estiver aplicada).
-  if (c.id && !sandbox) void supabaseAdmin.from("clients").update({ last_client_msg_at: new Date().toISOString() }).eq("id", c.id as string).then(() => {});
+  // (Na releitura isto já aconteceu na primeira passada — e "agora" não é quando o cliente falou.)
+  if (c.id && !sandbox && !releitura) void supabaseAdmin.from("clients").update({ last_client_msg_at: new Date().toISOString() }).eq("id", c.id as string).then(() => {});
   // CHECK-IN: se há uma pergunta de check-in aguardando pra este cliente, a 1ª resposta dele é
   // capturada e registrada na ficha (Jornada CS). Silencioso — não bloqueia a classificação de demanda.
-  if (c.id && !sandbox && msg.text && !msg.text.startsWith("[Imagem")) void capturarResposta(c.id as string, "cliente", msg.text);
+  if (c.id && !sandbox && !releitura && msg.text && !msg.text.startsWith("[Imagem")) void capturarResposta(c.id as string, "cliente", msg.text);
   const clienteNome = nomeOf(c);
   // Texto livre OU o briefing estruturado (client_briefings) — o texto livre está vazio na base real.
   const clienteBriefing = await loadBriefingCombinado(c.id as string, briefingCompleto(c));
@@ -2775,95 +2890,92 @@ async function processarInbound(req: NextRequest) {
       .from("content_cards").select("id")
       .eq("client_id", c.id as string).gte("client_approved_at", desde15).limit(1);
     if (!aprovouRecem || aprovouRecem.length === 0) {
-      const { data: cardAprov } = await supabaseAdmin
-        .from("content_cards")
-        .select("id, title")
-        .eq("client_id", c.id as string)
-        .is("client_approved_at", null)
-        .not("designer_delivered_at", "is", null)
-        .neq("status", statusDaEtapa("no_ar"))
-        .order("designer_delivered_at", { ascending: false })
-        .limit(1).maybeSingle();
-
+      // ── QUAL ARTE O CLIENTE APROVOU (21/10/2026, auditoria 2.4) ──────────
+      //
+      // Antes: o card ENTREGUE mais recente do cliente, em qualquer etapa — até em "Revisão interna"
+      // (o cliente nunca viu) ou arquivado — virava "Cliente aprovou" e ia para Agendado. A escolha
+      // agora mora em lib/cs/aprovacao-cliente: só a arte que está "Com o cliente"; com mais de uma,
+      // pergunta ao time em vez de chutar.
+      //
       // ── A CONFIRMAÇÃO DO CLIENTE TAMBÉM CONFIRMA A ENTREGA ──────────────
       //
       // Roberto (02/09): "ela entende que mandou e foi feito. Querendo ou não ela já pode
       // confirmar a entrega da arte também — até no sistema, pra não ficar com não feito ou
-      // parado."
-      //
-      // A busca acima exige `designer_delivered_at` preenchido, então só acha card cuja entrega
-      // JÁ foi registrada. Quando o designer manda a arte direto no grupo e não marca no sistema
-      // — que é como 206 dos 208 cards de agosto ficaram presos — o cliente aprova e nada fecha.
-      // O card segue "parado" para sempre e a vigilância cobra trabalho que já foi feito.
-      //
-      // Se o cliente está aprovando, a arte existe: ele não aprova o que não viu. Então a
-      // aprovação vale como prova de entrega. Só que inferir a entrega no card ERRADO seria pior
-      // que não inferir — por isso o candidato precisa ser ÚNICO e recente. Havendo dúvida, não
-      // mexe (a regra da casa: pergunta > roteamento errado).
-      let cardInferido: { id: string; title: string } | null = null;
-      if (!cardAprov) {
-        const desde21d = new Date(Date.now() - 21 * 86400_000).toISOString();
-        const { data: cands } = await supabaseAdmin
-          .from("content_cards")
-          .select("id, title")
-          .eq("client_id", c.id as string)
-          .is("client_approved_at", null)
-          .is("designer_delivered_at", null)
-          .in("status", statusDasEtapas("com_designer", "revisao", "com_cliente"))
-          .is("archived_at", null)
-          .gte("created_at", desde21d)
-          .order("created_at", { ascending: false })
-          .limit(2);
-        // Exatamente UM candidato: com dois, não dá para saber qual arte o cliente viu.
-        if (cands && cands.length === 1) cardInferido = cands[0] as { id: string; title: string };
-      }
+      // parado." Quando o designer manda a arte direto no grupo e não marca no sistema — que é como
+      // 206 dos 208 cards de agosto ficaram presos — o cliente aprova e nada fecha. Se não há nada
+      // "Com o cliente" e existe UM único card recente com o designer, a aprovação vale como prova de
+      // entrega. Com dois, não mexe (a regra da casa: pergunta > roteamento errado).
+      const { data: candAprov } = await supabaseAdmin
+        .from("content_cards")
+        .select("id, title, status, designer_delivered_at, client_approved_at, archived_at, created_at")
+        .eq("client_id", c.id as string)
+        .is("client_approved_at", null)
+        .is("archived_at", null)
+        .in("status", statusDasEtapas("com_designer", "com_cliente"))
+        .order("created_at", { ascending: false })
+        .limit(30);
+      const escolha = escolherCardAprovado((candAprov ?? []).map((k) => ({
+        id: k.id as string, title: (k.title as string) || "", status: k.status as string,
+        designerDeliveredAt: (k.designer_delivered_at as string) ?? null,
+        clientApprovedAt: (k.client_approved_at as string) ?? null,
+        archivedAt: (k.archived_at as string) ?? null, createdAt: (k.created_at as string) ?? null,
+      })), new Date());
 
-      if (cardInferido) {
-        const ap = await detectarAprovacao(msg.text, cardInferido.title || clienteNome);
+      if (escolha.tipo === "marcar") {
+        const card = escolha.card;
+        const ap = await detectarAprovacao(msg.text, card.title || clienteNome);
         if (ap.ok && ap.data?.aprovou) {
           const nowIso = new Date().toISOString();
-          const designer = (c.assigned_designer as string) || null;
+          // Aprovou → marca client_approved_at E AVANÇA pra Agendado (pedido do Roberto). Atômico:
+          // ainda sem aprovação, não arquivado e na MESMA etapa em que foi escolhido (corrida/retry).
           const { data: marcado } = await supabaseAdmin.from("content_cards")
             .update({ client_approved_at: nowIso, status: statusDaEtapa("agendado"), status_changed_at: nowIso })
-            .eq("id", cardInferido.id).is("client_approved_at", null).select("id");
+            .eq("id", card.id).is("client_approved_at", null).is("archived_at", null).eq("status", card.status)
+            .select("id");
           if (marcado && marcado.length > 0) {
-            aprovacaoDetectada = cardInferido.id;
-            // A entrega inferida passa pela transição de design: grava a entrega E fecha o pedido de
-            // arte (antes só o card mudava e o pedido ficava aberto na fila do designer).
-            const ent = await executarTransicao(cardInferido.id, { tipo: "entregue", quem: designer }, { quem: "CS (aprovação no grupo)" });
-            if (!ent.ok) console.error(`[CS/inbound] entrega inferida do card ${cardInferido.id}: ${ent.erro}`);
+            aprovacaoDetectada = card.id;
+            const designer = (c.assigned_designer as string) || null;
+            if (escolha.inferirEntrega) {
+              // A entrega inferida passa pela transição de design: grava a entrega E fecha o pedido
+              // de arte (antes só o card mudava e o pedido ficava aberto na fila do designer).
+              const ent = await executarTransicao(card.id, { tipo: "entregue", quem: designer }, { quem: "CS (aprovação no grupo)" });
+              if (!ent.ok) console.error(`[CS/inbound] entrega inferida do card ${card.id}: ${ent.erro}`);
+            }
             // O comentário deixa a INFERÊNCIA explícita. Um registro que parece medido mas foi
-            // deduzido precisa dizer isso, senão vira dado falso com cara de dado bom.
+            // deduzido precisa dizer isso, senão vira dado falso com cara de dado bom. Voltar o status
+            // desfaz a aprovação (lib/conteudo/producao → trocaDesfazAprovacao).
             await supabaseAdmin.from("card_comments").insert({
-              card_id: cardInferido.id, author: "🤖 CS", role: "system",
-              text: `🎉 Cliente aprovou no grupo. A entrega não estava marcada no sistema — como ele só aprova o que viu, registrei a entrega${designer ? ` (${designer})` : ""} e movi pra *${infoEtapa("agendado").rotulo}*. Se não era essa arte, é só voltar o status.`,
+              card_id: card.id, author: "🤖 CS", role: "system",
+              text: escolha.inferirEntrega
+                ? `🎉 Cliente aprovou no grupo. A entrega não estava marcada no sistema — como ele só aprova o que viu, registrei a entrega${designer ? ` (${designer})` : ""} e movi pra *${infoEtapa("agendado").rotulo}*. Se não era essa arte, é só voltar o status (a aprovação sai junto).`
+                : `🎉 Cliente aprovou no grupo → movi pra *${infoEtapa("agendado").rotulo}*. Pode publicar! (Se não era essa arte, é só voltar o status — a aprovação sai junto.)`,
             }).then(() => {}, () => {});
             const jid = internalGroupJid();
-            if (jid) await csSendGroupText(jid, `🎉 O cliente *${clienteNome}* aprovou a arte *${cardInferido.title}*! A entrega não estava marcada — registrei e movi pra *${infoEtapa("agendado").rotulo}*. 🚀`);
-            console.log(`[CS/inbound] aprovação inferiu entrega do card ${cardInferido.id}`);
+            if (jid) await csSendGroupText(jid, escolha.inferirEntrega
+              ? `🎉 O cliente *${clienteNome}* aprovou a arte *${card.title}*! A entrega não estava marcada — registrei e movi pra *${infoEtapa("agendado").rotulo}*. 🚀`
+              : `🎉 O cliente *${clienteNome}* aprovou a arte *${card.title}*! Já movi pra *${infoEtapa("agendado").rotulo}* — é só publicar. 🚀`);
+            console.log(`[CS/inbound] cliente aprovou card ${card.id} → ${infoEtapa("agendado").rotulo}${escolha.inferirEntrega ? " (entrega inferida)" : ""}`);
           }
         }
-      }
-
-      if (cardAprov) {
-        const ap = await detectarAprovacao(msg.text, (cardAprov.title as string) || clienteNome);
+      } else if (escolha.tipo === "perguntar") {
+        // Mais de uma arte com o cliente: aprovar a errada é pior que perguntar.
+        const ap = await detectarAprovacao(msg.text,
+          `uma das artes da ${clienteNome} (${escolha.cards.slice(0, 3).map((k) => k.title).join("; ")})`);
         if (ap.ok && ap.data?.aprovou) {
-          const nowIso = new Date().toISOString();
-          // Aprovou → marca client_approved_at E AVANÇA pra Agendado (pedido do Roberto): sai da fila
-          // de produção/aprovação e vira "pronto pra publicar". Atômico (.is null) contra corrida/retry.
-          const { data: marcado } = await supabaseAdmin.from("content_cards")
-            .update({ client_approved_at: nowIso, status: statusDaEtapa("agendado"), status_changed_at: nowIso })
-            .eq("id", cardAprov.id).is("client_approved_at", null).select("id");
-          if (marcado && marcado.length > 0) {
-            aprovacaoDetectada = cardAprov.id as string;
-            await supabaseAdmin.from("card_comments").insert({
-              card_id: cardAprov.id as string, author: "🤖 CS", role: "system",
-              text: `🎉 Cliente aprovou no grupo → movi pra *${infoEtapa("agendado").rotulo}*. Pode publicar! (Se não era essa arte, é só voltar o status.)`,
-            }).then(() => {}, () => {});
-            const jid = internalGroupJid();
-            if (jid) await csSendGroupText(jid, `🎉 O cliente *${clienteNome}* aprovou a arte *${cardAprov.title}*! Já movi pra *${infoEtapa("agendado").rotulo}* — é só publicar. 🚀`);
-            console.log(`[CS/inbound] cliente aprovou card ${cardAprov.id} → ${infoEtapa("agendado").rotulo}`);
+          aprovacaoDetectada = "ambigua";
+          // Uma pergunta por rajada: "aprovado" + "pode postar" não viram duas mensagens no grupo.
+          const desde30 = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+          const { data: jaPerguntou } = await supabaseAdmin.from("cs_outbound").select("id")
+            .eq("client_id", c.id as string).eq("origem", "cs-aprovacao-ambigua").eq("enviado", true)
+            .gte("created_at", desde30).limit(1);
+          const jid = internalGroupJid();
+          if (jid && !jaPerguntou?.length) {
+            const { mencionar } = await import("@/lib/cs/mencao");
+            const m = await mencionar((c.assigned_social as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
+            await csSendGroupText(jid, `${m.trecho ? `${m.trecho} ` : ""}${textoAprovacaoAmbigua(clienteNome, escolha.cards)}`,
+              undefined, { origem: "cs-aprovacao-ambigua", destino: "interno", clientId: c.id as string }, m.jids);
           }
+          console.log(`[CS/inbound] ${clienteNome} aprovou, mas ${escolha.cards.length} artes com o cliente — perguntei ao time`);
         }
       }
     }
@@ -2965,9 +3077,27 @@ async function processarInbound(req: NextRequest) {
     console.log(`[CS/inbound] rajada com assunto novo → não coalesce, segue como demanda própria`);
   }
 
-  if (!isOpenAIConfigured()) {
-    return NextResponse.json({ ok: true, classified: false, reason: "A1 desligado (sem key)", cliente: clienteNome });
-  }
+  // ─── NÃO LEU, NÃO SOME (21/10/2026, auditoria 5.10). A mensagem já foi reclamada (claim): sem
+  // guardar aqui, a falha da IA virava "ok, classified:false" e o pedido do cliente se perdia. Ela
+  // vai pra fila cs_mensagens_nao_lidas, que a rotina cs-nao-lidas relê a cada 15 min (e avisa o
+  // time se o grupo ficar sem leitura). Se nem guardar der, solta o claim e responde 500: o reenvio
+  // da Evolution ainda tem chance, e a falha aparece como falha. ───
+  const naoLeu = async (motivo: string) => {
+    console.error(`[CS/inbound] não consegui ler a mensagem de ${clienteNome}: ${motivo}`);
+    if (releitura) return NextResponse.json({ ok: true, classified: false, reason: motivo, cliente: clienteNome });
+    const { guardarNaoLida } = await import("@/lib/cs/nao-lidas-server");
+    const guardou = msg.messageId ? await guardarNaoLida({
+      messageId: msg.messageId, groupJid: msg.groupJid, clientId: (c.id as string) ?? null, clienteNome,
+      authorJid: msg.authorJid, authorName: msg.authorName, texto: msg.text, recebidaEmSeg: msg.timestamp, erro: motivo,
+    }) : false;
+    if (guardou) return NextResponse.json({ ok: true, classified: false, reason: motivo, guardada: true, cliente: clienteNome });
+    if (msg.messageId) {
+      try { await supabaseAdmin.from("cs_processed_messages").delete().eq("message_id", msg.messageId); } catch { /* ignore */ }
+    }
+    return NextResponse.json({ ok: false, classified: false, error: `não li a mensagem e não consegui guardar: ${motivo}` }, { status: 500 });
+  };
+
+  if (!isOpenAIConfigured()) return naoLeu("A1 desligado (sem OPENAI_API_KEY)");
 
   // Autoaprendizado (Nível 2): recusas (falso-positivos a evitar) E confirmadas (padrão do que É
   // demanda real DESTE cliente — pedido recorrente ganha confiança e poupa chamadas do A2 gpt-4o).
@@ -3008,7 +3138,9 @@ async function processarInbound(req: NextRequest) {
   // Vem ANTES do handler de data/evento porque "reunião dia 18 às 14h" é as duas coisas: uma data
   // futura E um compromisso nosso. Sem esta ordem, viraria lembrete de evento do cliente e a
   // agenda do time continuaria vazia.
-  if (c?.id && msg.text) {
+  // Na releitura (5.10) este bloco não roda: ele responde AO CLIENTE no grupo dele, e uma resposta
+  // horas depois sobre o horário da reunião confunde mais do que ajuda. O pedido vira sugestão abaixo.
+  if (c?.id && msg.text && !releitura) {
     const {
       lerIntencaoReuniao, textoConfirmacao, textoPergunta, textoPropoeHorario,
       propostaValida, ehConfirmacaoCurta, textoPropostaExpirada,
@@ -3060,13 +3192,15 @@ async function processarInbound(req: NextRequest) {
       if (jidEq) {
         const { mencionar } = await import("@/lib/cs/mencao");
         const mm = await mencionar((c.assigned_social as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
-        await csSendGroupText(jidEq,
+        const rReval = await csSendGroupText(jidEq,
           `⏳ ${mm.trecho} a *${clienteNome}* aceitou *${porExtenso(pendente.horario_proposto as string)}*, `
-          + `mas essa proposta é de mais de um dia atrás. Esse horário ainda está de pé? Responde *ok* que eu fecho.`,
+          + `mas essa proposta é de mais de um dia atrás. Esse horário ainda está de pé? Responde *nesta mensagem*: *ok* que eu fecho.`,
           undefined, { origem: "cs-reuniao-revalidar", destino: "interno" }, mm.jids);
         await supabaseAdmin.from("meetings")
           .update({ estado: "aguardando_social", perguntado_social_em: new Date().toISOString() })
           .eq("id", pendente.id as string);
+        // Só a resposta que CITA esta pergunta confirma (auditoria 5.1).
+        if (rReval.ok && rReval.id) await guardarIdPerguntaReuniao(pendente.id as string, rReval.id);
       }
       return NextResponse.json({ ok: true, reuniao_proposta_expirada: true, cliente: clienteNome });
     }
@@ -3160,8 +3294,15 @@ async function processarInbound(req: NextRequest) {
         if (jidInterno) {
           const { mencionar } = await import("@/lib/cs/mencao");
           const m = await mencionar((c.assigned_social as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
-          await csSendGroupText(jidInterno, textoPerguntaAoSocial(clienteNome, porExtenso(intencao.iso), m.trecho),
-            undefined, { origem: "cs-reuniao-pergunta-social", destino: "interno" }, m.jids);
+          const rPerg = await csSendGroupText(jidInterno, textoPerguntaAoSocial(clienteNome, porExtenso(intencao.iso), m.trecho),
+            undefined, { origem: "cs-reuniao-pergunta-social", destino: "interno", clientId: c.id as string }, m.jids);
+          // Só a resposta que CITA esta pergunta confirma (auditoria 5.1). O upsert não devolve o id
+          // da reunião: acha pelo par cliente+mês, o mesmo da chave do upsert.
+          if (rPerg.ok && rPerg.id) {
+            const { data: reuP } = await supabaseAdmin.from("meetings").select("id")
+              .eq("client_id", c.id as string).eq("mes_referencia", mesRef).maybeSingle();
+            if (reuP?.id) await guardarIdPerguntaReuniao(reuP.id as string, rPerg.id);
+          }
         }
         console.log(`[CS/inbound] ${clienteNome} propôs ${intencao.iso} → aguardando social`);
         return NextResponse.json({ ok: true, reuniao_proposta: intencao.iso, cliente: clienteNome });
@@ -3226,10 +3367,7 @@ async function processarInbound(req: NextRequest) {
   };
 
   const res = await classifyBlock([{ author: msg.authorName || "Cliente", text: msg.text }], ctx);
-  if (!res.ok || !res.data) {
-    console.error("[CS/inbound] A1 falhou:", res.error);
-    return NextResponse.json({ ok: true, classified: false, reason: res.error });
-  }
+  if (!res.ok || !res.data) return naoLeu(`A1 falhou: ${res.error ?? "sem resposta da IA"}`);
 
   const internalJid = internalGroupJid();
   const sugeridas: string[] = [];
@@ -3282,7 +3420,9 @@ async function processarInbound(req: NextRequest) {
   // esta linha, "está aberto há 37 minutos e ninguém assumiu" precisava ser reconstruído do
   // histórico toda vez. Roda em paralelo à classificação: não muda nada do que já acontece hoje,
   // só passa a registrar o estado. Só abre no expediente e uma por cliente por vez.
-  if (c.id && msg.text?.trim()) {
+  // Não na releitura (5.10): a mensagem é de horas atrás e o time pode já ter respondido no grupo —
+  // abrir agora geraria um "cliente sem resposta" falso.
+  if (c.id && msg.text?.trim() && !releitura) {
     void (async () => {
       try {
         const { abrirRequest } = await import("@/lib/cs/requests");
@@ -3496,7 +3636,9 @@ async function processarInbound(req: NextRequest) {
             : `\n\n❓ _Não localizei a arte anterior — se for ajuste de uma que já existe, me diz qual; senão o "ok" abre uma nova._`)
         : "";
       // Gramática visual fixa: cabeçalho (tipo — cliente) · 👤 responsável · 📩 fala do cliente · 👉 ação.
-      const txt = aviso + (statusBriefing
+      // Na releitura (5.10) a sugestão diz que é leitura atrasada e de quando é a mensagem.
+      const atrasada = releitura ? notaLeituraAtrasada(msg.timestamp, new Date()) : "";
+      const txt = atrasada + aviso + (statusBriefing
         ? `👀 *ACOMPANHAMENTO — ${clienteNomeItem}*\n👤 ${responsavel}\n\n${statusBriefing}\n\n_Não é pedido novo._\n👉 *não* se já tratou · *ok* pra abrir um follow-up`
         : ehReclamacao
         ? `🔴 *RECLAMAÇÃO — ${clienteNomeItem}*\n👤 ${responsavel}, atenção.\n\n📩 O cliente disse:\n_"${a3d ? a3d.briefing.trim() : msg.text}"_\n\n👉 Responde aqui: *ok* (registro como demanda) · *não* (vocês tratam direto)`
@@ -3517,7 +3659,8 @@ async function processarInbound(req: NextRequest) {
   } catch (e) {
     // Falha no meio do processamento (ex.: IA 500, DB): LIBERA o claim pra o retry do Evolution poder
     // reprocessar. Sem isso, a mensagem ficava "processada" e a demanda se perdia pra sempre.
-    if (msg.messageId) { try { await supabaseAdmin.from("cs_processed_messages").delete().eq("message_id", msg.messageId); } catch { /* ignore */ } }
+    // (Na releitura o claim é da primeira passada; a rotina cs-nao-lidas guarda a falha e tenta de novo.)
+    if (msg.messageId && !releitura) { try { await supabaseAdmin.from("cs_processed_messages").delete().eq("message_id", msg.messageId); } catch { /* ignore */ } }
     console.error("[CS/inbound] erro no processamento — claim liberado p/ retry:", e);
     return NextResponse.json({ ok: false, error: "erro interno no CS" }, { status: 500 });
   }
