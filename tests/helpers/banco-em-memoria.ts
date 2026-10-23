@@ -42,7 +42,7 @@ export function bancoEmMemoria(opcoes: { unicas?: Record<string, string[]> } = {
       if (f && (f.op === this.op || f.op === "*")) return { data: null, error: f.erro };
       const t = db[this.tabela];
       if (this.op === "insert" || this.op === "upsert") {
-        const novas = (Array.isArray(this.dados) ? this.dados : [this.dados!]).map((d) => ({
+        const novas = (Array.isArray(this.dados) ? this.dados : [this.dados!]).map((d): Linha => ({
           id: `${this.tabela}-${++seq}`, created_at: new Date(Date.now() + seq).toISOString(), ...d,
         }));
         for (const nova of novas) {
