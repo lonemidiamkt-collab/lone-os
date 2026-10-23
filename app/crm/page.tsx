@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
@@ -18,7 +18,9 @@ import { montarFilaHoje, inicioDaCadencia } from "@/lib/crm/hoje";
 import { waComTexto } from "@/lib/crm/modelos";
 import { PORTES, type QualificacaoLead } from "@/lib/crm/nota";
 import { PACOTES_VENDA } from "@/lib/clients/conversao";
-import { ROTULO_NICHO } from "@/lib/cs/nicho";
+import { ROTULO_NICHO, normalizarNicho } from "@/lib/cs/nicho";
+import { linkDoCliente, separarFechados } from "@/lib/crm/fechados";
+import { ABAS_DA_PAGINA_CRM } from "@/lib/navegacao/casco";
 import { PACOTES_PROPOSTA } from "@/lib/crm/proposta";
 import { ETAPAS_ABERTAS, MOTIVOS_PERDA, ROTULO_ETAPA, CRITERIO_SAIDA, chanceDe, rotuloMotivo } from "@/lib/crm/etapas";
 import { brl, calcularEsforco, calcularMeta, hojeSP, mesSP, type ResumoMeta } from "@/lib/crm/meta";
@@ -48,10 +50,12 @@ const ABERTOS: readonly CrmEstagio[] = ETAPAS_ABERTAS;
 const CANAIS = ["Site", "Anúncio → site", "Visita — Rota Lagos", "Indicação", "Tráfego pago", "Instagram", "Prospecção ativa", "WhatsApp", "Evento / networking", "Parceria", "Pipeline de outubro", "Outro"];
 
 // Título de cada aba no endereço do comercial (lá o casco já diz "Lone Comercial").
-const TITULO_ABA: Record<"hoje" | "dashboard" | "funil" | "agenda" | "relatorios", { titulo: string; apoio: string }> = {
+type AbaCrm = "hoje" | "dashboard" | "funil" | "fechados" | "agenda" | "relatorios";
+const TITULO_ABA: Record<AbaCrm, { titulo: string; apoio: string }> = {
   hoje: { titulo: "Hoje", apoio: "O que fazer agora, na ordem que vende" },
   dashboard: { titulo: "Dashboard", apoio: "" },
   funil: { titulo: "Funil", apoio: "Todos os negócios, por etapa" },
+  fechados: { titulo: "Fechados", apoio: "Vendas ganhas para virar cliente, clientes novos e o que se perdeu" },
   agenda: { titulo: "Agenda", apoio: "Reuniões e contatos marcados" },
   relatorios: { titulo: "Relatórios", apoio: "Ganhos, entrada de leads e motivos de perda" },
 };
@@ -130,7 +134,7 @@ export default function CrmPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [erroCarga, setErroCarga] = useState<string | null>(null);
-  const [tab, setTab] = useState<"hoje" | "dashboard" | "funil" | "agenda" | "relatorios">("hoje");
+  const [tab, setTab] = useState<AbaCrm>("hoje");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [convertendo, setConvertendo] = useState(false);
@@ -206,7 +210,7 @@ export default function CrmPage() {
     if (loading) return;
     const q = new URLSearchParams(window.location.search);
     const aba = q.get("aba");
-    if (aba && ["hoje", "dashboard", "funil", "agenda", "relatorios"].includes(aba)) setTab(aba as typeof tab);
+    if (aba && ABAS_DA_PAGINA_CRM.includes(aba)) setTab(aba as typeof tab);
     const leadId = q.get("lead");
     const lead = leadId ? leads.find((l) => l.id === leadId) : null;
     if (lead) { setTab("funil"); setDraft({ ...lead }); }
@@ -222,7 +226,7 @@ export default function CrmPage() {
   useEffect(() => { setCurrentTab(tab); }, [tab, setCurrentTab]);
   useEffect(() => {
     if (!pendingTab) return;
-    if (["hoje", "dashboard", "funil", "agenda", "relatorios"].includes(pendingTab)) {
+    if (ABAS_DA_PAGINA_CRM.includes(pendingTab)) {
       setTab(pendingTab as typeof tab);
     }
     setPendingTab("");
@@ -369,6 +373,7 @@ export default function CrmPage() {
       setLeads((prev) => prev.map((l) => (l.id === lead.id ? lead : l)));
       // Caiu em "perdido" sem motivo → abre o modal pra registrar o porquê (alimenta o relatório).
       if (to === "perdido" && !lead.motivoPerda) setDraft({ ...lead });
+      if (to === "ganho" && !lead.clienteId) avisarGanho(lead);
     } catch {
       setLeads(snapshot); // reverte: o card não muda de coluna se o banco não confirmou
       toast.error("Não foi possível mover o lead. Tente de novo.");
@@ -417,9 +422,11 @@ export default function CrmPage() {
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const { lead, aviso } = await r.json();
+      const virouGanho = lead.estagio === "ganho" && !lead.clienteId && leads.find((l) => l.id === lead.id)?.estagio !== "ganho";
       setLeads((prev) => (editando ? prev.map((l) => (l.id === lead.id ? lead : l)) : [lead, ...prev]));
       setDraft(null);
       if (aviso) toast.warning(aviso);
+      else if (virouGanho) avisarGanho(lead);
       else toast.success(editando ? "Lead atualizado." : "Lead criado.");
     } catch {
       toast.error("Não foi possível salvar o lead. Tente de novo.");
@@ -593,7 +600,32 @@ export default function CrmPage() {
   });
 
   // Trocar de lead fecha os painéis do anterior.
-  useEffect(() => { setQualificando(null); setConversao(null); setAbaFicha("resumo"); }, [draft?.id]);
+  // "Transformar em cliente" de fora da ficha (aba Fechados, aviso do ganho, Hoje): abre a ficha JÁ com a conversão.
+  // Sem a marca, o efeito abaixo zerava a conversão logo que a ficha trocava de lead.
+  const converterAoAbrir = useRef<string | null>(null);
+  const caixaConversao = useRef<HTMLDivElement | null>(null);
+  const conversaoInicial = (l: Partial<Lead>) => ({ pacote: "", nicho: normalizarNicho(l.segmento ?? null) ?? "" });
+  useEffect(() => {
+    setQualificando(null);
+    setAbaFicha("resumo");
+    if (draft?.id && converterAoAbrir.current === draft.id) { converterAoAbrir.current = null; setConversao(conversaoInicial(draft)); }
+    else setConversao(null);
+  }, [draft?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A caixa de conversão mora no Resumo da ficha: ao abrir, ela aparece e rola até ficar à vista.
+  useEffect(() => { if (conversao) requestAnimationFrame(() => caixaConversao.current?.scrollIntoView({ behavior: "smooth", block: "center" })); }, [conversao !== null]); // eslint-disable-line react-hooks/exhaustive-deps
+  function abrirConversao(l: Lead) {
+    if (draft?.id === l.id) { setAbaFicha("resumo"); setConversao(conversaoInicial(l)); return; }
+    converterAoAbrir.current = l.id;
+    setDraft({ ...l });
+  }
+  /** Venda fechada sem cliente: o aviso já leva ao próximo passo (antes o lead sumia do Funil sem dizer para onde). */
+  function avisarGanho(l: Lead) {
+    toast.success(`Venda fechada: ${l.empresa || l.contatoNome}`, {
+      description: "Falta transformar em cliente. Ela fica na aba Fechados até lá.",
+      action: { label: "Transformar em cliente", onClick: () => abrirConversao(l) },
+      duration: 12000,
+    });
+  }
   // Esc fecha a ficha.
   const fichaAberta = !!draft;
   useEffect(() => {
@@ -633,13 +665,31 @@ export default function CrmPage() {
       {/* No desktop, a sidebar secundária NATIVA (Sidebar.tsx → SECONDARY_NAV["/crm"]) cuida da
           navegação — fica colada no rail principal. No mobile, abas horizontais. */}
       {!casco && <div className="flex gap-1 overflow-x-auto border-b border-border lg:hidden">
-            {([["hoje", "Hoje", Sun], ["dashboard", "Dashboard", LayoutDashboard], ["funil", "Funil", Columns3], ["agenda", "Agenda", CalendarDays], ["relatorios", "Relatórios", BarChart3]] as const).map(([id, label, Icon]) => (
+            {([["hoje", "Hoje", Sun], ["dashboard", "Dashboard", LayoutDashboard], ["funil", "Funil", Columns3], ["fechados", "Fechados", Trophy], ["agenda", "Agenda", CalendarDays], ["relatorios", "Relatórios", BarChart3]] as const).map(([id, label, Icon]) => (
               <button key={id} onClick={() => setTab(id)}
                 className={`flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2 text-lone-body font-medium transition-colors ${tab === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
                 <Icon size={15} /> {label}
               </button>
             ))}
           </div>}
+
+      {tab === "hoje" && (() => {
+        const paraConverter = separarFechados(leads, null).converter;
+        return paraConverter.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-lone-warning-border bg-lone-warning-bg px-5 py-3">
+            <Trophy size={16} className="text-lone-warning" aria-hidden="true" />
+            <span className="text-lone-body text-foreground">
+              {paraConverter.length === 1
+                ? <><strong className="font-medium">{paraConverter[0].empresa || paraConverter[0].contatoNome}</strong> fechou e ainda não virou cliente.</>
+                : <><strong className="font-medium">{paraConverter.length} vendas fechadas</strong> ainda não viraram cliente.</>}
+            </span>
+            <div className="ml-auto flex gap-2">
+              {paraConverter.length === 1 && <Button size="sm" onClick={() => abrirConversao(paraConverter[0])}>Transformar em cliente</Button>}
+              <Button size="sm" variant="outline" onClick={() => setTab("fechados")}>Ver fechados</Button>
+            </div>
+          </div>
+        ) : null;
+      })()}
 
       {tab === "hoje" && (
         <HojeComercial
@@ -685,10 +735,7 @@ export default function CrmPage() {
 
       {tab === "funil" && (() => {
         const campo = "h-9 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none";
-        const mesAtual = hoje.slice(0, 7);
-        const fechados = filtrados.filter((l) => l.estagio === "ganho" || l.estagio === "perdido");
-        const fechadosDoMes = fechados.filter((l) => (l.fechadoEm ?? l.updatedAt ?? "").slice(0, 7) === mesAtual);
-        const listaFechados = verTodosFechados ? fechados : fechadosDoMes;
+        const fechadosFunil = separarFechados(filtrados, hoje.slice(0, 7));
         return (
         <>
           {/* Filtros numa linha só */}
@@ -777,36 +824,78 @@ export default function CrmPage() {
             }}
           />
 
-          {/* Fechados: ganhos e perdidos (do mês, ou todos) */}
-          <section className="rounded-2xl border border-border bg-card shadow-sm dark:shadow-none">
-            <div className="flex flex-wrap items-center gap-3 px-5 py-3.5">
-              <h2 className="text-lone-h2 text-foreground">Fechados</h2>
-              <span className="text-lone-caption text-muted-foreground">
-                {listaFechados.filter((l) => l.estagio === "ganho").length} ganhos · {listaFechados.filter((l) => l.estagio === "perdido").length} perdidos {verTodosFechados ? "(todos)" : "este mês"}
+          {/* Fechados moram na aba própria (out/2026): aqui só o atalho, com a pendência de conversão em destaque. */}
+          <button onClick={() => setTab("fechados")}
+            className="flex w-full flex-wrap items-center gap-3 rounded-2xl border border-border bg-card px-5 py-3.5 text-left shadow-sm transition-colors hover:border-primary/40 dark:shadow-none">
+            <Trophy size={16} className="text-lone-success" aria-hidden="true" />
+            <span className="text-lone-body font-medium text-foreground">Fechados</span>
+            {fechadosFunil.converter.length > 0 && (
+              <span className="rounded-full bg-lone-warning-bg px-2 py-0.5 text-lone-caption font-medium text-lone-warning">
+                {fechadosFunil.converter.length} {fechadosFunil.converter.length === 1 ? "venda falta" : "vendas faltam"} virar cliente
               </span>
-              <button onClick={() => setVerTodosFechados((v) => !v)} className="ml-auto text-lone-caption text-primary hover:underline">{verTodosFechados ? "Só este mês" : "Ver todos"}</button>
-            </div>
-            {listaFechados.length === 0 ? (
-              <p className="border-t border-border px-5 py-4 text-lone-caption text-muted-foreground">Nenhum negócio fechado {verTodosFechados ? "ainda" : "este mês"}.</p>
-            ) : (
-              <ul className="divide-y divide-border border-t border-border">
-                {listaFechados.map((l) => (
-                  <li key={l.id}>
-                    <button onClick={() => setDraft({ ...l })} className="flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors hover:bg-accent/50">
-                      <span className={`h-2 w-2 shrink-0 rounded-full ${ESTAGIO_META[l.estagio].color}`} aria-hidden="true" />
-                      <span className="min-w-0 flex-1 truncate text-lone-body text-foreground">{l.empresa || l.contatoNome}</span>
-                      <span className={`shrink-0 text-lone-caption ${l.estagio === "ganho" ? "text-lone-success" : "text-lone-danger"}`}>
-                        {l.estagio === "ganho" ? (l.clienteId ? "Ganho · já é cliente" : "Ganho") : `Perdido${rotuloMotivo(l.motivoPerdaCodigo) ? ` · ${rotuloMotivo(l.motivoPerdaCodigo)}` : ""}`}
-                      </span>
-                      {l.valorOrcamento != null && l.valorOrcamento > 0 && <span className="w-24 shrink-0 text-right text-lone-caption tabular-nums text-muted-foreground">{brl(l.valorOrcamento)}/mês</span>}
-                      <span className="w-12 shrink-0 text-right text-lone-caption text-muted-foreground">{fmtData(l.fechadoEm)}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
             )}
-          </section>
+            <span className="text-lone-caption text-muted-foreground">
+              {fechadosFunil.clientes.length + fechadosFunil.converter.filter((l) => (l.fechadoEm ?? "").slice(0, 7) === hoje.slice(0, 7)).length} ganhos · {fechadosFunil.perdidos.length} perdidos este mês
+            </span>
+            <span className="ml-auto text-lone-caption font-medium text-primary">Ver fechados →</span>
+          </button>
         </>
+        );
+      })()}
+
+      {tab === "fechados" && (() => {
+        const f = separarFechados(leads, verTodosFechados ? null : hoje.slice(0, 7));
+        const host = typeof window !== "undefined" ? window.location.host : null;
+        const linha = (l: Lead, acoes: React.ReactNode, detalhe: React.ReactNode) => (
+          <li key={l.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-lone-body font-medium text-foreground">{l.empresa || l.contatoNome}</div>
+              <div className="truncate text-lone-caption text-muted-foreground">{detalhe}</div>
+            </div>
+            {l.valorOrcamento != null && l.valorOrcamento > 0 && <span className="shrink-0 text-lone-body tabular-nums text-foreground">{brl(l.valorOrcamento)}<span className="text-lone-caption text-muted-foreground">/mês</span></span>}
+            <div className="flex shrink-0 gap-2">{acoes}</div>
+          </li>
+        );
+        const secao = (titulo: string, apoio: string, lista: Lead[], vazio: string, render: (l: Lead) => React.ReactNode, destaque = false) => (
+          <section className={`rounded-2xl border bg-card shadow-sm dark:shadow-none ${destaque && lista.length ? "border-lone-warning-border" : "border-border"}`}>
+            <div className="flex flex-wrap items-baseline gap-2 px-5 py-3.5">
+              <h2 className="text-lone-h2 text-foreground">{titulo}</h2>
+              <span className="text-lone-caption text-muted-foreground">{lista.length} · {apoio}</span>
+            </div>
+            {lista.length === 0
+              ? <p className="border-t border-border px-5 py-4 text-lone-caption text-muted-foreground">{vazio}</p>
+              : <ul className="divide-y divide-border border-t border-border">{lista.map(render)}</ul>}
+          </section>
+        );
+        return (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-lone-caption text-muted-foreground">Clientes novos e perdidos de</span>
+              {([[false, "Este mês"], [true, "Todos"]] as const).map(([todos, rotulo]) => (
+                <button key={rotulo} onClick={() => setVerTodosFechados(todos)}
+                  className={`h-8 rounded-full border px-3 text-sm transition-colors ${verTodosFechados === todos ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+            {secao("Falta virar cliente", "venda ganha sem cadastro no Lone OS — fica aqui até converter, de qualquer mês", f.converter,
+              "Nenhuma venda esperando. Quando marcar um negócio como Ganho, ele aparece aqui.",
+              (l) => linha(l, <>
+                <Button size="sm" onClick={() => abrirConversao(l)} className="gap-1.5"><Trophy size={14} /> Transformar em cliente</Button>
+                <Button size="sm" variant="outline" onClick={() => setDraft({ ...l })}>Abrir</Button>
+              </>, `Ganho em ${fmtData(l.fechadoEm)}${l.contatoNome && l.contatoNome !== l.empresa ? ` · ${l.contatoNome}` : ""}`), true)}
+            {secao("Viraram cliente", verTodosFechados ? "todos" : "este mês", f.clientes,
+              verTodosFechados ? "Nenhuma venda virou cliente ainda." : "Nenhuma venda virou cliente este mês.",
+              (l) => linha(l, <>
+                <a href={linkDoCliente(l.clienteId!, host)} target={casco ? "_blank" : undefined} rel={casco ? "noreferrer" : undefined}
+                  className="inline-flex h-8 items-center rounded-md border border-lone-success-border px-3 text-sm text-lone-success hover:bg-lone-success-bg">Ver no Lone OS</a>
+                <Button size="sm" variant="outline" onClick={() => setDraft({ ...l })}>Abrir</Button>
+              </>, `Ganho em ${fmtData(l.fechadoEm)}`))}
+            {secao("Perdidos", verTodosFechados ? "todos" : "este mês", f.perdidos,
+              verTodosFechados ? "Nenhum negócio perdido." : "Nenhum negócio perdido este mês.",
+              (l) => linha(l, <Button size="sm" variant="outline" onClick={() => setDraft({ ...l })}>Abrir</Button>,
+                `Perdido em ${fmtData(l.fechadoEm)}${rotuloMotivo(l.motivoPerdaCodigo) ? ` · ${rotuloMotivo(l.motivoPerdaCodigo)}` : l.motivoPerda ? ` · ${l.motivoPerda}` : ""}`))}
+          </div>
         );
       })()}
 
@@ -1406,7 +1495,7 @@ export default function CrmPage() {
 
             {/* ── Converter em cliente (Leva 7C, N27): pacote e ramo antes de criar ── */}
             {conversao && draft.id && (
-              <div className="mt-4 space-y-2 rounded-lg border border-lone-success-border bg-lone-success-bg p-3">
+              <div ref={caixaConversao} className="mt-4 space-y-2 rounded-lg border border-lone-success-border bg-lone-success-bg p-3">
                 <p className="text-lone-caption font-medium text-foreground">O que o cliente contratou?</p>
                 <div className="grid grid-cols-2 gap-2">
                   <select className={inputCls} aria-label="Pacote" value={conversao.pacote} onChange={(e) => setConversao({ ...conversao, pacote: e.target.value })}>
@@ -1481,14 +1570,15 @@ export default function CrmPage() {
               <footer className="border-t border-border px-5 py-3">
             <div className="flex flex-wrap items-center justify-end gap-2">
               {draft.id && draft.estagio === "ganho" && (draft.clienteId ? (
-                <a href={`/clients/${draft.clienteId}`}
+                <a href={linkDoCliente(draft.clienteId, typeof window !== "undefined" ? window.location.host : null)}
+                  target={casco ? "_blank" : undefined} rel={casco ? "noreferrer" : undefined}
                   className="mr-auto inline-flex h-9 items-center gap-1.5 rounded-md border border-lone-success-border px-3 text-sm text-lone-success hover:bg-lone-success-bg">
                   <Trophy size={14} /> Já é cliente — abrir ficha
                 </a>
               ) : (
                 <Button
                   variant="outline"
-                  onClick={() => setConversao({ pacote: "", nicho: "" })}
+                  onClick={() => abrirConversao(draft as Lead)}
                   disabled={convertendo}
                   className="mr-auto flex items-center gap-1.5 border-lone-success-border text-lone-success hover:bg-lone-success-bg"
                 >
