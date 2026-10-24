@@ -55,7 +55,8 @@ function OportunidadesContrato({ conv, anterior, rotuloAnterior, erro, fechament
     { chave: "perdidas", rotulo: conv.perdidas === 1 ? "perdida" : "perdidas", n: conv.perdidas, cor: "bg-lone-danger" },
     { chave: "abertas", rotulo: conv.abertas === 1 ? "aberta" : "abertas", n: conv.abertas, cor: "bg-muted-foreground/35" },
   ];
-  const dif = anterior ? conv.ganhas - anterior.ganhas : 0;
+  // Período anterior sem nenhuma oportunidade: "+2 vs. setembro" compara com o nada — não mostra.
+  const dif = anterior && anterior.oportunidades > 0 ? conv.ganhas - anterior.ganhas : 0;
   return (
     <>
       <div className="mt-2 flex items-center gap-3">
