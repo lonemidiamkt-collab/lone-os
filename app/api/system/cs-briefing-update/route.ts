@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
     // 96 preços guardados como regra eterna e a correção do cliente jogada fora. Agora a pergunta
     // é outra: isso muda o que a gente faz na PRÓXIMA peça deste cliente?
     const r = await chatJson<{ regras: { texto: string; tipo: string }[] }>({
+      origem: "cs:regras-semana",
       model: "gpt-4o-mini",
       system: `Você lê mensagens do GRUPO de WhatsApp de um cliente de uma agência de marketing e extrai as REGRAS duráveis daquele cliente.\n\n${DEFINICAO_DE_REGRA}\n\nMáximo 5 regras. O normal é voltar pouca coisa ou nada — só devolva o que passar no teste.`,
       user: conversa,

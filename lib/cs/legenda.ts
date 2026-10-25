@@ -81,6 +81,7 @@ export async function gerarLegenda(inp: LegendaInput): Promise<OpenAiResult<Lege
     `Escreva a legenda pronta pra postar (no JSON), fechando SEMPRE com o contato da ficha.`,
   ].filter(Boolean).join("\n");
   return chatJson<LegendaOutput>({
+    origem: "social:legenda",
     model: LEGENDA_MODEL, schemaName: "cs_legenda", schema: SCHEMA,
     maxTokens: 700, temperature: 0.6, system: `${SYSTEM}\n\n${METODO_LEGENDA}`, user,
   });

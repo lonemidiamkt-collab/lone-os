@@ -566,6 +566,7 @@ export async function montarMensagemCliente(
   ].filter(Boolean).join("\n");
 
   const r = await chatJson<{ mensagem: string }>({
+    origem: "cs:mensagem-cliente",
     model: "gpt-4o-mini", system: SYSTEM, user: contexto,
     schema: SCHEMA, schemaName: "mensagem_cliente", maxTokens: 300,
   });

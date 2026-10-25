@@ -10,7 +10,7 @@ import NewPlatformUpdateModal from "@/components/NewPlatformUpdateModal";
 import {
   Brain, Users, TrendingUp, Instagram, Palette, FileText, Megaphone, Zap, Lock,
   Settings, Printer, Sparkles, ChevronDown, ChevronUp, Rocket, Package,
-  GitBranch, Lightbulb, HelpCircle, PlayCircle, Plus, RefreshCw, ClipboardCheck, Radar,
+  GitBranch, Lightbulb, HelpCircle, PlayCircle, Plus, RefreshCw, ClipboardCheck, Radar, BrainCircuit,
 } from "lucide-react";
 
 interface PlatformUpdate {
@@ -411,7 +411,6 @@ const MODULES: Module[] = [
     context: "Quando você loga, a primeira coisa que vê. A ideia é responder em 30 segundos: 'onde está o fogo hoje?' e 'o que vai bem?'. Não é um relatório de números — é um alerta operacional que te aponta onde agir.",
     howItWorks: [
       "Assim que você abre o painel, o Lone OS carrega os dados de todos os clientes em tempo real.",
-      "O Morning Briefing (IA) analisa cada conta e gera o plano do dia: urgências, oportunidades e o que está ok.",
       "Alertas aparecem conforme a gravidade — vermelho pra crítico, amarelo pra atenção, azul pra oportunidade.",
       "Os cards do topo mostram métricas-chave (clientes ativos, em risco, onboarding, tarefas urgentes).",
       "Em 'Urgências do dia', 'posts aguardando aprovação' conta só o que o cliente AINDA não aprovou. Arte já aprovada pelo cliente aparece em 'O que precisa de atenção' como pronta pra postar — um card nunca aparece nos dois.",
@@ -421,17 +420,17 @@ const MODULES: Module[] = [
       "Avisos (toasts) aparecem no canto inferior direito: somem em 4s, exceto os de SLA, que ficam até você fechar. 'Ver agora' abre o card ou o cliente do aviso.",
       "SINO › 'MARCAR TODAS COMO LIDAS' (21/10/2026): marca só os avisos que estão na sua tela (com um filtro de área ligado, vira 'Marcar estas como lidas') e só os seus ou os do time — o aviso dirigido a outra pessoa não é tocado (antes o botão limpava o sino de todo mundo). Logo depois aparece 'Desfazer' por alguns segundos. Se o servidor não gravar, o sino diz que os avisos continuam não lidos em vez de fingir que marcou.",
       "LIMPEZA (23/09): saíram o mural 'Avisos da Empresa', o checklist diário de tráfego (a rotina vive na tela de Tráfego) e o 'Alerta de orçamento' (estimava gasto pelo dia do mês, não pelo gasto real). Se algum dado não carregar, a Dashboard diz isso em vermelho em vez de mostrar zero; 'Publicados' conta só o mês corrente; e 'Meu Desempenho' fica neutro ('sem tarefas') quando ninguém te atribuiu tarefa.",
+      "MORNING BRIEFING SAIU (25/10/2026): o card de IA com o plano do dia não estava mais montado na tela, e a rota dele e a do alerta crítico foram apagadas na faxina dos agentes. O plano do dia do tráfego chega no Diagnóstico diário das contas (PDF das 8h, no grupo de tráfego).",
       "INÍCIO E ÁREA CEO SEM ZERO FALSO (25/10/2026): número que não carregou aparece como '—' com 'Tentar de novo', nunca zero ou 'Tudo em dia!'; concluir tarefa no Hoje tem 'Desfazer'; a saúde do dia não é gravada se o Loninho não foi lido.",
     ],
     features: [
-      "Briefing matinal gerado por IA com urgências e oportunidades",
       "Radar de saúde das contas (score agregado por cliente)",
       "Alertas automáticos: CTR baixo, gasto sem conversão, fadiga de criativo",
       "Card 'Clientes' clicável leva pra aba detalhada",
     ],
     tips: [
       "Comece o dia sempre pela Dashboard — ela já te diz o que importa, sem precisar abrir outras abas.",
-      "Se você é gestor de tráfego, o Morning Briefing praticamente substitui o café da manhã técnico.",
+      "Se você é gestor de tráfego, o plano do dia está no Diagnóstico diário das contas (PDF das 8h, no grupo de tráfego).",
       "Os alertas críticos usam dados reais do Meta Ads — confia neles, não são genéricos.",
     ],
   },
@@ -936,9 +935,47 @@ const MODULES: Module[] = [
     faq: [
       { q: "Desliguei e o job rodou mesmo assim. Por quê?", a: "Ou ele já estava rodando quando você desligou (vale do próximo horário em diante), ou é 'Sem registro' — esses só param editando o crontab do servidor. Se a Central estiver fora do ar na hora, o job também roda: é de propósito, para nada parar por causa dela." },
       { q: "Um job novo não aparece na lista.", a: "A lista vem de lib/automacoes/registro.ts. Job novo no crontab precisa entrar lá — um teste automático acusa quando falta." },
-      { q: "Chegou 'OpenAI sem crédito'. O que eu faço?", a: "Recarregar o saldo em platform.openai.com/settings/organization/billing (e, de preferência, ligar a recarga automática com um teto mensal). Não precisa mexer em mais nada: as rotinas voltam no próximo horário e o Loninho volta a entender as mensagens na hora. O gasto normal é de cerca de US$ 1,20 por dia." },
+      { q: "Chegou 'OpenAI sem crédito'. O que eu faço?", a: "Recarregar o saldo em platform.openai.com/settings/organization/billing (e, de preferência, ligar a recarga automática com um teto mensal). Não precisa mexer em mais nada: as rotinas voltam no próximo horário e o Loninho volta a entender as mensagens na hora." },
       { q: "A IA ficou fora do ar. Os pedidos dos clientes daquele período se perderam?", a: "Não: toda mensagem fica guardada. Dá pra reprocessar em silêncio (rota /api/system/cs-reprocessar, de/ate): ela só classifica e grava o que era pedido como HISTÓRICO, com a hora original — sem mandar nada em grupo nenhum, sem abrir pendência e sem contar como 'pedido sem resposta' no score do cliente nem no desempenho do time. Foi usada no apagão de 25 a 30/09." },
       { q: "O vigia avisou de um job que eu sei que está ok.", a: "Abra a linha e veja as últimas execuções: se o job respondeu {\"ok\": false} ou HTTP de erro, a Central conta como falha. Se foi erro passageiro, a próxima execução com sucesso limpa o aviso." },
+    ],
+  },
+  {
+    id: "agentes",
+    icon: BrainCircuit,
+    title: "Central de Agentes",
+    shortDesc: "Os agentes de IA do Lone OS: o que cada um faz, quem responde por ele, o que o desliga e se está funcionando — e o interruptor geral do Loninho",
+    whoUses: "Admin e Gerente",
+    context: "Em 25/10/2026 o Roberto perguntou quantos agentes de IA o Lone OS tem, e ninguém sabia responder. Contados no código: 50 capacidades que chamam IA, todas na OpenAI; uma delas (o Morning Briefing) estava sem uso e saiu na faxina — ficam 49. Existe um agente com nome, o Loninho; os outros são capacidades dele ou rotinas em volta. A Central junta o catálogo (lib/agentes/catalogo.ts) com o registro de cada chamada de IA e responde 'quais são, o que fazem e se estão funcionando' sem depender da memória de ninguém. Fica no menu Sistema, ao lado da Central de Automações.",
+    howItWorks: [
+      "CATÁLOGO: cada agente tem um nome único, o que faz, a área (Atendimento, Social e conteúdo, Design, Tráfego, Comercial, Gestão), quem responde por ele, o alcance, o que o põe para rodar e o que o desliga. O catálogo mora no código: agente novo entra nele no mesmo commit.",
+      "ALCANCE — Só sugere (devolve um texto para alguém decidir) · Grava no sistema · Fala com o time · Fala com o cliente · Mexe na Meta (nenhum agente mexe hoje). Vale o maior alcance que o agente tem.",
+      "ESTADO — Funcionando. Falhando: a última chamada de IA falhou e nada deu certo depois, ou a rotina dele falhou na última vez. Parado: o que roda a cada mensagem ou por agenda passou do prazo sem rodar. Desligado: de propósito, ou todo gatilho dele está desligado agora. Sem registro: nenhuma execução em 90 dias (comum em agente de botão pouco usado).",
+      "ÚLTIMA EXECUÇÃO E 7 DIAS: vêm do registro de toda chamada de IA e de cada execução, mais a última rodada da rotina na Central de Automações. Custo em dinheiro não aparece: é número da agência e fica fora do Lone OS.",
+      "ETIQUETA OBRIGATÓRIA (25/10/2026): toda chamada de IA sai com o nome do agente que chamou. Antes, a maior parte das chamadas do Loninho saía sem nome e cerca de 1.400 por mês apareciam como 'Morning Briefing', uma tela que nem estava montada. Agora o código não aceita chamada sem etiqueta e um teste quebra se alguma sair sem. As chamadas antigas aparecem no fim da tela, em 'Chamadas sem etiqueta', e somem em uma semana.",
+      "INTERRUPTOR GERAL DO LONINHO (no topo): desligado — até alguém religar, por 1 hora, por 4 horas ou até amanhã às 8h —, o Loninho não lê nenhuma mensagem dos grupos (clientes, time e vendas): não sugere pedido, não transcreve áudio, não responde ninguém. O que chega nesse intervalo não é lido depois. O grupo do time recebe um aviso ao desligar e ao religar. As rotinas agendadas continuam e têm o interruptor delas na Central de Automações.",
+      "ABRIR A LINHA (a seta): quem responde, o modelo, a etiqueta das chamadas, a última falha com a mensagem, o que põe o agente para rodar (com link para a rotina na Central de Automações) e cada interruptor com o estado de agora — Central de Automações, variável do servidor, configuração ou constante no código.",
+      "IA FORA: quando a OpenAI fica sem crédito ou recusa a chave, uma faixa vermelha no topo diz desde quando, o que fazer e o que parou. Todos os agentes param juntos: é um fornecedor só.",
+      "SELO 'ATENÇÃO': marca o que o dono precisa saber. Hoje são quatro: três rotinas gravam regra do cliente já ativa, sem o 'ok' do time (Aprende com a correção, Regras da semana e Releitura do ciclo), e a rotina de terça grava o briefing inicial direto, marcado como gerado por IA.",
+      "FAXINA (25/10/2026): saíram o Morning Briefing e o alerta crítico (o card já não estava na tela), a rota antiga de legendas em lote (a de hoje é Social › Legendas da semana), uma rota de roteiro e uma de revisão de arte que ninguém chamava, e a geração de imagem antiga (a de hoje é a Arte por IA).",
+    ],
+    features: [
+      "Os 49 agentes de IA num lugar só, por área, com o estado real",
+      "Última execução e falhas dos últimos 7 dias de cada um, sem custo em dinheiro",
+      "Interruptor geral do Loninho, com pausa que volta sozinha e aviso no grupo do time",
+      "Cada interruptor do agente com o estado de agora",
+      "Faixa de 'IA fora' quando a OpenAI para",
+      "Etiqueta obrigatória em toda chamada de IA, conferida por teste",
+    ],
+    tips: [
+      "Loninho errando num grupo? Pause por 1 hora aqui, investigue e religue — o time é avisado nas duas pontas.",
+      "'Sem registro' em agente de botão não é defeito: só quer dizer que ninguém usou em 90 dias. Agente de mensagem ou de agenda 'Parado' é.",
+    ],
+    faq: [
+      { q: "Por que 49 e não 50?", a: "O inventário de 25/10/2026 contou 50. O Morning Briefing estava sem uso (a tela tinha sido desmontada) e saiu na faxina do mesmo dia." },
+      { q: "Desliguei o Loninho e chegou mensagem no grupo. Ela é lida quando eu religar?", a: "Não. Desligado, ele não guarda nada para ler depois. Confira à mão os grupos do intervalo — o aviso de religar lembra disso." },
+      { q: "Qual a diferença para a Central de Automações?", a: "Lá estão as rotinas agendadas do servidor, com ou sem IA. Aqui estão os agentes de IA, rodem eles por agenda, por mensagem no WhatsApp ou por botão. O agente que roda por agenda aponta para a rotina dele lá, e é lá que ela liga e desliga." },
+      { q: "Vou criar um agente novo. O que muda?", a: "Ele entra no catálogo (lib/agentes/catalogo.ts) com uma etiqueta própria, e toda chamada de IA dele usa essa etiqueta. Sem isso o código não compila e o teste de etiqueta quebra." },
     ],
   },
   {

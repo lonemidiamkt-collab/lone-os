@@ -5,6 +5,7 @@
 
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { FOCO_NA_DOR } from "@/lib/cs/estrategista";
+import type { OrigemIa } from "@/lib/agentes/catalogo";
 
 export const CRIATIVO_MODEL = "gpt-4o";
 
@@ -35,6 +36,8 @@ export interface CriativoInput {
   /** Informação CRUA que a equipe passou junto do pedido ("o pet passa por exame pré-operatório…").
    *  É matéria-prima factual: manda no conteúdo, mas o briefing continua mandando no jeito de falar. */
   contexto?: string;
+  /** Quem pediu o roteiro, para a etiqueta da chamada. Padrão: o Agente Criativo (social:roteiros). */
+  origem?: OrigemIa;
 }
 
 export interface Etapa { tempo: string; nome: string; texto: string; }
@@ -234,6 +237,7 @@ function buildUser(inp: CriativoInput): string {
 /** Gera roteiros de anúncio a partir do briefing do cliente. Nunca lança (retorno estruturado). */
 export async function gerarRoteiros(inp: CriativoInput): Promise<OpenAiResult<CriativoOutput>> {
   return chatJson<CriativoOutput>({
+    origem: inp.origem ?? "social:roteiros",
     model: CRIATIVO_MODEL,
     schemaName: "cs_roteiros",
     schema: CRIATIVO_SCHEMA,
@@ -253,6 +257,7 @@ const PREF_SCHEMA: Record<string, unknown> = {
 // Retorna null quando a mensagem é só um pedido pontual (produto/promo da vez) sem preferência.
 export async function extrairPreferenciaRoteiro(mensagem: string): Promise<string | null> {
   const res = await chatJson<{ preferencia: string | null }>({
+    origem: "social:roteiros",
     model: "gpt-4o-mini", schemaName: "cs_roteiro_pref", schema: PREF_SCHEMA,
     maxTokens: 120, temperature: 0,
     system:

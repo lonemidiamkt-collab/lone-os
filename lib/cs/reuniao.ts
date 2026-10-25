@@ -56,6 +56,7 @@ export function montarPrepReuniao(f: FichaPrep, pontos: string[] = []): string {
 export async function pontosPraReuniao(nome: string, nicho: string | undefined, contexto: string): Promise<string[]> {
   if (!isOpenAIConfigured()) return [];
   const r = await chatJson<{ pontos: string[] }>({
+    origem: "cs:reuniao-preparo",
     model: "gpt-4o-mini",
     system:
       "Você é o CS de uma agência de marketing. Dado o ESTADO do cliente, sugira 3 a 4 PONTOS objetivos pra " +
@@ -80,6 +81,7 @@ export interface ResumoReuniao {
 /** IA: extrai o essencial das NOTAS da reunião (não inventa). Alimenta a ficha da jornada. */
 export async function resumirReuniao(nome: string, nicho: string | undefined, notas: string): Promise<OpenAiResult<ResumoReuniao>> {
   return chatJson<ResumoReuniao>({
+    origem: "cs:reuniao-resumo",
     model: "gpt-4o",
     system:
       "Você é o CS de uma agência de marketing. Recebe as NOTAS de uma reunião com o cliente e extrai o " +

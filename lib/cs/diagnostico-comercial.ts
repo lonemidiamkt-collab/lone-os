@@ -97,6 +97,7 @@ export async function analisarDiagnostico(inp: DiagnosticoInput): Promise<OpenAi
   ].filter(Boolean).join("\n");
 
   return chatJson<DiagnosticoOutput>({
+    origem: "cs:diagnostico-comercial",
     model: DIAGNOSTICO_MODEL, schemaName: "cs_diagnostico_comercial", schema: SCHEMA,
     maxTokens: 2400, temperature: 0.5, system: SYSTEM, user,
   });

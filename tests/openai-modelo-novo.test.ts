@@ -25,7 +25,7 @@ describe("chatJson escolhe o parâmetro certo por modelo", () => {
   it("modelo GPT-5 recebe max_completion_tokens", async () => {
     process.env.OPENAI_API_KEY ||= "teste";
     const cap = capturarCorpo();
-    await chatJson({ model: "gpt-5.4-nano", schemaName: "t", schema: {}, system: "s", user: "u", maxTokens: 300 });
+    await chatJson({ origem: "radar:analise", model: "gpt-5.4-nano", schemaName: "t", schema: {}, system: "s", user: "u", maxTokens: 300 });
     expect(cap.body).toHaveProperty("max_completion_tokens", 300);
     expect(cap.body).not.toHaveProperty("max_tokens");
   });
@@ -33,7 +33,7 @@ describe("chatJson escolhe o parâmetro certo por modelo", () => {
   it("modelo antigo continua com max_tokens e temperature", async () => {
     process.env.OPENAI_API_KEY ||= "teste";
     const cap = capturarCorpo();
-    await chatJson({ model: "gpt-4o-mini", schemaName: "t", schema: {}, system: "s", user: "u", maxTokens: 300, temperature: 0.5 });
+    await chatJson({ origem: "radar:analise", model: "gpt-4o-mini", schemaName: "t", schema: {}, system: "s", user: "u", maxTokens: 300, temperature: 0.5 });
     expect(cap.body).toHaveProperty("max_tokens", 300);
     expect(cap.body).toHaveProperty("temperature", 0.5);
   });
@@ -41,7 +41,7 @@ describe("chatJson escolhe o parâmetro certo por modelo", () => {
   it("o3 e o4 também usam o contrato novo", async () => {
     process.env.OPENAI_API_KEY ||= "teste";
     const cap = capturarCorpo();
-    await chatJson({ model: "o4-mini", schemaName: "t", schema: {}, system: "s", user: "u" });
+    await chatJson({ origem: "radar:analise", model: "o4-mini", schemaName: "t", schema: {}, system: "s", user: "u" });
     expect(cap.body).toHaveProperty("max_completion_tokens");
   });
 });
@@ -56,7 +56,7 @@ describe("chatJson aceita imagem", () => {
     process.env.OPENAI_API_KEY ||= "teste";
     const cap = capturarCorpo();
     await chatJson({
-      model: "gpt-5.4-nano", schemaName: "t", schema: {}, system: "s", user: "u",
+      origem: "radar:analise", model: "gpt-5.4-nano", schemaName: "t", schema: {}, system: "s", user: "u",
       imagens: ["data:image/jpeg;base64,AAA"],
     });
     const msgs = (cap.body as Record<string, unknown>).messages as Array<Record<string, unknown>>;
@@ -70,7 +70,7 @@ describe("chatJson aceita imagem", () => {
   it("sem imagem, o content continua string simples", async () => {
     process.env.OPENAI_API_KEY ||= "teste";
     const cap = capturarCorpo();
-    await chatJson({ model: "gpt-4o-mini", schemaName: "t", schema: {}, system: "s", user: "u" });
+    await chatJson({ origem: "radar:analise", model: "gpt-4o-mini", schemaName: "t", schema: {}, system: "s", user: "u" });
     const msgs = (cap.body as Record<string, unknown>).messages as Array<Record<string, unknown>>;
     expect(typeof msgs.find((m) => m.role === "user")!.content).toBe("string");
   });

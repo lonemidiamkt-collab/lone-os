@@ -102,6 +102,7 @@ coisa? Se for outra coisa, o campo "sobre" tem que dizer qual. Responda APENAS n
 
 export async function analisarSentimentoCliente(mensagem: string): Promise<OpenAiResult<SentimentoOutput>> {
   return chatJson<SentimentoOutput>({
+    origem: "cs:termometro",
     model: "gpt-4o-mini",
     schemaName: "cs_sentimento",
     schema: SCHEMA,

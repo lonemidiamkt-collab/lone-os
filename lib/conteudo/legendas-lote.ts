@@ -2,7 +2,7 @@
 // legenda de cada card em RASCUNHO, editável antes de gravar.
 //
 // Já existia /api/cs/legendas-em-lote (09/08), que escreve e GRAVA direto, só em card sem legenda —
-// feito para destravar 16 artes num domingo. Aqui é o uso do dia a dia: o social vê a semana
+// feito para destravar 16 artes num domingo (sem quem chamasse, foi apagada em 25/10/2026). Aqui é o uso do dia a dia: o social vê a semana
 // inteira, ajusta o texto e só então salva nos cards. A IA é a mesma (lib/cs/legenda.ts, no tom e
 // com o briefing do cliente); o que muda é que nada é gravado sem a pessoa ler.
 //

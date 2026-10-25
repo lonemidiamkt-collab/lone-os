@@ -10,6 +10,7 @@
 // familiaridade inventada, dado que não está em FATOS, e "presente" sem `gift_reserved`.
 
 import type { ProspectRow, IntentLida } from "./tipos";
+import type { OrigemIa } from "@/lib/agentes/catalogo";
 import { preencher, type ProspectConfig, type ChaveTemplate, type Template } from "./config";
 import { primeiroNome, nomeDeTratamento, artigoDe, primeiraPessoa } from "./normalizar";
 import { porExtensoSP, horaCurtaSP, dataCurtaSP, componentesSP } from "./tempo";
@@ -40,8 +41,8 @@ export interface ContextoRedacao {
   valores?: Record<string, string | number | null | undefined>;
   /** Força o modo (o simulador/prévia usa "fixo" para não gastar IA). */
   forcarModo?: Template["modo"];
-  /** Origem da chamada de IA (llm_calls). */
-  origem?: string;
+  /** Etiqueta da chamada de IA (llm_calls): "prospeccao:…", do agente SDR no catálogo. */
+  origem?: OrigemIa;
 }
 
 export const saudacaoDoDia = (agora = new Date()) => { const h = componentesSP(agora).hora; return h < 12 ? "bom dia" : h < 18 ? "boa tarde" : "boa noite"; };

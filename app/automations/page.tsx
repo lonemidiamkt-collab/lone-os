@@ -53,6 +53,12 @@ export default function AutomationsPage() {
 
   useEffect(() => { if (gestao) void carregar(); }, [gestao, carregar]);
 
+  // A Central de Agentes linka para cá já filtrada na rotina do agente (?busca=<job>).
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("busca");
+    if (q) setBusca(q);
+  }, []);
+
   // Atualiza sozinho a cada minuto com a aba visível — o "há 3 min" e a saúde não envelhecem.
   useEffect(() => {
     if (!gestao) return;

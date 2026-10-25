@@ -17,7 +17,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const cfg = await carregarConfig();
   // Prévia = texto-base (modo fixo), sem gastar IA. ?ia=1 pede a redação real da Rafaela.
   const forcarModo = req.nextUrl.searchParams.get("ia") ? undefined : ("fixo" as const);
-  const red = { p, cfg, historico: [], forcarModo, origem: "prospeccao:previa" };
+  const red = { p, cfg, historico: [], forcarModo, origem: "prospeccao:previa" as const };
   const c = convite(red);
   return NextResponse.json({
     ok: true, modo: forcarModo ?? "diretriz",

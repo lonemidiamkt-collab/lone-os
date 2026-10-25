@@ -111,6 +111,7 @@ export async function analisarTranscricao(
     texto = `${texto.slice(0, meio)}\n\n[…trecho do meio omitido por tamanho…]\n\n${texto.slice(-meio)}`;
   }
   return chatJson<AnaliseReuniao>({
+    origem: "cs:reuniao-transcricao",
     model: "gpt-4o",
     system: SISTEMA,
     user: `Cliente: ${cliente}${nicho ? ` (${nicho})` : ""}\n\nTRANSCRIÇÃO:\n${texto}`,

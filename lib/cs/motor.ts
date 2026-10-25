@@ -156,7 +156,7 @@ no contexto do período, a narrativa deve girar em torno dela (e o mix pende pro
     (contexto ? `\n⭐ Contexto/campanha DESTE período (abastecido pelo time — prioritário):\n${contexto}\n` : "") +
     (eventos?.length ? `Datas/eventos marcados: ${eventos.join("; ")}\n` : "") +
     `\nDefina o objetivo do período, a narrativa que amarra as peças, e o mix-alvo de pilares.`;
-  return chatJson({ model: MODEL, system, user, schema: OBJ_SCHEMA, schemaName: "cs_objetivo_periodo", maxTokens: 700, temperature: 0.5 });
+  return chatJson({ origem: "social:calendario", model: MODEL, system, user, schema: OBJ_SCHEMA, schemaName: "cs_objetivo_periodo", maxTokens: 700, temperature: 0.5 });
 }
 
 // ── Estágio 3 — DECISÃO POR PEÇA (o funil da semana) ─────────────────────────
@@ -212,7 +212,7 @@ Formatos possíveis:\n${estruturas}\nResponda só no JSON (itens na ordem das da
     `Datas (uma peça por data): ${datas.join(", ")}\n` +
     (eventos?.length ? `Datas/eventos marcados: ${eventos.join("; ")}\n` : "") +
     `\nDecida as peças${mes ? " formando o arco do mês" : " formando o funil"}, sem repetir o que já foi feito.`;
-  return chatJson({ model: MODEL, system, user, schema: DEC_SCHEMA, schemaName: "cs_decisao_pecas", maxTokens: mes ? 4000 : 1800, temperature: 0.6 });
+  return chatJson({ origem: "social:calendario", model: MODEL, system, user, schema: DEC_SCHEMA, schemaName: "cs_decisao_pecas", maxTokens: mes ? 4000 : 1800, temperature: 0.6 });
 }
 
 // ── planejarPeriodo — compõe os 3 estágios ───────────────────────────────────
@@ -344,7 +344,7 @@ reel/vídeo. Responda só no JSON.`;
     li("Diferenciais", diag.diferenciais) + li("Ângulos vs. concorrência", diag.angulosVsConcorrencia) +
     (regras?.length ? `\n⚠️ REGRAS DO CLIENTE (o time definiu — OBEDEÇA sempre):\n${regras.map((r) => `- ${r}`).join("\n")}\n` : "") +
     `\nProjete a peça: objetivo → padrão narrativo → nº de artes que a mensagem pede → direção de arte de cada uma. Puxe a substância do corpo desta matéria-prima + do seu conhecimento do nicho.`;
-  const res = await chatJson<PecaFinal>({ model: MODEL, system, user, schema: PECA_SCHEMA, schemaName: "cs_peca_final", maxTokens: 2400, temperature: 0.6 });
+  const res = await chatJson<PecaFinal>({ origem: "social:calendario", model: MODEL, system, user, schema: PECA_SCHEMA, schemaName: "cs_peca_final", maxTokens: 2400, temperature: 0.6 });
   const peca = res.ok && res.data ? { ...res.data, data: dec.data, formato: dec.formato } : undefined;
   // ENFORCE nº de artes em código (o prompt sozinho não segura — modelo estica). Mantém a última
   // arte (CTA/fechamento) e corta o excesso do meio. "menos é mais" garantido.

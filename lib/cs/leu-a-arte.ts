@@ -69,6 +69,7 @@ export async function clienteFalouDaArte(clientId: string, desde: string): Promi
     if (!falas.length) return { resposta: "silencio", podeCobrar: true };
 
     const r = await chatJson<{ resposta: RespostaSobreArte; trecho: string | null }>({
+      origem: "cs:leu-a-arte",
       model: "gpt-4o-mini", system: SYSTEM,
       user: `Mensagens do cliente depois de a arte ir pra aprovação:\n${falas.map((f) => `- ${f.slice(0, 200)}`).join("\n")}`,
       schema: SCHEMA, schemaName: "resposta_arte", maxTokens: 200, temperature: 0,

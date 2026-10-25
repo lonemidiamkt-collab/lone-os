@@ -106,6 +106,7 @@ export async function gerarBriefingDesign(inp: BriefingDesignInput): Promise<Ope
     `Escreva o briefing da arte (no JSON).`,
   ].filter(Boolean).join("\n");
   return chatJson<BriefingDesignOutput>({
+    origem: "design:briefing-arte",
     model: BRIEFING_DESIGN_MODEL, schemaName: "cs_briefing_design", schema: SCHEMA,
     maxTokens: 700, temperature: 0.5, system: SYSTEM, user,
   });

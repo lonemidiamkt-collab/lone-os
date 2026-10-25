@@ -97,11 +97,14 @@ const MINHA_CARTEIRA = ["/clients?resp=mine", "/clients"];
 const LEVA_6A_GESTAO = ["/saude", "/agente?view=desempenho"];
 //  - /mapa-postagem (Leva 7D, N32): tela NOVA da gestão (postado × contratado por semana) — a rota
 //    não existia; só admin e manager (a API também exige gestão).
+//  - /agentes (25/10/2026): Central de Agentes — tela NOVA da gestão (os agentes de IA e o interruptor
+//    geral do Loninho), ao lado da Central de Automações; a API também exige gestão.
 const LEVA_7D_GESTAO = ["/mapa-postagem"];
+const CENTRAL_DE_AGENTES = ["/agentes"];
 const ACRESCIMOS: Record<Role, string[]> = {
   // /crm/rota (17/10/2026): a aba Rota do comercial — tela nova, só dos sócios.
-  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO, "/crm/rota"],
-  manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO],
+  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO, ...CENTRAL_DE_AGENTES, "/crm/rota"],
+  manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO, ...CENTRAL_DE_AGENTES],
   traffic:   ["/settings", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
   social:    ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA, "/saude"],
   designer:  ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],

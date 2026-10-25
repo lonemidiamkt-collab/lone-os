@@ -202,6 +202,7 @@ export async function enriquecerBriefing(mp: MateriaPrimaBriefing): Promise<Open
     `\nMonte o briefing estratégico completo. Fatos só do material acima; diagnóstico você infere do nicho+dores+posicionamento.`;
 
   return chatJson<BriefingEstruturado>({
+    origem: "cs:briefing-estrategico",
     model: ENRIQUECER_MODEL,
     system: SYSTEM,
     user,

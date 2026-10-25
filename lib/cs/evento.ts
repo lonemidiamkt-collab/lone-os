@@ -43,6 +43,7 @@ Responda APENAS no JSON do schema.`;
 export async function detectarEventoFuturo(text: string, hojeISO: string, diaSemana: string): Promise<OpenAiResult<EventoOutput>> {
   const user = `HOJE: ${diaSemana}, ${hojeISO}\n\nMensagem do cliente:\n"${text.slice(0, 800)}"\n\nExtraia o evento futuro (JSON).`;
   return chatJson<EventoOutput>({
+    origem: "cs:evento",
     model: "gpt-4o-mini", schemaName: "cs_evento", schema: SCHEMA,
     maxTokens: 200, temperature: 0.2, system: SYSTEM, user,
   });

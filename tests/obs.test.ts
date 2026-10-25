@@ -83,11 +83,21 @@ describe("uma execução, um id", () => {
     expect(inserts.find((i) => i.tabela === "llm_calls")?.linha).toMatchObject({ run_id: null, origem: "cs:vision", modelo: "gpt-4o", tokens_prompt: 10 });
     inserts.length = 0;
     await comExecucao({ origem: "inbound" }, async (e) => {
-      registrarChamadaLlm({ modelo: "gpt-4o-mini", usage: { prompt_tokens: 10, completion_tokens: 5 }, ms: 50, ok: true });
+      // Dentro da execução do webhook, a etiqueta é a do AGENTE que chamou — não "inbound" (25/10/2026).
+      registrarChamadaLlm({ modelo: "gpt-4o-mini", usage: { prompt_tokens: 10, completion_tokens: 5 }, ms: 50, ok: true, origem: "cs:classificador" });
       await tick();
-      expect(inserts.find((i) => i.tabela === "llm_calls")?.linha).toMatchObject({ run_id: e.id, origem: "inbound" });
+      expect(inserts.find((i) => i.tabela === "llm_calls")?.linha).toMatchObject({ run_id: e.id, origem: "cs:classificador" });
       expect(execucaoAtual()?.llm).toHaveLength(1);
     });
+  });
+
+  it("etiqueta vazia não vira nome de arquivo: grava 'sem-etiqueta' e avisa no log", async () => {
+    const erro = vi.spyOn(console, "error").mockImplementation(() => {});
+    registrarChamadaLlm({ modelo: "gpt-4o-mini", ms: 5, ok: true, origem: "" as never });
+    await tick();
+    expect(inserts.find((i) => i.tabela === "llm_calls")?.linha).toMatchObject({ origem: "sem-etiqueta" });
+    expect(erro).toHaveBeenCalled();
+    erro.mockRestore();
   });
 });
 

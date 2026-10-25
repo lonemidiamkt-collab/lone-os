@@ -11,6 +11,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { registrarChamadaLlm } from "@/lib/obs/llm";
+import type { OrigemIa } from "@/lib/agentes/catalogo";
 
 export interface CandidatoPerfil { username: string; queryId?: string; query?: string }
 
@@ -216,7 +217,7 @@ export function extrairPermalinks(texto: string): { permalink: string; username?
 /** Pergunta à IA com busca web. Só handles — a métrica quem dá é a Meta. */
 
 /** Recibo de uma chamada à Responses API (usage vem como input_/output_tokens, não prompt_/completion_). */
-function reciboResponses(modelo: string, json: Record<string, unknown> | null, t0: number, ok: boolean, origem: string): void {
+function reciboResponses(modelo: string, json: Record<string, unknown> | null, t0: number, ok: boolean, origem: OrigemIa): void {
   const u = (json?.usage ?? null) as { input_tokens?: number; output_tokens?: number; input_tokens_details?: { cached_tokens?: number } } | null;
   registrarChamadaLlm({
     modelo, ms: Date.now() - t0, ok, origem, tipo: "responses",

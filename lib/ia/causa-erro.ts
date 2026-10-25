@@ -9,6 +9,8 @@
 // não reconhece devolve null, e o aviso segue mostrando o erro como ele veio (melhor cru que
 // inventado).
 
+import { agenteDaOrigem } from "@/lib/agentes/catalogo";
+
 export type ChaveCausa = "openai-sem-credito" | "openai-chave-invalida" | "meta-token-vencido";
 
 export interface CausaConhecida {
@@ -78,19 +80,17 @@ export function erroDoResumo(resumo: string | null | undefined): string | null {
   return resumo.trim().startsWith("{") ? null : resumo.trim();
 }
 
-/** Nome que o time entende para cada origem de chamada de IA (llm_calls.origem). */
+/**
+ * Nome que o time entende para cada origem de chamada de IA (llm_calls.origem): o nome do agente no
+ * catálogo (lib/agentes/catalogo.ts). "inbound" é o Loninho inteiro (a execução do webhook); nome de
+ * arquivo ("app/.next/server/…", "lib/cs/…") é chamada de antes da etiqueta obrigatória (25/10/2026).
+ */
 export function rotuloDaOrigem(origem: string | null | undefined): string {
-  const o = (origem ?? "").toLowerCase();
-  if (o === "inbound" || o.includes("/cs/inbound")) return "Loninho lendo as mensagens dos grupos dos clientes";
-  if (o.startsWith("cs:revisao-arte")) return "revisão da arte na entrega";
-  if (o.startsWith("cs:transcribe") || o.startsWith("whisper")) return "transcrição de áudio";
-  if (o.startsWith("cs:vision")) return "leitura das imagens que chegam nos grupos";
-  if (o.includes("morning-briefing")) return "resumo da manhã";
-  if (o.startsWith("prospeccao:")) return "SDR (prospecção)";
-  if (o.startsWith("trafego:") || o.includes("creative-")) return "análise dos criativos do tráfego";
-  if (o.startsWith("radar:")) return "Trend Radar";
-  if (o.startsWith("cliente:estilo")) return "estilo visual dos clientes";
-  if (o.startsWith("social:")) return "pautas do social";
-  if (o.startsWith("cs:")) return "agente CS";
-  return origem || "outras chamadas";
+  const o = (origem ?? "").trim();
+  const agente = agenteDaOrigem(o);
+  if (agente) return agente.nome;
+  const lc = o.toLowerCase();
+  if (lc === "inbound" || lc.includes("/cs/inbound")) return "Loninho lendo as mensagens dos grupos dos clientes";
+  if (!o || lc === "sem-etiqueta" || /^(app|lib|components|stores)\//.test(lc)) return "chamadas sem etiqueta";
+  return o;
 }

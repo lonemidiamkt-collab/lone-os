@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
     const regrasAtuais = (await fetchClientCsRules(clientId)).map((r) => r.texto);
 
     const r = await chatJson<{ regras: { texto: string; tipo: string }[] }>({
+      origem: "cs:releitura",
       model: "gpt-4o-mini",
       schemaName: "releitura_cliente",
       schema: SCHEMA_REGRAS,

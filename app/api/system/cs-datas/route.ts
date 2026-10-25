@@ -76,6 +76,7 @@ export async function POST(req: NextRequest) {
     if (alvo.length === 0) { detalhe.push({ data: d.nome, clientes: 0 }); continue; }
 
     const r = await chatJson<{ ideias: { cliente: string; ideia: string }[] }>({
+      origem: "social:datas-comemorativas",
       model: "gpt-4o-mini", schemaName: "cs_datas_ideias", schema: IDEIAS_SCHEMA,
       maxTokens: 800, temperature: 0.7, system: IDEIAS_SYSTEM,
       user: [

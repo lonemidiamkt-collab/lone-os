@@ -131,6 +131,7 @@ function buildUser(input: BriefingInput): string {
 
 export async function gerarBriefing(input: BriefingInput): Promise<OpenAiResult<BriefingOutput>> {
   return chatJson<BriefingOutput>({
+    origem: "cs:redator-pedido",
     model: A3_MODEL,
     schemaName: "cs_briefing",
     schema: A3_SCHEMA,

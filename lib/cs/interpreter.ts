@@ -124,6 +124,7 @@ export async function interpretarResposta(inp: InterpInput): Promise<OpenAiResul
     `--- Resposta da equipe no grupo ---\n"${inp.mensagemEquipe}"\n\n` +
     `Entenda a intenção e responda no JSON.`;
   return chatJson<InterpOutput>({
+    origem: "cs:leitor-resposta-time",
     model: INTERP_MODEL,
     schemaName: "cs_interpretacao",
     schema: INTERP_SCHEMA,

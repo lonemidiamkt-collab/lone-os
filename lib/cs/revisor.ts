@@ -102,6 +102,7 @@ export async function revisarComoCS(p: PedidoRevisao): Promise<RevisaoCS> {
   ].filter(Boolean).join("\n");
 
   const r = await chatJson<RevisaoCS>({
+    origem: "cs:revisor",
     model: "gpt-4o-mini", system: SYSTEM, user,
     schema: SCHEMA, schemaName: "revisao_cs", maxTokens: 700, temperature: 0.2,
   });

@@ -10,6 +10,7 @@
 
 import { chatJson } from "@/lib/ai/openai";
 import { registrarChamadaLlm } from "@/lib/obs/llm";
+import type { OrigemIa } from "@/lib/agentes/catalogo";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { escolherArtes } from "@/lib/traffic/estilo-automatico";
 import { candidatasDoCliente } from "@/lib/traffic/estilo-ler";
@@ -36,7 +37,8 @@ export interface PedidoArte {
   pedido?: string | null;
   n?: number;
   qualidade?: "medium" | "high";
-  origem: string;
+  /** Etiqueta da chamada de IA (o mesmo nome vai para ia_geracoes.origem). */
+  origem: OrigemIa;
 }
 
 const ehImagem = (u: string | null | undefined): u is string => !!u && /\.(png|jpe?g|webp)(\?|$)/i.test(u);
@@ -61,7 +63,7 @@ export async function kitDoCliente(clientId: string): Promise<KitDoCliente> {
 }
 
 /** Transcreve os textos que estão NA IMAGEM (preço, produto, chamada) — para a variação não inventar. */
-export async function textosDaImagem(url: string, origem: string): Promise<string[]> {
+export async function textosDaImagem(url: string, origem: OrigemIa): Promise<string[]> {
   const r = await chatJson<{ textos: string[] }>({
     model: "gpt-4o-mini", schemaName: "textos_imagem", maxTokens: 400, temperature: 0,
     schema: { type: "object", additionalProperties: false, properties: { textos: { type: "array", maxItems: 20, items: { type: "string" } } }, required: ["textos"] },

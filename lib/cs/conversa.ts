@@ -227,6 +227,7 @@ export async function conversarComEquipe(inp: ConversaInput): Promise<OpenAiResu
     `Responda no seu tom (JSON). Não repita o que você já disse no histórico acima.`,
   ].filter(Boolean).join("\n");
   return chatJson<ConversaOutput>({
+    origem: "cs:conversa",
     model: CONVERSA_MODEL, schemaName: "cs_conversa", schema: SCHEMA,
     maxTokens: 300, temperature: inp.descontraido ? 0.75 : 0.6,
     system: `${base}\n\n${inp.descontraido ? SYSTEM + DESCONTRAIDO : SYSTEM}`, user,

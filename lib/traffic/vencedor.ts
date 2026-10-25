@@ -85,7 +85,7 @@ export async function roteiroDaVariacao(p: { briefing: BriefingCliente; preferen
   const res = await gerarRoteiros({
     briefing: p.briefing, preferencias: p.preferencias, estagioFunil: "meio",
     pedido: `Variação "${p.variacao.nome}" do anúncio vencedor — muda só: ${p.variacao.muda}. Mantém: ${p.variacao.mantem}.`,
-    contexto,
+    contexto, origem: "trafego:vencedor",
   });
   if (!res.ok || !res.data || res.data.precisa_briefing || !res.data.roteiros.length) return null;
   return [...res.data.roteiros].sort((a, b) => b.scorecard - a.scorecard)[0];

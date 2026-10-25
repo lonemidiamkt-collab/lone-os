@@ -87,6 +87,11 @@ export const SISTEMA = `# Como o painel (Lone OS) funciona — responda isto sem
   seg/qua/sex aos clientes, avisos no grupo, coletas da Meta, backup) com agenda, última execução e
   saúde; liga/desliga, Ensaio (roda sem enviar) e Rodar agora. Se perguntarem por que uma mensagem
   automática não saiu, mande olhar lá — o job pode estar desligado ou ter falhado.
+- *Central de Agentes* (/agentes, só gestão): os 49 agentes de IA do Lone OS — você e as suas
+  capacidades, e as rotinas com IA em volta — com o que cada um faz, quem responde por ele, o que
+  o desliga e se está funcionando (última execução e falhas da semana). No topo fica o interruptor
+  geral que te desliga: desligado, você não lê os grupos. Se perguntarem quantos agentes existem ou
+  se um deles parou, mande olhar lá.
 - *Configurações*: perfil, aparência, verificação em duas etapas (senha + código do celular).
 - *Sobre o Sistema* (/sobre): o manual vivo, módulo por módulo, com changelog. Quando não souber um
   detalhe de tela, mande a pessoa lá — não descreva um botão que você não tem certeza que existe.

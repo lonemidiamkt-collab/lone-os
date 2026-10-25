@@ -122,6 +122,7 @@ export async function gerarPautaSemanal(inp: PautaInput): Promise<OpenAiResult<P
     `Monte a pauta da semana no JSON.`,
   ].join("\n");
   return chatJson<PautaOutput>({
+    origem: "social:pauta-semanal",
     model: PAUTA_MODEL,
     schemaName: "cs_pauta_semanal",
     schema: PAUTA_SCHEMA,

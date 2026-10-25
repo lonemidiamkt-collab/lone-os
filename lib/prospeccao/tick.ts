@@ -78,7 +78,7 @@ export async function rodarTick(cfg: ProspectConfig, campanha: CampanhaRow | nul
         await definirProximaAcao(p.id, tipo === "24h" ? { type: "LEMBRETE_1H", at: isoSP(new Date(reuniao.getTime() - 3600_000)), owner: "SDR_AI", reason: "Lembrete 1h antes" } : { type: "REGISTRAR_RESULTADO", at: isoSP(new Date(reuniao.getTime() + 2 * 3600_000)), owner: "ROBERTO", reason: "Registrar o resultado" });
         continue;
       }
-      const ctxRed = { p, cfg, agora, origem: `prospeccao:lembrete_${tipo}` };
+      const ctxRed = { p, cfg, agora, origem: `prospeccao:lembrete_${tipo}` as const };
       const texto = tipo === "24h" ? await lembrete24h(ctxRed, p.reuniao_em!) : await lembrete1h(ctxRed, p.reuniao_em!);
       const r = await enviarAoProspect(p, texto, { autor: "agente", delayMs: 2000, estagio_antes: p.estagio, dry: o.dry });
       // O "sim" do prospect ao lembrete de véspera é respondido pela Rafaela (passo "lembrete").

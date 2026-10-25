@@ -1,10 +1,17 @@
 // lib/obs/llm.ts — cada chamada de modelo deixa um recibo: modelo, tokens, custo, quanto demorou,
 // de onde veio e em qual execução. Alimenta a execução aberta (agent_runs) e a tabela llm_calls,
-// que existe mesmo sem execução — 47 pontos chamam a OpenAI e nem todos rodam dentro de um
-// comExecucao() ainda.
+// que existe mesmo sem execução — nem todo ponto que chama a OpenAI roda dentro de um comExecucao().
+//
+// ETIQUETA OBRIGATÓRIA (25/10/2026). Até aqui, chamada sem rótulo ganhava o nome do arquivo que
+// aparecia na pilha. No servidor de produção a pilha é a do código COMPILADO, então o nome saía como
+// "app/.next/server/app/api/ai/morning-briefing/route" — ~1.400 chamadas por mês com o nome de uma
+// tela que nem está montada (eram, por exemplo, a Releitura de domingo). Agora `origem` é a etiqueta
+// do agente no catálogo (lib/agentes/catalogo.ts): o tipo não aceita outra e
+// tests/agentes-etiqueta.test.ts quebra se alguma chamada sair sem.
 
 import { execucaoAtual, registrarUsoLlm } from "@/lib/obs/correlacao";
 import { custoUsd, precoDe, type UsageOpenAi } from "@/lib/obs/preco-llm";
+import type { OrigemIa } from "@/lib/agentes/catalogo";
 
 export interface ChamadaLlm {
   modelo: string;
@@ -12,22 +19,14 @@ export interface ChamadaLlm {
   ms: number;
   ok: boolean;
   erro?: string | null;
-  /** Quem chamou ("cs:classificar", "radar:descoberta"). Sem isso, a origem da execução, ou "?". */
-  origem?: string | null;
+  /** Quem chamou: a etiqueta do agente no catálogo ("cs:classificador", "radar:candidatos"). */
+  origem: OrigemIa;
   /** Endpoint: chat | responses | transcription | vision. */
   tipo?: string;
 }
 
-// ORIGEM PELA PILHA (16/09): 66 chamadas de gpt-4o em 3 dias chegaram sem origem nem execução —
-// a fatia mais cara ficou anônima. Sem rótulo, o arquivo que chamou vira a origem ("lib/cs/cobranca").
-function origemDaPilha(): string | null {
-  const pilha = new Error().stack ?? "";
-  for (const linha of pilha.split("\n").slice(1)) {
-    const m = linha.match(/\/(lib|app|tests|stores|components)\/([^:)]+?)\.(?:ts|tsx|js)/);
-    if (m && !m[2].startsWith("obs/") && !m[2].startsWith("ai/openai")) return `${m[1]}/${m[2]}`;
-  }
-  return null;
-}
+/** O que vai para llm_calls quando, mesmo assim, a etiqueta chega vazia (só por código sem tipo). */
+export const SEM_ETIQUETA = "sem-etiqueta";
 
 /** Custo por chamada de modelos cobrados por unidade, não por token (US$). Estimativa. */
 // gpt-4o-mini-tts: ~US$ 0,015 por minuto de áudio; um aviso falado tem 5–10 s (lib/avisos/audio-server.ts).
@@ -49,7 +48,7 @@ export function registrarChamadaLlm(c: ChamadaLlm): void {
   });
   void gravar({
     run_id: e?.id ?? null,
-    origem: c.origem ?? e?.origem ?? origemDaPilha(),
+    origem: etiquetaDa(c.origem),
     tipo: c.tipo ?? "chat",
     modelo: c.modelo,
     tokens_prompt: u.prompt_tokens ?? 0,
@@ -61,6 +60,13 @@ export function registrarChamadaLlm(c: ChamadaLlm): void {
     ok: c.ok,
     erro: c.erro ? String(c.erro).slice(0, 300) : null,
   });
+}
+
+function etiquetaDa(origem: string | null | undefined): string {
+  const o = (origem ?? "").trim();
+  if (o) return o;
+  console.error("[llm] chamada de IA sem etiqueta — toda chamada precisa da etiqueta do agente (lib/agentes/catalogo.ts)");
+  return SEM_ETIQUETA;
 }
 
 async function gravar(linha: Record<string, unknown>): Promise<void> {

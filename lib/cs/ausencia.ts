@@ -22,6 +22,7 @@ const SCHEMA: Record<string, unknown> = {
 /** Extrai {nome, disponivel, ate} da mensagem. `hojeISO` ancora datas relativas ("até dia 15"). */
 export async function parseAusencia(text: string, hojeISO: string): Promise<{ nome: string | null; disponivel: boolean; ate: string | null; falhou?: boolean }> {
   const res = await chatJson<{ nome: string | null; disponivel: boolean; ate: string | null }>({
+    origem: "cs:ausencia",
     model: "gpt-4o-mini", schemaName: "cs_ausencia", schema: SCHEMA, maxTokens: 120, temperature: 0,
     system:
       `Hoje é ${hojeISO}. Extraia da mensagem da equipe quem da equipe está saindo de FÉRIAS/AUSÊNCIA ou ` +

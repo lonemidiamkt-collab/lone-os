@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < lote.length; i += 40) {
       const chunk = lote.slice(i, i + 40);
       const r = await chatJson<{ itens: { i: number; manter: boolean; tipo: string }[] }>({
+        origem: "cs:faxina-regras",
         model: "gpt-4o-mini", schemaName: "faxina_regras", schema: SCHEMA_TRIAGEM,
         maxTokens: 1500, temperature: 0,
         system:

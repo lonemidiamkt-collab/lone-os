@@ -5,6 +5,7 @@
 // não há cache_control). Usado pelo Agente CS (A1 = gpt-4o-mini).
 
 import { registrarChamadaLlm } from "@/lib/obs/llm";
+import type { OrigemIa } from "@/lib/agentes/catalogo";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -45,8 +46,11 @@ export interface ChatJsonParams {
    * miniatura de vídeo; usar isso é a diferença entre adivinhar e ver.
    */
   imagens?: string[];
-  /** Quem está chamando ("cs:classificar"). Vai para llm_calls; sem isso, a origem da execução. */
-  origem?: string;
+  /**
+   * Quem está chamando: a etiqueta do agente no catálogo (lib/agentes/catalogo.ts). Obrigatória — sem
+   * ela a chamada caía no nome do arquivo compilado, e ~1.400 por mês apareciam como "morning-briefing".
+   */
+  origem: OrigemIa;
 }
 
 /** Modelos que usam o contrato novo de parâmetros (max_completion_tokens, sem temperature livre). */

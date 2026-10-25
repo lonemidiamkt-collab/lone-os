@@ -174,6 +174,7 @@ export async function redigirProcesso(inp: EntradaRedator): Promise<OpenAiResult
   ].filter(Boolean).join("\n");
 
   return chatJson<ProcessoRascunho>({
+    origem: "gestao:redator-processos",
     model: "gpt-4o-mini", system: SYSTEM, user,
     schema: SCHEMA, schemaName: "processo", maxTokens: 3500, temperature: 0.3,
   });

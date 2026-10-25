@@ -294,6 +294,7 @@ export async function classifyBlock(
   ctx: ClassifierContext,
 ): Promise<OpenAiResult<CsClassifierOutput>> {
   return chatJson<CsClassifierOutput>({
+    origem: "cs:classificador",
     model: A1_MODEL,
     schemaName: "cs_classificacao",
     schema: A1_SCHEMA,

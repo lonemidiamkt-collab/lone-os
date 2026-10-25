@@ -87,7 +87,7 @@ describe("a IA está fora?", () => {
     expect(r?.falhas).toBe(10);
     expect(r?.porFrente[0]).toEqual({ rotulo: "Loninho lendo as mensagens dos grupos dos clientes", falhas: 7 });
     // O áudio devolve só "HTTP 429": não decide a causa, mas conta no que parou.
-    expect(r?.porFrente.map((f) => f.rotulo)).toContain("transcrição de áudio");
+    expect(r?.porFrente.map((f) => f.rotulo)).toContain("Transcrição de áudio");
   });
 
   it("duas falhas podem ser azar; não avisa", () => {
@@ -191,10 +191,12 @@ describe("aviso do vigia", () => {
 });
 
 describe("rótulo das frentes", () => {
-  it("o time lê o nome da coisa, não a origem técnica", () => {
+  it("o time lê o nome do agente no catálogo, não a origem técnica", () => {
     expect(rotuloDaOrigem("inbound")).toBe("Loninho lendo as mensagens dos grupos dos clientes");
-    expect(rotuloDaOrigem("app/.next/server/app/api/ai/morning-briefing/route")).toBe("resumo da manhã");
-    expect(rotuloDaOrigem("prospeccao:descoberta")).toBe("SDR (prospecção)");
+    expect(rotuloDaOrigem("cs:revisao-arte")).toBe("Revisor de arte");
+    expect(rotuloDaOrigem("prospeccao:descoberta")).toBe("SDR Rafaela");
+    // Antes da etiqueta obrigatória (25/10/2026) a origem vinha do arquivo compilado: não é o Morning Briefing.
+    expect(rotuloDaOrigem("app/.next/server/app/api/ai/morning-briefing/route")).toBe("chamadas sem etiqueta");
     expect(rotuloDaOrigem("algo-novo")).toBe("algo-novo");
   });
 });

@@ -42,6 +42,7 @@ export async function aprenderDaCorrecao(inp: EntradaCorrecao): Promise<RegraExt
   ].filter(Boolean).join("\n");
 
   const r = await chatJson<{ regras: { texto: string; tipo: string }[] }>({
+    origem: "cs:aprende-correcao",
     model: "gpt-4o-mini",
     schemaName: "regra_da_correcao",
     schema: SCHEMA_REGRAS,

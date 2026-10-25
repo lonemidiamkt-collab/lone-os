@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
 
       try {
         const resp = await chatJson<{ nicho: string; confianca: string }>({
+          origem: "cs:nichos",
           model: "gpt-4o-mini", schemaName: "nicho_cliente", schema: SCHEMA,
           maxTokens: 60, temperature: 0,
           system: "Você classifica o RAMO DE ATUAÇÃO de uma empresa a partir do material dado. " +

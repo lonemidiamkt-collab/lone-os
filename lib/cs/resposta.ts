@@ -59,6 +59,7 @@ export async function sugerirResposta(inp: RespostaInput): Promise<OpenAiResult<
     `Escreva a resposta pronta pra equipe enviar (no JSON).`,
   ].filter(Boolean).join("\n");
   return chatJson<RespostaOutput>({
+    origem: "cs:rascunho-resposta",
     model: "gpt-4o-mini", schemaName: "cs_resposta", schema: SCHEMA,
     maxTokens: 220, temperature: 0.5, system: SYSTEM, user,
   });

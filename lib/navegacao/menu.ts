@@ -19,7 +19,7 @@ import {
   AlertTriangle, Target, FileSignature,
   Radar, ListOrdered, Building2, MessageSquare, Settings2, BarChart3,
   Lock, Zap, Info, CalendarCheck, ShoppingBag, DatabaseZap, MapPin,
-  Trophy,
+  Trophy, BrainCircuit,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/types";
@@ -297,6 +297,9 @@ export const MENU: readonly GrupoMenu[] = [
     itens: [
       { id: "automacoes", rotulo: "Central de Automações", icone: Zap, href: "/automations", papeis: GESTAO,
         descricao: "Rotinas agendadas do servidor", termos: ["automações", "cron"] },
+      { id: "agentes", rotulo: "Central de Agentes", icone: BrainCircuit, href: "/agentes", papeis: GESTAO,
+        descricao: "Os agentes de IA: o que fazem, o que os desliga e se estão funcionando",
+        termos: ["agentes", "ia", "inteligência artificial", "loninho", "openai", "desligar loninho"] },
       // Leva 4: a única integração real (as outras 10 de /integrations eram simuladas). Saiu do Tráfego
       // para cá; /integrations redireciona e continua acendendo este item.
       { id: "conexao-meta", rotulo: "Conexão Meta", icone: Plug, href: "/conexao-meta", papeis: TRAFEGO,

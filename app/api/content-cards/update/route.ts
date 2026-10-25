@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── CONFERE A ARTE CONTRA AS REGRAS DO CLIENTE, NA ENTREGA ───────────────
-    // A verificação existia (api/cs/verificar-arte-regras) e NUNCA era chamada — zero notificações
+    // A verificação existia (api/cs/verificar-arte-regras, apagada em 25/10/2026) e NUNCA era chamada — zero notificações
     // na base inteira. É aqui que ela faz sentido: no instante em que o designer marca a entrega,
     // antes da peça ir pro cliente. Se o cliente já corrigiu o endereço uma vez, essa regra está
     // guardada e o time é avisado ANTES de errar de novo.

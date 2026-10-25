@@ -17,7 +17,8 @@ import { podeAgir, numerosDaEquipe } from "@/lib/cs/autoridade";
 import { textoSemAutoridade, type AcaoDoTime } from "@/lib/cs/autoridade-comandos";
 import { marcarTarefaPeloAviso, lembrarMensagem, ehCitacaoDeTarefa, responderCitacaoDeTarefa, type ResultadoAviso } from "@/lib/tarefas/auto-marcar-server";
 import { respostaPrometeMarcar, textoNaoAchei, textoSemPermissao } from "@/lib/tarefas/auto-marcar";
-import { comExecucao, definirAtor } from "@/lib/obs/correlacao";
+import { comExecucao, definirAtor, anotar } from "@/lib/obs/correlacao";
+import { loninhoPodeLer } from "@/lib/agentes/loninho-server";
 import { ehDm, tratarDmProspeccao } from "@/lib/prospeccao/inbound";
 import { ehGrupoVendas, tratarGrupoVendas } from "@/lib/crm/assistente-server";
 import { ehPedidoPrioridades, formatarTop } from "@/lib/priority/comando";
@@ -966,6 +967,18 @@ async function processarInbound(req: NextRequest) {
   const msg = parseUpsert(payload);
   if (!msg) return NextResponse.json({ ok: true, skip: "não é mensagem de grupo com texto" });
   if (msg.fromMe) return NextResponse.json({ ok: true, skip: "própria mensagem" });
+
+  // ─── INTERRUPTOR GERAL (25/10/2026): desligado na Central de Agentes, o Loninho não lê nada dos
+  // grupos — cliente, time e vendas. Vem antes do claim e de qualquer IA: nada é gasto nem respondido.
+  // A releitura da fila de não lidas recebe "não classificou" e a mensagem continua na fila.
+  const portao = await loninhoPodeLer();
+  if (!portao.ler) {
+    console.log(`[CS/inbound] ${portao.motivo} — ignorada (grupo=${msg.groupJid})`);
+    anotar(portao.motivo);
+    return req.headers.get("x-cs-releitura") === "1"
+      ? NextResponse.json({ ok: true, classified: false, reason: portao.motivo })
+      : NextResponse.json({ ok: true, skip: portao.motivo });
+  }
   // Quem é da equipe vem de team_members (a mesma fonte da autoridade), não mais só do .env.
   const equipeJids = await numerosDaEquipe();
 

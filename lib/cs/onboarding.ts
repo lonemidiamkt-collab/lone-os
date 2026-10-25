@@ -18,6 +18,7 @@ const TRIGGER_SCHEMA: Record<string, unknown> = {
 /** Extrai {cliente, grupo} da mensagem de gatilho (texto livre). */
 export async function parseOnboardingTrigger(text: string): Promise<{ cliente: string | null; grupo: string | null }> {
   const res = await chatJson<{ cliente: string | null; grupo: string | null }>({
+    origem: "cs:onboarding",
     model: "gpt-4o-mini", schemaName: "cs_onboarding_trigger", schema: TRIGGER_SCHEMA,
     maxTokens: 120, temperature: 0,
     system:
@@ -115,6 +116,7 @@ export async function estruturarBriefing(
 ): Promise<OpenAiResult<BriefingEstruturado>> {
   const conversa = qa.map((x) => `P: ${x.pergunta}\nR: ${x.resposta}`).join("\n\n");
   return chatJson<BriefingEstruturado>({
+    origem: "cs:onboarding",
     model: "gpt-4o",
     schemaName: "cs_onboarding_briefing",
     schema: BRIEFING_SCHEMA,

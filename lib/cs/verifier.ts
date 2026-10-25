@@ -86,6 +86,7 @@ export async function verificarDemanda(inp: VerifierInput): Promise<OpenAiResult
     `Mensagem completa do cliente: "${inp.mensagemOriginal}"\n\n` +
     `É MESMO uma demanda acionável para a Lone? Seja cético.`;
   return chatJson<VerifierOutput>({
+    origem: "cs:verificador",
     model: A2_MODEL,
     schemaName: "cs_verificacao",
     schema: A2_SCHEMA,

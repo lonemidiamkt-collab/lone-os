@@ -3,6 +3,7 @@
 // A lógica já existia em app/api/cs/verificar-arte-regras/route.ts desde que foi escrita — e NUNCA
 // foi chamada por lugar nenhum: zero notificações geradas na base inteira. O núcleo saiu da rota
 // pra cá para poder rodar do servidor, sem sessão de usuário, no momento em que o designer entrega.
+// A rota antiga continuou sem uso e foi apagada na faxina dos agentes (25/10/2026).
 //
 // É a segunda metade do pedido do Roberto: o agente aprende a regra na correção do cliente
 // (lib/cs/aprender-correcao.ts) e a COBRA aqui, antes da peça chegar ao cliente de novo.
