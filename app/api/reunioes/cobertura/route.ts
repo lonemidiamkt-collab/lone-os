@@ -23,7 +23,12 @@ export async function GET(req: NextRequest) {
     ? par
     : `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}`;
 
-  const carteira = await saudeDaCarteira(mes, agora);
+  // 25/10/2026 (auditoria 6.2): leitura que falha responde 500 com o motivo — antes era ok:true com todo cliente
+  // "sem reunião" (cobertura 0%). A tela já tinha o texto "Não consegui calcular a cobertura".
+  let carteira: Awaited<ReturnType<typeof saudeDaCarteira>>;
+  try { carteira = await saudeDaCarteira(mes, agora); } catch (e) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500, headers: { "cache-control": "no-store" } });
+  }
 
   return NextResponse.json({
     ok: true,

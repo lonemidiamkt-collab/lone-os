@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Info, RotateCcw, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROTULO_STATUS, formatarValorMeta, mesCurto, type StatusMeta } from "@/lib/goals/catalogo";
+import { lerAlvoDigitado } from "@/lib/goals/alvo";
 import type { MetaPainel } from "@/lib/goals/metas-server";
 
 const ESTILO_STATUS: Record<StatusMeta, { selo: string; barra: string }> = {
@@ -52,12 +53,22 @@ export default function CartaoMeta({ m, nomeMesAtual, editando, onSalvar, onPadr
   /** "setembro" — o rótulo do parcial. */
   nomeMesAtual: string;
   editando: boolean;
-  onSalvar: (chave: string, alvo: number) => void;
+  onSalvar: (chave: string, alvo: number) => void | Promise<void>;
   onPadrao: (chave: string) => void;
   salvando: boolean;
 }) {
   const [rascunho, setRascunho] = useState(String(m.alvo));
   const f = m.fechado;
+  // Enter e botão passam pela MESMA porta (25/10/2026, auditoria 7.1): antes o Enter salvava o campo vazio como 0,
+  // ignorava o "salvando" e, em meta "quanto mais, melhor", alvo 0 virava "batida 100%". O motivo de não salvar
+  // aparece embaixo do campo, enquanto se digita.
+  const leitura = lerAlvoDigitado(rascunho, m);
+  const erroAlvo = leitura.tipo === "erro" ? leitura.motivo : null;
+  const salvar = () => {
+    if (salvando || leitura.tipo !== "salvar") return;
+    if (leitura.confirmar && !window.confirm(leitura.confirmar)) return;
+    void onSalvar(m.chave, leitura.valor);
+  };
   const estilo = ESTILO_STATUS[f.status];
 
   return (
@@ -102,10 +113,11 @@ export default function CartaoMeta({ m, nomeMesAtual, editando, onSalvar, onPadr
           </label>
           <input id={`alvo-${m.chave}`} type="number" inputMode="decimal" min={0} step={m.casas ? 0.1 : 1}
             value={rascunho} onChange={(e) => setRascunho(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") onSalvar(m.chave, Number(rascunho)); }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); salvar(); } }}
+            aria-invalid={!!erroAlvo} aria-describedby={erroAlvo ? `alvo-erro-${m.chave}` : undefined}
             className="h-8 w-24 rounded-md border border-input bg-background px-2 text-sm tabular-nums text-foreground outline-none focus:border-primary" />
-          <button type="button" disabled={salvando || rascunho.trim() === "" || Number(rascunho) === m.alvo}
-            onClick={() => onSalvar(m.chave, Number(rascunho))}
+          <button type="button" disabled={salvando || leitura.tipo !== "salvar"}
+            onClick={salvar}
             className="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
             <Save size={12} aria-hidden /> Salvar
           </button>
@@ -115,6 +127,7 @@ export default function CartaoMeta({ m, nomeMesAtual, editando, onSalvar, onPadr
               <RotateCcw size={12} aria-hidden /> Padrão
             </button>
           )}
+          {erroAlvo && <p id={`alvo-erro-${m.chave}`} role="alert" className="w-full text-lone-caption text-lone-danger">{erroAlvo}</p>}
         </div>
       )}
     </div>

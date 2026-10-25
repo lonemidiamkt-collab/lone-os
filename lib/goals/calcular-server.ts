@@ -38,6 +38,8 @@ export interface CalculoDoMes {
   mes: string;
   valores: Record<string, ValorMeta>;
   falhas: string[];
+  /** Metas cuja fonte NÃO foi lida (25/10/2026, 7.2): o fechamento não grava essas — "não consegui ler" não é resultado. */
+  chavesComFalha: string[];
 }
 
 export async function calcularMetasDoMes(mes: string, agora = new Date()): Promise<CalculoDoMes> {
@@ -46,11 +48,15 @@ export async function calcularMetasDoMes(mes: string, agora = new Date()): Promi
   const tsFim = new Date(`${fim}T23:59:59-03:00`).toISOString();
   const hoje = hojeSP(agora);
   const falhas: string[] = [];
+  const chavesComFalha = new Set<string>();
   const v: Record<string, ValorMeta> = {};
   const falhou = (fonte: string, chaves: string[], e: unknown) => {
     const m = erroDe(e);
     falhas.push(`${fonte}: ${m}`);
-    for (const k of chaves) v[k] = semFonte(tabelaFaltando(m) ? `${fonte} ainda não existe no banco` : `não consegui ler ${fonte} agora`);
+    for (const k of chaves) {
+      v[k] = semFonte(tabelaFaltando(m) ? `${fonte} ainda não existe no banco` : `não consegui ler ${fonte} agora`);
+      chavesComFalha.add(k);
+    }
   };
 
   // ── Clientes ──────────────────────────────────────────────────────────────
@@ -114,6 +120,7 @@ export async function calcularMetasDoMes(mes: string, agora = new Date()): Promi
           : "não consegui ler o tráfego agora";
         v.conversas_mes = semFonte(motivo);
         v.custo_por_conversa = semFonte(motivo);
+        chavesComFalha.add("conversas_mes"); chavesComFalha.add("custo_por_conversa");
         return;
       }
       const t = (data ?? null) as { conversas?: number; investido?: number; contas?: number } | null;
@@ -197,5 +204,5 @@ export async function calcularMetasDoMes(mes: string, agora = new Date()): Promi
     })(),
   ]);
 
-  return { mes, valores: v, falhas };
+  return { mes, valores: v, falhas, chavesComFalha: [...chavesComFalha] };
 }

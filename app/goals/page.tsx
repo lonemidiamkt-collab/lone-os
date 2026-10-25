@@ -64,10 +64,16 @@ export default function GoalsPage() {
     return () => { vivo = false; };
   }, [recarga]);
 
+  // Trava síncrona (25/10/2026, auditoria 7.1): dois Enter seguidos chegavam antes do "salvando" re-renderizar e criavam
+  // duas linhas em `okrs`. O ref fecha a porta na hora; o estado só desenha o botão desligado.
+  const salvandoRef = useRef(false);
   const salvarAlvo = useCallback(async (chave: string, alvo: number) => {
+    if (salvandoRef.current) return;
     if (!Number.isFinite(alvo) || alvo < 0) { toast.error("Informe um número válido."); return; }
+    salvandoRef.current = true;
     setSalvando(true);
     const r = await chamar("/api/goals", { chave, alvo }, { method: "PUT" });
+    salvandoRef.current = false;
     setSalvando(false);
     if (!r.ok) { toast.error(r.erro ?? "Não consegui salvar a meta."); return; }
     toast.success("Meta atualizada.");
@@ -75,8 +81,11 @@ export default function GoalsPage() {
   }, []);
 
   const voltarPadrao = useCallback(async (chave: string) => {
+    if (salvandoRef.current) return;
+    salvandoRef.current = true;
     setSalvando(true);
     const r = await chamar(`/api/goals?chave=${encodeURIComponent(chave)}`, undefined, { method: "DELETE" });
+    salvandoRef.current = false;
     setSalvando(false);
     if (!r.ok) { toast.error(r.erro ?? "Não consegui voltar ao padrão."); return; }
     toast.success("Meta de volta ao padrão.");
@@ -84,17 +93,26 @@ export default function GoalsPage() {
   }, []);
 
   // ── Indicadores ao vivo do mês corrente (qualidade de tráfego + relacionamento) ─
+  // 25/10/2026 (auditoria 7.4): campo sem fonte vem null e vira "—"; a falha (inteira ou de uma fonte) aparece com
+  // "Tentar de novo". Antes a rota caía em zeros: "Sem contato +15d: 0 de 0" em verde, "Contas no orçamento 0%".
   type RealTraffic = {
-    investmentExecutedPct: number; isReal: boolean; accountsWithinBudgetPct: number; accountsCounted: number;
-    ctrPct: number; impressionsMonth: number; trafficQualIsReal: boolean;
-    activeClients: number; staleContacts: number;
+    investmentExecutedPct: number | null; isReal: boolean; accountsWithinBudgetPct: number | null; accountsCounted: number | null;
+    ctrPct: number | null; impressionsMonth: number | null; trafficQualIsReal: boolean;
+    activeClients: number | null; staleContacts: number | null; falhas?: string[];
   };
   const [realTraffic, setRealTraffic] = useState<RealTraffic | null>(null);
+  const [erroAoVivo, setErroAoVivo] = useState<string | null>(null);
+  const [recargaAoVivo, setRecargaAoVivo] = useState(0);
   useEffect(() => {
     let alive = true;
-    chamar<RealTraffic>("/api/okr/traffic-metrics").then((r) => { if (alive && r.ok && r.data) setRealTraffic(r.data); });
+    chamar<RealTraffic>("/api/okr/traffic-metrics").then((r) => {
+      if (!alive) return;
+      if (!r.ok || !r.data) { setErroAoVivo(r.erro ?? "o servidor não devolveu os indicadores"); return; }
+      setErroAoVivo(null);
+      setRealTraffic(r.data);
+    });
     return () => { alive = false; };
-  }, []);
+  }, [recargaAoVivo]);
 
   const resumo = useMemo(() => {
     if (!painel) return null;
@@ -208,6 +226,11 @@ export default function GoalsPage() {
         </div>
 
         {/* ─── Avisos: de onde vêm os números ─────────────────────── */}
+        {/* Fonte que falhou no cálculo das metas (25/10/2026, 7.5): antes `painel.falhas` nunca aparecia e o alvo padrão
+            passava pelo configurado. */}
+        {!!painel?.falhas.length && (
+          <AvisoFalha texto={`Parte das metas não foi lida: ${painel.falhas.join("; ")}.`} onTentar={() => setRecarga((n) => n + 1)} />
+        )}
         {erroMetas && (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-lone-danger" role="alert">
             <AlertTriangle size={13} className="shrink-0" />
@@ -219,7 +242,9 @@ export default function GoalsPage() {
         )}
         {painel && !painel.fechadoGravado && (
           <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
-            {painel.historicoExiste
+            {painel.historicoErro
+              ? <>Não consegui ler o histórico gravado agora — os números de <span className="capitalize">{nomeFechado}</span> foram calculados na hora, da mesma fonte, e os meses anteriores aparecem sem dado.</>
+              : painel.historicoExiste
               ? <>O fechamento de <span className="capitalize">{nomeFechado}</span> ainda não foi gravado (o job roda no dia 1º, 7h). Os números abaixo foram calculados agora, da mesma fonte.</>
               : <>O histórico mês a mês começa quando a migration das metas for aplicada e o fechamento rodar. Por enquanto, <span className="capitalize">{nomeFechado}</span> é calculado na hora, da fonte.</>}
           </p>
@@ -272,17 +297,24 @@ export default function GoalsPage() {
         )}
 
         {/* ─── Indicadores ao vivo do mês corrente ────────────────── */}
+        {erroAoVivo && <AvisoFalha texto={`Não consegui carregar os indicadores ao vivo: ${erroAoVivo}`} onTentar={() => setRecargaAoVivo((n) => n + 1)} />}
+        {!!realTraffic?.falhas?.length && (
+          <AvisoFalha texto={`Parte dos indicadores ao vivo não foi lida (${realTraffic.falhas.join("; ")}). Os cartões dessas fontes mostram "—".`} onTentar={() => setRecargaAoVivo((n) => n + 1)} />
+        )}
         {realTraffic && (
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {(() => {
-              const staleRatio = realTraffic.activeClients > 0 ? realTraffic.staleContacts / realTraffic.activeClients : 0;
-              const staleTone = staleRatio >= 0.5 ? "text-destructive" : staleRatio >= 0.25 ? "text-lone-warning" : "text-lone-success";
-              const budgetTone = realTraffic.accountsWithinBudgetPct >= 90 ? "text-lone-success" : realTraffic.accountsWithinBudgetPct >= 70 ? "text-lone-warning" : "text-destructive";
+              const temContato = realTraffic.staleContacts != null && realTraffic.activeClients != null && realTraffic.activeClients > 0;
+              const staleRatio = temContato ? (realTraffic.staleContacts as number) / (realTraffic.activeClients as number) : null;
+              const staleTone = staleRatio == null ? "text-muted-foreground" : staleRatio >= 0.5 ? "text-destructive" : staleRatio >= 0.25 ? "text-lone-warning" : "text-lone-success";
+              const orc = realTraffic.accountsWithinBudgetPct;
+              const budgetTone = orc == null ? "text-muted-foreground" : orc >= 90 ? "text-lone-success" : orc >= 70 ? "text-lone-warning" : "text-destructive";
+              const traco = (v: number | null, f: (n: number) => string) => (v == null ? "—" : f(v));
               const tiles = [
-                { label: "CTR médio", value: realTraffic.trafficQualIsReal ? `${realTraffic.ctrPct.toLocaleString("pt-BR")}%` : "—", sub: "cliques ÷ impressões · mês corrente", tone: "text-foreground" },
-                { label: "Impressões", value: realTraffic.trafficQualIsReal ? realTraffic.impressionsMonth.toLocaleString("pt-BR") : "—", sub: "mês corrente, sem repetir captura", tone: "text-foreground" },
-                { label: "Contas no orçamento", value: `${realTraffic.accountsWithinBudgetPct}%`, sub: `${realTraffic.accountsCounted} contas ativas`, tone: budgetTone },
-                { label: "Sem contato +15d", value: String(realTraffic.staleContacts), sub: `de ${realTraffic.activeClients} clientes ativos`, tone: staleTone },
+                { label: "CTR médio", value: realTraffic.trafficQualIsReal ? traco(realTraffic.ctrPct, (n) => `${n.toLocaleString("pt-BR")}%`) : "—", sub: "cliques ÷ impressões · mês corrente", tone: "text-foreground" },
+                { label: "Impressões", value: realTraffic.trafficQualIsReal ? traco(realTraffic.impressionsMonth, (n) => n.toLocaleString("pt-BR")) : "—", sub: "mês corrente, sem repetir captura", tone: "text-foreground" },
+                { label: "Contas no orçamento", value: traco(orc, (n) => `${n}%`), sub: realTraffic.accountsCounted == null ? "contas não lidas" : orc == null ? "nenhuma conta com gasto lido" : `${realTraffic.accountsCounted} contas ativas`, tone: budgetTone },
+                { label: "Sem contato +15d", value: temContato ? String(realTraffic.staleContacts) : "—", sub: temContato ? `de ${realTraffic.activeClients} clientes ativos` : "sem leitura da carteira", tone: staleTone },
               ];
               return tiles.map((t) => (
                 <div key={t.label} className="rounded-xl border border-border bg-card p-3.5">
@@ -370,7 +402,13 @@ export default function GoalsPage() {
             Como estamos{cockpit.data?.atual?.periodo ? ` — ${cockpit.data.atual.periodo}` : ""}
           </h3>
           {cockpit.loading && <p className="text-xs text-muted-foreground">Calculando…</p>}
-          {cockpit.erro && <p className="text-xs text-destructive">Não consegui carregar os números: {cockpit.erro}</p>}
+          {/* Falha inteira ou de uma fonte: aviso com "Tentar de novo" — nunca zero no lugar do que não veio (25/10/2026, 6.3). */}
+          {cockpit.erro && (
+            <AvisoFalha texto={`Não consegui carregar os números: ${cockpit.erro}`} onTentar={cockpit.recarregar} />
+          )}
+          {!!cockpit.data?.falhas?.length && (
+            <AvisoFalha texto={`Parte dos números não foi lida (${cockpit.data.falhas.join("; ")}). Os cartões dessas fontes mostram "—".`} onTentar={cockpit.recarregar} />
+          )}
           {cockpit.data && !cockpit.data.temComparacao && (
             <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">{cockpit.data.motivoSemComparacao}</p>
           )}
@@ -488,6 +526,19 @@ function RelatoriosQuinzenais() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** Aviso de falha com "Tentar de novo" (25/10/2026, auditoria 6.3/7.4/7.5): o número que não veio não vira zero. */
+function AvisoFalha({ texto, onTentar }: { texto: string; onTentar: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-lone-danger" role="alert">
+      <AlertTriangle size={13} className="shrink-0" aria-hidden />
+      <span className="flex-1">{texto}</span>
+      <button type="button" onClick={onTentar} className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline">
+        <RefreshCcw size={12} aria-hidden /> Tentar de novo
+      </button>
     </div>
   );
 }

@@ -10,8 +10,8 @@
 // anterior gravado, `variacaoPct` vem null e a tela não desenha seta — em vez de inventar
 // evolução contra número que ninguém mediu.
 
-import { useEffect, useState } from "react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { useCallback, useEffect, useState } from "react";
+import { chamar } from "@/lib/api/chamar";
 
 export interface DeltaCockpit {
   chave: string;
@@ -27,9 +27,10 @@ export interface DeltaCockpit {
 export interface CockpitData {
   atual: {
     periodo: string;
-    clientes: number;
-    ativos: number;
-    emRisco: number;
+    /** null = a carteira não foi lida (25/10/2026, 6.3). */
+    clientes: number | null;
+    ativos: number | null;
+    emRisco: number | null;
     postsPublicados: { valor: number | null };
     postsMeta: number | null;
     cobertura: { health: number; interacao: number };
@@ -37,29 +38,34 @@ export interface CockpitData {
   deltas: DeltaCockpit[];
   temComparacao: boolean;
   motivoSemComparacao: string | null;
+  /** Fontes que não foram lidas — os cartões delas mostram "—" com o motivo (25/10/2026, 6.3). */
+  falhas?: string[];
 }
 
 export function useCockpit() {
   const [data, setData] = useState<CockpitData | null>(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
     let vivo = true;
-    authedFetch("/api/ceo/cockpit")
-      .then(async (r) => {
-        if (!r.ok) throw new Error(r.status === 403 ? "Sem permissão para o cockpit." : `HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((d) => { if (vivo) setData(d as CockpitData); })
+    setLoading(true);
+    // `chamar` (25/10/2026, 6.3): o motivo do servidor chega à tela (antes "HTTP 500"), e há "Tentar de novo".
+    chamar<CockpitData>("/api/ceo/cockpit").then((r) => {
+      if (!vivo) return;
+      setLoading(false);
       // Erro vira mensagem na tela, não tela vazia com número velho — foi assim que o painel
       // zerado passou despercebido por dias.
-      .catch((e) => { if (vivo) setErro(e instanceof Error ? e.message : "não consegui carregar"); })
-      .finally(() => { if (vivo) setLoading(false); });
+      if (!r.ok || !r.data) { setErro(r.status === 403 ? "Sem permissão para o cockpit." : r.erro ?? "não consegui carregar"); return; }
+      setErro(null);
+      setData(r.data);
+    });
     return () => { vivo = false; };
-  }, []);
+  }, [tentativa]);
 
-  return { data, loading, erro };
+  const recarregar = useCallback(() => setTentativa((n) => n + 1), []);
+  return { data, loading, erro, recarregar };
 }
 
 /** Formata pra tela: null vira "—", nunca 0. */

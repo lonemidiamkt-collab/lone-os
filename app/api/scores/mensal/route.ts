@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCronOrUser } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { clientesIlegiveis } from "@/lib/cs/sem-postar";
+import { lerTodasAsLinhas, type PaginaLida } from "@/lib/scores/ler-tudo";
 import {
   fecharSocial, fecharDesigner, rotuloMes,
   type ClienteMes, type ArteEntregue,
@@ -34,12 +35,17 @@ export async function GET(req: NextRequest) {
   const fimDate = new Date(Date.UTC(ano, mes, 1));
   const fim = fimDate.toISOString().slice(0, 10);
 
+  // 25/10/2026 (auditoria 7.3): toda leitura confere o erro. Antes, posts fora do ar deixavam TODO cliente "Sem nenhum
+  // post" em vermelho com o nome do social — cobrança injusta — e a rota respondia ok:true. Os posts são paginados.
+  type LinhaPost = { client_id: string; posted_at: string };
   const [clientesQ, postsQ, cardsQ, reunioesQ, ilegiveis] = await Promise.all([
     supabaseAdmin.from("clients")
       .select("id, name, nome_fantasia, status, active, assigned_social, assigned_designer, posts_goal, service_type")
       .or("active.is.null,active.eq.true"),
-    supabaseAdmin.from("client_ig_posts").select("client_id, posted_at")
-      .gte("posted_at", inicio).lt("posted_at", fim),
+    lerTodasAsLinhas<LinhaPost>((de, ate, contar) => supabaseAdmin.from("client_ig_posts")
+      .select("client_id, posted_at", contar ? { count: "exact" } : undefined)
+      .gte("posted_at", inicio).lt("posted_at", fim).order("posted_at").range(de, ate) as unknown as PromiseLike<PaginaLida<LinhaPost>>)
+      .then((data) => ({ data, error: null }), (e: unknown) => ({ data: null, error: { message: e instanceof Error ? e.message : String(e) } })),
     supabaseAdmin.from("content_cards")
       .select("client_id, title, designer_delivered_at, designer_delivered_by, due_date")
       .not("designer_delivered_at", "is", null)
@@ -54,6 +60,16 @@ export async function GET(req: NextRequest) {
       .in("estado", ["agendada", "realizada"]),
     clientesIlegiveis(),
   ]);
+
+  const naoLidas = [
+    clientesQ.error && `os clientes (${clientesQ.error.message})`,
+    postsQ.error && `os posts do Instagram (${postsQ.error.message})`,
+    cardsQ.error && `as artes entregues (${cardsQ.error.message})`,
+    reunioesQ.error && `as reuniões (${reunioesQ.error.message})`,
+  ].filter(Boolean);
+  if (naoLidas.length) {
+    return NextResponse.json({ ok: false, error: `Não consegui montar o fechamento: não li ${naoLidas.join(", ")}. Tente de novo em instantes.` }, { status: 500 });
+  }
 
   const clientes = (clientesQ.data ?? [])
     .filter((c) => !/\(teste\)/i.test((c.name as string) || ""))

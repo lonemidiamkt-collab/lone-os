@@ -43,6 +43,7 @@ function daLinha(r: Record<string, unknown>): Cockpit {
     tarefasVencidas: { valor: n(r.tasks_overdue) },
     diasSemFalarMedio: { valor: n(r.avg_days_since_last_interaction) },
     cobertura: { health: 0, interacao: 0 },
+    falhas: [],
   };
 }
 
@@ -54,17 +55,21 @@ export async function GET(req: NextRequest) {
   const periodo = req.nextUrl.searchParams.get("periodo") || periodoAtualBRT();
   const atual = await calcularCockpit(periodo);
 
-  const { data: anteriorRow } = await supabaseAdmin
+  const { data: anteriorRow, error: eAnterior } = await supabaseAdmin
     .from("snapshots").select("*").eq("period", periodoAnterior(periodo)).maybeSingle();
+  // Fechamento anterior que não foi LIDO não é "nenhum fechamento gravado" (25/10/2026, 6.3).
+  if (eAnterior) atual.falhas.push(`o fechamento de ${periodoAnterior(periodo)}: ${eAnterior.message}`);
   const anterior = anteriorRow ? daLinha(anteriorRow) : null;
 
   return NextResponse.json({
     atual,
+    falhas: atual.falhas,
     anterior: anterior ? { periodo: anterior.periodo } : null,
     deltas: compararComAnterior(atual, anterior),
     // A tela precisa saber a diferença entre "não mudou" e "não temos com o que comparar".
     temComparacao: !!anterior,
     motivoSemComparacao: anterior ? null
+      : eAnterior ? `Não consegui ler o fechamento de ${periodoAnterior(periodo)} — sem comparação por enquanto.`
       : `Nenhum fechamento gravado para ${periodoAnterior(periodo)}. A comparação aparece a partir do primeiro fechamento de mês.`,
   });
 }
@@ -81,6 +86,14 @@ export async function POST(req: NextRequest) {
   const pedido = req.nextUrl.searchParams.get("periodo");
   const periodo = pedido || periodoAnterior(periodoAtualBRT());
   const c = await calcularCockpit(periodo);
+  // 25/10/2026 (auditoria 6.3): fonte que falhou não vira fechamento oficial com zero. Recusa e diz qual faltou —
+  // rodar de novo (?periodo=) depois que a fonte voltar fecha o mês certo.
+  if (c.falhas.length) {
+    return NextResponse.json({
+      ok: false, periodo,
+      error: `Não gravei o fechamento de ${periodo}: ${c.falhas.join("; ")}. Rode de novo com ?periodo=${periodo} quando a leitura voltar.`,
+    }, { status: 500 });
+  }
 
   const { error } = await supabaseAdmin.from("snapshots").upsert({
     period: periodo, period_type: "monthly",

@@ -36,9 +36,10 @@ export async function reunioesDosClientes(clientIds: string[]): Promise<Map<stri
 
   if (error) {
     // Erro de leitura NÃO pode virar "ninguém teve reunião": seria acusar a operação inteira por
-    // uma falha de banco. Quem chama recebe o mapa vazio e o log diz o que houve.
+    // uma falha de banco. 25/10/2026 (auditoria 6.2): o comentário já dizia isso, mas o código devolvia o mapa
+    // VAZIO — cobertura 0% e responsáveis zerados. Agora lança; a rota responde 500 com o motivo.
     console.error("[meetings/consulta] falha ao ler reuniões:", error.message);
-    return mapa;
+    throw new Error(`Não consegui ler as reuniões (${error.message}).`);
   }
 
   for (const m of data ?? []) {
@@ -59,7 +60,7 @@ export async function reunioesDosClientes(clientIds: string[]): Promise<Map<stri
 
 /** A saúde de reunião de cada cliente ativo, para o mês pedido. */
 export async function saudeDaCarteira(mes: string, agora = new Date()): Promise<ClienteComReuniao[]> {
-  const { data: clientes } = await supabaseAdmin
+  const { data: clientes, error } = await supabaseAdmin
     .from("clients")
     .select("id, name, nome_fantasia, assigned_social, minimum_meetings_per_month")
     // Elegível = ativo e fora do onboarding. Cliente que ainda está entrando não deve derrubar a
@@ -67,6 +68,8 @@ export async function saudeDaCarteira(mes: string, agora = new Date()): Promise<
     .or("active.is.null,active.eq.true")
     .neq("status", "onboarding")
     .is("draft_status", null);
+  // Sem a carteira não há cobertura para calcular — "0 clientes elegíveis" seria falha com cara de dado (6.2).
+  if (error) throw new Error(`Não consegui ler os clientes (${error.message}).`);
 
   const elegiveis = (clientes ?? []).filter((c) => !/\(teste\)/i.test((c.name as string) || ""));
   const porCliente = await reunioesDosClientes(elegiveis.map((c) => c.id as string));

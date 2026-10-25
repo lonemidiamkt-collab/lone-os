@@ -15,6 +15,8 @@ import { ehPalpiteSobreSistema, ehFillerComNome, RESPOSTA_SEM_VISAO_DO_PAINEL } 
 import { proporRegra, decidirRegra } from "@/lib/cs/regras-propostas";
 import { podeAgir, numerosDaEquipe } from "@/lib/cs/autoridade";
 import { textoSemAutoridade, type AcaoDoTime } from "@/lib/cs/autoridade-comandos";
+import { marcarTarefaPeloAviso, lembrarMensagem, ehCitacaoDeTarefa, responderCitacaoDeTarefa, type ResultadoAviso } from "@/lib/tarefas/auto-marcar-server";
+import { respostaPrometeMarcar, textoNaoAchei, textoSemPermissao } from "@/lib/tarefas/auto-marcar";
 import { comExecucao, definirAtor } from "@/lib/obs/correlacao";
 import { ehDm, tratarDmProspeccao } from "@/lib/prospeccao/inbound";
 import { ehGrupoVendas, tratarGrupoVendas } from "@/lib/crm/assistente-server";
@@ -487,39 +489,8 @@ async function checarSatisfacao(
   }
 }
 
-// Auto-marca uma TAREFA como feita quando alguém avisa no grupo que concluiu ("já fiz a arte da
-// Imperio"). Casa a referência com uma tarefa ABERTA — prioriza a do próprio autor e/ou o cliente
-// citado. Só marca com âncora forte (evita marcar a errada). Devolve o título marcado ou null.
-async function marcarTarefaFeita(autor: string | null | undefined, ref: string): Promise<string | null> {
-  try {
-    const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-    const r = norm(ref);
-    if (r.length < 3) return null;
-    const { data } = await supabaseAdmin.from("tasks")
-      .select("id, title, client_name, assigned_to").neq("status", "done").limit(200);
-    if (!data || data.length === 0) return null;
-    const autorPrimeiro = norm(autor || "").split(" ")[0];
-    const refWords = new Set(r.split(/\W+/).filter((w) => w.length >= 4));
-    let best: { id: string; title: string; score: number } | null = null;
-    for (const t of data) {
-      const cliN = norm((t.client_name as string) || "");
-      const mine = !!autorPrimeiro && norm(t.assigned_to as string).includes(autorPrimeiro);
-      const cliInRef = cliN.length >= 3 && r.includes(cliN);
-      let overlap = 0;
-      for (const w of norm(t.title as string).split(/\W+/)) if (w.length >= 4 && refWords.has(w)) overlap++;
-      const forte = cliInRef || (mine && overlap >= 1) || overlap >= 2;
-      const score = overlap + (cliInRef ? 3 : 0) + (mine ? 1 : 0);
-      if (forte && (!best || score > best.score)) best = { id: t.id as string, title: t.title as string, score };
-    }
-    if (!best) return null;
-    await supabaseAdmin.from("tasks").update({ status: "done" }).eq("id", best.id);
-    console.log(`[CS/inbound] tarefa marcada feita via chat: "${best.title}"`);
-    return best.title;
-  } catch (e) {
-    console.error("[CS/inbound] marcarTarefaFeita erro:", e);
-    return null;
-  }
-}
+// Auto-marcação de TAREFA quando alguém avisa no grupo que concluiu: lib/tarefas/auto-marcar-server.ts (25/10/2026,
+// auditoria 13.1 — antes o nome do cliente bastava para fechar a tarefa de outra pessoa).
 
 // Time postou uma IMAGEM no grupo do cliente (provável arte entregue/postada fora do botão) → avança
 // o card do cliente automaticamente. CONSERVADOR: só age se houver EXATAMENTE UM card candidato (arte
@@ -571,6 +542,8 @@ async function responderPapo(p: {
   quotedMsgId?: string | null; texto: string; sinais: SinaisDoPapo; descontraido: boolean;
   /** Remetente com papel operacional. Sem isso, "fiz a tarefa" não marca nada — é nível C. */
   podeAgir: boolean;
+  /** Nome do remetente na Gestão da Equipe (pelo número) e id da mensagem: dizem de quem é a tarefa avisada. */
+  autorEquipe?: string | null; naoConferiAutor?: boolean; messageId?: string | null;
 }) {
   try {
     const historico = histTexto(p.groupJid);       // memória = mensagens ANTERIORES
@@ -580,9 +553,12 @@ async function responderPapo(p: {
       mensagem: p.texto, autor: p.authorName || "", contexto: snap.texto,
       descontraido: p.descontraido, historico: historico || undefined,
     });
-    // Avisaram que uma tarefa foi feita? Marca no sistema (fecha o loop da cobrança).
-    let marcada: string | null = null;
-    if (conv.ok && conv.data?.tarefa_feita && p.podeAgir) marcada = await marcarTarefaFeita(p.authorName, conv.data.tarefa_feita);
+    // Avisaram que uma tarefa foi feita? Marca no sistema (fecha o loop da cobrança). 25/10/2026 (13.1): só a tarefa
+    // de quem avisou, ou a que o aviso cita; empate pergunta; a resposta sempre diz o título e o dono.
+    const refTarefa = conv.ok ? conv.data?.tarefa_feita ?? null : null;
+    const aviso: ResultadoAviso | null = refTarefa && p.podeAgir
+      ? await marcarTarefaPeloAviso({ autor: p.autorEquipe ?? null, referencia: refTarefa, mensagem: p.texto, msgId: p.messageId })
+      : null;
     let resp0 = (conv.ok && conv.data?.resposta) ? conv.data.resposta : "Opa! Tô por aqui 👋 me chama que eu ajudo.";
     // PALPITE SOBRE O SISTEMA NUNCA SAI. "pode ser um bug", "verifica se tá atualizado", "pode ser
     // que tá filtrando" — o agente não vê o painel e não tem como saber. Chamado pelo nome recebe
@@ -593,16 +569,30 @@ async function responderPapo(p: {
       console.log(`[CS/inbound] palpite barrado: "${resp0.slice(0, 60)}"`);
       resp0 = RESPOSTA_SEM_VISAO_DO_PAINEL;
     }
-    // Se marquei a tarefa e a resposta não deixou isso claro, confirmo.
-    const resp = marcada && !/marqu|marcad|feita|conclu/i.test(resp0)
-      ? `${resp0}\n\n✅ Marquei "${marcada}" como feita no sistema.` : resp0;
+    // O "Vou marcar como feita ✅" da IA só sai com a marcação de verdade: o texto da tarefa (título, dono, como
+    // desfazer) toma o lugar dele. Sem tarefa que bata, ou sem permissão, a promessa cai — e a explicação só sai
+    // quando chamaram o agente pelo nome (avisar a cada "terminei" seria ruído).
+    let resp = resp0;
+    let calarPromessa = false;
+    if (aviso && aviso.tipo !== "nada") {
+      resp = respostaPrometeMarcar(resp0) ? aviso.texto : `${resp0}\n\n${aviso.texto}`;
+    } else if (refTarefa && respostaPrometeMarcar(resp0)) {
+      const porque = p.podeAgir ? textoNaoAchei(refTarefa) : textoSemPermissao(!!p.naoConferiAutor);
+      if (p.sinais.chamadoPeloNome) resp = porque;
+      else calarPromessa = true;
+    }
+    if (calarPromessa) {
+      pushHist(p.groupJid, "Você (Lone)", "(calei: tarefa avisada não foi marcada)");
+      console.log(`[CS/inbound] calei a promessa de marcar tarefa (${p.podeAgir ? "sem tarefa que bata" : "sem autoridade"}): "${p.texto.slice(0, 40)}"`);
+      return;
+    }
     // Manda ou cala? Só o chamado pelo nome passa por cima do "ignorar" e do recibo vazio.
     const veredicto = {
       ignorar: !!(conv.ok && conv.data?.ignorar === true),
       // Recibo: o detector antigo (curto, sem nome) OU o novo (abertura + nome + fecho de cortesia)
       // OU um palpite que foi trocado pela frase honesta sem ninguém ter chamado pelo nome.
       soRecibo: ehSoRecibo(resp) || ehFillerComNome(resp) || (palpite && !p.sinais.chamadoPeloNome),
-      marcouTarefa: !!marcada,
+      marcouTarefa: !!aviso && aviso.tipo !== "nada",
     };
     if (!deveFalar(p.sinais, veredicto)) {
       const motivo = veredicto.ignorar ? "não era pra Lone" : "era só recibo";
@@ -610,7 +600,8 @@ async function responderPapo(p: {
       console.log(`[CS/inbound] calei (${motivo}): "${p.texto.slice(0, 40)}"`);
       return;
     }
-    await csSendGroupText(p.groupJid, resp, p.quotedMsgId || undefined);
+    const enviada = await csSendGroupText(p.groupJid, resp, p.quotedMsgId || undefined);
+    if (aviso) lembrarMensagem(enviada.id, aviso); // "reabre" / o número citando esta mensagem acham a tarefa
     pushHist(p.groupJid, "Você (Lone)", resp);      // lembra o que ELA disse → não repete
     // A janela de continuação abre com o NOME e não desliza com a resposta do agente. Era o
     // deslizar que fazia a conversa não acabar nunca.
@@ -1119,6 +1110,25 @@ async function processarInbound(req: NextRequest) {
     if (!msg.text) return NextResponse.json({ ok: true, skip: "áudio sem transcrição" });
     console.log(`[CS/inbound] 🎤 áudio transcrito (${msg.authorName || "?"}): "${msg.text.slice(0, 80)}"`);
     gravarNoCorpus(msg.text); // a fala do cliente entra no aprendizado igual a uma mensagem escrita
+  }
+
+  // ─── "reabre" (ou o número da opção) citando a confirmação/pergunta de TAREFA do agente (25/10/2026, 13.1). Vem
+  // antes da demanda citada: o fallback por texto da demanda casaria o cliente que aparece na confirmação. ───
+  if (msg.quotedMsgId && msg.text && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid))
+    && ehCitacaoDeTarefa({ texto: msg.text, quotedMsgId: msg.quotedMsgId, quotedText: msg.quotedText })) {
+    if (!podeAgirC) {
+      await csSendGroupText(msg.groupJid, textoSemPermissao(autoridade.naoConferi), msg.messageId, { origem: "tarefa-sem-autoridade", destino: "interno" });
+      return NextResponse.json({ ok: true, tarefa: "sem_autoridade" });
+    }
+    const r = await responderCitacaoDeTarefa({
+      texto: msg.text, quotedMsgId: msg.quotedMsgId, quotedText: msg.quotedText,
+      autor: autoridade.autor?.nome ?? null, msgId: msg.messageId,
+    });
+    if (r) {
+      const enviada = await csSendGroupText(msg.groupJid, r.texto, msg.messageId, { origem: "tarefa-citada", destino: "interno" });
+      if (r.tipo === "marcou") lembrarMensagem(enviada.id, r);
+      return NextResponse.json({ ok: r.tipo !== "falhou", tarefa: r.tipo });
+    }
   }
 
   // ─── Reply direto numa SUGESTÃO do agente? Então é resposta de DEMANDA (ok/não/ajustar/
@@ -2807,6 +2817,7 @@ async function processarInbound(req: NextRequest) {
     const alvoPapo = {
       groupJid: msg.groupJid, authorJid: msg.authorJid, authorName: msg.authorName,
       quotedMsgId: msg.quotedMsgId, sinais, descontraido: noGrupoEquipe, podeAgir: podeAgirC,
+      autorEquipe: autoridade.autor?.nome ?? null, naoConferiAutor: autoridade.naoConferi, messageId: msg.messageId,
     };
     const timer = setTimeout(() => {
       pendPapo.delete(chave);

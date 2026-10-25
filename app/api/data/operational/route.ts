@@ -24,7 +24,8 @@ export async function GET(req: NextRequest) {
   ] = await Promise.all([
     db.fetchTimeline(),
     db.fetchOnboardingItems(),
-    db.fetchTasks(),
+    // 25/10/2026 (13.4): tarefas que não carregam vêm como `tarefasErro` (o resto da carga segue) — nunca lista vazia.
+    db.fetchTasks().then((t) => t, (e: unknown) => (e instanceof Error ? e : new Error(String(e)))),
     db.fetchNotices(),
     db.fetchCreativeAssets(),
     db.fetchSocialProofs(),
@@ -52,8 +53,9 @@ export async function GET(req: NextRequest) {
 
   // `crisisNotes` saiu (Leva 6B): a "nota de crise" da ficha foi removida na Leva 1 e ninguém mais lia.
   // `globalChat` saiu (Leva 5a): o Chat Interno não tem tela desde a Leva 1 (2 mensagens na vida).
+  const tarefasErro = tasks instanceof Error ? tasks.message : null;
   return NextResponse.json({
-    timeline, onboardingItems, tasks, notices,
+    timeline, onboardingItems, tasks: tasks instanceof Error ? null : tasks, tarefasErro, notices,
     creativeAssets, socialProofs, quinzReports,
     moodEntries, clientAccess,
   });

@@ -23,7 +23,13 @@ export async function POST(req: NextRequest) {
   // mesma coisa: arrumar dado fora do horário do cron não devia custar uma notificação a ninguém.
   const semPost = req.nextUrl.searchParams.get("sem_post") === "1";
 
-  const r = await executarCobrancaSetup({ aplicar: !previewOnly, promover, marcarMarcos: !previewOnly });
+  // 25/10/2026 (auditoria 13.3): leitura que falha aborta a rodada e aparece como falha, não como "tudo em dia".
+  let r: Awaited<ReturnType<typeof executarCobrancaSetup>>;
+  try {
+    r = await executarCobrancaSetup({ aplicar: !previewOnly, promover, marcarMarcos: !previewOnly });
+  } catch (e) {
+    return NextResponse.json({ ok: false, erro: e instanceof Error ? e.message : String(e) }, { status: 500 });
+  }
   if (r.semOnboarding) return NextResponse.json({ ok: true, status: "sem cliente em onboarding" });
 
   const texto = r.texto;

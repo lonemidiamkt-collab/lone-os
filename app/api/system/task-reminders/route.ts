@@ -6,6 +6,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { spNow, ymd, addDays } from "@/lib/cs/vigilancia";
+import { resultadoDosEnvios, type FalhaEnvio } from "@/lib/automacoes/envios";
+import { idsCobrados } from "@/lib/tarefas/cobranca";
 
 // POST /api/system/task-reminders — COBRANÇA de tarefas pelo Lone CS no grupo da Equipe.
 // Regra (pedido do Roberto): véspera às 10h + dia do prazo às 9h; se estourar, cobra 1x/dia até
@@ -157,11 +159,23 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // 25/10/2026 (auditoria 13.2): `last_reminded_at` só para quem RECEBEU a cobrança. Antes marcava todas — inclusive
+  // as de quem o envio falhou —, e a rodada das 10h não tentava de novo: a cobrança sumia até o dia seguinte. E sem
+  // grupo configurado nada saía e a rotina respondia ok:true.
   const dest = process.env.CS_TEAM_GROUP_JID || process.env.CS_INTERNAL_GROUP_JID;
+  if (!dest) {
+    return NextResponse.json({
+      ok: false, cobrar: aCobrar.length, hora,
+      erro: "CS_TEAM_GROUP_JID (ou CS_INTERNAL_GROUP_JID) não configurado — nenhuma cobrança saiu e nenhuma tarefa foi marcada como cobrada.",
+    });
+  }
   const enviados: string[] = [];
-  const falhas: string[] = [];
+  const porTexto: string[] = [];
+  const incertos: string[] = [];
+  const falhas: FalhaEnvio[] = [];
+  const receberam = new Set<string>();
 
-  if (dest) {
+  {
     const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
     const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
     const { csSendGroupDocument } = await import("@/lib/cs/notify");
@@ -189,30 +203,40 @@ export async function POST(req: NextRequest) {
         const envio = await csSendGroupDocument(
           dest, pdf.buffer.toString("base64"), arquivo, legenda, "application/pdf", m.jids,
         );
-        if (!envio.ok) throw new Error(envio.error ?? "envio falhou");
-        enviados.push(b.pessoa);
+        // "Incerto" = a Evolution respondeu erro genérico mas pode ter entregue: conta como cobrado para a rodada
+        // das 10h não repetir, e vai listado na resposta.
+        if (envio.ok) { enviados.push(b.pessoa); receberam.add(b.pessoaOriginal); }
+        else if (envio.incerto) { incertos.push(b.pessoa); receberam.add(b.pessoaOriginal); }
+        else throw new Error(envio.error ?? "envio falhou");
       } catch (e) {
         // Cobrança que some porque o render caiu é pior que cobrança feia: manda o texto.
-        falhas.push(`${b.pessoa}: ${String(e).slice(0, 60)}`);
-        await csSendGroupText(dest, legenda, undefined, { origem: "task-reminders", destino: "interno" }, m.jids)
-          .catch(() => {});
+        const motivoPdf = (e instanceof Error ? e.message : String(e)).slice(0, 80);
+        const t = await csSendGroupText(dest, legenda, undefined, { origem: "task-reminders", destino: "interno" }, m.jids)
+          .catch((err: unknown) => ({ ok: false as const, error: String(err), incerto: false }));
+        if (t.ok) { porTexto.push(b.pessoa); receberam.add(b.pessoaOriginal); }
+        else if (t.incerto) { incertos.push(b.pessoa); receberam.add(b.pessoaOriginal); }
+        else falhas.push({ alvo: b.pessoa, erro: `PDF: ${motivoPdf}; texto: ${(t.error ?? "não saiu").slice(0, 80)}` });
       }
       // Respiro entre documentos: a fila da Evolution engasga com envios colados.
       await new Promise((r) => setTimeout(r, 1500));
     }
   }
 
-  // Marca last_reminded_at (dedup 1x/dia).
-  const nowIso = new Date().toISOString();
-  await supabaseAdmin.from("tasks").update({ last_reminded_at: nowIso }).in("id", aCobrar.map((i) => i.id));
+  // Marca last_reminded_at (dedup 1x/dia) SÓ do que saiu. O que falhou fica sem marca e a próxima rodada tenta.
+  const cobradas = idsCobrados(aCobrar.map((it) => ({ id: it.id, pessoa: donos.get(it.id) || "sem dono" })), receberam);
+  if (cobradas.length) {
+    const nowIso = new Date().toISOString();
+    const { error: eMarca } = await supabaseAdmin.from("tasks").update({ last_reminded_at: nowIso }).in("id", cobradas);
+    if (eMarca) falhas.push({ alvo: "marca de cobrança", erro: `${eMarca.message} — a próxima rodada pode cobrar de novo` });
+  }
 
-  // A resposta diz quem recebeu e quem falhou. Antes devolvia "ok" mesmo quando o envio tinha sido
-  // recusado — e a cobrança sumia sem ninguém saber.
   return NextResponse.json({
-    ok: falhas.length === 0,
-    cobrado: aCobrar.length,
+    ...resultadoDosEnvios(falhas),
+    cobrado: cobradas.length,
+    a_cobrar: aCobrar.length,
     pdfs_enviados: enviados,
-    falhas,
+    por_texto: porTexto,
+    incertos,
     hora,
   });
 }

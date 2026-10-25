@@ -13,6 +13,7 @@ import {
   type Equipe, type LinhaOkr, type MetaCatalogo, type Sentido, type StatusMeta,
 } from "./catalogo";
 import { calcularMetasDoMes } from "./calcular-server";
+import { motivoAlvoInvalido } from "./alvo";
 import type { ValorMeta } from "./calculos";
 
 export const TABELA_HISTORICO = "goal_results";
@@ -40,11 +41,19 @@ export interface LinhaHistorico {
   calculado_em: string;
 }
 
-export async function lerHistorico(meses: readonly string[]): Promise<{ linhas: LinhaHistorico[]; existe: boolean }> {
+/** A tabela não existe (migration não aplicada) — diferente de "não consegui ler agora". */
+export const tabelaAusente = (m: string) => /does not exist|schema cache|Could not find/i.test(m);
+
+/**
+ * 25/10/2026 (auditoria 7.5): erro de leitura NÃO é "tabela não existe". Antes qualquer erro virava `existe:false` e a tela
+ * mandava "aplicar a migration"; agora só a tabela ausente diz isso, e o resto vem em `erro`.
+ */
+export async function lerHistorico(meses: readonly string[]): Promise<{ linhas: LinhaHistorico[]; existe: boolean; erro: string | null }> {
   const { data, error } = await supabaseAdmin.from(TABELA_HISTORICO)
     .select("periodo, chave, valor, alvo, status, sem_fonte, detalhe, calculado_em").in("periodo", [...meses]);
-  if (error) return { linhas: [], existe: false };
+  if (error) return tabelaAusente(error.message) ? { linhas: [], existe: false, erro: null } : { linhas: [], existe: true, erro: error.message };
   return {
+    erro: null,
     linhas: ((data ?? []) as Record<string, unknown>[]).map((r) => ({
       periodo: r.periodo as string,
       chave: r.chave as string,
@@ -66,6 +75,10 @@ export interface Fechamento {
   trimestre: string;
   linhas: Omit<LinhaHistorico, "calculado_em">[];
   falhas: string[];
+  /** Metas que NÃO entram no fechamento gravado: a fonte delas falhou (25/10/2026, 7.2). */
+  naoGravar: string[];
+  /** Os alvos não foram lidos: nada é gravado (o padrão entraria como se fosse a meta do trimestre). */
+  abortado: string | null;
 }
 
 /** Calcula o mês e aplica o alvo do trimestre dele. Não grava. */
@@ -73,6 +86,7 @@ export async function calcularFechamento(mes: string, agora = new Date()): Promi
   const trimestre = trimestreDo(mes);
   const [calc, alvos] = await Promise.all([calcularMetasDoMes(mes, agora), lerAlvos(trimestre)]);
   const falhas = [...calc.falhas, ...(alvos.erro ? [`alvos (okrs): ${alvos.erro}`] : [])];
+  const abortado = alvos.erro ? `não consegui ler as metas do trimestre ${trimestre} (${alvos.erro}) — sem elas o alvo padrão seria gravado como se fosse o combinado` : null;
   const linhas = METAS.map((m) => {
     const v: ValorMeta = calc.valores[m.chave] ?? { valor: null, semFonte: "não calculado" };
     const alvo = alvos.alvos.get(m.chave)?.alvo ?? m.alvoPadrao;
@@ -82,18 +96,26 @@ export async function calcularFechamento(mes: string, agora = new Date()): Promi
       sem_fonte: v.semFonte ?? null, detalhe: v.detalhe ?? null,
     };
   });
-  return { mes, trimestre, linhas, falhas };
+  return { mes, trimestre, linhas, falhas, naoGravar: calc.chavesComFalha, abortado };
 }
 
-export async function gravarFechamento(f: Fechamento): Promise<{ ok: boolean; erro?: string }> {
+/**
+ * Grava o fechamento. 25/10/2026 (auditoria 7.2): sem os alvos não grava nada; meta com a fonte falhando fica de fora
+ * (a tela recalcula essa meta na hora, e o job pode ser rodado de novo com ?periodo=). Antes "não consegui ler X" virava
+ * o fechamento oficial e a tela nunca mais recalculava o mês.
+ */
+export async function gravarFechamento(f: Fechamento): Promise<{ ok: boolean; erro?: string; gravadas: number }> {
+  if (f.abortado) return { ok: false, erro: f.abortado, gravadas: 0 };
+  const linhas = f.linhas.filter((l) => !f.naoGravar.includes(l.chave));
+  if (!linhas.length) return { ok: true, gravadas: 0 };
   const agora = new Date().toISOString();
   const { error } = await supabaseAdmin.from(TABELA_HISTORICO)
-    .upsert(f.linhas.map((l) => ({ ...l, calculado_em: agora })), { onConflict: "periodo,chave" });
+    .upsert(linhas.map((l) => ({ ...l, calculado_em: agora })), { onConflict: "periodo,chave" });
   if (error) {
-    const falta = /does not exist|schema cache|Could not find/i.test(error.message);
-    return { ok: false, erro: falta ? `tabela ${TABELA_HISTORICO} não existe — aplique ${MIGRACAO_METAS}` : error.message };
+    const falta = tabelaAusente(error.message);
+    return { ok: false, erro: falta ? `tabela ${TABELA_HISTORICO} não existe — aplique ${MIGRACAO_METAS}` : error.message, gravadas: 0 };
   }
-  return { ok: true };
+  return { ok: true, gravadas: linhas.length };
 }
 
 // ─── O painel da tela ──────────────────────────────────────────────────────
@@ -133,6 +155,10 @@ export interface PainelMetas {
   /** O mês fechado veio do histórico gravado (true) ou foi calculado agora (false). */
   fechadoGravado: boolean;
   historicoExiste: boolean;
+  /** O histórico existe mas não foi lido agora (25/10/2026, 7.5) — não é "aplique a migration". */
+  historicoErro: string | null;
+  /** As metas configuradas não foram lidas: os cartões mostram o alvo PADRÃO (25/10/2026, 7.5). */
+  alvosFalharam: boolean;
   equipes: typeof EQUIPES;
   metas: MetaPainel[];
   falhas: string[];
@@ -159,13 +185,20 @@ export async function montarPainelMetas(agora = new Date()): Promise<PainelMetas
     calcularMetasDoMes(atual, agora),
   ]);
   const alvosDoFechado = alvosFechado ?? alvosAtuais;
-  const gravadasDoFechado = hist.linhas.filter((l) => l.periodo === fechado);
+  // Linha gravada com "não consegui ler" (fechamento antigo, de antes da trava do 7.2) não vale como resultado: a meta
+  // é recalculada agora, como a que ficou sem gravar.
+  const gravadasDoFechado = hist.linhas.filter((l) => l.periodo === fechado
+    && !(l.valor == null && /^não consegui ler/i.test(l.sem_fonte ?? "")));
   const fechadoGravado = gravadasDoFechado.length > 0;
-  // Mês fechado sem fechamento gravado: calcula agora (a tela avisa que é cálculo do momento).
-  const calcFechado = fechadoGravado ? null : await calcularMetasDoMes(fechado, agora);
+  // Mês fechado sem fechamento gravado — inteiro ou em parte (25/10/2026, 7.2): calcula agora o que falta (a tela avisa
+  // que é cálculo do momento). Antes, com UMA meta gravada, as outras ficavam "não calculado" para sempre.
+  const faltaGravar = METAS.some((m) => !gravadasDoFechado.some((l) => l.chave === m.chave));
+  const calcFechado = faltaGravar ? await calcularMetasDoMes(fechado, agora) : null;
 
   const falhas = [...parcial.falhas.map((f) => `mês corrente — ${f}`), ...(calcFechado?.falhas ?? []).map((f) => `mês fechado — ${f}`)];
-  if (alvosAtuais.erro) falhas.push(`alvos: ${alvosAtuais.erro}`);
+  if (alvosAtuais.erro) falhas.push(`metas configuradas: ${alvosAtuais.erro} — os cartões mostram o alvo padrão`);
+  if (alvosFechado?.erro) falhas.push(`metas do trimestre ${trimestreFechado}: ${alvosFechado.erro}`);
+  if (hist.erro) falhas.push(`histórico gravado: ${hist.erro}`);
 
   const metas: MetaPainel[] = METAS.map((m) => {
     const alvoAtual = alvosAtuais.alvos.get(m.chave)?.alvo ?? m.alvoPadrao;
@@ -194,7 +227,8 @@ export async function montarPainelMetas(agora = new Date()): Promise<PainelMetas
 
   return {
     hoje, mesFechado: fechado, mesAtual: atual, trimestreAtual,
-    fechadoGravado, historicoExiste: hist.existe, equipes: EQUIPES, metas, falhas,
+    fechadoGravado, historicoExiste: hist.existe, historicoErro: hist.erro,
+    alvosFalharam: !!alvosAtuais.erro || !!alvosFechado?.erro, equipes: EQUIPES, metas, falhas,
   };
 }
 
@@ -204,7 +238,9 @@ export async function montarPainelMetas(agora = new Date()): Promise<PainelMetas
 export async function salvarAlvo(chave: string, alvo: number, quem: string, agora = new Date()): Promise<{ ok: boolean; erro?: string }> {
   const meta = METAS.find((m) => m.chave === chave);
   if (!meta) return { ok: false, erro: "Meta desconhecida." };
-  if (!Number.isFinite(alvo) || alvo < 0) return { ok: false, erro: "Informe um número válido." };
+  // 25/10/2026 (auditoria 7.1): a mesma regra da tela — alvo zero numa meta "quanto mais, melhor" nasce batida.
+  const invalido = motivoAlvoInvalido(alvo, meta.sentido);
+  if (invalido) return { ok: false, erro: invalido };
   const trimestre = trimestreDo(hojeSP(agora).slice(0, 7));
   const { alvos, erro } = await lerAlvos(trimestre);
   if (erro) return { ok: false, erro };
