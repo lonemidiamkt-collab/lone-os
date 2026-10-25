@@ -1124,7 +1124,7 @@ async function processarInbound(req: NextRequest) {
       texto: msg.text, quotedMsgId: msg.quotedMsgId, quotedText: msg.quotedText,
       autor: autoridade.autor?.nome ?? null, msgId: msg.messageId,
     });
-    if (r) {
+    if (r && r.tipo !== "nada") {
       const enviada = await csSendGroupText(msg.groupJid, r.texto, msg.messageId, { origem: "tarefa-citada", destino: "interno" });
       if (r.tipo === "marcou") lembrarMensagem(enviada.id, r);
       return NextResponse.json({ ok: r.tipo !== "falhou", tarefa: r.tipo });

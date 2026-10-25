@@ -209,7 +209,7 @@ describe("reabre e escolha pelo número", () => {
     tabelas.tasks[0].status = "done";
     const citado = textoMarquei({ id: "1", titulo: "Criar arte de piso da Imperio", cliente: "Imperio Pisos", dono: "Bruna Exemplo" });
     const re = await srv.responderCitacaoDeTarefa({ texto: "reabre", quotedMsgId: "sumiu", quotedText: citado, autor: "Bruna Exemplo" });
-    expect(re?.texto).toMatch(/Reabri/);
+    expect(re && "texto" in re ? re.texto : "").toMatch(/Reabri/);
     expect(tabelas.tasks[0].status).toBe("pending");
   });
 
