@@ -2,7 +2,9 @@
 // Sober Premium design — Apple/Stripe inspired
 // All templates return plain HTML (compatible with any email provider)
 
-const WELCOME_BANNER_URL = "https://painel.lonemidia.com/storage/v1/object/public/onboarding-docs/email/welcome-banner.png";
+// 24/10/2026: o banner morava no bucket onboarding-docs, que ficou PRIVADO no fechamento de junho — todo
+// e-mail de boas-vindas saía com a imagem quebrada. Agora vem da pasta pública do painel (como o logo).
+const WELCOME_BANNER_URL = "https://painel.lonemidia.com/brand/email-boas-vindas.jpg";
 const LOGO_URL = "https://painel.lonemidia.com/logo-email.png";
 const BRAND_COLOR = "#0d4af5";
 const BG_COLOR = "#18181b";
@@ -18,7 +20,7 @@ function baseLayout(content: string): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lone Midia</title>
+  <title>Lone Mídia</title>
 </head>
 <body style="margin:0;padding:0;background-color:${BG_COLOR};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG_COLOR};padding:40px 20px;">
@@ -32,10 +34,10 @@ function baseLayout(content: string): string {
               <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
                 <tr>
                   <td width="56" valign="middle" style="padding-right:14px;">
-                    <img src="${LOGO_URL}" alt="Lone Midia" width="48" height="48" style="display:block;width:48px;height:48px;object-fit:contain;border-radius:10px;" />
+                    <img src="${LOGO_URL}" alt="Lone Mídia" width="48" height="48" style="display:block;width:48px;height:48px;object-fit:contain;border-radius:10px;" />
                   </td>
                   <td valign="middle">
-                    <p style="color:${TEXT_PRIMARY};font-size:15px;font-weight:700;margin:0;letter-spacing:-0.01em;line-height:1.2;">Lone Midia</p>
+                    <p style="color:${TEXT_PRIMARY};font-size:15px;font-weight:700;margin:0;letter-spacing:-0.01em;line-height:1.2;">Lone Mídia</p>
                     <p style="color:${TEXT_SECONDARY};font-size:12px;font-weight:400;margin:2px 0 0;line-height:1.3;">Assessoria de Marketing e Vendas</p>
                   </td>
                 </tr>
@@ -47,7 +49,7 @@ function baseLayout(content: string): string {
           <tr>
             <td align="center" style="padding-top:24px;">
               <p style="color:${TEXT_SECONDARY};font-size:11px;margin:0;">
-                Lone Midia Marketing Digital &bull; Rio de Janeiro, RJ
+                Lone Mídia Marketing Digital &bull; Rio de Janeiro, RJ
               </p>
               <p style="color:#52525b;font-size:10px;margin:4px 0 0;">
                 Este e-mail foi enviado automaticamente pelo Lone OS
@@ -71,7 +73,7 @@ export function welcomeEmail(clientName: string, companyName: string, serviceLab
     html: baseLayout(`
       <!-- Welcome Banner -->
       <div style="border-radius:12px;overflow:hidden;margin-bottom:28px;">
-        <img src="${WELCOME_BANNER_URL}" alt="Muito Obrigado - Lone Mídia agradece pela confiança e preferencia" style="width:100%;height:auto;display:block;border-radius:12px;" />
+        <img src="${WELCOME_BANNER_URL}" alt="Muito obrigado! A Lone Mídia agradece pela confiança e preferência" style="width:100%;height:auto;display:block;border-radius:12px;" />
       </div>
 
       <p style="color:${TEXT_PRIMARY};font-size:14px;line-height:1.8;margin:0 0 16px;">
@@ -152,7 +154,7 @@ export function broadcastEmail(subject: string, contentHtml: string, clientName:
       </div>
       <div style="border-top:1px solid ${BORDER_COLOR};margin:28px 0 16px;"></div>
       <p style="color:${TEXT_PRIMARY};font-size:13px;margin:0 0 2px;">Abracos,</p>
-      <p style="color:${TEXT_PRIMARY};font-size:14px;font-weight:600;margin:0;">Equipe Lone Midia</p>
+      <p style="color:${TEXT_PRIMARY};font-size:14px;font-weight:600;margin:0;">Equipe Lone Mídia</p>
       <p style="color:${BRAND_COLOR};font-size:12px;margin:2px 0 0;">Assessoria de Marketing e Vendas</p>
     `),
   };
