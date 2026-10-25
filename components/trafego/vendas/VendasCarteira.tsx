@@ -12,7 +12,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import Skeleton from "@/components/ui/Skeleton";
 import { chamar } from "@/lib/api/chamar";
 import { cn } from "@/lib/utils";
-import { INVESTIMENTO_NAO_APURADO, type RespostaVendasCarteira } from "@/lib/trafego/vendas";
+import { INVESTIMENTO_NAO_APURADO, fraseCobertura, investimentoParcial, type RespostaVendasCarteira } from "@/lib/trafego/vendas";
 import VendasDoCliente from "./VendasDoCliente";
 
 const brl = (n: number | null | undefined, casas = 0) =>
@@ -102,6 +102,9 @@ export default function VendasCarteira({ clientes }: { clientes: { id: string; n
           <ul className="space-y-2">
             {linhas.map((l) => {
               const ab = aberto === l.clientId;
+              // Mês pela metade (25/10/2026): custo por venda com parte dos dias não é o final.
+              const parcial = investimentoParcial(l.resumo);
+              const cobertura = fraseCobertura(l.resumo.cobertura);
               return (
                 <li key={l.clientId} className="overflow-hidden rounded-xl border border-border bg-card">
                   <button type="button" onClick={() => setAberto(ab ? null : l.clientId)} aria-expanded={ab}
@@ -111,12 +114,17 @@ export default function VendasCarteira({ clientes }: { clientes: { id: string; n
                       <p className="truncate text-[11px] text-muted-foreground">{l.gestor ?? "—"}{l.ultimaVenda ? ` · última ${ddmm(l.ultimaVenda)}` : ""}</p>
                     </div>
                     <div><p className="text-[11px] text-muted-foreground">Vendas</p><p className="text-sm font-semibold tabular-nums text-foreground">{l.resumo.vendas}</p></div>
-                    <div><p className="text-[11px] text-muted-foreground">Custo/venda</p><p className="text-sm font-semibold tabular-nums text-foreground">{brl(l.resumo.custoPorVenda, 2)}</p></div>
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">Custo/venda</p>
+                      <p className="text-sm font-semibold tabular-nums text-foreground">{brl(l.resumo.custoPorVenda, 2)}</p>
+                      {parcial && l.resumo.custoPorVenda != null && <p className="text-[10px] leading-tight text-lone-info">parcial</p>}
+                    </div>
                     <div>
                       <p className="text-[11px] text-muted-foreground">Investido</p>
                       <p className="text-sm tabular-nums text-foreground">{brl(l.resumo.investimento)}</p>
                       {/* null = nenhum gasto lido no mês (dia 1º, mês sem métrica) — não é R$ 0 (21/10/2026). */}
                       {l.resumo.investimento == null && <p className="text-[10px] leading-tight text-muted-foreground">{INVESTIMENTO_NAO_APURADO}</p>}
+                      {cobertura && <p className="text-[10px] leading-tight text-muted-foreground">{cobertura}</p>}
                     </div>
                     <div><p className="text-[11px] text-muted-foreground">Retorno</p><p className="text-sm tabular-nums text-foreground">{l.resumo.retorno != null ? `${l.resumo.retorno.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}x` : "—"}</p></div>
                     <ChevronDown size={16} className={cn("hidden text-muted-foreground transition-transform sm:block", ab && "rotate-180")} aria-hidden="true" />
@@ -133,7 +141,7 @@ export default function VendasCarteira({ clientes }: { clientes: { id: string; n
         </>
       )}
       <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        <Info size={12} className="shrink-0" aria-hidden="true" /> Investimento = gasto em anúncio nos dias fechados do mês (o mesmo número dos relatórios). Retorno só conta vendas com valor informado.
+        <Info size={12} className="shrink-0" aria-hidden="true" /> Investimento = gasto em anúncio nos dias fechados do mês (o mesmo número dos relatórios). Com parte dos dias lida, o custo por venda é parcial. Retorno só conta vendas com valor informado.
       </p>
     </section>
   );

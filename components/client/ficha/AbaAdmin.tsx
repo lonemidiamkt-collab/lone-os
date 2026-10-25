@@ -13,6 +13,7 @@ import type { OnboardingItem } from "@/lib/types";
 import CicloDeVida from "./CicloDeVida";
 import ContaMetaAds from "./ContaMetaAds";
 import OnboardingChecklist from "./OnboardingChecklist";
+import ObservacaoDoCadastro from "./ObservacaoDoCadastro";
 import RadarRenovacao from "@/components/client/RadarRenovacao";
 import { Secao } from "./Secao";
 import { SECAO } from "./abas";
@@ -54,9 +55,12 @@ export default function AbaAdmin({ ctx, onboarding, dadosCompletos, updateClient
             <ContaMetaAds client={c} updateClientData={updateClientData} />
           </div>
         </dl>
+        {/* 25/10/2026 (onda 5): a palavra do CLIENTE no link de cadastro, em destaque e separada das
+            notas internas abaixo — antes só aparecia na linha do tempo e em Pendentes. */}
+        <ObservacaoDoCadastro clientId={c.id} className="mt-3 border-t border-border pt-3" />
         {c.notes && (
           <div className="mt-3 border-t border-border pt-3">
-            <p className="mb-1 text-lone-caption text-muted-foreground">Observações</p>
+            <p className="mb-1 text-lone-caption text-muted-foreground">Observações internas da equipe</p>
             <p className="whitespace-pre-wrap rounded-lg bg-muted p-3 text-lone-body text-foreground">{c.notes}</p>
           </div>
         )}

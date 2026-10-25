@@ -24,6 +24,7 @@ import { supabase } from "./client";
 import { supabaseAdmin } from "./server";
 import { normalizarEtapa } from "@/lib/crm/etapas";
 import { avisosDaPessoa } from "@/lib/notificacoes/lidas";
+import { observacaoParaFicha, type LinhaCadastro, type ObservacaoCadastro } from "@/lib/onboarding/observacao-ficha";
 import type {
   Client, Task, ContentCard, DesignRequest, AppNotification,
   TimelineEntry, ChatMessage, OnboardingItem,
@@ -296,6 +297,20 @@ export async function fetchClientById(id: string): Promise<Client | null> {
   const { data, error } = await supabaseAdmin.from("clients").select("*").eq("id", id).maybeSingle();
   if (error) { console.error("[DB] fetchClientById:", error); return null; }
   return data ? snakeToClient(data) : null;
+}
+
+// A observação que o CLIENTE escreveu no link de cadastro (client_onboarding_submissions.notes), para a
+// aba Admin da ficha — separada das notas internas (`clients.notes`). SÓ server (service_role).
+// Lança no erro: a ficha diz "não consegui ler", nunca "o cliente não escreveu nada" (25/10/2026).
+export async function fetchObservacaoCadastro(clientId: string): Promise<{ observacao: ObservacaoCadastro | null; temCadastro: boolean }> {
+  const { data, error } = await supabaseAdmin.from("client_onboarding_submissions")
+    .select("notes, status, submitted_at, created_at")
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw new Error(error.message);
+  const linhas = (data ?? []) as unknown as LinhaCadastro[];
+  return { observacao: observacaoParaFicha(linhas), temCadastro: linhas.length > 0 };
 }
 
 // COMPLETO — rascunhos. SÓ server (service_role). Alimenta a tela de aprovação de cadastro.

@@ -6,6 +6,7 @@ import { getServerUser } from "@/lib/supabase/auth-server";
 import { encryptVault, decryptVault } from "@/lib/crypto/vault";
 import { espelharNoCofre } from "@/lib/cofre/espelhar";
 import { planejarTroca, valorParaGuardar, campoEspelhado, avisoDoEspelho, type ResultadoEspelho } from "@/lib/cofre/versoes";
+import { registrarAcessoCofre } from "@/lib/cofre/registro-acesso";
 
 // Campos sensíveis persistidos em `clients`. Qualquer outro campo que entre na allowlist
 // abaixo fica fora do fluxo de RLS aberta e passa por este endpoint (admin-only).
@@ -29,28 +30,9 @@ function validateField(table: VaultTable, field: string): boolean {
   return false;
 }
 
-async function logAccess(params: {
-  user: { id: string; email: string };
-  clientId?: string;
-  field: string;
-  action: "reveal" | "update";
-  req: NextRequest;
-}) {
-  // Reaproveita a tabela vault_access_log criada em migration 018.
-  // Fire-and-forget — log failure não bloqueia operação legítima.
-  supabaseAdmin.from("vault_access_log").insert({
-    user_id: params.user.id,
-    user_email: params.user.email,
-    client_id: params.clientId ?? null,
-    resource_type: `credential:${params.field}`,
-    resource_path: null,
-    action: params.action,
-    ip: params.req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? params.req.headers.get("x-real-ip") ?? null,
-    user_agent: params.req.headers.get("user-agent") ?? null,
-  }).then(({ error }) => {
-    if (error) console.warn("[client-vault] log insert failed:", error.message);
-  });
-}
+// O registro em vault_access_log mora em lib/cofre/registro-acesso.ts (25/10/2026): a rota das senhas
+// anteriores (/api/client-vault/anteriores) registra o "Ver" do mesmo jeito.
+const logAccess = registrarAcessoCofre;
 
 // GET /api/client-vault?clientId=...&table=clients&field=facebook_password
 // Retorna { value: string | null } (plaintext descriptografado).

@@ -22,6 +22,7 @@ import { ACEITA_LOGO, DICA_LOGO, validarLogo } from "@/lib/clients/logo-upload";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import MarcaDoCliente from "@/components/clients/MarcaDoCliente";
 import CofreStatus from "@/components/client/ficha/CofreStatus";
+import SenhasAnteriores from "@/components/client/ficha/SenhasAnteriores";
 
 interface Props {
   client: Client;
@@ -761,6 +762,15 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                         </div>
                       )}
                     </div>
+                    {/* 25/10/2026 (onda 5): as senhas guardadas a cada troca, com Ver e Restaurar — antes só o
+                        "Desfazer" de ~15 s do aviso chegava nelas. Restaurou: a revelada aqui em cima não vale mais. */}
+                    {isAdmin && !editing && pwFieldMap[pwKey] && (
+                      <SenhasAnteriores clientId={client.id} field={pwFieldMap[pwKey]}
+                        onRestaurada={() => {
+                          setForm((p) => ({ ...p, [pwKey]: "" }));
+                          setSemSenha((p) => { const n = { ...p }; delete n[pwKey]; return n; });
+                        }} />
+                    )}
                   </div>
                 </div>
               );
