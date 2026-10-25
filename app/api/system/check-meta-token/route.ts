@@ -66,9 +66,10 @@ export async function POST(req: NextRequest) {
       const body = `${av.motivo} Renove em Sistema › Conexão Meta (/conexao-meta) antes que as sincronizações parem.`;
 
       if (!alreadyNotified) {
-        const expiresAt = new Date(Date.now() + 7 * 86_400_000).toISOString(); // notificação some em 7 dias
+        // `priority` e `expires_at` não existem em notifications (24/10/2026): o insert falhava calado e o
+        // aviso de token vencendo nunca chegou ao sino. A prioridade vai no título; o aviso some ao ser lido.
         const { error: errNotif } = await supabaseAdmin.from("notifications").insert({
-          type: "system", title: av.titulo, body, priority: av.prioridade ?? "high", expires_at: expiresAt, read: false,
+          type: "system", title: av.prioridade === "urgent" ? `⚠️ ${av.titulo}` : av.titulo, body, read: false,
         });
         if (errNotif) console.error("[check-meta-token] aviso não gravado:", errNotif.message);
         notified = !errNotif;
