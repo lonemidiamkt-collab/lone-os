@@ -27,6 +27,13 @@ describe("ritmo do mês", () => {
     expect(r.diaIdeal).toBe(100);
     expect(r.mediaDia).toBe(100);
     expect(r.fimProjetado).toBe(30);
+    // O que falta (R$ 2.000) ÷ os 21 dias que faltam contando hoje.
+    expect(r.diariaNecessaria).toBeCloseTo(95.24, 2);
+  });
+
+  it("diária necessária: a de quem atrasou sobe, a de quem adiantou desce", () => {
+    expect(ritmoDoMes({ verba: 3000, gasto: 500, hoje: "2026-09-10" }).diariaNecessaria).toBeCloseTo(119.05, 2);
+    expect(ritmoDoMes({ verba: 3000, gasto: 3100, hoje: "2026-09-10" }).diariaNecessaria).toBe(0);
   });
 
   it("gasto desconhecido é sem dados (nunca 'no ritmo'); zero depois do dia 2 é parado", () => {

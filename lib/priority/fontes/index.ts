@@ -6,6 +6,7 @@ import { temTrafego } from "@/lib/clients/servico";
 import { nivelDoCliente } from "@/lib/saude/carteira";
 import type { ItemBruto, ContextoRanking } from "../tipos";
 import { itensDoTrafego } from "./trafego";
+import { itensDosAlarmes } from "./alarmes";
 import { itensDaProducao } from "./producao";
 import { itensDaSaude } from "./saude";
 import { itensDeTarefas } from "./tarefas";
@@ -64,6 +65,8 @@ export async function coletarTudo(): Promise<{ itens: ItemBruto[]; ctx: Contexto
   const ctx: ContextoRanking = { importanciaCliente: Object.fromEntries([...clientes.porId.values()].map((c) => [c.id, c.importancia])) };
   const fontes: { nome: string; fn: () => Promise<ItemBruto[]> }[] = [
     { nome: "trafego", fn: () => itensDoTrafego(clientes) },
+    // Ritmo da verba do mês e "gastou sem conversa" (25/10/2026). Separada do diagnóstico: falha de um não cala o outro.
+    { nome: "alarmes", fn: () => itensDosAlarmes(clientes) },
     { nome: "producao", fn: () => itensDaProducao(clientes) },
     { nome: "saude", fn: () => itensDaSaude(clientes) },
     { nome: "tarefa", fn: () => itensDeTarefas(clientes) },

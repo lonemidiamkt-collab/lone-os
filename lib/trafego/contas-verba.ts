@@ -26,6 +26,8 @@ export interface RitmoMes {
   mediaDia: number | null;
   /** Verba ÷ dias do mês. */
   diaIdeal: number | null;
+  /** O que falta da verba ÷ dias que faltam (hoje incluído): a diária que fecha o mês na verba (25/10/2026). */
+  diariaNecessaria: number | null;
   /** Dia em que a verba acaba no ritmo atual (pode passar do fim do mês). */
   fimProjetado: number | null;
 }
@@ -42,7 +44,7 @@ export function ritmoDoMes(p: { verba: number | null | undefined; gasto: number 
   const verba = p.verba != null && p.verba > 0 ? p.verba : null;
   const gasto = p.gasto ?? null;
   if (verba === null) {
-    return { status: "sem_verba", verba: null, gasto, pctGasto: null, pctMes, dia, diasNoMes, esperado: null, mediaDia: gasto != null && dia > 0 ? gasto / dia : null, diaIdeal: null, fimProjetado: null };
+    return { status: "sem_verba", verba: null, gasto, pctGasto: null, pctMes, dia, diasNoMes, esperado: null, mediaDia: gasto != null && dia > 0 ? gasto / dia : null, diaIdeal: null, diariaNecessaria: null, fimProjetado: null };
   }
   const status = statusPacing({ verba, gasto, dia, diasNoMes });
   const mediaDia = gasto != null && dia > 0 ? gasto / dia : null;
@@ -58,6 +60,7 @@ export function ritmoDoMes(p: { verba: number | null | undefined; gasto: number 
     esperado: verba * (dia / diasNoMes),
     mediaDia,
     diaIdeal: verba / diasNoMes,
+    diariaNecessaria: restante != null ? restante / (diasNoMes - dia + 1) : null,
     fimProjetado: mediaDia && mediaDia > 0 && restante != null ? dia + Math.floor(restante / mediaDia) : null,
   };
 }

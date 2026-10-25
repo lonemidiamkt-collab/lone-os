@@ -17,7 +17,9 @@
 // Referência de desenho: Google SRE ("todo alerta precisa exigir ação humana em minutos"; no máximo
 // ~2 por turno) e PagerDuty (fora do horário, só o que é crítico).
 
-export type TipoAviso = "conta_parada" | "saldo_zerado";
+// sem_conversa / verba_* (25/10/2026): os alarmes de lib/traffic/alarmes — gastando sem receber conversa e
+// verba do mês acabando. Entram no mesmo teto e no mesmo horário; não fazem parte do teste de controle.
+export type TipoAviso = "conta_parada" | "saldo_zerado" | "sem_conversa" | "verba_estourando" | "verba_estourou";
 export type Braco = "voz" | "controle";
 export type DecisaoFala = "falar" | "avisar_teto" | "mudo";
 
@@ -154,6 +156,8 @@ export function juntarNomes(nomes: string[], max = 6): string {
  */
 export function textoLote(tipo: TipoAviso, nomes: string[], porSaldo = false): { titulo: string; corpo: string } {
   const n = nomes.length;
+  if (tipo === "sem_conversa") return { titulo: `${n} contas estão gastando sem receber conversa`, corpo: `${juntarNomes(nomes)}. Vale conferir o WhatsApp dos anúncios agora.` };
+  if (tipo === "verba_estourando" || tipo === "verba_estourou") return { titulo: `${n} contas com a verba do mês acabando`, corpo: `${juntarNomes(nomes)}. Vale baixar a diária ou combinar verba extra.` };
   if (tipo === "saldo_zerado") return { titulo: `${n} contas estão com o saldo zerado`, corpo: `${juntarNomes(nomes)}. Os anúncios param até recarregar. Vale avisar os clientes hoje.` };
   if (porSaldo) return { titulo: `${n} contas pararam porque o saldo zerou`, corpo: `${juntarNomes(nomes)}. Vale avisar os clientes pra recarregar.` };
   return { titulo: `${n} contas pararam de rodar hoje`, corpo: `${juntarNomes(nomes)}. Vale conferir o saldo e o pagamento.` };
