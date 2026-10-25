@@ -16,6 +16,7 @@ export const maxDuration = 300;
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { runBalanceSync, getAlertSettings, alertasPendentes } from "@/lib/traffic/sync-core";
+import { resultadoDoSync } from "@/lib/traffic/resultado-sync";
 
 export async function POST(req: NextRequest) {
   const denied = requireCron(req); if (denied) return denied;
@@ -44,8 +45,11 @@ export async function POST(req: NextRequest) {
       : undefined;
 
     console.log(`[sync-saldos] synced=${r.synced}/${r.total} erros=${r.errors} em_alerta=${emAlerta.length} enviados=${r.alertsDispatched} dry=${dry}`);
+    // Todas as contas em erro NÃO é "funcionando" (auditoria 9.10, 25/10/2026): a Central lia ok:true e
+    // ficava verde com nenhum saldo lido — o grupo também não recebia alerta nenhum.
+    const falhou = resultadoDoSync(r);
     return NextResponse.json({
-      ok: true, dry,
+      ...falhou, dry,
       synced: r.synced, errors: r.errors, total: r.total, synced_at: r.syncedAt,
       alertas_ligados: settings.enabled && !!settings.groupJid,
       alertas_enviados: r.alertsDispatched,

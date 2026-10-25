@@ -12,6 +12,7 @@ import { slug } from "@/lib/traffic/weekly-report";
 import { coletar, periodoAnterior, periodoPadrao, selecionarClientes } from "@/lib/diagnostico-mensal/dados";
 import { diagnosticoMensalHtml, legendaCliente } from "@/lib/diagnostico-mensal/pdf";
 import type { Analise, DadosCliente } from "@/lib/diagnostico-mensal/analise";
+import { resultadoDosEnvios, type FalhaEnvio } from "@/lib/automacoes/envios";
 
 // /api/system/diagnostico-mensal — o diagnóstico mensal de cada cliente, em PDF, no grupo de TRÁFEGO.
 //
@@ -27,6 +28,10 @@ import type { Analise, DadosCliente } from "@/lib/diagnostico-mensal/analise";
 //   ?baixar=1&clientId=<id>   → devolve o PDF.   ?html=1&clientId=<id> → devolve o HTML.
 //   ?enviar=1                 → gera e envia ao grupo de tráfego (um PDF por cliente).
 //   ?enviar=1&force=1         → reenvia mesmo quem já recebeu no período.
+//
+// 25/10/2026 (auditoria 10.4): respondia ok:true com 0 PDFs enviados. Agora, no envio, `ok` só quando todo
+// PDF que devia sair saiu (sem dado no período e "já enviado" não são falha), e erro de leitura do
+// "já enviado" não vira "ainda não enviado" (mandaria em dobro).
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -57,9 +62,10 @@ async function handle(req: NextRequest) {
 
   let jid = "";
   if (enviar) {
-    const { data: cfg } = await supabaseAdmin.from("agency_settings").select("value").eq("key", "traffic_alert_group_jid").single();
+    const { data: cfg, error: cfgErr } = await supabaseAdmin.from("agency_settings").select("value").eq("key", "traffic_alert_group_jid").maybeSingle();
+    if (cfgErr) return NextResponse.json({ ok: false, error: `não consegui ler o grupo de tráfego: ${cfgErr.message}` }, { status: 500 });
     jid = (cfg?.value as string) || "";
-    if (!jid) return NextResponse.json({ error: "grupo de tráfego não configurado" }, { status: 500 });
+    if (!jid) return NextResponse.json({ ok: false, error: "grupo de tráfego não configurado" }, { status: 500 });
   }
 
   for (const c of elegiveis) {
@@ -84,7 +90,8 @@ async function handle(req: NextRequest) {
       if (baixar || enviar) {
         const chave = `diagnostico_mensal:${until}:${c.id}`;
         if (enviar && !force) {
-          const { data: ja } = await supabaseAdmin.from("agency_settings").select("key").eq("key", chave).maybeSingle();
+          const { data: ja, error: jaErr } = await supabaseAdmin.from("agency_settings").select("key").eq("key", chave).maybeSingle();
+          if (jaErr) { resultados.push({ ...linha, enviado: false, erro: `não consegui conferir se já foi enviado (${jaErr.message}) — não enviei para não repetir` }); continue; }
           if (ja) { resultados.push({ ...linha, enviado: false, erro: "já enviado neste período" }); continue; }
         }
         const pdf = await htmlToPdf(pagina);
@@ -95,10 +102,11 @@ async function handle(req: NextRequest) {
           });
         }
         const r = await csSendGroupDocument(jid, pdf.buffer.toString("base64"), `Diagnostico ${nome} ${since} a ${until}.pdf`, legendaCliente(dados, analise));
-        if (r.ok) {
+        // Incerto (pode ter saído) também grava o "já enviado": repetir às cegas manda em dobro.
+        if (r.ok || r.incerto) {
           await supabaseAdmin.from("agency_settings").upsert({ key: chave, value: new Date().toISOString() }, { onConflict: "key" });
         }
-        resultados.push({ ...linha, enviado: r.ok, ...(r.ok ? {} : { erro: r.error }) });
+        resultados.push({ ...linha, enviado: r.ok, ...(r.ok ? {} : { erro: r.incerto ? `${r.error} — pode ter saído, não reenvio` : r.error }) });
         await sleep(2500); // o WhatsApp barra rajada de documentos
       } else {
         resultados.push(linha);
@@ -109,21 +117,30 @@ async function handle(req: NextRequest) {
   }
 
   // Fecho no grupo: o placar da carteira, do mais urgente ao mais saudável. É o que o Roberto lê primeiro.
+  let fecho: { ok: boolean; error?: string } | null = null;
   if (enviar && resultados.some((r) => r.enviado)) {
     const ok = resultados.filter((r) => r.enviado && r.nota != null).sort((a, b) => (a.nota ?? 0) - (b.nota ?? 0));
     const linhas = ok.slice(0, 8).map((r) => `• ${r.cliente} — ${r.nota}/100${r.urgentes ? ` (${r.urgentes} urgente${r.urgentes > 1 ? "s" : ""})` : ""}`);
-    const falhas = resultados.filter((r) => r.erro && r.enviado !== false && !r.erro.startsWith("sem dado"));
+    const naoGeraram = resultados.filter((r) => r.erro && r.enviado !== false && !r.erro.startsWith("sem dado"));
     const semDado = resultados.filter((r) => r.erro?.startsWith("sem dado"));
-    await csSendGroupText(jid, [
+    fecho = await csSendGroupText(jid, [
       `✅ *Diagnóstico mensal enviado* — ${resultados.filter((r) => r.enviado).length} clientes, período ${since.split("-").reverse().join("/")} a ${until.split("-").reverse().join("/")}.`,
       linhas.length ? `\n*Os que mais precisam de atenção (menor nota):*\n${linhas.join("\n")}` : "",
       semDado.length ? `\n🔎 Sem dado para diagnosticar (conferir cadastro/conta): ${semDado.map((f) => f.cliente).join(", ")}` : "",
-      falhas.length ? `\n⚠️ ${falhas.length} não gerou: ${falhas.map((f) => f.cliente).join(", ")}` : "",
-    ].filter(Boolean).join("\n")).catch(() => {});
+      naoGeraram.length ? `\n⚠️ ${naoGeraram.length} não gerou: ${naoGeraram.map((f) => f.cliente).join(", ")}` : "",
+    ].filter(Boolean).join("\n")).catch((e) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
   }
 
+  // No envio, o que devia sair e não saiu é falha. "Sem dado no período" e "já enviado" não são.
+  const falhas: FalhaEnvio[] = enviar
+    ? resultados
+        .filter((r) => r.erro && !r.erro.startsWith("sem dado") && r.erro !== "já enviado neste período")
+        .map((r) => ({ alvo: r.cliente, erro: r.erro as string }))
+    : [];
+  if (fecho && !fecho.ok) falhas.push({ alvo: "placar no grupo de tráfego", erro: fecho.error ?? "não saiu" });
+
   return NextResponse.json({
-    ok: true, periodo, anterior, enviado: enviar,
+    ...(enviar ? resultadoDosEnvios(falhas) : { ok: true }), periodo, anterior, enviado: enviar,
     escopo: { clientes: elegiveis.length, fora_por_ser_so_social: foraSocial, pausados },
     resultados,
   });

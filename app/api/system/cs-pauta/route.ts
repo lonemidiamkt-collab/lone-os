@@ -10,6 +10,7 @@ import { csSendGroupText } from "@/lib/cs/notify";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
 import { getHolidays } from "@/lib/holidays/brasil-api";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
+import { resultadoDosEnvios, SEM_GRUPO_INTERNO, type FalhaEnvio } from "@/lib/automacoes/envios";
 import { loadBriefingCombinado } from "@/lib/cs/load-briefing";
 import {
   gerarPautaSemanal, datasProximaSemana, serializePauta, formatPauta, buildPautaSugestao, labelDia,
@@ -19,6 +20,11 @@ import {
 // cliente e a equipe responde "ok" pra criar os CARDS no board (com due_date). Inverte a cobrança
 // de "sem pauta": em vez de só cobrar, o agente chega com a proposta pronta. Suggest-only.
 // Cron sugerido: sexta 14h BRT = `0 17 * * 5` (UTC). ?preview=1 calcula sem postar/gravar.
+//
+// 25/10/2026 (auditoria 10.4): a falha da IA virava "skip" com ok:true, envio que falhava contava como
+// "sugerida" e o dedup da semana (a demanda já gravada) impedia propor de novo. Agora a falha entra em
+// `falhas` (ok:false), a demanda só fica se a mensagem saiu (ou pode ter saído), e `sugeridas` conta o que
+// chegou ao grupo.
 const PAUTA_LIVE = true; // false = só calcula (kill switch)
 
 // Piloto: env CS_PAUTA_CLIENT_IDS (ids separados por vírgula) delimita quem recebe pauta.
@@ -31,7 +37,7 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
   const previewOnly = req.nextUrl.searchParams.get("preview") !== null;
 
-  if (!isOpenAIConfigured()) return NextResponse.json({ ok: true, skip: "IA off" });
+  if (!isOpenAIConfigured()) return NextResponse.json({ ok: false, erro: "IA não configurada (OPENAI_API_KEY) — nenhuma pauta foi proposta." });
 
   const now = spNow();
   const { segunda, datas: datasBrutas } = datasProximaSemana(now);
@@ -72,13 +78,20 @@ export async function POST(req: NextRequest) {
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   const semanaKey = ymd(segunda);
   const resultados: Array<Record<string, unknown>> = [];
+  const falhas: FalhaEnvio[] = [];
   let sugeridas = 0;
+  if (!internalJid && !previewOnly && PAUTA_LIVE && clientes.length) {
+    // Sem grupo, a proposta não chega a ninguém — e gravar a demanda travaria a semana.
+    return NextResponse.json({ ...resultadoDosEnvios([{ alvo: "grupo interno", erro: SEM_GRUPO_INTERNO }]), semana: semanaKey, elegiveis: clientes.length, sugeridas: 0 });
+  }
 
   for (const c of clientes) {
     const nome = (c.nome_fantasia as string) || (c.name as string) || "Cliente";
     // Dedup por cliente+semana (re-rodar o cron não duplica a proposta).
     const messageId = `pauta-${c.id}-${semanaKey}`;
-    const { data: ja } = await supabaseAdmin.from("cs_demandas").select("id").eq("message_id", messageId).limit(1).maybeSingle();
+    const { data: ja, error: jaErr } = await supabaseAdmin.from("cs_demandas").select("id").eq("message_id", messageId).limit(1).maybeSingle();
+    // Não saber se já propôs não é "ainda não propôs": pula e diz (senão duplicaria a pauta).
+    if (jaErr) { falhas.push({ alvo: nome, erro: `não consegui conferir se a pauta já foi proposta: ${jaErr.message}` }); continue; }
     if (ja) { resultados.push({ cliente: nome, skip: "já proposta" }); continue; }
 
     const briefing = await loadBriefingCombinado(c.id as string, [
@@ -105,12 +118,18 @@ export async function POST(req: NextRequest) {
       briefing, regras, historicoTitulos: historico, datas, eventos,
     });
     if (!r.ok || !r.data || !r.data.itens.length) {
-      resultados.push({ cliente: nome, skip: `geração falhou: ${r.ok ? "0 itens" : r.error}` });
+      const motivo = `a IA não gerou a pauta (${r.ok ? "0 itens" : r.error})`;
+      resultados.push({ cliente: nome, erro: motivo });
+      falhas.push({ alvo: nome, erro: motivo });
       continue;
     }
     // Só itens em datas válidas (o modelo não pode inventar dia).
     const itens = r.data.itens.filter((i) => datas.includes(i.dia)).slice(0, datas.length);
-    if (!itens.length) { resultados.push({ cliente: nome, skip: "itens fora das datas" }); continue; }
+    if (!itens.length) {
+      resultados.push({ cliente: nome, erro: "itens fora das datas" });
+      falhas.push({ alvo: nome, erro: "a IA propôs só datas fora da semana" });
+      continue;
+    }
 
     if (previewOnly || !PAUTA_LIVE) {
       resultados.push({ cliente: nome, preview: formatPauta(itens), observacao: r.data.observacao });
@@ -126,16 +145,30 @@ export async function POST(req: NextRequest) {
       resumo: `Pauta da semana ${labelDia(datas[0]).split(" ")[1]}–${labelDia(datas[datas.length - 1]).split(" ")[1]}`,
       briefing: formatPauta(itens), responsavel: (c.assigned_social as string) || null, status: "pendente",
     }).select("id").single();
-    if (insErr || !dem) { resultados.push({ cliente: nome, skip: `insert: ${insErr?.message}` }); continue; }
+    if (insErr || !dem) {
+      resultados.push({ cliente: nome, erro: `insert: ${insErr?.message}` });
+      falhas.push({ alvo: nome, erro: `não gravei a demanda da pauta: ${insErr?.message ?? "sem retorno"}` });
+      continue;
+    }
 
-    if (internalJid) {
-      const msg = buildPautaSugestao((c.assigned_social as string) || null, nome, itens, r.data.observacao);
-      // FICA COMO TEXTO DE PROPÓSITO, mesmo passando de 600 caracteres de vez em quando.
-      // O time RESPONDE esta mensagem ("ok c6d4") e o id dela é guardado em
-      // cs_demandas.msg_id_sugestao para amarrar a resposta à demanda. PDF não tem esse fio, e
-      // trocar interação que funciona por um aviso mais bonito é um mau negócio.
-      const sent = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-pauta", destino: "interno" });
-      if (sent.ok && sent.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: sent.id }).eq("id", dem.id);
+    const msg = buildPautaSugestao((c.assigned_social as string) || null, nome, itens, r.data.observacao);
+    // FICA COMO TEXTO DE PROPÓSITO, mesmo passando de 600 caracteres de vez em quando.
+    // O time RESPONDE esta mensagem ("ok c6d4") e o id dela é guardado em
+    // cs_demandas.msg_id_sugestao para amarrar a resposta à demanda. PDF não tem esse fio, e
+    // trocar interação que funciona por um aviso mais bonito é um mau negócio.
+    const sent = await csSendGroupText(internalJid as string, msg, undefined, { origem: "cs-pauta", destino: "interno" });
+    if (!sent.ok && !sent.incerto) {
+      // Certo que não saiu: apaga a demanda, senão o dedup da semana impede propor de novo.
+      const { error: delErr } = await supabaseAdmin.from("cs_demandas").delete().eq("id", dem.id);
+      resultados.push({ cliente: nome, erro: `envio: ${sent.error}` });
+      falhas.push({ alvo: nome, erro: `a proposta não saiu (${sent.error ?? "o WhatsApp recusou"})${delErr ? ` e não consegui desfazer a demanda (${delErr.message}) — a semana ficou travada` : " — rode de novo para propor"}` });
+      continue;
+    }
+    if (sent.incerto) {
+      // Pode ter saído: a demanda fica (não duplica), e o time confere o grupo.
+      falhas.push({ alvo: nome, erro: `${sent.error ?? "sem resposta"} — pode ter saído, confira o grupo` });
+    } else if (sent.id) {
+      await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: sent.id }).eq("id", dem.id);
     }
     sugeridas++;
     resultados.push({ cliente: nome, itens: itens.length });
@@ -143,6 +176,6 @@ export async function POST(req: NextRequest) {
 
   console.log(`[cs-pauta] semana=${semanaKey} elegiveis=${clientes.length} sugeridas=${sugeridas} preview=${previewOnly}`);
   return NextResponse.json({
-    ok: true, live: PAUTA_LIVE, semana: semanaKey, datas, elegiveis: clientes.length, sugeridas, resultados,
+    ...resultadoDosEnvios(falhas), live: PAUTA_LIVE, semana: semanaKey, datas, elegiveis: clientes.length, sugeridas, resultados,
   });
 }

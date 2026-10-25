@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { reservarAviso, devolverReserva } from "@/lib/traffic/aviso-reserva";
 import { requireCron } from "@/lib/api/cron-guard";
 import { runBalanceSync, getAlertSettings } from "@/lib/traffic/sync-core";
 import { type OpAlertType } from "@/lib/budgets/operational-alerts";
@@ -73,29 +73,33 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Envia 1 msg por conta urgente, com dedup por (conta, dia).
-  let sent = 0, skipped = 0, failed = 0;
+  // Envia 1 msg por conta urgente, com dedup por (conta, dia). A linha do log é a RESERVA, gravada antes
+  // de enviar (auditoria 9.8): duas rodadas juntas não mandam em dobro, e insert que falhava depois do
+  // envio não faz mais o aviso repetir. force=1 usa uma chave própria (reenvio consciente, mas registrado).
+  let sent = 0, skipped = 0, failed = 0, incertos = 0;
+  const erros: string[] = [];
   for (const { account, reasons } of urgent) {
-    const cycleKey = `urgent|${account.metaAccountId}|${dateKey}`;
-    if (!force) {
-      const { data: existing } = await supabaseAdmin
-        .from("budget_alert_log").select("id").eq("cycle_key", cycleKey).limit(1);
-      if (existing && existing.length > 0) { skipped++; continue; }
-    }
+    const cycleKey = `urgent|${account.metaAccountId}|${dateKey}${force ? `|forcado|${Date.now()}` : ""}`;
+    const reserva = await reservarAviso({
+      ad_account_id: account.adAccountId as string,
+      balance_at_trigger: account.available ?? 0,
+      channel: "whatsapp_group",
+      cycle_key: cycleKey,
+      sent_at: new Date().toISOString(),
+    });
+    if (reserva === "ja-avisado") { skipped++; continue; }
+    if (reserva === "erro") { failed++; erros.push(`${account.clientName}: não consegui registrar o aviso (não enviei para não repetir)`); continue; }
     const res = await sendGroupText(settings.groupJid, buildMessage(account.clientName, reasons));
-    if (res.ok) {
-      sent++;
-      await supabaseAdmin.from("budget_alert_log").insert({
-        rule_id: null,
-        ad_account_id: account.adAccountId,
-        balance_at_trigger: account.available ?? 0,
-        channel: "whatsapp_group",
-        cycle_key: cycleKey,
-        sent_at: new Date().toISOString(),
-      });
-    } else { failed++; }
+    if (res.ok) sent++;
+    else if (res.incerto) { incertos++; erros.push(`${account.clientName}: ${res.error ?? "sem resposta"} — pode ter saído, não reenviei`); }
+    else { failed++; erros.push(`${account.clientName}: ${res.error ?? "falhou"}`); await devolverReserva(cycleKey); }
     await sleep(1200);
   }
 
-  return NextResponse.json({ ok: sent > 0, status: "sent", urgent: urgent.length, sent, skipped, failed });
+  // ok só quando tudo o que devia sair saiu (já avisado hoje não é falha).
+  const ok = failed === 0 && incertos === 0;
+  return NextResponse.json({
+    ok, status: "sent", urgent: urgent.length, sent, skipped, failed, incertos,
+    ...(erros.length ? { erro: erros.slice(0, 5).join("; "), erros } : {}),
+  });
 }

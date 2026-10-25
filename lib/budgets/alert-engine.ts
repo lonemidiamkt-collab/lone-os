@@ -65,6 +65,11 @@ export function evaluateAccount(
     return { severity: "disabled", reason: "Conta não ativa na Meta", pctRemaining: null };
   }
   if (available === null) {
+    // Pré-pago sem saldo lido (auditoria 9.9, 25/10/2026): a Meta não mandou o saldo da carteira. É
+    // falha de leitura — aparece como erro ("não consegui ler"), nunca como "Saldo zerado" nem como ok.
+    if (input.isPrepaid === true) {
+      return { severity: "error", reason: "Não consegui ler o saldo da carteira na Meta", pctRemaining: null };
+    }
     // Pós-pago sem cap: não há saldo monitorável → não alarmar.
     return { severity: "ok", reason: "Sem monitor de saldo", pctRemaining: null };
   }

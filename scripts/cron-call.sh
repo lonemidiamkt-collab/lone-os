@@ -4,7 +4,8 @@
 #
 # Central de Automações (/automations): antes de chamar, pergunta se o job está ligado
 # (automacoes/pode-rodar); depois, registra duração, HTTP e o começo da resposta
-# (automacoes/registrar). A Central fora do ar NUNCA impede o job de rodar.
+# (automacoes/registrar). A Central fora do ar NUNCA impede um job LIGADO de rodar (sem resposta, vale o
+# último estado que ela deu — ver o portão abaixo).
 #   CRON_JOB=<nome>  registra com outro nome (padrão: o endpoint sem a query)
 #   CRON_JOB=-       chama sem portão nem registro (chamada interna de outro script)
 #   CRON_MAX_TIME=N  tempo máximo da chamada, em segundos (padrão: sem limite, como antes)
@@ -42,11 +43,25 @@ registrar() {
 INICIO_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # ── Portão: desligado/pausado na Central? ────────────────────────────────────
+# 25/10/2026 (auditoria 10.5): sem resposta da Central (ou com a configuração indisponível, "rodar":null),
+# antes o job rodava sempre — um job de cliente DESLIGADO por incidente saía igual se o banco piscasse.
+# Agora vale o ÚLTIMO ESTADO CONHECIDO, guardado a cada resposta: desligado continua desligado; ligado (ou
+# sem estado guardado) roda, como antes. Uma Central fora do ar continua não parando job ligado.
+CACHE_DIR="${CRON_CACHE_DIR:-/opt/loneos/.cron-cache}"
+CACHE="$CACHE_DIR/$(printf '%s' "$JOB" | tr '/' '_').ligado"
 PODE=$(curl -s -m 10 "$BASE/automacoes/pode-rodar?job=$JOB" -H "Authorization: Bearer $CRON_SECRET" 2>/dev/null || true)
+if printf '%s' "$PODE" | grep -Eq '"ligado":(true|false)'; then
+  mkdir -p "$CACHE_DIR" 2>/dev/null || true
+  printf '%s' "$PODE" | grep -Eo '"ligado":(true|false)' | head -1 > "$CACHE" 2>/dev/null || true
+elif ! printf '%s' "$PODE" | grep -Eq '"rodar":(true|false)'; then
+  if [ -f "$CACHE" ] && grep -q '"ligado":false' "$CACHE" 2>/dev/null; then
+    PODE='{"rodar":false,"motivo":"desligado na Central (último estado conhecido; a Central não respondeu agora)"}'
+  fi
+fi
 if printf '%s' "$PODE" | grep -q '"rodar":false'; then
-  MOTIVO=$(printf '%s' "$PODE" | sed -n 's/.*"motivo":"\([^"]*\)".*/\1/p')
+  MOTIVO=$(printf '%s' "$PODE" | sed -n 's/.*"motivo":"\([^"]*\)".*/\1/p' | tr -d '"\\')
   echo "[cron-call] $JOB pulado: ${MOTIVO:-desligado na Central de Automações}" >&2
-  registrar "{\"job\":\"$JOB\",\"skipped\":true,\"started_at\":\"$INICIO_ISO\"}"
+  registrar "{\"job\":\"$JOB\",\"skipped\":true,\"started_at\":\"$INICIO_ISO\",\"resumo\":\"pulado: ${MOTIVO:-desligado na Central de Automações}\"}"
   exit 0
 fi
 

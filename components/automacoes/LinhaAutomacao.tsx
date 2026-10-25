@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   ChevronDown, FlaskConical, Loader2, MessageCircle, Play, Users, TrendingUp, ShieldCheck, Database, AlertTriangle,
@@ -46,6 +46,10 @@ interface Resultado {
   ensaio: boolean;
   ok: boolean;
   rodando: boolean;
+  /** false = a rota pulou (trava interna, rodada já feita, fora do dia) — nada saiu (auditoria 10.2). */
+  executado?: boolean;
+  motivo?: string;
+  rodandoDesde?: string;
   status?: number;
   duracao_ms?: number;
   resposta?: string;
@@ -107,6 +111,14 @@ export default function LinhaAutomacao({ linha: l, agora, aberta, onAbrir, onMud
   const [execucoes, setExecucoes] = useState<Execucao[] | null>(null);
   const [erroExec, setErroExec] = useState<string | null>(null);
   const [carregandoExec, setCarregandoExec] = useState(false);
+  // Depois do "ainda rodando" (202) o botão NÃO destrava: segue rodando no servidor (auditoria 10.3).
+  const [rodandoLocal, setRodandoLocal] = useState<string | null>(null);
+  const rodandoDesde = l.rodandoDesde ?? rodandoLocal;
+  // A execução que saiu do 202 entra no histórico quando termina: aí o botão destrava.
+  const ultimaEm = l.ultima?.em ?? null;
+  useEffect(() => {
+    if (rodandoLocal && ultimaEm && new Date(ultimaEm).getTime() >= new Date(rodandoLocal).getTime()) setRodandoLocal(null);
+  }, [ultimaEm, rodandoLocal]);
 
   const destino = DESTINO_UI[l.destino];
   const IconeDestino = destino.icone;
@@ -148,11 +160,17 @@ export default function LinhaAutomacao({ linha: l, agora, aberta, onAbrir, onMud
     setAcao(ensaio ? "ensaio" : "rodar");
     const r = await chamar<Resultado>("/api/system/automacoes/rodar", { job: l.id, ensaio, confirmado });
     setAcao(null);
-    if (!r.ok || !r.data) { toast.error(r.erro ?? "Não consegui rodar."); return; }
+    // 409 = já está rodando (o cron, outro gestor ou o clique anterior): a frase diz desde quando.
+    if (!r.ok || !r.data) { toast.error(r.erro ?? "Não consegui rodar."); onMudou(); return; }
     const res = { ...r.data, ensaio };
     setResultado(res);
-    if (res.rodando) toast.message(res.mensagem ?? "Ainda rodando no servidor.");
-    else if (res.ok) toast.success(ensaio ? `Ensaio de ${l.nome} concluído.` : `${l.nome} rodou.`);
+    if (res.rodando) {
+      setRodandoLocal(res.rodandoDesde ?? new Date().toISOString());
+      toast.message(res.mensagem ?? "Ainda rodando no servidor.");
+    } else if (res.executado === false) {
+      // A rota pulou: nada saiu. Antes aparecia "X rodou." (auditoria 10.2).
+      toast.warning(`${l.nome} não ${ensaio ? "executou" : "enviou"}: ${res.motivo ?? "a rota pulou"}.`, { duration: 10000 });
+    } else if (res.ok) toast.success(ensaio ? `Ensaio de ${l.nome} concluído.` : `${l.nome} rodou.`);
     else toast.error(`${l.nome} respondeu com erro${res.status ? ` (HTTP ${res.status})` : ""}.`);
     onAbrir(true);
     void carregarExecucoes();
@@ -200,7 +218,11 @@ export default function LinhaAutomacao({ linha: l, agora, aberta, onAbrir, onMud
         {/* Última execução */}
         <div className="min-w-0 text-xs">
           <p className="text-lone-eyebrow uppercase text-muted-foreground xl:hidden">Última execução</p>
-          {l.ultima ? (
+          {rodandoDesde ? (
+            <p className="flex items-center gap-1.5 text-foreground" title={dataHora(rodandoDesde)}>
+              <Loader2 size={11} className="animate-spin" aria-hidden /> rodando desde {dataHora(rodandoDesde)}
+            </p>
+          ) : l.ultima ? (
             <>
               <p className="flex items-center gap-1.5 text-foreground">
                 <span aria-hidden className={cn("inline-block h-1.5 w-1.5 rounded-full",
@@ -208,7 +230,7 @@ export default function LinhaAutomacao({ linha: l, agora, aberta, onAbrir, onMud
                 <span title={dataHora(l.ultima.em)}>{haQuanto(l.ultima.em, agora)}</span>
               </p>
               <p className="text-muted-foreground">
-                {l.ultima.pulado ? "pulada (desligado)" : [l.ultima.ok ? "ok" : "erro", l.ultima.status ? `HTTP ${l.ultima.status}` : null, l.ultima.duracaoMs != null ? duracaoCurta(l.ultima.duracaoMs) : null].filter(Boolean).join(" · ")}
+                {l.ultima.pulado ? `pulada${l.ultimaMotivo ? ` — ${l.ultimaMotivo}` : ""}` : [l.ultima.ok ? "ok" : "erro", l.ultima.status ? `HTTP ${l.ultima.status}` : null, l.ultima.duracaoMs != null ? duracaoCurta(l.ultima.duracaoMs) : null].filter(Boolean).join(" · ")}
               </p>
             </>
           ) : (
@@ -246,9 +268,12 @@ export default function LinhaAutomacao({ linha: l, agora, aberta, onAbrir, onMud
             </Button>
           )}
           {l.endpoint && (
-            <Button variant="secondary" size="sm" disabled={acao !== null} onClick={clicarRodar}>
-              {acao === "rodar" ? <Loader2 className="animate-spin" /> : <Play />}
-              {acao === "rodar" ? "Rodando…" : "Rodar agora"}
+            <Button
+              variant="secondary" size="sm" disabled={acao !== null || !!rodandoDesde} onClick={clicarRodar}
+              title={rodandoDesde ? `Já está rodando desde ${dataHora(rodandoDesde)} — espere terminar.` : undefined}
+            >
+              {acao === "rodar" || rodandoDesde ? <Loader2 className="animate-spin" /> : <Play />}
+              {acao === "rodar" || rodandoDesde ? "Rodando…" : "Rodar agora"}
             </Button>
           )}
           <button
@@ -282,11 +307,13 @@ export default function LinhaAutomacao({ linha: l, agora, aberta, onAbrir, onMud
         <div className="mt-3 space-y-3">
           {resultado && (
             <div className="rounded-lg border border-border bg-card p-3">
-              <p className={cn("text-xs font-medium", resultado.rodando ? "text-muted-foreground" : resultado.ok ? "text-lone-success" : "text-lone-danger")}>
+              <p className={cn("text-xs font-medium", resultado.rodando ? "text-muted-foreground" : resultado.executado === false ? "text-lone-warning" : resultado.ok ? "text-lone-success" : "text-lone-danger")}>
                 {resultado.ensaio ? "Ensaio" : "Execução manual"}
                 {resultado.rodando
                   ? " · ainda rodando no servidor (o resultado entra no histórico ao terminar)"
-                  : ` · ${resultado.ok ? "ok" : "erro"}${resultado.status ? ` · HTTP ${resultado.status}` : ""}${resultado.duracao_ms != null ? ` · ${duracaoCurta(resultado.duracao_ms)}` : ""}`}
+                  : resultado.executado === false
+                    ? ` · não ${resultado.ensaio ? "executou" : "enviou nada"}: ${resultado.motivo ?? "a rota pulou"}`
+                    : ` · ${resultado.ok ? "ok" : "erro"}${resultado.status ? ` · HTTP ${resultado.status}` : ""}${resultado.duracao_ms != null ? ` · ${duracaoCurta(resultado.duracao_ms)}` : ""}`}
               </p>
               {resultado.resposta && (
                 <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted/50 p-2 font-mono text-[11px] leading-relaxed text-foreground">

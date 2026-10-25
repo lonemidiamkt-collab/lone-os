@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { ROTA_CONEXAO_META } from "@/lib/trafego/anuncios";
 
 export class TokenExpiredError extends Error {
   constructor(message: string) {
@@ -57,39 +58,19 @@ async function saveGlobalToken(token: string, expiresIn?: number, tokenType: "sh
   }
 }
 
-async function clearGlobalToken() {
-  const res = await authedFetch("/api/meta/token", { method: "DELETE" });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    console.error("[Meta] Failed to clear global token:", err);
+async function clearGlobalToken(): Promise<{ ok: boolean; erro?: string }> {
+  try {
+    const res = await authedFetch("/api/meta/token", { method: "DELETE" });
+    if (res.ok) return { ok: true };
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, erro: err.error ?? `erro ${res.status}` };
+  } catch {
+    return { ok: false, erro: "sem conexão com o servidor" };
   }
 }
 
-/** Exchange a short-lived token for a long-lived one (~60 days) via server-side API route */
-async function exchangeForLongLivedToken(shortToken: string): Promise<"ok" | "failed"> {
-  try {
-    // authedFetch, NÃO fetch puro: a rota exige admin logado (ela usa o META_APP_SECRET). Com fetch
-    // puro ela devolvia 401, a troca falhava em silêncio e ficava salvo o token CURTO do Facebook —
-    // que dura ~1h. Era essa a causa do painel de resultados "caindo sozinho": não era o link, era
-    // o token da Meta morrendo na mesma tarde em que era criado.
-    const res = await authedFetch("/api/meta/exchange-token", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ short_lived_token: shortToken }),
-    });
-    const data = await res.json();
-    if (!res.ok || !data.access_token) {
-      console.error("[Meta] Token exchange failed:", data.error ?? data);
-      return "failed";
-    }
-    await saveGlobalToken(data.access_token, data.expires_in, "long");
-    console.log(`[Meta] Long-lived token saved (expires in ~${Math.round((data.expires_in ?? 0) / 86400)}d)`);
-    return "ok";
-  } catch (err) {
-    console.error("[Meta] Token exchange error:", err);
-    return "failed";
-  }
-}
+// A troca pelo token longo (60 dias) saiu daqui em 25/10/2026: quem troca e grava agora é o servidor,
+// DEPOIS de conferir o token novo (app/api/meta/reconectar — auditoria 9.5).
 
 interface MetaConnectionState {
   connected: boolean;
@@ -99,6 +80,21 @@ interface MetaConnectionState {
   tokenType: "short" | "long" | null;
   tokenExpiresAt: number | null;
   exchangeFailed: boolean;
+}
+
+/** Token que acabou de voltar do login do Facebook e ainda NÃO foi gravado (a tela confere antes). */
+export interface TokenPendente { token: string; expiresIn: number | null }
+
+/** Erro que o Facebook devolveu no retorno do login (`?error=…`), em português. */
+export function erroDoRetorno(url: { search: string; hash: string }): string | null {
+  const q = new URLSearchParams(url.search);
+  const h = new URLSearchParams(url.hash.replace(/^#/, ""));
+  const erro = q.get("error") ?? h.get("error");
+  if (!erro) return null;
+  const motivo = q.get("error_reason") ?? h.get("error_reason");
+  const desc = q.get("error_description") ?? h.get("error_description");
+  if (motivo === "user_denied" || erro === "access_denied") return "O login no Facebook foi cancelado ou a permissão foi negada. Nada mudou — o token atual continua.";
+  return `O Facebook devolveu um erro no login (${desc || erro}). Nada mudou — o token atual continua.`;
 }
 
 export function useMetaConnection() {
@@ -111,41 +107,31 @@ export function useMetaConnection() {
     tokenExpiresAt: null,
     exchangeFailed: false,
   });
+  const [pendente, setPendente] = useState<TokenPendente | null>(null);
+  const [erroLogin, setErroLogin] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function init() {
-      // 1. Check if we're returning from OAuth (token in URL hash)
-      if (typeof window !== "undefined" && window.location.hash) {
+      // 1. Voltando do login do Facebook. 25/10/2026 (auditoria 9.5): o token NÃO é gravado aqui — antes
+      // era, na hora, sem saber de quem era o perfil nem o que alcançava. Fica pendente e a tela de
+      // Conexão Meta confere (perfil, permissões, "de N para M contas") e pede confirmação.
+      // Só na tela de Conexão Meta (é para lá que o /traffic repassa o retorno): em outra tela, um
+      // `?error=` que não é do Facebook não pode sumir da barra de endereço.
+      if (typeof window !== "undefined" && window.location.pathname === ROTA_CONEXAO_META) {
+        const erro = erroDoRetorno(window.location);
         const params = new URLSearchParams(window.location.hash.slice(1));
         const token = params.get("access_token");
-        const expiresIn = params.get("expires_in");
-        if (token) {
-          const expiresInNum = expiresIn ? parseInt(expiresIn, 10) : undefined;
-          await saveGlobalToken(token, expiresInNum, "short");
-          const expiresAt = expiresInNum ? Date.now() + (expiresInNum - 300) * 1000 : null;
-          if (!cancelled) {
-            setState({ connected: true, loading: false, token, tokenExpired: false, tokenType: "short", tokenExpiresAt: expiresAt, exchangeFailed: false });
+        if (token || erro) {
+          if (token) {
+            const expiresIn = params.get("expires_in");
+            const n = expiresIn ? parseInt(expiresIn, 10) : NaN;
+            setPendente({ token, expiresIn: Number.isFinite(n) ? n : null });
           }
-          window.history.replaceState(null, "", window.location.pathname + window.location.search);
-          // Exchange for long-lived token in background, update state when done
-          exchangeForLongLivedToken(token).then(async (result) => {
-            const upgraded = await loadGlobalToken();
-            if (!cancelled) {
-              if (result === "failed") {
-                // Exchange falhou: fica conectado com short token mas avisa
-                setState((prev) => ({ ...prev, exchangeFailed: true }));
-              } else if (upgraded) {
-                setState({
-                  connected: true, loading: false, token: upgraded.token, tokenExpired: false,
-                  tokenType: upgraded.tokenType, tokenExpiresAt: upgraded.expiresAt,
-                  exchangeFailed: false,
-                });
-              }
-            }
-          });
-          return;
+          if (erro) setErroLogin(erro);
+          // Tira o token e o erro da barra de endereço (não fica no histórico nem num print).
+          window.history.replaceState(null, "", window.location.pathname);
         }
       }
 
@@ -224,9 +210,21 @@ export function useMetaConnection() {
     window.location.href = `https://www.facebook.com/v21.0/dialog/oauth?${params}`;
   }, []);
 
-  const disconnect = useCallback(async () => {
-    await clearGlobalToken();
+  // Desconectar que falha NÃO finge que desconectou (antes o erro só ia ao console).
+  const disconnect = useCallback(async (): Promise<{ ok: boolean; erro?: string }> => {
+    const r = await clearGlobalToken();
+    if (!r.ok) return r;
     setState({ connected: false, loading: false, token: null, tokenExpired: false, tokenType: null, tokenExpiresAt: null, exchangeFailed: false });
+    return { ok: true };
+  }, []);
+
+  /** Depois de gravar (ou desistir do) token pendente: relê o estado do servidor. */
+  const recarregar = useCallback(async () => {
+    const global = await loadGlobalToken();
+    const vencido = !!(global?.expiresAt && Date.now() > global.expiresAt);
+    setState(global
+      ? { connected: !vencido, loading: false, token: global.token, tokenExpired: vencido, tokenType: global.tokenType, tokenExpiresAt: global.expiresAt, exchangeFailed: false }
+      : { connected: false, loading: false, token: null, tokenExpired: false, tokenType: null, tokenExpiresAt: null, exchangeFailed: false });
   }, []);
 
   // Um 401 visto num navegador (rede, permissão da conta, rate limit) NÃO pode apagar o token
@@ -236,7 +234,11 @@ export function useMetaConnection() {
     setState({ connected: false, loading: false, token: null, tokenExpired: true, tokenType: null, tokenExpiresAt: null, exchangeFailed: false });
   }, []);
 
-  return { ...state, connect, disconnect, handleTokenError };
+  return {
+    ...state, connect, disconnect, handleTokenError, recarregar,
+    pendente, descartarPendente: () => setPendente(null),
+    erroLogin, limparErroLogin: () => setErroLogin(null),
+  };
 }
 
 function isMetaAuthError(status: number, body: { error?: { code?: number } }): boolean {

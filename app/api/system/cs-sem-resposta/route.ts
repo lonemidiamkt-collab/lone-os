@@ -3,8 +3,9 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
-import { vencidas, marcarExpirada, SLA_MINUTOS } from "@/lib/cs/requests";
+import { vencidas, marcarExpirada, desfechoDoAvisoSemResposta, SLA_MINUTOS } from "@/lib/cs/requests";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { resultadoDosEnvios, SEM_GRUPO_INTERNO, type FalhaEnvio } from "@/lib/automacoes/envios";
 
 // POST /api/system/cs-sem-resposta — "o cliente perguntou e ninguém assumiu".
 //
@@ -24,11 +25,14 @@ export async function POST(req: NextRequest) {
   const denied = requireCron(req); if (denied) return denied;
   const dry = req.nextUrl.searchParams.get("dry") !== null;
 
-  const abertas = await vencidas();
+  // Leitura que falha não é "nenhuma pergunta vencida" (auditoria 10.1).
+  let abertas: Awaited<ReturnType<typeof vencidas>>;
+  try { abertas = await vencidas(); }
+  catch (e) { return NextResponse.json({ ok: false, erro: e instanceof Error ? e.message : String(e) }, { status: 500 }); }
   if (!abertas.length) return NextResponse.json({ ok: true, vencidas: 0 });
 
   const jid = process.env.CS_INTERNAL_GROUP_JID || "";
-  if (!jid) return NextResponse.json({ ok: false, erro: "grupo interno não configurado" }, { status: 500 });
+  if (!jid && !dry) return NextResponse.json({ ...resultadoDosEnvios([{ alvo: "grupo interno", erro: SEM_GRUPO_INTERNO }]), vencidas: abertas.length }, { status: 500 });
 
   // UMA mensagem com todas, não uma por pendência: três alertas seguidos no grupo viram ruído e
   // ninguém lê o terceiro.
@@ -49,14 +53,27 @@ export async function POST(req: NextRequest) {
     "Se já respondeu por fora, ignora — eu fecho sozinho quando alguém falar no grupo.",
   ].filter(Boolean).join("\n");
 
+  const falhas: FalhaEnvio[] = [];
+  let marcadas = 0;
   if (!dry) {
-    await csSendGroupText(jid, texto, undefined, { origem: "cliente-sem-resposta", destino: "interno" });
-    // Marca depois de avisar: o alerta sai UMA vez por pendência, mesmo que ninguém responda.
-    for (const r of abertas) await marcarExpirada(r.id);
+    const envio = await csSendGroupText(jid, texto, undefined, { origem: "cliente-sem-resposta", destino: "interno" });
+    // Marca só quando o aviso saiu (ou pode ter saído): envio recusado volta na próxima rodada.
+    const d = desfechoDoAvisoSemResposta(envio);
+    if (d.falha) falhas.push({ alvo: "grupo interno", erro: d.falha });
+    if (d.marcar) {
+      const naoMarcadas: string[] = [];
+      for (const r of abertas) {
+        const erro = await marcarExpirada(r.id);
+        if (erro) naoMarcadas.push(r.cliente); else marcadas++;
+      }
+      if (naoMarcadas.length) {
+        falhas.push({ alvo: "registro", erro: `não marquei ${naoMarcadas.length} pergunta(s) como avisada(s) (${naoMarcadas.slice(0, 3).join(", ")}) — podem ser avisadas de novo` });
+      }
+    }
   }
 
   return NextResponse.json({
-    ok: true, dry, vencidas: abertas.length,
+    ...resultadoDosEnvios(falhas), dry, vencidas: abertas.length, marcadas,
     detalhe: abertas.map((r) => ({ cliente: r.cliente, minutos: r.minutos, topico: r.topico })),
     ...(dry ? { previa: texto } : {}),
   });

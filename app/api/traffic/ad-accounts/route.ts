@@ -64,11 +64,13 @@ export async function GET(req: NextRequest) {
       (a) => !linkedSet.has(a.id) && a.account_status !== 100,
     );
 
-    // Get all clients for the selector
-    const { data: clients } = await supabaseAdmin
+    // Get all clients for the selector — com a conta da ficha, para a tela perguntar ANTES de trocar a
+    // conta principal de quem já tem uma (auditoria 9.6, 25/10/2026).
+    const { data: clients, error: cliErr } = await supabaseAdmin
       .from("clients")
-      .select("id, name, nome_fantasia")
+      .select("id, name, nome_fantasia, meta_ad_account_id")
       .order("name");
+    if (cliErr) return NextResponse.json({ error: `Não consegui ler os clientes (${cliErr.message}).` }, { status: 500 });
 
     return NextResponse.json({
       accounts: available,
@@ -86,11 +88,17 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
   try {
     const body = await req.json();
-    const { clientId, metaAccountId, accountName, isPrepaid } = body as {
+    const { clientId, metaAccountId, accountName, isPrepaid, trocarFicha } = body as {
       clientId: string;
       metaAccountId: string;
       accountName: string;
       isPrepaid?: boolean;
+      /**
+       * O cliente já tem OUTRA conta na ficha: true = a nova vira a principal (relatório, portal e
+       * Instagram passam a ler dela, e a antiga sai do controle de verba); false = só entra no
+       * controle de verba e a ficha fica como está. Ausente com conta diferente na ficha = 409.
+       */
+      trocarFicha?: boolean;
     };
 
     if (!clientId || !metaAccountId) {
@@ -120,6 +128,26 @@ export async function POST(req: NextRequest) {
     if (donos.some((d) => d.noEspelho)) {
       return NextResponse.json({ error: "Esta conta já está na carteira de tráfego deste cliente." }, { status: 409 });
     }
+
+    // A ficha já aponta para OUTRA conta? Antes ela era trocada calada pela nova (auditoria 9.6): relatório,
+    // portal e Instagram passavam a ler a conta nova, e o gatilho do banco tirava a antiga do controle de verba.
+    const { data: ficha, error: fichaLerErr } = await supabaseAdmin
+      .from("clients").select("name, nome_fantasia, meta_ad_account_id").eq("id", clientId).maybeSingle();
+    if (fichaLerErr) {
+      return NextResponse.json({ error: "Não consegui ler a ficha do cliente. Nada foi salvo — tente de novo." }, { status: 503 });
+    }
+    if (!ficha) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+    const semAct = (c: string) => c.replace(/^act_/, "");
+    const contaNaFicha = (ficha.meta_ad_account_id as string | null) || null;
+    const fichaTemOutra = !!contaNaFicha && semAct(contaNaFicha) !== semAct(conta);
+    if (fichaTemOutra && typeof trocarFicha !== "boolean") {
+      const nome = (ficha.nome_fantasia as string | null) || (ficha.name as string);
+      return NextResponse.json({
+        error: `A ficha de ${nome} usa a conta ${contaNaFicha} (relatório, portal e Instagram leem dela). Escolha se a nova vira a principal ou só entra no controle de verba.`,
+        codigo: "ficha_tem_outra_conta", contaNaFicha,
+      }, { status: 409 });
+    }
+    const atualizarFicha = !fichaTemOutra || trocarFicha === true;
 
     // Try to auto-detect billing type from Meta if we have a token
     let resolvedIsPrepaid = isPrepaid ?? true;
@@ -154,14 +182,17 @@ export async function POST(req: NextRequest) {
     // só num lado é o bug que fez o Portuga P'Neus ficar semanas sem dado no painel com a conta
     // "cadastrada" — na época eu corrigi o cliente na mão e deixei a causa de pé.
     // Prefixo `act_` porque é assim que o resto do sistema consulta a Graph API.
-    const { error: fichaErr } = await supabaseAdmin
-      .from("clients").update({ meta_ad_account_id: conta }).eq("id", clientId);
+    // "Só adicionar ao controle de verba" (trocarFicha=false) não mexe na ficha: a principal continua.
+    const { error: fichaErr } = atualizarFicha
+      ? await supabaseAdmin.from("clients").update({ meta_ad_account_id: conta }).eq("id", clientId)
+      : { error: null };
 
     return NextResponse.json({
       id: inserted.id, synced: false,
       // Se a ficha falhar, quem chamou precisa saber: a conta "existe" mas o cliente segue
       // invisível no painel. Silêncio aqui foi o que escondeu o problema antes.
-      fichaAtualizada: !fichaErr, ...(fichaErr ? { avisoFicha: fichaErr.message } : {}),
+      fichaAtualizada: atualizarFicha && !fichaErr,
+      ...(fichaErr ? { avisoFicha: fichaErr.message } : {}),
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

@@ -74,7 +74,8 @@ export function getBalanceDisplay(a: AccountForDisplay): BalanceDisplay {
   if (a.is_prepaid) {
     return {
       primary:   fmt(a.availableBalance, cur),
-      secondary: "Saldo em conta",
+      // Sem leitura da carteira (auditoria 9.9): diz que não leu, em vez de um "—" que parece vazio.
+      secondary: a.availableBalance === null ? "Saldo não lido da Meta" : "Saldo em conta",
       severity:  toDisplay(a.severity),
     };
   }

@@ -179,14 +179,20 @@ export async function POST(req: NextRequest) {
   if (!dryRun && !force) {
     const reserva = await reservarRodada(chaveTrava, dateKey);
     if (!reserva.conseguiu) {
-      return NextResponse.json({ ok: true, status: "skip", motivo: reserva.motivo, kind, dateKey });
+      // `executado: false` no começo (25/10/2026, auditoria 10.2): o "Rodar agora" e o registro do cron leem
+      // isto e mostram "não enviou: …" em vez de "rodou".
+      return NextResponse.json({ ok: true, executado: false, motivo: `nada enviado — ${reserva.motivo ?? "a rodada de hoje já foi feita"}`, status: "skip", kind, dateKey });
     }
   }
 
   try {
     // Trava global (a menos que seja teste de 1 cliente)
     if (!onlyClientId && !dryRun && !(await clientMsgsEnabled())) {
-      return NextResponse.json({ ok: true, status: "disabled", message: "traffic_client_msgs_enabled=false" });
+      // Trava interna desligada: a Central mostrava "Funcionando" com ela segurando tudo (auditoria 10.2).
+      return NextResponse.json({
+        ok: true, executado: false, motivo: "envio aos clientes desligado (traffic_client_msgs_enabled = false)",
+        status: "disabled", message: "traffic_client_msgs_enabled=false",
+      });
     }
 
     // Todos os clientes ativos com grupo. Na SEGUNDA: quem tem conta Meta recebe o

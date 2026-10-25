@@ -5,6 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { gravarExecucao, podeRodarJob } from "@/lib/automacoes/painel";
 import { okDaResposta } from "@/lib/automacoes/saude";
+import { naoExecutou } from "@/lib/automacoes/execucao";
+import { liberarExecucao } from "@/lib/automacoes/trava-execucao";
 
 const JOB_VALIDO = /^[a-z0-9][a-z0-9/_-]{0,79}$/;
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null);
@@ -13,6 +15,13 @@ const data = (v: unknown): string | null => (typeof v === "string" && !Number.is
 // POST /api/system/automacoes/registrar — o cron-call.sh conta como foi cada execução.
 // Body: {job, started_at, duration_ms, http_status, resumo, corpo_ok?, skipped?}
 // ok = HTTP 2xx e corpo sem {"ok":false} (corpo_ok vem do corpo inteiro, lido no shell).
+//
+// 25/10/2026 (auditoria de erro recuperável):
+//   10.2 — rota que respondeu `executado: false` (trava interna desligada, rodada já feita) é registrada como
+//          PULADA, com o motivo — antes contava como "ok" e a Central mostrava "Funcionando" com a trava
+//          segurando tudo. Pulo esperado pela agenda (`esperado: true`, ex.: fora do dia do calendário) segue
+//          como rodada normal.
+//   10.3 — execução de verdade (não pulada) solta a reserva que o portão (pode-rodar) fez.
 export async function POST(req: NextRequest) {
   const denied = requireCron(req);
   if (denied) return denied;
@@ -23,9 +32,15 @@ export async function POST(req: NextRequest) {
   const job = typeof b.job === "string" ? b.job.trim() : "";
   if (!JOB_VALIDO.test(job)) return NextResponse.json({ error: "job inválido" }, { status: 400 });
 
-  const skipped = b.skipped === true;
   const httpStatus = num(b.http_status);
   let resumo = typeof b.resumo === "string" ? b.resumo.slice(0, 300) : null;
+  const pulo = b.skipped === true ? null : naoExecutou(resumo);
+  const puladoPelaRota = !!pulo && !pulo.esperado;
+  const skipped = b.skipped === true || puladoPelaRota;
+  // Rodou (mesmo que a rota tenha decidido não enviar): solta a reserva do portão. Pulado pelo portão não
+  // reservou nada — e soltar aqui liberaria a reserva de quem está rodando.
+  if (b.skipped !== true) await liberarExecucao(job, okDaResposta(httpStatus, resumo, typeof b.corpo_ok === "boolean" ? b.corpo_ok : null)).catch(() => {});
+  if (puladoPelaRota) resumo = `pulado: ${pulo!.motivo}\n${resumo ?? ""}`.slice(0, 300);
   // O motivo da falha chega à parte (cron-call.sh): o resumo corta em 300 e o erro ficava de fora.
   // Vai junto no mesmo campo, numa linha própria — é dela que o vigia tira a causa.
   const erro = typeof b.erro === "string" ? b.erro.replace(/\s+/g, " ").trim().slice(0, 400) : "";

@@ -7,6 +7,7 @@
 // alertas em tempo real ao grupo (anti-spam por dia/severidade).
 
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { jaAvisado, reservarAviso, devolverReserva } from "@/lib/traffic/aviso-reserva";
 import {
   fetchAccountBalances,
   fetchBatchDailySpend,
@@ -117,9 +118,12 @@ type AccountRow = {
 
 // Carrega a config de alertas por cliente (client_alert_config). Resiliente:
 // se a tabela não existir ou der erro, retorna vazio (→ defaults globais).
-export async function getClientAlertConfigs(): Promise<Map<string, ClientAlertConfig>> {
+// `estrito` (25/10/2026, auditoria 9.2): a TELA que edita a config não pode mostrar o padrão quando a
+// leitura falhou — quem salvasse gravaria o padrão por cima do que estava configurado. Lá, erro lança.
+export async function getClientAlertConfigs(opts?: { estrito?: boolean }): Promise<Map<string, ClientAlertConfig>> {
   const map = new Map<string, ClientAlertConfig>();
   const { data, error } = await supabaseAdmin.from("client_alert_config").select("*");
+  if (error && opts?.estrito) throw new Error(error.message);
   if (error || !data) return map;
   for (const r of data as Array<Record<string, unknown>>) {
     map.set(r.client_id as string, {
@@ -386,12 +390,9 @@ export async function alertasPendentes(
 
     const cycleKey = `${snap.metaAccountId}|${sev}|${today}`;
     if (vistos.has(cycleKey)) continue; // mesma conta em dois cadastros: um aviso só
-    const { data: existing } = await supabaseAdmin
-      .from("budget_alert_log")
-      .select("id")
-      .eq("cycle_key", cycleKey)
-      .limit(1);
-    if (existing && existing.length > 0) continue; // já avisado hoje nessa severidade
+    // Leitura que falha NÃO é "ainda não avisado" (auditoria 9.8): na dúvida, não sai.
+    const ja = await jaAvisado(cycleKey);
+    if (ja !== false) continue; // já avisado hoje nessa severidade, ou não deu pra saber
     vistos.add(cycleKey);
     out.push({ snap, severidade: sev, cycleKey, texto: buildUrgentMessage(snap) });
   }
@@ -408,21 +409,26 @@ async function dispatchRealtimeAlerts(
   let sent = 0;
 
   for (const a of pendentes) {
-    const res = await sendGroupText(settings.groupJid, a.texto);
-    if (!res.ok) {
-      console.error(`[budget-alert] Falha ao enviar alerta de ${a.snap.clientName}:`, res.error);
-      continue;
-    }
-
-    await supabaseAdmin.from("budget_alert_log").insert({
-      rule_id: null,
-      ad_account_id: a.snap.adAccountId,
+    // RESERVA ANTES DE ENVIAR (auditoria 9.8, 25/10/2026): cron das 2h + "Sincronizar" + "Adicionar conta"
+    // liam "ainda não avisado" juntos e mandavam em dobro; e o insert depois do envio, sem conferir o erro,
+    // fazia o aviso repetir a cada 2 h quando falhava. Ver lib/traffic/aviso-reserva.ts.
+    const reserva = await reservarAviso({
+      ad_account_id: a.snap.adAccountId as string,
       balance_at_trigger: a.snap.available ?? 0,
       channel: "whatsapp_group",
       cycle_key: a.cycleKey,
       sent_at: now,
     });
-    sent++;
+    if (reserva !== "reservado") continue;
+    const res = await sendGroupText(settings.groupJid, a.texto);
+    if (res.ok) { sent++; continue; }
+    if (res.incerto) {
+      // Pode ter saído: a reserva fica (repetir às cegas é o que manda em dobro).
+      console.warn(`[budget-alert] envio incerto do alerta de ${a.snap.clientName} — não repito hoje:`, res.error);
+      continue;
+    }
+    console.error(`[budget-alert] Falha ao enviar alerta de ${a.snap.clientName}:`, res.error);
+    await devolverReserva(a.cycleKey);
   }
   return sent;
 }
