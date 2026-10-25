@@ -1,32 +1,44 @@
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { payloadDoJwt } from "@/lib/obs/ator";
+import { ehAdmin } from "@/lib/auth/admins-fixos";
+import { buscarMembroPorEmail } from "@/lib/equipe/membro-server";
 
-// Emails com flag isAdmin=true. Usado pelo caminho Bearer JWT para derivar
-// permissões de admin sem consulta extra ao banco.
-const ADMIN_EMAILS = new Set([
-  "lonemidiamkt@gmail.com", // Roberto (admin)
-  "lucas@lonemidia.com",    // Lucas  (admin)
-  "julio@lonemidia.com",    // Julio  (manager)
-]);
+// QUEM É ADMIN (25/10/2026, onda 6, item 8.8): antes era só uma lista fixa de e-mails, qualquer que fosse
+// a função na equipe. Agora vem da função em team_members (`role = "admin"`), com a lista fixa de
+// lib/auth/admins-fixos.ts como rede de segurança dos sócios. A consulta é a mesma que já existia para
+// barrar desativado/removido (cache de 60 s, limpo na hora por /api/team ao mudar alguém).
 
-const situacao = new Map<string, { bloqueia: boolean; ate: number }>();
-async function equipeBloqueia(email: string): Promise<boolean> {
+interface Situacao { bloqueia: boolean; papel: string | null; lida: boolean; ate: number }
+const situacao = new Map<string, Situacao>();
+async function situacaoNaEquipe(email: string): Promise<Situacao> {
   const c = situacao.get(email);
-  if (c && c.ate > Date.now()) return c.bloqueia;
+  if (c && c.ate > Date.now()) return c;
   let bloqueia = false;
-  try {
-    const { data, error } = await supabaseAdmin.from("team_members").select("is_active, deleted_at").eq("email", email).maybeSingle();
-    // Sem linha na equipe: não bloqueia (login que não é da equipe é caso à parte — não trancar
-    // ninguém por engano). Erro de consulta: idem, e fica no log.
-    if (error) console.warn("[auth-server] não consegui consultar a equipe:", error.message);
-    else if (data && (data.is_active === false || data.deleted_at)) bloqueia = true;
-  } catch { /* fail-open consciente: DB fora derruba tudo de qualquer jeito */ }
-  situacao.set(email, { bloqueia, ate: Date.now() + 60_000 });
-  return bloqueia;
+  let papel: string | null = null;
+  let lida = false;
+  // E-mail sem diferença de maiúsculas (8.12): linha antiga com "Julio@..." não pode virar "fora da equipe".
+  const { membro, erro } = await buscarMembroPorEmail<{ role?: string | null; is_active?: boolean | null; deleted_at?: string | null }>(
+    email, "role, is_active, deleted_at, email",
+  );
+  // Sem linha na equipe: não bloqueia (login que não é da equipe é caso à parte — não trancar
+  // ninguém por engano). Erro de consulta: idem, e fica no log — fail-open consciente: banco fora
+  // derruba tudo de qualquer jeito. Sem leitura, o papel fica desconhecido (admin só pela lista fixa).
+  if (erro) console.warn("[auth-server] não consegui consultar a equipe:", erro);
+  else {
+    lida = true;
+    if (membro && (membro.is_active === false || membro.deleted_at)) bloqueia = true;
+    else if (membro) papel = (membro.role as string) ?? null;
+  }
+  const s: Situacao = { bloqueia, papel, lida, ate: Date.now() + 60_000 };
+  situacao.set(email, s);
+  return s;
 }
-/** Só para testes. */
-export function _limparCacheEquipe() { situacao.clear(); }
+/** Esquece o que sabia da equipe: tudo (testes) ou só um e-mail (quem /api/team acabou de mudar). */
+export function _limparCacheEquipe(email?: string) {
+  if (email) situacao.delete(email.trim().toLowerCase());
+  else situacao.clear();
+}
 
 export interface ServerUser {
   id: string;
@@ -36,6 +48,11 @@ export interface ServerUser {
   aal: "aal1" | "aal2";
   /** A conta tem verificação em duas etapas ativa. */
   duasEtapas: boolean;
+  /**
+   * Função na equipe (team_members.role), lida junto com a checagem de desativado. `undefined` = não
+   * consegui ler a equipe agora; `null` = o e-mail não está na equipe. require-role usa sem consultar de novo.
+   */
+  papel?: string | null;
 }
 
 /**
@@ -86,7 +103,8 @@ export async function getServerUser(req: NextRequest): Promise<ServerUser | null
   // DESATIVADO NÃO ENTRA. "Desativar" na Gestão da Equipe prometia bloquear o acesso, mas só o
   // login pela tela era barrado (roster não lista inativo) — uma sessão já aberta seguia usando
   // todas as rotas. Agora a equipe é consultada aqui (cache de 60s) e inativo/removido vira 401.
-  if (await equipeBloqueia(email)) return null;
+  const eq = await situacaoNaEquipe(email);
+  if (eq.bloqueia) return null;
   const duasEtapas = (data.user.factors ?? []).some((f) => f.factor_type === "totp" && f.status === "verified");
   const aal = payloadDoJwt(accessToken)?.aal === "aal2" ? "aal2" : "aal1";
   // Quem ligou a verificação em duas etapas só é "logado" em aal2. Sessão aal1 de uma conta com
@@ -97,8 +115,9 @@ export async function getServerUser(req: NextRequest): Promise<ServerUser | null
   return {
     id: data.user.id,
     email,
-    isAdmin: ADMIN_EMAILS.has(email),
+    isAdmin: ehAdmin(email, eq.papel),
     aal,
     duasEtapas,
+    papel: eq.lida ? eq.papel : undefined,
   };
 }

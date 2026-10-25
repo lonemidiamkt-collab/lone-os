@@ -83,7 +83,8 @@ beforeEach(() => {
       versoes[id] = { valor: (op.dados as { valor_cifrado: string }).valor_cifrado, motivo: (op.dados as { motivo: string }).motivo, em: "2026-10-25T12:00:00Z", por: ROBERTO, email: null };
       return { data: { id }, error: null };
     }
-    if (op.tabela === "team_members") return { data: [{ auth_id: ROBERTO, name: "Roberto" }], error: null };
+    // team_members NÃO tem auth_id (onda 6, 8.12): o nome vem pelo e-mail, sem diferença de maiúsculas.
+    if (op.tabela === "team_members") return { data: [{ email: "LoneMidiaMkt@gmail.com", name: "Roberto" }], error: null };
     if (op.tabela === "clients" && op.tipo === "select") return { data: { instagram_password: senhaAtual }, error: null };
     if (op.tabela === "clients" && op.tipo === "update") { senhaAtual = (op.dados as Record<string, string | null>).instagram_password ?? null; return { data: null, error: null }; }
     return { data: null, error: null };
@@ -179,7 +180,7 @@ describe("Restaurar esta (ação `restaurar` de /api/client-vault)", () => {
 
 describe("textos da tela", () => {
   it("descreve sem a senha; a confirmação diz qual e que a atual não se perde", () => {
-    const [v] = montarVersoes([{ id: V1, motivo: "troca", trocado_por_id: ROBERTO, trocado_por_email: "x@y", trocado_em: "2026-10-21T17:30:00Z" }], new Map([[ROBERTO, "Roberto"]]));
+    const [v] = montarVersoes([{ id: V1, motivo: "troca", trocado_por_id: ROBERTO, trocado_por_email: "LoneMidiaMkt@gmail.com", trocado_em: "2026-10-21T17:30:00Z" }], new Map([["lonemidiamkt@gmail.com", "Roberto"]]));
     expect(descreverVersao(v)).toBe("Valia até 21/10/2026, 14:30 · trocada por Roberto");
     expect(confirmacaoRestaurar("instagram_password", v)).toMatch(/^Restaurar a senha do Instagram que valia até 21\/10\/2026, 14:30\?/);
     expect(confirmacaoRestaurar("instagram_password", v)).toMatch(/não se perde/);

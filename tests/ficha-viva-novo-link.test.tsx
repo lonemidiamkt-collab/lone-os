@@ -49,21 +49,26 @@ describe("junção da ficha: o link novo chega à tela", () => {
 });
 
 describe("cartão da Ficha Viva: 'Novo link' pede confirmação", () => {
-  beforeEach(() => { api.chamar.mockReset(); });
+  // 25/10/2026 (onda 6, 12.1): o cartão lê o diagnóstico pela rota (/ficha-viva/analise) ao abrir. As
+  // asserções olham só as chamadas de TROCA de link; o diagnóstico responde "não respondeu".
+  const rotear = (troca?: unknown) => api.chamar.mockImplementation(async (url: string) =>
+    url.endsWith("/ficha-viva/analise") ? { ok: true, status: 200, erro: null, data: { diagnostico: null } } : troca);
+  const trocas = () => api.chamar.mock.calls.filter(([url]) => String(url).includes("generate-token"));
+  beforeEach(() => { api.chamar.mockReset(); rotear(); });
   const ativo = { ...base, ...extraInicial } as Client;
 
   it("um clique só não troca: mostra que o link enviado ao cliente deixa de abrir", async () => {
     render(<FichaVivaManagementCard client={ativo} onUpdate={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /novo link/i }));
     expect(screen.getByRole("alertdialog")).toHaveTextContent(/link enviado ao cliente deixa de abrir/i);
-    expect(api.chamar).not.toHaveBeenCalled();
+    expect(trocas()).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-    expect(api.chamar).not.toHaveBeenCalled();
+    expect(trocas()).toHaveLength(0);
   });
 
   it("confirmando: troca e entrega o token novo para quem guarda a tela", async () => {
-    api.chamar.mockResolvedValue({ ok: true, status: 200, erro: null, data: { token: "NOVO", raioxToken: "RX-NOVO" } });
+    rotear({ ok: true, status: 200, erro: null, data: { token: "NOVO", raioxToken: "RX-NOVO" } });
     const onUpdate = vi.fn();
     render(<FichaVivaManagementCard client={ativo} onUpdate={onUpdate} />);
     fireEvent.click(screen.getByRole("button", { name: /novo link/i }));
@@ -74,7 +79,7 @@ describe("cartão da Ficha Viva: 'Novo link' pede confirmação", () => {
   });
 
   it("falha do servidor aparece como falha e não mexe no link da tela", async () => {
-    api.chamar.mockResolvedValue({ ok: false, status: 500, erro: "Não consegui completar (erro 500).", data: null });
+    rotear({ ok: false, status: 500, erro: "Não consegui completar (erro 500).", data: null });
     const onUpdate = vi.fn();
     render(<FichaVivaManagementCard client={ativo} onUpdate={onUpdate} />);
     fireEvent.click(screen.getByRole("button", { name: /novo link/i }));

@@ -14,6 +14,7 @@ import Sidebar from "@/components/Sidebar";
 import { ROTAS_COM_PAINEL_FIXO } from "@/lib/navegacao/menu";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import LoginScreen from "@/components/LoginScreen";
+import ReentrarSessao from "@/components/ReentrarSessao";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { Logo } from "@/components/ui/Logo";
 import { Menu } from "lucide-react";
@@ -30,7 +31,7 @@ import SessionTimeout from "@/components/SessionTimeout";
 // Routes that have a secondary sidebar (240px extra)
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, hydrated } = useRole();
+  const { isAuthenticated, hydrated, sessaoInterrompida } = useRole();
 
   if (!hydrated) {
     return (
@@ -42,8 +43,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) return <LoginScreen />;
-  return <>{children}</>;
+  // Sessão que CAIU com a página aberta (inatividade, servidor recusou, outra aba saiu) não troca a página
+  // pelo login: ela fica montada por baixo do pedido de senha e o formulário não se perde (25/10/2026, 8.3).
+  // A estrutura é a mesma nos dois casos (children na mesma posição) para o React não remontar a página.
+  if (!isAuthenticated && !sessaoInterrompida) return <LoginScreen />;
+  return <>{children}{sessaoInterrompida ? <ReentrarSessao /> : null}</>;
 }
 
 function MainLayout({ children }: { children: React.ReactNode }) {

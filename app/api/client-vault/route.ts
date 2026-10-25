@@ -7,6 +7,7 @@ import { encryptVault, decryptVault } from "@/lib/crypto/vault";
 import { espelharNoCofre } from "@/lib/cofre/espelhar";
 import { planejarTroca, valorParaGuardar, campoEspelhado, avisoDoEspelho, type ResultadoEspelho } from "@/lib/cofre/versoes";
 import { registrarAcessoCofre } from "@/lib/cofre/registro-acesso";
+import { buscarMembroPorEmail } from "@/lib/equipe/membro-server";
 
 // Campos sensíveis persistidos em `clients`. Qualquer outro campo que entre na allowlist
 // abaixo fica fora do fluxo de RLS aberta e passa por este endpoint (admin-only).
@@ -54,22 +55,27 @@ export async function GET(req: NextRequest) {
 
   // Autorização: admin tem acesso total. O social ATRIBUÍDO pode revelar APENAS a
   // senha do Instagram (clients.instagram_password) dos clientes da própria carteira.
+  //
+  // 25/10/2026 (onda 6, item 8.12): procurava a pessoa por `team_members.auth_id`, coluna que não existe —
+  // o social atribuído NUNCA conseguia revelar (caía no 403) e o erro do banco era engolido. O elo é o
+  // e-mail do login, sem diferença de maiúsculas; banco fora vira 503, não "acesso restrito".
   if (!user.isAdmin) {
-    const { data: tm } = await supabaseAdmin
-      .from("team_members")
-      .select("name, role")
-      .eq("auth_id", user.id)
-      .maybeSingle();
+    const { membro: tm, erro: eEquipe } = await buscarMembroPorEmail<{ name: string | null; role: string | null }>(user.email, "name, role, email");
+    if (eEquipe) {
+      console.error("[client-vault] não consegui ler a equipe:", eEquipe);
+      return NextResponse.json({ error: "Não consegui conferir sua permissão agora. Tente de novo em instantes." }, { status: 503 });
+    }
     const socialPodeVer = tm?.role === "social" && table === "clients" && field === "instagram_password";
     if (!socialPodeVer) {
       return NextResponse.json({ error: "Acesso restrito" }, { status: 403 });
     }
-    const { data: c } = await supabaseAdmin
+    const { data: c, error: eCliente } = await supabaseAdmin
       .from("clients")
       .select("assigned_social")
       .eq("id", clientId)
       .maybeSingle();
-    if (!c || (c as { assigned_social?: string | null }).assigned_social !== tm?.name) {
+    if (eCliente) return NextResponse.json({ error: "Não consegui conferir a carteira agora. Tente de novo em instantes." }, { status: 503 });
+    if (!c || !tm?.name || (c as { assigned_social?: string | null }).assigned_social !== tm.name) {
       return NextResponse.json({ error: "Cliente fora da sua carteira" }, { status: 403 });
     }
   }
