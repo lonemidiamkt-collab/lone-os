@@ -27,8 +27,13 @@ export async function GET(req: NextRequest) {
   if (gate instanceof NextResponse) return gate;
   const mes = req.nextUrl.searchParams.get("mes") ?? mesSP(new Date());
   if (!MES.test(mes)) return NextResponse.json({ error: "Mês inválido (use AAAA-MM)." }, { status: 400 });
-  const meta = await db.fetchCrmMeta(mes);
-  return NextResponse.json({ meta });
+  // Meta que não carregou não é "sem meta" (24/10/2026): 503, e a tela diz que não leu em vez de mostrar R$ 0.
+  try {
+    const meta = await db.fetchCrmMeta(mes);
+    return NextResponse.json({ meta });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Não consegui ler a meta do mês." }, { status: 503 });
+  }
 }
 
 export async function PUT(req: NextRequest) {

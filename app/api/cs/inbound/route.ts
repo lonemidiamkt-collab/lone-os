@@ -2233,6 +2233,11 @@ async function processarInbound(req: NextRequest) {
         .eq("client_id", c.id as string).eq("status", "pendente")
         .gte("created_at", d7).order("created_at", { ascending: false }).limit(6);
       if (jaPend && jaPend.length > 0) {
+        // AUTORIDADE (24/10/2026): criar os cards dos pedidos capturados é confirmar demanda — mesma regra do "ok".
+        if (!podeAgirC) {
+          await csSendGroupText(msg.groupJid, `Achei ${jaPend.length} pedido(s) da *${clienteNome}*, mas só quem é da equipe (com o WhatsApp cadastrado na Gestão da Equipe) cria card por aqui. Não criei nada.`);
+          return NextResponse.json({ ok: true, demanda_cmd: "sem_autoridade", cliente: clienteNome });
+        }
         // 21/10/2026 (auditoria 5.9): só vira "confirmada" a demanda cujo card nasceu; a que falhou
         // continua pendente e aparece aqui com o motivo.
         const criados: string[] = [];
@@ -2379,7 +2384,9 @@ async function processarInbound(req: NextRequest) {
   // ─── Desambiguação: 2+ pedidos abertos + confirmação/seleção SEM reply → cria os escolhidos ou
   // LISTA por nome (fim do "responde na mensagem" seco). Só age com 2+ pendentes; o caso de 1
   // pendente e os replies citados seguem pelo fluxo robusto abaixo (evita card duplicado no retry). ─
-  if (isInternalCmdGroup(msg.groupJid) && !demandaDaSugestao && (ehConfirmacaoLivre(msg.text) || pareceSelecao(msg.text))) {
+  // AUTORIDADE (24/10/2026): escolher "1"/"todas" cria card — exige a mesma autoridade do "ok <código>" (podeAgirC).
+  // Antes qualquer pessoa no grupo interno (cliente adicionado por engano, número fora da equipe) criava os cards.
+  if (isInternalCmdGroup(msg.groupJid) && podeAgirC && !demandaDaSugestao && (ehConfirmacaoLivre(msg.text) || pareceSelecao(msg.text))) {
     const desdeAmb = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
     const { data: pend } = await supabaseAdmin.from("cs_demandas").select("*")
       .eq("status", "pendente").gte("created_at", desdeAmb)
@@ -2546,7 +2553,8 @@ async function processarInbound(req: NextRequest) {
   // (alucinada). O "ok/não/ajustar" explícito (parseDecision/parseAjuste) segue funcionando sem reply.
   // NÃO gateia por !isTrivial: uma confirmação trivial ("beleza", "show", "Ok!") respondendo (reply)
   // a uma sugestão DEVE ser interpretada — antes o isTrivial engolia e o card nunca era criado.
-  if (isInternalCmdGroup(msg.groupJid) && isOpenAIConfigured() && (msg.quotedMsgId || ehConfirmacaoLivre(msg.text))) {
+  // AUTORIDADE (24/10/2026): a resposta livre confirma ou descarta demanda — exige a mesma autoridade do "ok".
+  if (isInternalCmdGroup(msg.groupJid) && podeAgirC && isOpenAIConfigured() && (msg.quotedMsgId || ehConfirmacaoLivre(msg.text))) {
     let alvo = demandaDaSugestao?.status === "pendente" ? demandaDaSugestao : null;
     // Sem reply, mas a mensagem parece confirmação ("cria o card", "pode criar", "tá certo"):
     // interpreta se houver EXATAMENTE 1 demanda pendente recente (com 2+ o bloco de desambiguação

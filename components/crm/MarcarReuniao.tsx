@@ -5,12 +5,12 @@
 // recebe o convite e a pauta. Marcou → evento no Google com Meet, aviso no grupo de vendas e a confirmação
 // pronta para mandar ao lead no WhatsApp (quem manda é o comercial).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CalendarClock, Check, Copy, MapPin, MessageCircle, Phone, Search, Video, X } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 import { ehAberta } from "@/lib/crm/etapas";
-import { DURACOES, diaCurto, horaCurta, inicioDe, type Formato } from "@/lib/crm/reunioes";
+import { DURACOES, ROTULO_FORMATO, convidadosDoConvite, diaCurto, emailValido, horaCurta, inicioDe, separarEmails, textoConvidados, type Formato } from "@/lib/crm/reunioes";
 
 interface LeadOpcao { id: string; empresa: string | null; contatoNome: string; email: string | null; endereco?: string | null; cidade?: string | null; estagio: string }
 interface Marcada { reuniao: { inicio: string; meetUrl: string | null; formato: Formato; local: string | null }; aviso: string | null; whatsappLead: string | null; mensagemLead: string }
@@ -33,6 +33,9 @@ export default function MarcarReuniao<L extends LeadOpcao>({ leads, leadInicial,
   const [pauta, setPauta] = useState("Raio-x do marketing da loja e próximos passos.");
   const [livres, setLivres] = useState<string[] | null>(null);
   const [google, setGoogle] = useState<string>("");
+  // Leitura da agenda que falhou (24/10/2026, auditoria 4.9): diz que não leu e oferece tentar de novo — nunca "livre".
+  const [erroAgenda, setErroAgenda] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
   const [enviando, setEnviando] = useState(false);
   const [marcada, setMarcada] = useState<Marcada | null>(null);
 
@@ -42,24 +45,37 @@ export default function MarcarReuniao<L extends LeadOpcao>({ leads, leadInicial,
     return leads.filter((l) => ehAberta(l.estagio) && (!q || (l.empresa ?? "").toLowerCase().includes(q) || l.contatoNome.toLowerCase().includes(q))).slice(0, 8);
   }, [leads, busca]);
 
-  // Lead escolhido: e-mail e endereço vêm do cadastro.
+  // Lead escolhido: e-mail e endereço vêm do cadastro — só ao ESCOLHER o lead. Antes rodava a cada recarga da lista
+  // e devolvia ao campo o e-mail que a pessoa tinha apagado (24/10/2026, auditoria 4.7).
+  // Trocou de lead: o e-mail (e o endereço) do lead anterior não fica no campo — convidaria a pessoa errada.
+  const anterior = useRef<{ email: string; local: string }>({ email: "", local: "" });
   useEffect(() => {
     if (!lead) return;
-    setConvidado((c) => c || lead.email || "");
-    setLocal((x) => x || lead.endereco || lead.cidade || "");
-  }, [lead]);
+    const doLead = { email: lead.email || "", local: lead.endereco || lead.cidade || "" };
+    setConvidado((c) => (!c || c === anterior.current.email ? doLead.email : c));
+    setLocal((x) => (!x || x === anterior.current.local ? doLead.local : x));
+    anterior.current = doLead;
+  }, [lead?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Quem recebe o convite: exatamente o que está no campo (o servidor não acrescenta o e-mail do cadastro).
+  const emailsDigitados = separarEmails(convidado);
+  const emailsInvalidos = emailsDigitados.filter((e) => !emailValido(e));
+  const convidados = convidadosDoConvite(emailsDigitados);
 
   // Horários livres do dia (Google Agenda + reuniões do Comercial).
   useEffect(() => {
     let vivo = true;
     setLivres(null);
-    chamar<{ livres: string[]; google: string }>(`/api/crm/reunioes/horarios?dia=${dia}&duracao=${duracao}`).then((r) => {
+    setErroAgenda(null);
+    chamar<{ livres: string[]; google: string; erro?: string | null }>(`/api/crm/reunioes/horarios?dia=${dia}&duracao=${duracao}`).then((r) => {
       if (!vivo) return;
-      setLivres(r.ok ? r.data?.livres ?? [] : []);
+      const erro = !r.ok ? `Não consegui ler a agenda: ${r.erro ?? "sem resposta"}` : r.data?.erro ?? null;
+      setErroAgenda(erro);
+      setLivres(erro ? [] : r.data?.livres ?? []);
       setGoogle(r.ok ? r.data?.google ?? "" : "erro");
     });
     return () => { vivo = false; };
-  }, [dia, duracao]);
+  }, [dia, duracao, tentativa]);
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onFechar(); };
@@ -70,10 +86,11 @@ export default function MarcarReuniao<L extends LeadOpcao>({ leads, leadInicial,
   async function marcar() {
     if (!lead) { toast.error("Escolha o lead."); return; }
     if (!/^\d{2}:\d{2}$/.test(hora)) { toast.error("Escolha o horário."); return; }
+    if (emailsInvalidos.length) { toast.error(`E-mail inválido no convite: ${emailsInvalidos.join(", ")}.`); return; }
     setEnviando(true);
     const r = await chamar<Marcada>("/api/crm/reunioes", {
       leadId: lead.id, inicio: inicioDe(dia, hora), duracao, formato, autor,
-      local: formato === "presencial" ? local : null, convidados: convidado.trim() ? [convidado.trim()] : [], pauta,
+      local: formato === "presencial" ? local : null, convidados, pauta,
     });
     setEnviando(false);
     if (!r.ok || !r.data) { toast.error(r.erro ?? "Não consegui marcar."); return; }
@@ -175,10 +192,17 @@ export default function MarcarReuniao<L extends LeadOpcao>({ leads, leadInicial,
             {/* Horário */}
             <div>
               <label className="mb-1 block text-lone-caption font-medium text-muted-foreground">
-                Horário {google === "conectado" ? "· livres no Google Agenda da Lone" : google === "desconectado" ? "· Google Agenda não conectado (não confere conflito)" : ""}
+                Horário {erroAgenda ? "" : google === "conectado" ? "· livres no Google Agenda da Lone" : google === "desconectado" ? "· Google Agenda não conectado (só confere as reuniões do Comercial)" : ""}
               </label>
+              {erroAgenda && (
+                <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-lone-warning-border bg-lone-warning-bg px-3 py-2" role="alert">
+                  <p className="min-w-0 flex-1 text-lone-caption text-lone-warning">{erroAgenda} Se escolher um horário à mão, confira antes no Google Agenda.</p>
+                  <button type="button" onClick={() => setTentativa((n) => n + 1)} className="h-7 shrink-0 rounded-md border border-border bg-card px-2.5 text-[12px] text-foreground hover:bg-accent">Tentar de novo</button>
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-1.5">
                 {livres === null ? <span className="text-lone-caption text-muted-foreground">Procurando horários livres…</span>
+                  : erroAgenda ? null
                   : livres.length === 0 ? <span className="text-lone-caption text-muted-foreground">Nenhum horário livre entre 9h e 18h neste dia.</span>
                   : livres.map((h) => (
                     <button key={h} type="button" onClick={() => setHora(h)} aria-pressed={hora === h}
@@ -196,8 +220,12 @@ export default function MarcarReuniao<L extends LeadOpcao>({ leads, leadInicial,
               </div>
             )}
             <div>
-              <label className="mb-1 block text-lone-caption font-medium text-muted-foreground">Convite por e-mail para</label>
-              <input type="email" className={campo} value={convidado} onChange={(e) => setConvidado(e.target.value)} placeholder="email@daloja.com.br (opcional)" />
+              <label htmlFor="convite-reuniao" className="mb-1 block text-lone-caption font-medium text-muted-foreground">Convite por e-mail para</label>
+              <input id="convite-reuniao" className={campo} value={convidado} onChange={(e) => setConvidado(e.target.value)} placeholder="email@daloja.com.br (opcional; mais de um, separe por vírgula)"
+                aria-invalid={emailsInvalidos.length > 0} aria-describedby="convite-reuniao-ajuda" />
+              <p id="convite-reuniao-ajuda" className={`mt-1 text-lone-caption ${emailsInvalidos.length ? "text-lone-danger" : "text-muted-foreground"}`}>
+                {emailsInvalidos.length ? `E-mail inválido: ${emailsInvalidos.join(", ")}. Corrija ou apague.` : "Só quem estiver aqui recebe o convite. Apagou, ninguém recebe."}
+              </p>
             </div>
             <div>
               <label className="mb-1 block text-lone-caption font-medium text-muted-foreground">Pauta</label>
@@ -205,8 +233,16 @@ export default function MarcarReuniao<L extends LeadOpcao>({ leads, leadInicial,
             </div>
 
             <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
-              <p className="text-lone-caption text-muted-foreground">{lead && hora ? `${diaCurto(inicioDe(dia, hora))} às ${horaCurta(inicioDe(dia, hora))} · ${duracao} min` : "Escolha o lead e o horário."}</p>
-              <button disabled={enviando || !lead || !hora} onClick={marcar}
+              {/* O que vai ser criado, com a lista exata de quem recebe o convite, antes do clique (24/10/2026). */}
+              <div className="min-w-0 text-lone-caption text-muted-foreground">
+                {lead && hora ? (
+                  <>
+                    <p className="text-foreground">{diaCurto(inicioDe(dia, hora))} às {horaCurta(inicioDe(dia, hora))} · {duracao} min · {ROTULO_FORMATO[formato]}</p>
+                    <p className="truncate" title={textoConvidados(convidados)}>Convite para: {textoConvidados(convidados)}</p>
+                  </>
+                ) : "Escolha o lead e o horário."}
+              </div>
+              <button disabled={enviando || !lead || !hora || emailsInvalidos.length > 0} onClick={marcar}
                 className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
                 {enviando ? "Marcando…" : "Marcar reunião"}
               </button>

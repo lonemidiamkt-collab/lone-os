@@ -8,6 +8,7 @@ import { csSendGroupText } from "@/lib/cs/notify";
 import { spNow } from "@/lib/cs/vigilancia";
 import { chatJson, isOpenAIConfigured } from "@/lib/ai/openai";
 import { datasNaJanela, tagsDoNicho, dataEncaixa, formatDataCurta, type DataResolvida } from "@/lib/cs/datas";
+import { resultadoDosEnvios, SEM_GRUPO_INTERNO, type FalhaEnvio } from "@/lib/automacoes/envios";
 
 // POST /api/system/cs-datas — RADAR DE DATAS comemorativas: toda segunda, olha as datas dos
 // próximos 2-8 dias, cruza com a carteira (nicho) e propõe 1 ideia de post por cliente que encaixa,
@@ -50,9 +51,11 @@ export async function POST(req: NextRequest) {
   const janela = datasNaJanela(now, 2, 8); // 2-8 dias à frente = tempo de produzir a arte
   if (janela.length === 0) return NextResponse.json({ ok: true, skip: "sem datas na janela", janela: [] });
 
-  const { data: clientsData } = await supabaseAdmin
+  const { data: clientsData, error: errClientes } = await supabaseAdmin
     .from("clients").select("id, name, nome_fantasia, nicho, industry, assigned_social")
     .or("active.is.null,active.eq.true").not("assigned_social", "is", null).not("name", "ilike", "%(teste)%");
+  // Carteira que não carregou não é "nada pra sugerir" (24/10/2026).
+  if (errClientes) return NextResponse.json({ ok: false, error: `não li a carteira: ${errClientes.message}` }, { status: 500 });
   const clientes = (clientsData ?? []).map((c) => ({
     nome: (c.nome_fantasia as string) || (c.name as string) || "Cliente",
     nicho: (c.nicho as string) || (c.industry as string) || "",
@@ -112,15 +115,18 @@ export async function POST(req: NextRequest) {
 
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let postada = false;
+  // `ok` só quando o radar que devia sair saiu (24/10/2026, auditoria 5.12).
+  const falhas: FalhaEnvio[] = [];
+  if (DATAS_LIVE && !internalJid && !previewOnly && msg) falhas.push({ alvo: "grupo interno", erro: SEM_GRUPO_INTERNO });
   if (DATAS_LIVE && internalJid && !previewOnly && msg) {
     // Texto ou PDF segue o VOLUME (lib/cs/enviar-aviso.ts). Abaixo do limite nada muda; acima,
     // vira PDF em vez de ser cortado pelo WhatsApp com "Ler mais".
     const { enviarAviso } = await import("@/lib/cs/enviar-aviso");
     const r = await enviarAviso(internalJid, msg, { titulo: "Datas do mês" }, { origem: "cs-datas", destino: "interno" });
     postada = r.ok;
-    if (!r.ok) console.error("[cs-datas] post falhou:", r.error);
+    if (!r.ok) { console.error("[cs-datas] post falhou:", r.error); falhas.push({ alvo: "grupo interno", erro: r.error ?? "o WhatsApp recusou" }); }
   }
 
   console.log(`[cs-datas] janela=${janela.length} datas=${datas.length} blocos=${blocos.length} postada=${postada}`);
-  return NextResponse.json({ ok: true, live: DATAS_LIVE, janela: janela.map((d: DataResolvida) => d.nome), detalhe, postada, preview: msg || "(nada pra sugerir)" });
+  return NextResponse.json({ ...resultadoDosEnvios(falhas), live: DATAS_LIVE, janela: janela.map((d: DataResolvida) => d.nome), detalhe, postada, preview: msg || "(nada pra sugerir)" });
 }

@@ -614,12 +614,25 @@ export async function updateDesignRequestDb(id: string, updates: Partial<DesignR
 
 // forUser = nome do colaborador logado. Retorna as GLOBAIS (target_user null) + as direcionadas A ELE.
 // Sem forUser (compat) → todas. Assim uma notificação de "nova tarefa pro Pedro" só chega ao Pedro.
-export async function fetchNotifications(forUser?: string): Promise<AppNotification[]> {
+//
+// FALHA ≠ VAZIO (24/10/2026, auditoria 4.11): a leitura que falhava devolvia [] e o sino mostrava "Tudo
+// em dia". `lerNotificacoes` devolve o erro; a rota do sino responde 503 e a tela diz que não carregou.
+// `fetchNotifications` continua devolvendo [] na falha só para a carga geral do AppState (que não pode cair).
+export async function lerNotificacoes(forUser?: string): Promise<{ ok: true; notifications: AppNotification[] } | { ok: false; erro: string }> {
   let q = db.from("notifications").select("*").order("created_at", { ascending: false }).limit(50);
   if (forUser) q = q.or(`target_user.is.null,target_user.eq.${forUser}`);
   const { data, error } = await q;
-  if (error) { console.error("[DB] fetchNotifications:", error); return []; }
-  return (data ?? []).map((row: Record<string, unknown>) => ({
+  if (error) { console.error("[DB] lerNotificacoes:", error); return { ok: false, erro: error.message }; }
+  return { ok: true, notifications: (data ?? []).map(linhaParaAviso) };
+}
+
+export async function fetchNotifications(forUser?: string): Promise<AppNotification[]> {
+  const r = await lerNotificacoes(forUser);
+  return r.ok ? r.notifications : [];
+}
+
+function linhaParaAviso(row: Record<string, unknown>): AppNotification {
+  return {
     id: row.id as string,
     type: (row.type as AppNotification["type"]) ?? "system",
     title: row.title as string,
@@ -631,7 +644,7 @@ export async function fetchNotifications(forUser?: string): Promise<AppNotificat
     falar: row.falar === true,
     avisoId: (row.aviso_id as string) ?? undefined,
     paraMim: row.target_user != null,
-  }));
+  };
 }
 
 /** Devolve a linha criada — a tela precisa dela pra TROCAR o item otimista pelo real. Sem isso o
@@ -1153,9 +1166,12 @@ function crmToRow(patch: Record<string, unknown>): Record<string, unknown> {
   return row;
 }
 
+// FALHA ≠ VAZIO (24/10/2026, auditoria 4.10/4.11): a leitura que falhava devolvia [] — o funil aparecia
+// vazio, a importação achava que nenhum lead existia e criava o funil inteiro de novo, e o cron da rota
+// duplicava as lojas. Agora LANÇA: quem chama mostra "não consegui ler o funil" (ou o cron falha).
 export async function fetchCrmLeads(): Promise<CrmLead[]> {
   const { data, error } = await db.from("crm_leads").select("*").order("updated_at", { ascending: false });
-  if (error) { console.error("[DB] fetchCrmLeads:", error.message); return []; }
+  if (error) { console.error("[DB] fetchCrmLeads:", error.message); throw new Error(`Não consegui ler o funil do comercial (${error.message}).`); }
   return (data ?? []).map(snakeToCrmLead);
 }
 
@@ -1192,10 +1208,11 @@ function snakeToCrmActivity(r: Record<string, unknown>): CrmLeadActivity {
   };
 }
 
+/** Lança na falha (24/10/2026): histórico que não carregou não pode aparecer como "sem histórico ainda". */
 export async function fetchLeadActivities(leadId: string): Promise<CrmLeadActivity[]> {
   const { data, error } = await db.from("crm_lead_activities")
     .select("*").eq("lead_id", leadId).order("created_at", { ascending: false });
-  if (error) { console.error("[DB] fetchLeadActivities:", error.message); return []; }
+  if (error) { console.error("[DB] fetchLeadActivities:", error.message); throw new Error(`Não consegui ler o histórico do lead (${error.message}).`); }
   return (data ?? []).map(snakeToCrmActivity);
 }
 
@@ -1220,9 +1237,11 @@ function snakeToCrmMeta(r: Record<string, unknown>): CrmMeta {
   };
 }
 
+/** null = meta não definida para o mês. Erro de leitura LANÇA (24/10/2026): virava "sem meta" e R$ 0 na tela. */
 export async function fetchCrmMeta(mes: string): Promise<CrmMeta | null> {
   const { data, error } = await db.from("crm_metas").select("*").eq("mes", mes).maybeSingle();
-  if (error || !data) return null;
+  if (error) { console.error("[DB] fetchCrmMeta:", error.message); throw new Error(`Não consegui ler a meta do mês (${error.message}).`); }
+  if (!data) return null;
   return snakeToCrmMeta(data);
 }
 

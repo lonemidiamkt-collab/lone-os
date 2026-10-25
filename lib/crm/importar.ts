@@ -90,6 +90,29 @@ export interface Plano {
   totais: { criar: number; atualizar: number; ignorar: number; mensalidade: number };
 }
 
+// ─── O plano aprovado na prévia ─────────────────────────────────────────
+
+const ordenarChaves = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)));
+
+/**
+ * IMPRESSÃO DIGITAL do que vai ser gravado (24/10/2026, auditoria 4.10). O "Importar" recalculava o plano na
+ * hora, contra o funil daquele instante: se a leitura falhasse (lista vazia) ou o funil mudasse depois da
+ * prévia, gravava outra coisa — com a lista vazia, criava o funil inteiro de novo. A prévia devolve esta
+ * assinatura; o "Importar" manda de volta e o servidor só grava se o plano recalculado for o MESMO.
+ * Só entra o que grava: linhas "criar" (campos e atividades) e "atualizar" (as mudanças de → para).
+ */
+export function assinaturaDoPlano(plano: Pick<Plano, "linhas">): string {
+  const partes = plano.linhas
+    .filter((l) => l.acao !== "ignorar")
+    .map((l) => JSON.stringify([
+      l.chave, l.acao, l.leadId ?? null,
+      l.acao === "criar" ? ordenarChaves(l.campos) : l.mudancas.map((m) => [m.campo, m.valor]),
+      l.atividades.map((a) => [a.tipo, a.texto, a.quando]),
+    ]))
+    .sort();
+  return createHash("sha1").update(partes.join("\n")).digest("hex").slice(0, 16);
+}
+
 // ─── Utilitários ───────────────────────────────────────────────────────
 
 export const normalizarNome = (s: string | null | undefined): string =>

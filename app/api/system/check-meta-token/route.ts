@@ -1,14 +1,16 @@
 // POST /api/system/check-meta-token
 //
-// Cron endpoint — verificar diariamente se o token Meta está prestes a expirar.
+// Cron diário — confere se o token da Meta FUNCIONA (chamada real à Graph API) e se está perto de vencer.
 // Sugestão de crontab (adicionar em /etc/cron.d/loneos ou crontab -e no VPS):
 //   0 8 * * * curl -s -X POST https://painel.lonemidia.com/api/system/check-meta-token \
 //     -H "Authorization: Bearer $CRON_SECRET" >> /var/log/loneos-crons.log 2>&1
 //
-// Comportamento por janela de expiração:
-//   ≤14 dias → notification priority=high
-//   ≤7 dias  → notification priority=urgent + email para admin
-//   ≤1 dia ou expirado → notification priority=urgent + email + flag meta_token_critical=true
+// 24/10/2026 (auditoria 5.14): antes só olhava a data gravada e respondia `ok: true` com token vencido, revogado ou
+// sem data. A decisão agora mora em lib/meta/conferir-token.ts:
+//   token funcionando e longe de vencer → ok
+//   funcionando e vence em ≤14 dias → ok + aviso (≤7 dias: urgente + e-mail; ≤1 dia: banner crítico)
+//   vencido, recusado pela Meta ou sem token → ok:false + aviso urgente + e-mail + banner crítico
+//   não deu para conferir (Meta fora, rede) → ok:false com o motivo (o banner só liga se a data já está no fim)
 //
 // Idempotente: não cria notificação duplicada no mesmo dia (checa created_at).
 
@@ -19,120 +21,86 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/emailService";
 import { requireCron } from "@/lib/api/cron-guard";
+import { avaliarToken, perguntarAGraph } from "@/lib/meta/conferir-token";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
-
-function daysUntil(expiresAtMs: number): number {
-  return Math.floor((expiresAtMs - Date.now()) / 86_400_000);
-}
 
 export async function POST(req: NextRequest) {
   const denied = requireCron(req);
   if (denied) return denied;
   try {
-    // 1. Ler token e data de expiração
-    const { data: settings } = await supabaseAdmin
+    // 1. Ler token e data de expiração. Leitura que falha não é "sem token": é falha da rotina.
+    const { data: settings, error: errSettings } = await supabaseAdmin
       .from("agency_settings")
       .select("key, value")
       .in("key", ["meta_token", "meta_token_expires_at"]);
+    if (errSettings) return NextResponse.json({ ok: false, error: `não li o token: ${errSettings.message}` }, { status: 500 });
 
     const map = new Map((settings ?? []).map((r: { key: string; value: string }) => [r.key, r.value]));
     const token = map.get("meta_token");
     const expiresAtRaw = map.get("meta_token_expires_at");
+    const expiraEmMs = expiresAtRaw ? parseInt(expiresAtRaw, 10) : null;
 
-    if (!token) {
-      return NextResponse.json({ ok: false, message: "Token Meta não configurado" });
-    }
+    // 2. A pergunta de verdade: a Meta aceita este token?
+    const graph = token ? await perguntarAGraph(token) : null;
+    const av = avaliarToken({ temToken: !!token, expiraEmMs, graph, agoraMs: Date.now() });
 
-    if (!expiresAtRaw) {
-      return NextResponse.json({ ok: true, message: "Token sem data de expiração registrada" });
-    }
+    // 3. Banner crítico do painel (SystemAlertBanner lê meta_token_critical).
+    const { error: errFlag } = await supabaseAdmin
+      .from("agency_settings")
+      .upsert({ key: "meta_token_critical", value: av.critico ? "true" : "false" }, { onConflict: "key" });
+    if (errFlag) console.error("[check-meta-token] flag crítica não gravada:", errFlag.message);
 
-    const expiresAtMs = parseInt(expiresAtRaw, 10);
-    const days = daysUntil(expiresAtMs);
+    let notified = false;
+    if (av.avisar) {
+      // 4. Uma notificação por dia (idempotência).
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: existing } = await supabaseAdmin
+        .from("notifications")
+        .select("id")
+        .eq("type", "system")
+        .ilike("title", "%token Meta%")
+        .gte("created_at", `${today}T00:00:00Z`)
+        .limit(1);
+      const alreadyNotified = (existing?.length ?? 0) > 0;
+      const body = `${av.motivo} Renove em Sistema › Conexão Meta (/conexao-meta) antes que as sincronizações parem.`;
 
-    // Sem urgência
-    if (days > 14) {
-      // Limpar flag crítica se existia
-      await supabaseAdmin
-        .from("agency_settings")
-        .upsert({ key: "meta_token_critical", value: "false" }, { onConflict: "key" });
-      return NextResponse.json({ ok: true, days, message: "Token OK" });
-    }
+      if (!alreadyNotified) {
+        const expiresAt = new Date(Date.now() + 7 * 86_400_000).toISOString(); // notificação some em 7 dias
+        const { error: errNotif } = await supabaseAdmin.from("notifications").insert({
+          type: "system", title: av.titulo, body, priority: av.prioridade ?? "high", expires_at: expiresAt, read: false,
+        });
+        if (errNotif) console.error("[check-meta-token] aviso não gravado:", errNotif.message);
+        notified = !errNotif;
+      }
 
-    // 2. Verificar se já criamos notificação hoje (idempotência)
-    const today = new Date().toISOString().slice(0, 10);
-    const { data: existing } = await supabaseAdmin
-      .from("notifications")
-      .select("id")
-      .eq("type", "system")
-      .ilike("title", "%token Meta%")
-      .gte("created_at", `${today}T00:00:00Z`)
-      .limit(1);
-
-    const alreadyNotified = (existing?.length ?? 0) > 0;
-
-    // 3. Determinar severidade e ações
-    const isCritical = days <= 1;
-    const isUrgent   = days <= 7;
-    const priority   = isCritical || isUrgent ? "urgent" : "high";
-
-    const expiresLabel = days < 0
-      ? "expirado"
-      : days === 0
-      ? "expira hoje"
-      : `expira em ${days} dia${days === 1 ? "" : "s"}`;
-
-    const title = `Token Meta ${expiresLabel}`;
-    const body  = `O token de integração com o Meta Ads ${expiresLabel}. Renove em Sistema › Conexão Meta (/conexao-meta) antes que as sincronizações parem.`;
-
-    // 4. Criar notificação (se não existir hoje)
-    if (!alreadyNotified) {
-      const expiresAt = new Date(Date.now() + 7 * 86_400_000).toISOString(); // notificação some em 7 dias
-      await supabaseAdmin.from("notifications").insert({
-        type:       "system",
-        title,
-        body,
-        priority,
-        expires_at: expiresAt,
-        read:       false,
-      });
-    }
-
-    // 5. Email para admin (≤7 dias, 1 vez por dia)
-    if (isUrgent && !alreadyNotified) {
-      await sendEmail({
-        to:           ADMIN_EMAIL,
-        subject:      `[Lone OS] ⚠️ Token Meta ${expiresLabel}`,
-        html: `<p>Olá,</p>
-               <p>O token de integração com o Meta Ads <strong>${expiresLabel}</strong>.</p>
-               <p>Renove em Sistema › Conexão Meta: <a href="https://painel.lonemidia.com/conexao-meta">painel.lonemidia.com/conexao-meta</a>.</p>
-               <p>Se o token expirar, todas as sincronizações de saldo e relatórios de tráfego pararão de funcionar.</p>`,
-        templateName: "meta-token-alert",
-        toName:       "Roberto Lino",
-      }).catch((e) => console.error("[check-meta-token] email error:", e));
-    }
-
-    // 6. Marcar flag crítica no DB (≤1 dia ou expirado)
-    if (isCritical) {
-      await supabaseAdmin
-        .from("agency_settings")
-        .upsert({ key: "meta_token_critical", value: "true" }, { onConflict: "key" });
-    } else {
-      await supabaseAdmin
-        .from("agency_settings")
-        .upsert({ key: "meta_token_critical", value: "false" }, { onConflict: "key" });
+      // 5. E-mail para o admin (urgente, 1 vez por dia).
+      if (av.prioridade === "urgent" && !alreadyNotified) {
+        await sendEmail({
+          to:           ADMIN_EMAIL,
+          subject:      `[Lone OS] ⚠️ ${av.titulo}`,
+          html: `<p>Olá,</p>
+                 <p>${av.motivo}</p>
+                 <p>Renove em Sistema › Conexão Meta: <a href="https://painel.lonemidia.com/conexao-meta">painel.lonemidia.com/conexao-meta</a>.</p>
+                 <p>Sem um token válido, as sincronizações de saldo e os relatórios de tráfego param de funcionar.</p>`,
+          templateName: "meta-token-alert",
+          toName:       "Roberto Lino",
+        }).catch((e) => console.error("[check-meta-token] email error:", e));
+      }
     }
 
     return NextResponse.json({
-      ok:       true,
-      days,
-      priority,
-      critical: isCritical,
-      notified: !alreadyNotified,
+      ok:       av.ok,
+      ...(av.ok ? {} : { error: av.motivo }),
+      message:  av.motivo,
+      days:     av.dias,
+      graph:    graph?.tipo ?? "sem_token",
+      priority: av.prioridade,
+      critical: av.critico,
+      notified,
     });
   } catch (err) {
     console.error("[check-meta-token] error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
   }
 }

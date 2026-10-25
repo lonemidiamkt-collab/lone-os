@@ -251,23 +251,18 @@ export const useOperationalStore = create<OperationalState>()(
         const tempId = `temp-task-${Date.now()}`;
         const optimistic: Task = { ...task, id: tempId } as Task;
         set((s) => ({ tasks: [...s.tasks, optimistic] }), false, "ops/task/add/optimistic");
-        try {
-          const res = await authedFetch("/api/tasks/create", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(task),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
-          const confirmed: Task = { ...optimistic, id: data.id ?? tempId };
-          set((s) => ({
-            tasks: s.tasks.map((t) => t.id === tempId ? confirmed : t),
-          }), false, "ops/task/add/confirmed");
-          return confirmed;
-        } catch (err) {
+        // TAREFAS COM O MOTIVO DO SERVIDOR (24/10/2026, auditoria 4.15): o erro jogado para a tela era "HTTP 500" e
+        // a tela trocava por uma frase genérica. `chamar` traz a frase do servidor; quem chama mostra `erro.message`.
+        const r = await chamar<{ id?: string }>("/api/tasks/create", task);
+        if (!r.ok) {
           set((s) => ({ tasks: s.tasks.filter((t) => t.id !== tempId) }), false, "ops/task/add/rollback");
-          throw err;
+          throw new Error(r.erro ?? "Não consegui criar a tarefa.");
         }
+        const confirmed: Task = { ...optimistic, id: r.data?.id ?? tempId };
+        set((s) => ({
+          tasks: s.tasks.map((t) => t.id === tempId ? confirmed : t),
+        }), false, "ops/task/add/confirmed");
+        return confirmed;
       },
 
       updateTask: async (id, updates) => {
@@ -275,35 +270,20 @@ export const useOperationalStore = create<OperationalState>()(
         set((s) => ({
           tasks: s.tasks.map((t) => t.id === id ? { ...t, ...updates } : t),
         }), false, "ops/task/update/optimistic");
-        try {
-          const res = await authedFetch("/api/tasks/update", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id, ...updates }),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        } catch (err) {
+        const r = await chamar("/api/tasks/update", { id, ...updates });
+        if (!r.ok) {
           if (prev) set((s) => ({ tasks: s.tasks.map((t) => t.id === id ? prev : t) }), false, "ops/task/update/rollback");
-          throw err;
+          throw new Error(r.erro ?? "Não consegui salvar a tarefa.");
         }
       },
 
       deleteTask: async (id) => {
         const prev = get().tasks.find((t) => t.id === id);
         set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }), false, "ops/task/delete/optimistic");
-        try {
-          const res = await authedFetch("/api/tasks/delete", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id }),
-          });
-          if (!res.ok) {
-            if (prev) set((s) => ({ tasks: s.tasks.some((t) => t.id === id) ? s.tasks : [...s.tasks, prev] }), false, "ops/task/delete/rollback");
-            throw new Error(`HTTP ${res.status}`);
-          }
-        } catch (err) {
+        const r = await chamar("/api/tasks/delete", { id });
+        if (!r.ok) {
           if (prev) set((s) => ({ tasks: s.tasks.some((t) => t.id === id) ? s.tasks : [...s.tasks, prev] }), false, "ops/task/delete/rollback");
-          throw err;
+          throw new Error(r.erro ?? "Não consegui excluir a tarefa.");
         }
       },
 

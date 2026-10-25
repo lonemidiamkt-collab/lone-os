@@ -163,11 +163,14 @@ export async function calendarioId(): Promise<string> {
 /** Faixas ocupadas do calendário entre `de` e `ate` (freebusy). Erro → lista vazia + aviso. */
 export async function ocupadosNoCalendario(deIso: string, ateIso: string): Promise<{ ok: boolean; faixas: { inicio: string; fim: string }[]; error?: string }> {
   const cal = await calendarioId();
-  const r = await gapi<{ calendars?: Record<string, { busy?: { start: string; end: string }[] }> }>("https://www.googleapis.com/calendar/v3/freeBusy", {
+  const r = await gapi<{ calendars?: Record<string, { busy?: { start: string; end: string }[]; errors?: { reason?: string }[] }> }>("https://www.googleapis.com/calendar/v3/freeBusy", {
     method: "POST", body: JSON.stringify({ timeMin: deIso, timeMax: ateIso, timeZone: "America/Sao_Paulo", items: [{ id: cal }] }),
   });
   if (!r.ok) return { ok: false, faixas: [], error: r.error };
-  const busy = r.data?.calendars?.[cal]?.busy ?? Object.values(r.data?.calendars ?? {})[0]?.busy ?? [];
+  const agenda = r.data?.calendars?.[cal] ?? Object.values(r.data?.calendars ?? {})[0];
+  // O Google responde 200 com `errors` quando não consegue ler a agenda (24/10/2026): isso não é "livre o dia todo".
+  if (!agenda || agenda.errors?.length) return { ok: false, faixas: [], error: agenda?.errors?.map((e) => e.reason).filter(Boolean).join(", ") || "a agenda não veio na resposta" };
+  const busy = agenda.busy ?? [];
   return { ok: true, faixas: busy.map((b) => ({ inicio: b.start, fim: b.end })) };
 }
 

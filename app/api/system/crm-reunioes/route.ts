@@ -8,6 +8,7 @@ import { DESTINO_AVISOS_COMERCIAL } from "@/lib/crm/acesso";
 import { mandarNoGrupoVendas } from "@/lib/crm/grupo-vendas-envio";
 import { deLinha } from "@/lib/crm/reunioes-server";
 import { horaCurta, lembretesDevidos, textoHoraGrupo, textoVesperaGrupo } from "@/lib/crm/reunioes";
+import { resultadoDosEnvios, type FalhaEnvio } from "@/lib/automacoes/envios";
 
 // POST /api/system/crm-reunioes — LEMBRETES das reuniões de venda no grupo de vendas (e no sino):
 // véspera a partir das 9h e 1 hora antes, uma vez cada (crm_reunioes.lembrete_*_em). Regra em lib/crm/reunioes.ts.
@@ -24,6 +25,9 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
 
   const enviados: { id: string; tipo: string }[] = [];
+  // `ok` só quando os lembretes saíram (24/10/2026, auditoria 5.12). Antes o resultado do envio era ignorado e a
+  // rotina respondia ok com o lembrete perdido.
+  const falhas: FalhaEnvio[] = [];
   for (const linha of data ?? []) {
     const r = deLinha(linha);
     const l = linha.crm_leads as { empresa: string | null; contato_nome: string; telefone: string | null; endereco: string | null; cidade: string | null } | null;
@@ -37,15 +41,18 @@ export async function POST(req: NextRequest) {
       const coluna = tipo === "vespera" ? "lembrete_vespera_em" : "lembrete_hora_em";
       const { data: marcou } = await supabaseAdmin.from("crm_reunioes").update({ [coluna]: agora.toISOString() }).eq("id", r.id).is(coluna, null).select("id");
       if (!marcou?.length) continue;
-      await mandarNoGrupoVendas(tipo === "vespera" ? textoVesperaGrupo(r, lead) : textoHoraGrupo(r, lead, agora), `crm-reuniao:${tipo}`);
-      await supabaseAdmin.from("notifications").insert({
+      const envio = await mandarNoGrupoVendas(tipo === "vespera" ? textoVesperaGrupo(r, lead) : textoHoraGrupo(r, lead, agora), `crm-reuniao:${tipo}`);
+      // Não repete (o sino abaixo leva o mesmo lembrete); a falha fica na resposta e a Central mostra vermelho.
+      if (!envio.ok) falhas.push({ alvo: `grupo de vendas (${lead.empresa || lead.contatoNome}, ${tipo === "vespera" ? "véspera" : "1 hora antes"})`, erro: envio.error ?? "o WhatsApp recusou" });
+      const { error: errSino } = await supabaseAdmin.from("notifications").insert({
         type: "content", target_user: DESTINO_AVISOS_COMERCIAL, read: false,
         title: tipo === "vespera" ? `Comercial: reunião amanhã às ${horaCurta(r.inicio)} — ${lead.empresa || lead.contatoNome}` : `Comercial: reunião às ${horaCurta(r.inicio)} — ${lead.empresa || lead.contatoNome}`,
         body: r.meetUrl ?? r.local ?? "",
       });
-      enviados.push({ id: r.id, tipo });
+      if (errSino) falhas.push({ alvo: `sino (${lead.empresa || lead.contatoNome})`, erro: errSino.message });
+      if (envio.ok) enviados.push({ id: r.id, tipo });
     }
   }
-  console.log(`[crm-reunioes] lembretes=${enviados.length} dry=${dry}`);
-  return NextResponse.json({ ok: true, dry, enviados });
+  console.log(`[crm-reunioes] lembretes=${enviados.length} falhas=${falhas.length} dry=${dry}`);
+  return NextResponse.json({ ...resultadoDosEnvios(falhas), dry, enviados });
 }

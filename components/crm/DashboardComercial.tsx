@@ -88,7 +88,7 @@ function Rotulo({ children }: { children: React.ReactNode }) {
 }
 
 export default function DashboardComercial<L extends LeadDash>({
-  leads, historico, historicoErro, metas, carregarMeta, metaContatosSemana, nome, proximoPasso, onAbrirLead, onDefinirMeta, onIrPara, agora: agoraFixo, acao,
+  leads, historico, historicoErro, metas, metasErro, carregarMeta, metaContatosSemana, nome, proximoPasso, onAbrirLead, onDefinirMeta, onIrPara, agora: agoraFixo, acao,
 }: {
   leads: L[];
   /** Histórico de etapa (lib/crm/taxas.ts). null = não carregou: a taxa aparece como indisponível, nunca como zero. */
@@ -96,6 +96,8 @@ export default function DashboardComercial<L extends LeadDash>({
   historicoErro?: string | null;
   /** Metas por mês ("2026-10" → meta). Mês ausente = ainda não carregado. */
   metas: Record<string, CrmMeta | null>;
+  /** Meses cuja meta NÃO carregou (24/10/2026): a tela diz isso em vez de "sem meta" e R$ 0. */
+  metasErro?: Record<string, string>;
   carregarMeta?: (mes: string) => void;
   metaContatosSemana: number | null;
   nome: string;
@@ -204,7 +206,7 @@ export default function DashboardComercial<L extends LeadDash>({
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
             <Anel tamanho="lg" pct={heroi.progresso != null ? heroi.progresso * 100 : null} tom={tomMeta}
               rotulo="da meta" rotuloAcessivel={heroi.meta ? `${Math.round((heroi.progresso ?? 0) * 100)}% da meta de ${nomeDoMes(iv.mes)}` : "Meta não definida"}
-              centro={heroi.meta == null ? <span className="px-3 text-lone-caption text-muted-foreground">sem meta</span> : undefined} />
+              centro={heroi.meta == null ? <span className="px-3 text-lone-caption text-muted-foreground">{metasErro?.[iv.mes] ? "não carregou" : "sem meta"}</span> : undefined} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5"><Target size={13} className="text-muted-foreground" aria-hidden="true" /><Rotulo>Meta de {nomeDoMes(iv.mes)} · MRR novo</Rotulo></div>
               <p className="mt-1.5 text-[32px] font-semibold leading-none tracking-tight tabular-nums text-foreground">
@@ -222,6 +224,14 @@ export default function DashboardComercial<L extends LeadDash>({
                   )}
                   {heroi.cobertura != null && (
                     <p className="text-lone-caption text-muted-foreground">O ponderado do funil cobre <span className={`font-semibold ${heroi.nivelCobertura === "verde" ? "text-lone-success" : heroi.nivelCobertura === "amarelo" ? "text-lone-warning" : "text-lone-danger"}`}>{heroi.cobertura.toFixed(1).replace(".", ",")}×</span> o que falta.</p>
+                  )}
+                </div>
+              ) : metasErro?.[iv.mes] ? (
+                <div className="mt-4 rounded-xl border border-lone-danger-border bg-lone-danger-bg p-3" role="alert">
+                  <p className="text-lone-body font-medium text-foreground">Não consegui carregar a meta de {nomeDoMes(iv.mes)}.</p>
+                  <p className="mt-0.5 text-lone-caption text-muted-foreground">Pode ser a conexão ou o servidor reiniciando. A meta não foi apagada.</p>
+                  {carregarMeta && (
+                    <button onClick={() => carregarMeta(iv.mes)} className="mt-2 inline-flex h-8 items-center rounded-lg border border-border bg-card px-3 text-[13px] text-foreground hover:bg-accent">Tentar de novo</button>
                   )}
                 </div>
               ) : (

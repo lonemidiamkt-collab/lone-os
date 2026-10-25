@@ -4,7 +4,7 @@
 // do Meu Trabalho e pela ação "Nova tarefa" da busca ⌘K (?acao=nova-tarefa). Um formulário só:
 // o que muda aqui (colaboradores, prioridade, cliente) muda em todo lugar que cria tarefa.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ListChecks, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { useOperationalStore } from "@/stores/useOperationalStore";
@@ -54,7 +54,10 @@ export function BotaoNovaTarefa({ abrirAoMontar = false, aoAbrir }: { abrirAoMon
               await addTask(dados);
               toast.success("Tarefa criada.");
               setCriando(false);
-            } catch { toast.error("Não deu pra criar a tarefa."); }
+            } catch (e) {
+              // O motivo do servidor (24/10/2026, auditoria 4.15); o formulário continua aberto com o que foi digitado.
+              toast.error(`Não criei a tarefa: ${e instanceof Error && e.message ? e.message : "sem resposta do servidor"}. O que você digitou continua aqui.`, { duration: 12000 });
+            }
           }}
         />
       )}
@@ -79,6 +82,29 @@ export function NovaTarefaModal({
   const [clientId, setClientId] = useState("");
   const [description, setDescription] = useState("");
   const [salvando, setSalvando] = useState(false);
+
+  /**
+   * Fechar (clique fora, X, Cancelar ou Esc) pergunta antes de jogar fora o que foi digitado (24/10/2026, auditoria
+   * 4.13). Antes o clique fora descartava a tarefa inteira sem aviso.
+   */
+  const temAlgoDigitado = !!(title.trim() || description.trim() || dueDate || clientId || priority !== "medium" || assignedTo !== currentUser);
+  const pedirFechar = () => {
+    if (salvando) return;
+    if (temAlgoDigitado && !window.confirm("Descartar a tarefa que você começou?")) return;
+    onClose();
+  };
+  const pedirFecharRef = useRef(pedirFechar);
+  pedirFecharRef.current = pedirFechar;
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const alvo = e.target as HTMLElement | null;
+      if (alvo?.closest("input, textarea, select")) { alvo.blur(); return; } // Esc no campo só tira o foco
+      pedirFecharRef.current();
+    };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, []);
 
   const submit = async () => {
     if (!title.trim()) return;
@@ -109,12 +135,12 @@ export function NovaTarefaModal({
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={pedirFechar} />
       <div role="dialog" aria-modal="true" aria-label="Nova tarefa"
         className="relative w-full max-w-lg bg-card border border-border rounded-2xl shadow-sm p-6 space-y-4 animate-fade-in max-h-[90vh] overflow-auto">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold text-foreground flex items-center gap-2"><ListChecks size={18} className="text-primary" /> Nova tarefa</h2>
-          <button onClick={onClose} aria-label="Fechar" className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+          <button onClick={pedirFechar} aria-label="Fechar" className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
         </div>
 
         <div className="space-y-1.5">
@@ -172,7 +198,7 @@ export function NovaTarefaModal({
 
         {erro && <p className="text-xs text-destructive">{erro}</p>}
         <div className="flex items-center justify-end gap-2 pt-1">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors">Cancelar</button>
+          <button onClick={pedirFechar} className="px-4 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors">Cancelar</button>
           <button onClick={submit} disabled={!title.trim() || salvando}
             className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/85 transition-all disabled:opacity-50">
             {salvando ? "Criando…" : "Criar tarefa"}

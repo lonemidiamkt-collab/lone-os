@@ -31,6 +31,8 @@ export default function ImportarComercialPage() {
   const [csv, setCsv] = useState<string | null>(null);
   const [nomeCsv, setNomeCsv] = useState<string | null>(null);
   const [plano, setPlano] = useState<Plano | null>(null);
+  // A assinatura do plano que a prévia mostrou: o "Importar" só grava se o servidor chegar ao mesmo plano (24/10/2026).
+  const [assinatura, setAssinatura] = useState<string | null>(null);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [busy, setBusy] = useState<"previa" | "importar" | null>(null);
   const [verIgnorados, setVerIgnorados] = useState(false);
@@ -40,7 +42,7 @@ export default function ImportarComercialPage() {
   async function lerArquivo(f: File | undefined, tipo: "json" | "csv") {
     if (!f) return;
     const texto = await f.text();
-    setPlano(null); setResultado(null);
+    setPlano(null); setResultado(null); setAssinatura(null);
     if (tipo === "json") {
       try { setDados(JSON.parse(texto)); setNomeDados(f.name); }
       catch { toast.error("Esse arquivo não é um JSON válido."); }
@@ -49,10 +51,18 @@ export default function ImportarComercialPage() {
 
   async function enviar(confirmar: boolean) {
     setBusy(confirmar ? "importar" : "previa");
-    const r = await chamar<{ plano: Plano; resultado?: Resultado }>("/api/crm/importar", { dados: dados ?? undefined, csv: csv ?? undefined, confirmar });
+    const r = await chamar<{ plano: Plano; assinatura?: string; resultado?: Resultado }>("/api/crm/importar", {
+      dados: dados ?? undefined, csv: csv ?? undefined, confirmar, assinatura: confirmar ? assinatura ?? undefined : undefined,
+    });
     setBusy(null);
-    if (!r.ok || !r.data) { toast.error(r.erro ?? "Não consegui processar."); return; }
+    if (!r.ok || !r.data) {
+      toast.error(r.erro ?? "Não consegui processar.", { duration: 12000 });
+      // O funil mudou desde a prévia: mostra a prévia nova (nada foi gravado) para conferir antes de importar.
+      if (confirmar && r.status === 409) enviar(false);
+      return;
+    }
     setPlano(r.data.plano);
+    if (r.data.assinatura) setAssinatura(r.data.assinatura);
     if (r.data.resultado) {
       setResultado(r.data.resultado);
       if (r.data.resultado.erros.length) toast.warning(`${r.data.resultado.erros.length} linha(s) com erro — veja abaixo.`);

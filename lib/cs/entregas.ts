@@ -34,6 +34,8 @@ export interface ConferenciaEntrega {
   /** O WhatsApp não confirmou a tempo: PODE ter chegado. Conferir no grupo antes de reenviar
    *  (21/10/2026 — reenviar às cegas era o que mandava em dobro). */
   incertos?: string[];
+  /** A conferência NÃO RODOU (o log não pôde ser lido): o número de problemas é desconhecido, não zero. */
+  erro?: string;
 }
 
 /**
@@ -55,7 +57,9 @@ export async function conferirEntrega(
     .eq("date_key", dateKey)
     .eq("kind", kind)
     .in("client_id", elegiveis.map((c) => c.id));
-  if (error) return vazio;
+  // Leitura que falha NÃO é "0 problemas" (24/10/2026, auditoria 5.13): antes devolvia a conferência vazia e o
+  // cron dizia que tinha chegado para todo mundo. Agora volta com `erro` e o aviso diz que não conferiu.
+  if (error) return { ...vazio, erro: error.message };
 
   const porCliente = new Map<string, { status: string; error: string | null }[]>();
   for (const r of data ?? []) {
@@ -78,7 +82,15 @@ export async function conferirEntrega(
 }
 
 /** Monta o aviso. Devolve string vazia quando está tudo entregue — aí não se manda nada. */
-export function textoConferencia(conf: ConferenciaEntrega): string {
+export function textoConferencia(conf: ConferenciaEntrega & { elegiveis?: number }): string {
+  if (conf.erro) {
+    return [
+      `❓ *Não consegui conferir a entrega (${ROTULO[conf.kind]})* — ${conf.dateKey}`,
+      "",
+      `O registro de envios não pôde ser lido (${conf.erro}). Não sei quantos clientes receberam${conf.elegiveis ? ` (eram ${conf.elegiveis})` : ""}.`,
+      "_Confira a Central de Automações ou o grupo de cada cliente antes de reenviar._",
+    ].join("\n");
+  }
   const incertos = conf.incertos ?? [];
   const problemas = conf.falharam.length + conf.semRegistro.length;
   if (!problemas && !incertos.length) return "";
@@ -119,13 +131,16 @@ export async function conferirEAvisar(
   dateKey: string,
   elegiveis: { id: string; nome: string }[],
 ): Promise<ConferenciaEntrega | null> {
+  const jid = process.env.CS_INTERNAL_GROUP_JID;
   try {
     const conf = await conferirEntrega(kind, dateKey, elegiveis);
-    const texto = textoConferencia(conf);
-    const jid = process.env.CS_INTERNAL_GROUP_JID;
+    const texto = textoConferencia({ ...conf, elegiveis: elegiveis.length });
     if (texto && jid) await csSendGroupText(jid, texto);
     return conf;
-  } catch {
-    return null; // conferência nunca derruba a entrega
+  } catch (e) {
+    // Conferência nunca derruba a entrega — mas a quebra aparece como "não conferi", não como silêncio (24/10/2026).
+    const conf: ConferenciaEntrega = { kind, dateKey, entregues: 0, falharam: [], semRegistro: [], erro: e instanceof Error ? e.message : String(e) };
+    if (jid) await csSendGroupText(jid, textoConferencia({ ...conf, elegiveis: elegiveis.length })).catch(() => {});
+    return conf;
   }
 }

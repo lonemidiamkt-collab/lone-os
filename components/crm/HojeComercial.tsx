@@ -30,8 +30,8 @@ const diaSP = (iso: string) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : new Date
 const RECOLHIDOS_DE_INICIO: GrupoHoje[] = ["fim"];
 
 export default function HojeComercial<L extends LeadDoHoje>({
-  fila, leads, hoje, resumoMeta, ocupado, onAbrir, onEnviarWhatsApp, onRegistrar, onPatch, onDefinirMeta, onVerDashboard,
-  reunioes = [], onReuniao, onMarcarReuniao,
+  fila, leads, hoje, resumoMeta, ocupado, onAbrir, onEnviarWhatsApp, onAbriuWhatsApp, onRegistrar, onPatch, onLote, onDefinirMeta, onVerDashboard,
+  erroMeta, onTentarMeta, reunioes = [], onReuniao, onMarcarReuniao,
 }: {
   fila: ItemHoje<L>[];
   leads: L[];
@@ -40,10 +40,17 @@ export default function HojeComercial<L extends LeadDoHoje>({
   ocupado: string | null;
   onAbrir: (l: L) => void;
   onEnviarWhatsApp: (l: L, texto: string) => Promise<void>;
+  /** WhatsApp aberto por um link daqui: a página pergunta "Enviou?" na volta e só então registra (24/10/2026). */
+  onAbriuWhatsApp?: (l: L, texto: string) => void;
   onRegistrar: (l: L, tipo: CrmAtividadeTipo, texto: string) => Promise<boolean>;
-  onPatch: (l: L, patch: Record<string, unknown>, ok: string) => Promise<void>;
+  onPatch: (l: L, patch: Record<string, unknown>, ok: string) => Promise<boolean>;
+  /** Vários de uma vez: a página conta só o que gravou e dá um Desfazer para todos (24/10/2026). */
+  onLote: (acao: "feito" | "adiar" | "perder", leads: L[]) => Promise<void>;
   onDefinirMeta: () => void;
   onVerDashboard: () => void;
+  /** A meta do mês não carregou: mostra isso (e "Tentar de novo") em vez de "sem meta definida". */
+  erroMeta?: string | null;
+  onTentarMeta?: () => void;
   /** Reuniões de venda (lib/crm/reunioes.ts): as de hoje, as de amanhã para confirmar e as sem registro. */
   reunioes?: ReuniaoBase[];
   onReuniao?: (id: string, acao: "realizada" | "nao_veio") => Promise<boolean>;
@@ -65,16 +72,13 @@ export default function HojeComercial<L extends LeadDoHoje>({
   const alternarSelecao = (id: string) => setSelecionados((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const itensSelecionados = fila.filter((i) => selecionados.has(i.lead.id));
 
+  // Lote (24/10/2026, auditoria 4.6): antes o "adiar" contava todos como adiados mesmo com erro, e nada tinha
+  // Desfazer. Quem grava, conta e desfaz é a página (onLote).
   async function emLote(acao: "feito" | "adiar") {
     setEmMassa(true);
-    let ok = 0;
-    for (const i of itensSelecionados) {
-      if (acao === "feito") { if (await onRegistrar(i.lead, "whatsapp", "Contato feito por outro caminho (marcado em lote no Hoje)")) ok++; }
-      else { await onPatch(i.lead, { retomarEm: somaDias(hoje, 1) }, "Adiado"); ok++; }
-    }
+    await onLote(acao, itensSelecionados.map((i) => i.lead));
     setEmMassa(false);
     setSelecionados(new Set());
-    toast.success(acao === "feito" ? `${ok} marcado(s) como feito.` : `${ok} adiado(s) para amanhã.`);
   }
 
   // Régua encerrada sem resposta: decidir em bloco (23/10/2026 — ninguém marcava perdido e a taxa de fechamento
@@ -83,7 +87,7 @@ export default function HojeComercial<L extends LeadDoHoje>({
     const nomes = lista.map((i) => `• ${i.lead.empresa || i.lead.contatoNome}`).join("\n");
     if (!window.confirm(`Marcar como perdido (sem resposta)?\n\n${nomes}\n\nDá para reabrir depois pela ficha.`)) return;
     setEmMassa(true);
-    for (const i of lista) await onPatch(i.lead, { estagio: "perdido", motivoPerdaCodigo: "sem_resposta", origemEtapa: "lote" }, `${i.lead.empresa || i.lead.contatoNome}: perdido (sem resposta).`);
+    await onLote("perder", lista.map((i) => i.lead));
     setEmMassa(false);
   }
 
@@ -112,7 +116,12 @@ export default function HojeComercial<L extends LeadDoHoje>({
         </Cartao>
         <Cartao className="justify-center">
           <div className="flex items-center gap-1.5"><Target size={13} className="text-muted-foreground" aria-hidden="true" /><span className="text-[10.5px] font-medium uppercase tracking-[0.06em] text-muted-foreground">Meta do mês</span></div>
-          {resumoMeta.meta == null ? (
+          {erroMeta ? (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2" role="alert">
+              <p className="text-lone-body text-lone-danger">Não consegui carregar a meta do mês.</p>
+              {onTentarMeta && <button onClick={onTentarMeta} className="h-8 rounded-lg border border-border px-3 text-[13px] text-foreground hover:bg-accent">Tentar de novo</button>}
+            </div>
+          ) : resumoMeta.meta == null ? (
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
               <p className="text-lone-body text-foreground">Vendido {brl(resumoMeta.vendido)} · sem meta definida</p>
               <button onClick={onDefinirMeta} className="h-8 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:opacity-90">Definir meta</button>
@@ -176,7 +185,7 @@ export default function HojeComercial<L extends LeadDoHoje>({
                     <span className="block text-lone-caption text-muted-foreground">Amanhã — confirme hoje com o lead</span>
                   </div>
                   {link ? (
-                    <a href={link} target="_blank" rel="noopener noreferrer" onClick={() => onRegistrar(l, "whatsapp", "Pedido de confirmação da reunião de amanhã (pelo Hoje)")}
+                    <a href={link} target="_blank" rel="noopener noreferrer" onClick={() => onAbriuWhatsApp?.(l, "Pedido de confirmação da reunião de amanhã (pelo Hoje)")}
                       className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-lone-success-bg px-3 text-[13px] font-medium text-lone-success hover:opacity-80"><MessageCircle size={14} /> Pedir confirmação</a>
                   ) : (
                     <button onClick={() => { navigator.clipboard?.writeText(msg).catch(() => {}); toast.success("Mensagem copiada — o lead está sem WhatsApp."); }} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] text-foreground hover:bg-accent"><Copy size={14} /> Copiar confirmação</button>

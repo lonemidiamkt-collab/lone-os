@@ -19,6 +19,7 @@ import {
   textoLembreteCliente,
 } from "@/lib/cs/agendar-reuniao";
 import { porExtenso as extenso } from "@/lib/cs/parse-horario";
+import { resultadoDosEnvios, SEM_GRUPO_INTERNO, type FalhaEnvio } from "@/lib/automacoes/envios";
 
 // POST /api/system/cs-reuniao-mensal — o ciclo mensal de reuniões com o cliente.
 //
@@ -40,6 +41,9 @@ export async function POST(req: NextRequest) {
   const agora = spNow();
   const janela = janelaDoMes(agora);
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
+  // `ok` só quando tudo o que devia sair saiu (24/10/2026, auditoria 5.12): lembrete, oferta, entrega ao social e
+  // cobrança que o WhatsApp recusou entram aqui e aparecem na resposta (a Central lê o ok).
+  const falhas: FalhaEnvio[] = [];
 
   // ── 1. LEMBRETES ────────────────────────────────────────────────────────
   // Rodam sempre, inclusive fora da janela: uma reunião marcada dia 20 para o dia 28 precisa do
@@ -105,9 +109,12 @@ export async function POST(req: NextRequest) {
     const comLink = ext.link ? `${textoLembrete(l, quandoTxt, m.trecho)}\n🔗 ${ext.link}` : textoLembrete(l, quandoTxt, m.trecho);
 
     // ── 1a. EQUIPE ────────────────────────────────────────────────────────
-    if (!dry && internalJid) {
+    if (!dry && !internalJid) {
+      falhas.push({ alvo: `lembrete da equipe (${l.cliente})`, erro: SEM_GRUPO_INTERNO });
+    } else if (!dry && internalJid) {
       const r = await csSendGroupText(internalJid, comLink, undefined,
         { origem: "cs-reuniao-lembrete", destino: "interno" }, m.jids);
+      if (!r.ok) falhas.push({ alvo: `lembrete da equipe (${l.cliente})`, erro: r.error ?? "o WhatsApp recusou" });
       if (r.ok) {
         // Marca ANTES de qualquer outra coisa dar errado: repetir o lembrete é pior que perdê-lo.
         await supabaseAdmin.from("meetings")
@@ -134,6 +141,7 @@ export async function POST(req: NextRequest) {
           : textoLembreteCliente(quandoTxt, l.tipo);
         const rc = await csSendGroupText(grupoCli, textoCli, undefined,
           { origem: "cs-reuniao-lembrete-cliente", destino: "cliente" });
+        if (!rc.ok) falhas.push({ alvo: `lembrete do cliente (${l.cliente})`, erro: rc.error ?? "o WhatsApp recusou" });
         if (rc.ok) {
           await supabaseAdmin.from("meetings")
             .update(l.tipo === "vespera"
@@ -158,13 +166,13 @@ export async function POST(req: NextRequest) {
   // ── 2. COBRANÇA DA JANELA ───────────────────────────────────────────────
   if (!janela.aberta) {
     return NextResponse.json({
-      ok: true, janela: { ...janela }, abordagem: descrever(abordagem), lembretes: lembretesEnviados,
+      ...resultadoDosEnvios(falhas), janela: { ...janela }, abordagem: descrever(abordagem), lembretes: lembretesEnviados,
       cobranca: "fora da janela (dia 15 a 22)",
     });
   }
   // Cobrança é de horário comercial: ninguém marca reunião às 21h de sábado.
   if (!(await isBusinessDay(agora)) || !isBusinessHour(agora)) {
-    return NextResponse.json({ ok: true, janela, abordagem: descrever(abordagem), lembretes: lembretesEnviados, cobranca: "fora do expediente" });
+    return NextResponse.json({ ...resultadoDosEnvios(falhas), janela, abordagem: descrever(abordagem), lembretes: lembretesEnviados, cobranca: "fora do expediente" });
   }
 
   // Uma cobrança por dia. O cron roda de hora em hora por causa dos lembretes; sem este dedup,
@@ -174,7 +182,7 @@ export async function POST(req: NextRequest) {
     const { data: jaHoje } = await supabaseAdmin.from("cs_outbound")
       .select("id").eq("origem", "cs-reuniao-cobranca").eq("dia", hojeStr).limit(1);
     if (jaHoje?.length) {
-      return NextResponse.json({ ok: true, janela, abordagem: descrever(abordagem), lembretes: lembretesEnviados, cobranca: "já cobrado hoje" });
+      return NextResponse.json({ ...resultadoDosEnvios(falhas), janela, abordagem: descrever(abordagem), lembretes: lembretesEnviados, cobranca: "já cobrado hoje" });
     }
   }
 
@@ -250,7 +258,7 @@ export async function POST(req: NextRequest) {
 
       const r = await csSendGroupText(grupoCli, texto, undefined,
         { origem: "cs-reuniao-oferta", destino: "cliente", clientId: c.clientId });
-      if (!r.ok) { acoes.push(`FALHA ofertar ${c.cliente}: ${r.error}`); continue; }
+      if (!r.ok) { acoes.push(`FALHA ofertar ${c.cliente}: ${r.error}`); falhas.push({ alvo: `oferta ao cliente (${c.cliente})`, erro: r.error ?? "o WhatsApp recusou" }); continue; }
 
       await supabaseAdmin.from("meetings").upsert({
         client_id: c.clientId,
@@ -276,12 +284,13 @@ export async function POST(req: NextRequest) {
 
     // ── Entregar a conversa ao social ────────────────────────────────────
     if (acao.tipo === "passar_pro_social") {
-      if (!internalJid) continue;
+      if (!internalJid) { if (!dry) falhas.push({ alvo: `entrega ao social (${c.cliente})`, erro: SEM_GRUPO_INTERNO }); continue; }
       const m = c.responsavel ? await mencionar(c.responsavel).catch(() => ({ trecho: "", jids: [] as string[] })) : { trecho: "", jids: [] as string[] };
       const texto = textoPassarProSocial(c.cliente, acao.motivo, m.trecho);
       if (dry) { acoes.push(`(dry) passar ${c.cliente}`); continue; }
       const r = await csSendGroupText(internalJid, texto, undefined,
         { origem: "cs-reuniao-entrega", destino: "interno" }, m.jids);
+      if (!r.ok) falhas.push({ alvo: `entrega ao social (${c.cliente})`, erro: r.error ?? "o WhatsApp recusou" });
       if (r.ok) {
         const id = idReuniao.get(c.clientId);
         if (id) await supabaseAdmin.from("meetings")
@@ -294,7 +303,7 @@ export async function POST(req: NextRequest) {
 
     // ── Cobrar o social que não respondeu ao horário do cliente ──────────
     if (acao.tipo === "cobrar_social") {
-      if (!internalJid) continue;
+      if (!internalJid) { if (!dry) falhas.push({ alvo: `cobrança ao social (${c.cliente})`, erro: SEM_GRUPO_INTERNO }); continue; }
       const id = idReuniao.get(c.clientId);
       const prop = (doMes ?? []).find((x) => x.client_id === c.clientId)?.horario_proposto as string | undefined;
       const m = c.responsavel ? await mencionar(c.responsavel).catch(() => ({ trecho: "", jids: [] as string[] })) : { trecho: "", jids: [] as string[] };
@@ -302,6 +311,7 @@ export async function POST(req: NextRequest) {
       if (dry) { acoes.push(`(dry) cobrar social ${c.cliente}`); continue; }
       const r = await csSendGroupText(internalJid, texto, undefined,
         { origem: "cs-reuniao-cobra-social", destino: "interno" }, m.jids);
+      if (!r.ok) falhas.push({ alvo: `cobrança ao social (${c.cliente})`, erro: r.error ?? "o WhatsApp recusou" });
       if (r.ok) {
         // Reinicia o relógio: senão a mesma cobrança sairia todo dia até alguém responder.
         if (id) await supabaseAdmin.from("meetings").update({ perguntado_social_em: agoraIso }).eq("id", id);
@@ -318,10 +328,13 @@ export async function POST(req: NextRequest) {
       ? { trecho: "", jids: [] as string[] }
       : await mencionar(c.pessoa).catch(() => ({ trecho: "", jids: [] as string[] }));
     const texto = textoCobranca(c, janela, m.trecho);
-    if (!dry && internalJid) {
+    if (!dry && !internalJid) {
+      falhas.push({ alvo: `cobrança de ${c.pessoa}`, erro: SEM_GRUPO_INTERNO });
+    } else if (!dry && internalJid) {
       const r = await csSendGroupText(internalJid, texto, undefined,
         { origem: "cs-reuniao-cobranca", destino: "interno" }, m.jids);
       if (r.ok) postadas.push(c.pessoa);
+      else falhas.push({ alvo: `cobrança de ${c.pessoa}`, erro: r.error ?? "o WhatsApp recusou" });
       await new Promise((r2) => setTimeout(r2, 1200));
     } else {
       postadas.push(`(dry) ${c.pessoa}`);
@@ -329,7 +342,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({
-    ok: true,
+    ...resultadoDosEnvios(falhas),
     janela,
     // Sai no log de toda execução. Sem isto, "o agente não mandou nada" e "o agente está
     // desligado" ficam indistinguíveis — e é assim que se perde uma janela inteira.

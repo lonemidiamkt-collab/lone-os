@@ -71,7 +71,10 @@ async function comFallbackDeColunas<T>(fn: (patch: Record<string, unknown>) => P
 export async function GET(req: NextRequest) {
   const gate = await requireRole(req, PAPEIS_COMERCIAL);
   if (gate instanceof NextResponse) return gate;
-  const leads = await db.fetchCrmLeads();
+  // Falha na leitura não vira funil vazio (24/10/2026): 503 com o motivo; a tela mostra "Tentar de novo".
+  let leads: Awaited<ReturnType<typeof db.fetchCrmLeads>>;
+  try { leads = await db.fetchCrmLeads(); }
+  catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Não consegui ler o funil agora." }, { status: 503 }); }
   // Leva 7C (N27/N28): nota A/B/C, toques da cadência e se já virou cliente — e os segmentos do ICP
   // para a qualificação (os mesmos da prospecção).
   const [extras, cfg, hist] = await Promise.all([carregarExtras(leads.map((l) => l.id)), carregarConfig(), lerHistoricoDeEtapas()]);
