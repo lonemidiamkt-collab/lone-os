@@ -35,27 +35,39 @@ export async function POST(req: NextRequest) {
   }
   const meses = pedido ? [pedido] : mesesAte(ultimo, quantos);
 
-  const resultados: { mes: string; gravado: boolean; erro?: string; falhas: string[]; metas: { chave: string; valor: number | null; alvo: number | null; status: string; semFonte: string | null }[] }[] = [];
+  // 25/10/2026 (auditoria 7.2): meta com a fonte falhando NÃO é gravada (a tela recalcula na hora) e sem as metas do
+  // trimestre nada é gravado. A resposta é ok:false listando o que ficou de fora — antes era ok:true e "não consegui
+  // ler X" virava o fechamento oficial do mês.
+  type Resultado = {
+    mes: string; gravado: boolean; gravadas: number; erro?: string; falhas: string[]; nao_gravadas: string[];
+    metas: { chave: string; valor: number | null; alvo: number | null; status: string; semFonte: string | null }[];
+  };
+  const resultados: Resultado[] = [];
   for (const mes of meses) {
     const f = await calcularFechamento(mes);
-    let gravado = false, erro: string | undefined;
+    let gravado = false, gravadas = 0, erro: string | undefined;
     if (!dry) {
       const g = await gravarFechamento(f);
-      gravado = g.ok;
+      gravado = g.ok && g.gravadas > 0;
+      gravadas = g.gravadas;
       erro = g.erro;
     }
     resultados.push({
-      mes, gravado, erro, falhas: f.falhas,
+      mes, gravado, gravadas, erro, falhas: f.falhas,
+      nao_gravadas: f.abortado ? f.linhas.map((l) => l.chave) : f.naoGravar,
       metas: f.linhas.map((l) => ({ chave: l.chave, valor: l.valor, alvo: l.alvo, status: l.status, semFonte: l.sem_fonte })),
     });
   }
 
-  const erros = resultados.filter((r) => r.erro);
+  const problemas = resultados.flatMap((r) => [
+    ...(r.erro ? [`${r.mes}: ${r.erro}`] : []),
+    ...(!r.erro && r.nao_gravadas.length ? [`${r.mes}: não gravei ${r.nao_gravadas.join(", ")} (a fonte falhou — ${r.falhas.join("; ")})`] : []),
+  ]);
   return NextResponse.json({
-    ok: erros.length === 0,
+    ok: problemas.length === 0,
     job: "metas-fechamento",
     dry,
     meses: resultados,
-    ...(erros.length ? { error: erros.map((r) => `${r.mes}: ${r.erro}`).join("; ") } : {}),
-  }, { status: erros.length && erros.length === resultados.length ? 500 : 200 });
+    ...(problemas.length ? { error: `${problemas.join(" | ")}. Rode de novo com ?periodo= quando a fonte voltar.` } : {}),
+  }, { status: resultados.every((r) => r.erro) ? 500 : 200 });
 }

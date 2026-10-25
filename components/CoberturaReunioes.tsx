@@ -9,8 +9,8 @@
 // atravessa tudo: só reunião REALIZADA conta. Agendada é promessa, e promessa não é cobertura.
 
 import { useEffect, useState } from "react";
-import { CalendarClock, AlertTriangle, Loader2 } from "lucide-react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { CalendarClock, AlertTriangle, Loader2, RotateCcw } from "lucide-react";
+import { chamar } from "@/lib/api/chamar";
 
 interface Resumo {
   clientesElegiveis: number; comReuniaoRealizada: number; comApenasAgendada: number;
@@ -27,22 +27,21 @@ export default function CoberturaReunioes({ mes }: { mes?: string }) {
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
     let vivo = true;
     setCarregando(true);
-    authedFetch(`/api/reunioes/cobertura${mes ? `?mes=${mes}` : ""}`)
-      .then(async (r) => {
-        const j = await r.json();
-        if (!r.ok) throw new Error(j?.error ?? "não consegui carregar");
-        return j;
-      })
-      .then((j) => { if (vivo) { setResumo(j.resumo); setPessoas(j.porResponsavel ?? []); setErro(null); } })
+    // `chamar` (25/10/2026, 6.2): o 502 de HTML do deploy chegava como "Unexpected token <"; agora vem a frase certa.
+    chamar<{ resumo: Resumo; porResponsavel?: Pessoa[] }>(`/api/reunioes/cobertura${mes ? `?mes=${mes}` : ""}`).then((r) => {
+      if (!vivo) return;
+      setCarregando(false);
       // Falha de carga vira aviso, nunca "cobertura 0%": um número inventado é pior que nenhum.
-      .catch((e: Error) => { if (vivo) setErro(e.message); })
-      .finally(() => { if (vivo) setCarregando(false); });
+      if (!r.ok || !r.data?.resumo) { setErro(r.erro ?? "o servidor não devolveu a cobertura"); return; }
+      setResumo(r.data.resumo); setPessoas(r.data.porResponsavel ?? []); setErro(null);
+    });
     return () => { vivo = false; };
-  }, [mes]);
+  }, [mes, tentativa]);
 
   if (carregando) {
     return (
@@ -53,9 +52,13 @@ export default function CoberturaReunioes({ mes }: { mes?: string }) {
   }
   if (erro || !resumo) {
     return (
-      <div className="card p-4 flex items-start gap-2 text-[12px] text-lone-warning">
+      <div role="alert" className="card p-4 flex flex-wrap items-start gap-2 text-[12px] text-lone-warning">
         <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-        <span>Não consegui calcular a cobertura de reuniões: {erro}</span>
+        <span className="flex-1">Não consegui calcular a cobertura de reuniões: {erro}</span>
+        <button type="button" onClick={() => setTentativa((n) => n + 1)}
+          className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline">
+          <RotateCcw size={12} aria-hidden /> Tentar de novo
+        </button>
       </div>
     );
   }

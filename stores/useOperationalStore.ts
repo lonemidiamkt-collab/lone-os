@@ -28,8 +28,14 @@ interface OperationalState {
   moodHistory: Record<string, MoodEntry[]>;
   clientAccess: Record<string, ClientAccess>;
   initialized: boolean;
+  /** A carga inteira falhou (rede, servidor). Com erro, `initialized` fica false e "Tentar de novo" recarrega. */
+  loadError: string | null;
+  /** As tarefas não carregaram (carga inteira ou só elas): a lista NÃO é "nenhuma tarefa" (25/10/2026, 13.4/6.4). */
+  tarefasErro: string | null;
 
   init: () => Promise<void>;
+  /** Recarrega mesmo já carregado — o botão "Tentar de novo". */
+  recarregar: () => Promise<void>;
   subscribeRealtime: () => () => void;
 
   addTimelineEntry: (entry: Omit<TimelineEntry, "id">) => Promise<void>;
@@ -67,7 +73,12 @@ export const selectOnboarding = (s: OperationalState) => s.onboarding;
 export const selectClientOnboarding = (clientId: string) => (s: OperationalState) =>
   s.onboarding[clientId] ?? [];
 export const selectTasks = (s: OperationalState) => s.tasks;
+/** As tarefas da tela são a verdade? Carregadas e sem erro. Antes disso, "nenhuma tarefa" não pode aparecer. */
+export const selectTarefasProntas = (s: OperationalState) => s.initialized && !s.tarefasErro;
 export const selectNotices = (s: OperationalState) => s.notices;
+
+/** Carga em andamento — init do casco e da tela ao mesmo tempo não fazem duas idas ao servidor. */
+let carregando: Promise<void> | null = null;
 
 export const useOperationalStore = create<OperationalState>()(
   devtools(
@@ -82,15 +93,43 @@ export const useOperationalStore = create<OperationalState>()(
       moodHistory: {},
       clientAccess: {},
       initialized: false,
+      loadError: null,
+      tarefasErro: null,
 
       init: async () => {
-        if (get().initialized) return;
-        try {
-          const res = await authedFetch("/api/data/operational");
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const { timeline, onboardingItems, tasks, notices, creativeAssets, socialProofs, quinzReports, moodEntries, clientAccess } = await res.json();
-          set({ timeline, onboarding: onboardingItems, tasks, notices, creativeAssets, socialProofs, quinzReports, moodHistory: moodEntries, clientAccess, initialized: true }, false, "ops/init/done");
-        } catch {}
+        // Tarefas com erro também recarregam: o casco chama init a cada 45 s e assim tenta de novo sozinho.
+        if (get().initialized && !get().tarefasErro) return;
+        await get().recarregar();
+      },
+
+      // 25/10/2026 (auditoria 13.4/6.4): o `catch {}` engolia a falha — a lista de tarefas dizia "Nenhuma tarefa em
+      // aberto" e o Hoje "Tudo em dia!". Agora a falha vira `loadError`/`tarefasErro`, e o que já estava na tela fica.
+      recarregar: () => {
+        if (carregando) return carregando;
+        carregando = (async () => {
+          type Payload = {
+            timeline: Record<string, TimelineEntry[]>; onboardingItems: Record<string, OnboardingItem[]>;
+            tasks: Task[] | null; tarefasErro?: string | null; notices: Notice[];
+            creativeAssets: Record<string, CreativeAsset[]>; socialProofs: Record<string, SocialProofEntry[]>;
+            quinzReports: QuinzReport[]; moodEntries: Record<string, MoodEntry[]>; clientAccess: Record<string, ClientAccess>;
+          };
+          const r = await chamar<Payload>("/api/data/operational");
+          if (!r.ok || !r.data) {
+            const motivo = r.erro ?? "O servidor não devolveu os dados.";
+            set({ loadError: motivo, tarefasErro: `Não consegui carregar as tarefas: ${motivo}` }, false, "ops/init/error");
+            return;
+          }
+          const d = r.data;
+          set((s) => ({
+            timeline: d.timeline, onboarding: d.onboardingItems, notices: d.notices, creativeAssets: d.creativeAssets,
+            socialProofs: d.socialProofs, quinzReports: d.quinzReports, moodHistory: d.moodEntries, clientAccess: d.clientAccess,
+            // Tarefas que não vieram mantêm as que já estavam na tela (se havia), com o aviso de erro por cima.
+            tasks: d.tasks ?? s.tasks,
+            tarefasErro: d.tasks ? null : `Não consegui carregar as tarefas: ${d.tarefasErro || "o servidor não devolveu a lista"}`,
+            loadError: null, initialized: true,
+          }), false, "ops/init/done");
+        })().finally(() => { carregando = null; });
+        return carregando;
       },
 
       subscribeRealtime: () => {

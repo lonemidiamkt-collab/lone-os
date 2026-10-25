@@ -5,10 +5,12 @@ import { ETAPAS, ETAPAS_COMPROMETIDAS, ETAPAS_FINAIS, statusNaEtapa } from "@/li
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import ErroCargaCards from "@/components/conteudo/ErroCargaCards";
+import ErroCargaTarefas from "@/components/tarefas/ErroCargaTarefas";
+import { situacaoDaFonte, valorDaFonte, legendaDaFonte } from "@/lib/ceo/fontes";
 import { OperationalKpisPanel } from "@/components/ceo/OperationalKpisPanel";
 import CoberturaReunioes from "@/components/CoberturaReunioes";
 import CargaPorPessoa from "@/components/equipe/CargaPorPessoa";
-import { useOperationalStore } from "@/stores/useOperationalStore";
+import { useOperationalStore, selectTarefasProntas } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
 import { getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel, todaySP, spDateStr } from "@/lib/utils";
 import {
@@ -41,6 +43,15 @@ export default function CEOPage() {
   const designRequests = useContentStore((s) => s.designRequests);
   const tasks = useOperationalStore((s) => s.tasks);
   const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
+  // 25/10/2026 (auditoria 6.5): número só com a fonte carregada. Antes "Total de Clientes 0", "Risco de Churn 0",
+  // "Taxa Geral 0%" e "Publicações atrasadas 0 — nenhuma" (em verde) apareciam carregando e quando a leitura falhava.
+  const clientesCarregados = useClientsStore((s) => s.initialized);
+  const clientesErro = useClientsStore((s) => s.erro);
+  const initClientes = useClientsStore((s) => s.init);
+  const fClientes = situacaoDaFonte({ carregada: clientesCarregados, erro: clientesErro });
+  const fTarefas = situacaoDaFonte({ carregada: useOperationalStore(selectTarefasProntas), erro: useOperationalStore((s) => s.tarefasErro) });
+  const fCards = situacaoDaFonte({ carregada: useContentStore((s) => s.initialized), erro: useContentStore((s) => s.loadError) });
+  const [tentandoClientes, setTentandoClientes] = useState(false);
 
 
   // O acesso vem do papel da sessão (o PIN antigo estava escrito no bundle e não protegia nada).
@@ -396,29 +407,41 @@ export default function CEOPage() {
       <div className="p-6 space-y-6 animate-fade-in">
         {/* Operação, desempenho e carga contam os cards: se não carregaram, avisa em vez de mostrar zero (25/10/2026). */}
         <ErroCargaCards variante="faixa" />
+        {/* Tarefas e clientes idem (25/10/2026, 6.5). */}
+        <ErroCargaTarefas variante="faixa" />
+        {clientesErro && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-lone-danger-border bg-lone-danger-bg px-4 py-3">
+            <p className="text-sm text-lone-danger">Não consegui carregar os clientes ({clientesErro}) — os números da carteira aparecem como &quot;—&quot;.</p>
+            <button type="button" disabled={tentandoClientes}
+              onClick={async () => { setTentandoClientes(true); try { await initClientes(); } finally { setTentandoClientes(false); } }}
+              className="rounded-lg border border-lone-danger-border bg-card px-3 py-1.5 text-xs font-medium text-lone-danger hover:opacity-90 disabled:opacity-60">
+              {tentandoClientes ? "Tentando…" : "Tentar de novo"}
+            </button>
+          </div>
+        )}
         {/* KPIs */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="card">
             <p className="text-xs text-muted-foreground">Total de Clientes</p>
-            <p className="text-2xl font-bold text-primary mt-1">{clients.length}</p>
-            <p className="text-xs text-muted-foreground mt-1">na carteira</p>
+            <p className="text-2xl font-bold text-primary mt-1">{valorDaFonte(clients.length, fClientes)}</p>
+            <p className="text-xs text-muted-foreground mt-1">{legendaDaFonte("na carteira", fClientes)}</p>
           </div>
           <div className="card">
             <p className="text-xs text-muted-foreground">Clientes Ativos</p>
-            <p className="text-2xl font-bold text-primary mt-1">{clients.filter((c) => c.status !== "onboarding").length}</p>
-            <p className="text-xs text-muted-foreground mt-1">em operação</p>
+            <p className="text-2xl font-bold text-primary mt-1">{valorDaFonte(clients.filter((c) => c.status !== "onboarding").length, fClientes)}</p>
+            <p className="text-xs text-muted-foreground mt-1">{legendaDaFonte("em operação", fClientes)}</p>
           </div>
           <div className="card">
             <p className="text-xs text-muted-foreground">Bons Resultados</p>
-            <p className="text-2xl font-bold text-primary mt-1">{clients.filter((c) => c.status === "good").length}</p>
-            <p className="text-xs text-muted-foreground mt-1">clientes satisfeitos</p>
+            <p className="text-2xl font-bold text-primary mt-1">{valorDaFonte(clients.filter((c) => c.status === "good").length, fClientes)}</p>
+            <p className="text-xs text-muted-foreground mt-1">{legendaDaFonte("clientes satisfeitos", fClientes)}</p>
           </div>
           <div className="card">
             <p className="text-xs text-muted-foreground">Risco de Churn</p>
             <p className="text-2xl font-bold text-destructive mt-1">
-              {clients.filter((c) => c.active !== false && emRisco(c)).length} clientes
+              {fClientes === "pronta" ? `${clients.filter((c) => c.active !== false && emRisco(c)).length} clientes` : "—"}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">precisam de atenção</p>
+            <p className="text-xs text-muted-foreground mt-1">{legendaDaFonte("precisam de atenção", fClientes)}</p>
           </div>
         </div>
 
@@ -447,7 +470,7 @@ export default function CEOPage() {
               {/* Reunião com cliente é entrega operacional, não agenda — por isso fica aqui, ao
                   lado dos KPIs de entrega, e não numa tela própria que ninguém abriria. */}
               <CoberturaReunioes />
-              <OperationalKpisPanel cards={contentCards} />
+              <OperationalKpisPanel cards={contentCards} indisponivel={fCards !== "pronta" ? legendaDaFonte("", fCards) : undefined} />
             </div>
           )}
 
@@ -477,7 +500,7 @@ export default function CEOPage() {
                     <div className="grid grid-cols-2 gap-2.5">
                       <div className="rounded-xl border border-border bg-background p-3">
                         <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Novos no mês</p>
-                        <p className="text-lg font-bold text-primary tabular-nums mt-0.5">{novosNoMes}</p>
+                        <p className="text-lg font-bold text-primary tabular-nums mt-0.5">{valorDaFonte(novosNoMes, fClientes)}</p>
                       </div>
                       <button onClick={() => router.push("/defesa")} className="rounded-xl border border-border bg-background p-3 text-left transition-colors hover:border-primary/40">
                         <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Anomalias Meta</p>
@@ -791,20 +814,21 @@ export default function CEOPage() {
               <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
                 <div className="bg-card border border-border rounded-xl p-4 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Tarefas</p>
-                  <p className="text-2xl font-bold text-foreground mt-1">{tasks.length}</p>
-                  <p className="text-xs text-muted-foreground">{tasks.filter((t) => t.status === "done").length} concluídas</p>
+                  <p className="text-2xl font-bold text-foreground mt-1">{valorDaFonte(tasks.length, fTarefas)}</p>
+                  <p className="text-xs text-muted-foreground">{legendaDaFonte(`${tasks.filter((t) => t.status === "done").length} concluídas`, fTarefas)}</p>
                 </div>
                 <div className="bg-card border border-border rounded-xl p-4 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Taxa Geral</p>
                   <p className="text-2xl font-bold text-primary mt-1">
-                    {tasks.length > 0 ? Math.round((tasks.filter((t) => t.status === "done").length / tasks.length) * 100) : 0}%
+                    {/* Sem tarefa nenhuma não é 0% de conclusão: é "—" (e falha de carga também). */}
+                    {fTarefas === "pronta" && tasks.length > 0 ? `${Math.round((tasks.filter((t) => t.status === "done").length / tasks.length) * 100)}%` : "—"}
                   </p>
-                  <p className="text-xs text-muted-foreground">de conclusão</p>
+                  <p className="text-xs text-muted-foreground">{legendaDaFonte(tasks.length > 0 ? "de conclusão" : "sem tarefas", fTarefas)}</p>
                 </div>
                 <div className="bg-card border border-border rounded-xl p-4 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Posts Publicados</p>
-                  <p className="text-2xl font-bold text-primary mt-1">{contentCards.filter((c) => statusNaEtapa(c.status, "no_ar") && noMesSP(c.publishVerifiedAt ?? c.statusChangedAt)).length}</p>
-                  <p className="text-xs text-muted-foreground">este mês</p>
+                  <p className="text-2xl font-bold text-primary mt-1">{valorDaFonte(contentCards.filter((c) => statusNaEtapa(c.status, "no_ar") && noMesSP(c.publishVerifiedAt ?? c.statusChangedAt)).length, fCards)}</p>
+                  <p className="text-xs text-muted-foreground">{legendaDaFonte("este mês", fCards)}</p>
                 </div>
                 <div className="bg-card border border-border rounded-xl p-4 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Colaboradores</p>

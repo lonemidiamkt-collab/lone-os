@@ -44,7 +44,10 @@ describe("o inbound decide por remetente, não por grupo", () => {
 
   it("confirmar demanda/regra e marcar tarefa feita também exigem autoridade", () => {
     expect(INBOUND).toMatch(/decision && isInternalCmdGroup\(msg\.groupJid\) && podeAgirC/);
-    expect(INBOUND).toMatch(/conv\.data\?\.tarefa_feita && p\.podeAgir/);
+    // 25/10/2026 (13.1): a referência da IA vira `refTarefa`; marcar continua exigindo autoridade, e o "reabre" /
+    // número citando a mensagem do agente também (podeAgirC antes de responderCitacaoDeTarefa).
+    expect(INBOUND).toMatch(/refTarefa && p\.podeAgir/);
+    expect(INBOUND).toMatch(/ehCitacaoDeTarefa\([\s\S]{0,200}if \(!podeAgirC\)[\s\S]{0,400}responderCitacaoDeTarefa\(/);
   });
 
   it("a autoridade é resolvida uma vez, pelo número, com nível C", () => {

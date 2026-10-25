@@ -14,7 +14,7 @@ const base = (over: Partial<Cockpit> = {}): Cockpit => ({
   designDiasMedio: { valor: null, semFonte: "ninguém marca início do trabalho" },
   tarefasConcluidas: { valor: 40 }, tarefasVencidas: { valor: 5 },
   diasSemFalarMedio: { valor: 12.4 },
-  cobertura: { health: 35, interacao: 15 }, ...over,
+  cobertura: { health: 35, interacao: 15 }, falhas: [], ...over,
 });
 
 describe("compararComAnterior", () => {

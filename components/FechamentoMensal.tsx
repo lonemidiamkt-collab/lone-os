@@ -14,8 +14,8 @@
 // dias de atraso. É o que dá para agir hoje de manhã.
 
 import { useEffect, useState } from "react";
-import { Users, AlertTriangle, Clock, Image as ImageIcon, EyeOff } from "lucide-react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { Users, AlertTriangle, Clock, Image as ImageIcon, EyeOff, RotateCcw } from "lucide-react";
+import { chamar } from "@/lib/api/chamar";
 
 interface Social {
   pessoa: string; clientes: number; comPost: number; semPost: number;
@@ -73,26 +73,44 @@ export default function FechamentoMensal() {
   const [dados, setDados] = useState<Resposta | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
     let vivo = true;
     setCarregando(true);
     setErro(null);
-    authedFetch(`/api/scores/mensal?mes=${mes}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((j) => { if (vivo) setDados(j); })
-      .catch((e) => { if (vivo) setErro(String(e.message ?? e)); })
-      .finally(() => { if (vivo) setCarregando(false); });
+    // `chamar` (25/10/2026, 7.3): o motivo do servidor chega à tela — antes aparecia "HTTP 500", sem tentar de novo.
+    chamar<Resposta>(`/api/scores/mensal?mes=${mes}`).then((r) => {
+      if (!vivo) return;
+      setCarregando(false);
+      if (!r.ok || !r.data) { setErro(r.erro ?? "o servidor não devolveu o fechamento"); return; }
+      setDados(r.data);
+    });
     return () => { vivo = false; };
-  }, [mes]);
+  }, [mes, tentativa]);
 
   if (carregando && !dados) {
     return <div className="card p-4"><p className="text-xs text-muted-foreground">Carregando fechamento…</p></div>;
   }
   if (erro) {
     return (
-      <div className="card p-4">
-        <p className="text-xs text-destructive">Não consegui carregar o fechamento: {erro}</p>
+      <div className="card p-4 space-y-3">
+        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-lone-danger">
+          <AlertTriangle size={13} className="shrink-0" aria-hidden />
+          <span className="flex-1">Não consegui carregar o fechamento: {erro}</span>
+          <button type="button" onClick={() => setTentativa((n) => n + 1)} className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline">
+            <RotateCcw size={12} aria-hidden /> Tentar de novo
+          </button>
+        </div>
+        {/* O seletor de mês continua: um mês que falhou não prende a tela. */}
+        <div className="flex flex-wrap gap-1">
+          {meses.map((m) => (
+            <button key={m.valor} type="button" onClick={() => setMes(m.valor)}
+              className={`px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${mes === m.valor ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:text-foreground"}`}>
+              {m.rotulo}{m.emAndamento ? " · em andamento" : ""}
+            </button>
+          ))}
+        </div>
       </div>
     );
   }

@@ -16,6 +16,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { emRisco as clienteEmRisco } from "@/lib/saude/carteira";
+import { lerTodasAsLinhas, type PaginaLida } from "@/lib/scores/ler-tudo";
 
 export interface Metrica {
   valor: number | null;
@@ -25,9 +26,10 @@ export interface Metrica {
 
 export interface Cockpit {
   periodo: string;              // "2026-07"
-  clientes: number;
-  ativos: number;
-  emRisco: number;
+  /** null = a carteira não foi lida (25/10/2026, 6.3) — nunca "0 clientes". */
+  clientes: number | null;
+  ativos: number | null;
+  emRisco: number | null;
   churnPct: Metrica;
   healthMedio: Metrica;
   postsPublicados: Metrica;
@@ -42,6 +44,8 @@ export interface Cockpit {
   diasSemFalarMedio: Metrica;
   /** Quantos clientes entraram em cada média — a tela avisa quando a cobertura é baixa. */
   cobertura: { health: number; interacao: number };
+  /** Fontes que não foram lidas (25/10/2026, 6.3). Com alguma, o fechamento do mês NÃO é gravado. */
+  falhas: string[];
 }
 
 const num = (v: number | null | undefined): Metrica => ({ valor: v ?? null });
@@ -59,17 +63,35 @@ export async function calcularCockpit(periodo = periodoAtualBRT()): Promise<Cock
   const fimIso = new Date(Date.UTC(ano, m, 0)).toISOString().slice(0, 10);
   const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 
-  const [{ data: clientes }, { data: cards }, { data: tarefas }, { data: posts }] = await Promise.all([
-    supabaseAdmin.from("clients")
+  // 25/10/2026 (auditoria 6.3): cada fonte confere o próprio erro. Antes as quatro leituras usavam `data ?? []` e a falha
+  // aparecia como "Posts publicados 0", "Tarefas vencidas 0", "Artes entregues 0" — e o fechamento gravava esses zeros.
+  // Fonte que falha vira `semFonte("não consegui ler …")` nas métricas dela e um nome em `falhas`. Cards e tarefas são
+  // paginados (passam de mil linhas); os posts do mês vêm pela contagem.
+  type L = Record<string, unknown>;
+  const falhas: string[] = [];
+  const ler = async <T,>(rotulo: string, p: PromiseLike<T>): Promise<T | null> => {
+    try { return await p; } catch (e) { falhas.push(`${rotulo}: ${e instanceof Error ? e.message : String(e)}`); return null; }
+  };
+  const paginado = (montar: (de: number, ate: number, contar: boolean) => unknown) =>
+    lerTodasAsLinhas<L>(montar as (de: number, ate: number, contar: boolean) => PromiseLike<PaginaLida<L>>);
+  const comErro = async <T,>(q: PromiseLike<{ data: T | null; error: { message: string } | null; count?: number | null }>) => {
+    const r = await q;
+    if (r.error) throw new Error(r.error.message);
+    return r;
+  };
+  const [clientes, cards, tarefas, posts] = await Promise.all([
+    ler("os clientes", comErro(supabaseAdmin.from("clients")
       .select("id, status, current_health_score, current_health_level, posts_goal, last_client_msg_at")
-      .is("draft_status", null).or("active.is.null,active.eq.true"),
-    supabaseAdmin.from("content_cards")
-      .select("designer_delivered_at, due_date, work_started_at, publish_verified_at")
-      .is("archived_at", null),
-    supabaseAdmin.from("tasks").select("status, due_date"),
-    supabaseAdmin.from("client_ig_posts").select("id")
-      .gte("posted_at", `${inicio}T00:00:00-03:00`).lte("posted_at", `${fimIso}T23:59:59-03:00`),
+      .is("draft_status", null).or("active.is.null,active.eq.true")).then((r) => (r.data ?? []) as L[])),
+    ler("os cards", paginado((de, ate, contar) => supabaseAdmin.from("content_cards")
+      .select("id, designer_delivered_at, due_date, work_started_at, publish_verified_at", contar ? { count: "exact" } : undefined)
+      .is("archived_at", null).order("id").range(de, ate))),
+    ler("as tarefas", paginado((de, ate, contar) => supabaseAdmin.from("tasks")
+      .select("id, status, due_date", contar ? { count: "exact" } : undefined).order("id").range(de, ate))),
+    ler("os posts do Instagram", comErro(supabaseAdmin.from("client_ig_posts").select("id", { count: "exact", head: true })
+      .gte("posted_at", `${inicio}T00:00:00-03:00`).lte("posted_at", `${fimIso}T23:59:59-03:00`)).then((r) => r.count ?? 0)),
   ]);
+  const naoLi = (fonte: string) => semFonte(`não consegui ler ${fonte} agora`);
 
   const cli = clientes ?? [];
   const ativos = cli.filter((c) => c.status !== "onboarding");
@@ -79,7 +101,7 @@ export async function calcularCockpit(periodo = periodoAtualBRT()): Promise<Cock
 
   // ── Saúde: só quem TEM score entra na média. Contar quem não tem como zero puxava tudo pra baixo.
   const comScore = cli.filter((c) => c.current_health_score != null);
-  const healthMedio = comScore.length
+  const healthMedio = !clientes ? naoLi("os clientes") : comScore.length
     ? num(arred(comScore.reduce((s, c) => s + Number(c.current_health_score), 0) / comScore.length))
     : semFonte("nenhum cliente com score calculado");
 
@@ -96,18 +118,18 @@ export async function calcularCockpit(periodo = periodoAtualBRT()): Promise<Cock
   // entrega). Melhor dizer que não sabe.
   const comInicio = k.filter((c) => c.work_started_at && c.designer_delivered_at &&
     (c.designer_delivered_at as string) > (c.work_started_at as string));
-  const designDias = comInicio.length >= 5
+  const designDias = !cards ? naoLi("os cards") : comInicio.length >= 5
     ? num(arred(comInicio.reduce((s, c) =>
         s + (new Date(c.designer_delivered_at as string).getTime() - new Date(c.work_started_at as string).getTime()) / 86400000, 0) / comInicio.length))
     : semFonte("ninguém marca início do trabalho no card");
 
   // ── SLA de entrega: exige os dois carimbos. Zero cards têm. ────────────────
   const comSla = k.filter((c) => c.work_started_at && c.publish_verified_at);
-  const slaHoras = comSla.length >= 3
+  const slaHoras = !cards ? naoLi("os cards") : comSla.length >= 3
     ? num(arred(comSla.reduce((s, c) =>
         s + (new Date(c.publish_verified_at as string).getTime() - new Date(c.work_started_at as string).getTime()) / 3600000, 0) / comSla.length))
     : semFonte("card não registra início nem verificação de publicação");
-  const slaPct = comSla.length >= 3
+  const slaPct = !cards ? naoLi("os cards") : comSla.length >= 3
     ? num(Math.round(comSla.filter((c) =>
         (new Date(c.publish_verified_at as string).getTime() - new Date(c.work_started_at as string).getTime()) / 3600000 <= 48).length / comSla.length * 100))
     : semFonte("sem card com os dois carimbos");
@@ -118,29 +140,30 @@ export async function calcularCockpit(periodo = periodoAtualBRT()): Promise<Cock
 
   // ── Silêncio do cliente: só quem tem registro de conversa entra. ───────────
   const comMsg = cli.filter((c) => c.last_client_msg_at);
-  const diasSemFalar = comMsg.length
+  const diasSemFalar = !clientes ? naoLi("os clientes") : comMsg.length
     ? num(arred(comMsg.reduce((s, c) =>
         s + (Date.now() - new Date(c.last_client_msg_at as string).getTime()) / 86400000, 0) / comMsg.length))
     : semFonte("nenhuma conversa de cliente registrada");
 
   return {
     periodo,
-    clientes: cli.length,
-    ativos: ativos.length,
-    emRisco: emRisco.length,
-    churnPct: cli.length ? num(arred((emRisco.length / cli.length) * 100)) : semFonte("sem clientes"),
+    clientes: clientes ? cli.length : null,
+    ativos: clientes ? ativos.length : null,
+    emRisco: clientes ? emRisco.length : null,
+    churnPct: !clientes ? naoLi("os clientes") : cli.length ? num(arred((emRisco.length / cli.length) * 100)) : semFonte("sem clientes"),
     healthMedio,
-    postsPublicados: num(posts?.length ?? 0),
+    postsPublicados: posts === null ? naoLi("os posts do Instagram") : num(posts),
     postsMeta: meta || null,
     slaEntregaHoras: slaHoras,
     slaCumprimentoPct: slaPct,
-    designEntregues: num(entregues.length),
-    designNoPrazoPct: entregues.length ? num(Math.round((noPrazo.length / entregues.length) * 100)) : semFonte("nenhuma arte entregue"),
+    designEntregues: !cards ? naoLi("os cards") : num(entregues.length),
+    designNoPrazoPct: !cards ? naoLi("os cards") : entregues.length ? num(Math.round((noPrazo.length / entregues.length) * 100)) : semFonte("nenhuma arte entregue"),
     designDiasMedio: designDias,
-    tarefasConcluidas: num(t.filter((x) => x.status === "done").length),
-    tarefasVencidas: num(vencidas.length),
+    tarefasConcluidas: !tarefas ? naoLi("as tarefas") : num(t.filter((x) => x.status === "done").length),
+    tarefasVencidas: !tarefas ? naoLi("as tarefas") : num(vencidas.length),
     diasSemFalarMedio: diasSemFalar,
     cobertura: { health: comScore.length, interacao: comMsg.length },
+    falhas,
   };
 }
 

@@ -66,31 +66,37 @@ export function BotaoNovaTarefa({ abrirAoMontar = false, aoAbrir }: { abrirAoMon
 }
 
 export function NovaTarefaModal({
-  clients, currentUser, onClose, onCriar,
+  clients, currentUser, onClose, onCriar, inicial,
 }: {
   clients: { id: string; name: string }[]; currentUser: string;
   onClose: () => void; onCriar: (t: Omit<Task, "id">) => Promise<void>;
+  /** Tarefa a EDITAR (25/10/2026, auditoria 13.5): o mesmo formulário, já preenchido. Sem isto, cria. */
+  inicial?: Task;
 }) {
   const COLABORADORES = useColaboradores();
-  const [title, setTitle] = useState("");
+  const editando = !!inicial;
+  const [title, setTitle] = useState(inicial?.title ?? "");
   // Padrão = quem está criando (o caso mais comum é anotar pra si). O 1º da lista era um nome
   // qualquer, e a tarefa ia pra pessoa errada sem ninguém perceber.
-  const [assignedTo, setAssignedTo] = useState(currentUser);
+  const [assignedTo, setAssignedTo] = useState(inicial?.assignedTo ?? currentUser);
   const [erro, setErro] = useState<string | null>(null);
-  const [dueDate, setDueDate] = useState("");
-  const [priority, setPriority] = useState<Priority>("medium");
-  const [clientId, setClientId] = useState("");
-  const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState(inicial?.dueDate?.slice(0, 10) ?? "");
+  const [priority, setPriority] = useState<Priority>(inicial?.priority ?? "medium");
+  const [clientId, setClientId] = useState(inicial?.clientId ?? "");
+  const [description, setDescription] = useState(inicial?.description ?? "");
   const [salvando, setSalvando] = useState(false);
 
   /**
    * Fechar (clique fora, X, Cancelar ou Esc) pergunta antes de jogar fora o que foi digitado (24/10/2026, auditoria
    * 4.13). Antes o clique fora descartava a tarefa inteira sem aviso.
    */
-  const temAlgoDigitado = !!(title.trim() || description.trim() || dueDate || clientId || priority !== "medium" || assignedTo !== currentUser);
+  const temAlgoDigitado = inicial
+    ? title !== inicial.title || description !== (inicial.description ?? "") || dueDate !== (inicial.dueDate?.slice(0, 10) ?? "")
+      || clientId !== (inicial.clientId ?? "") || priority !== inicial.priority || assignedTo !== inicial.assignedTo
+    : !!(title.trim() || description.trim() || dueDate || clientId || priority !== "medium" || assignedTo !== currentUser);
   const pedirFechar = () => {
     if (salvando) return;
-    if (temAlgoDigitado && !window.confirm("Descartar a tarefa que você começou?")) return;
+    if (temAlgoDigitado && !window.confirm(editando ? "Descartar as mudanças na tarefa?" : "Descartar a tarefa que você começou?")) return;
     onClose();
   };
   const pedirFecharRef = useRef(pedirFechar);
@@ -109,7 +115,9 @@ export function NovaTarefaModal({
   const submit = async () => {
     if (!title.trim()) return;
     const prof = COLABORADORES.find((c) => c.name === assignedTo);
-    if (!assignedTo || !prof) {
+    // Editando sem trocar a pessoa: vale quem já estava, mesmo fora da lista (papel genérico, ex-membro).
+    const mantemDono = !!inicial && assignedTo === inicial.assignedTo;
+    if (!assignedTo || (!prof && !mantemDono)) {
       setErro(COLABORADORES.length === 0
         ? "A lista da equipe não carregou — recarregue a página para escolher o colaborador."
         : "Escolha um colaborador da equipe.");
@@ -121,14 +129,15 @@ export function NovaTarefaModal({
     await onCriar({
       title: title.trim(),
       assignedTo,
-      role: prof.role as Role,
-      status: "pending",
+      // Pessoa mantida na edição: o papel também (não muda o papel da tarefa sem a pessoa mudar).
+      role: mantemDono && inicial ? inicial.role : (prof?.role as Role),
+      status: inicial?.status ?? "pending",
       priority,
       dueDate: dueDate || undefined,
       clientId: clientId || "",
-      clientName: cli?.name || "",
+      clientName: cli?.name || (inicial && clientId === inicial.clientId ? inicial.clientName : "") || "",
       description: description.trim() || undefined,
-      createdBy: currentUser,
+      createdBy: inicial ? inicial.createdBy : currentUser,
     });
     setSalvando(false);
   };
@@ -136,10 +145,10 @@ export function NovaTarefaModal({
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={pedirFechar} />
-      <div role="dialog" aria-modal="true" aria-label="Nova tarefa"
+      <div role="dialog" aria-modal="true" aria-label={editando ? "Editar tarefa" : "Nova tarefa"}
         className="relative w-full max-w-lg bg-card border border-border rounded-2xl shadow-sm p-6 space-y-4 animate-fade-in max-h-[90vh] overflow-auto">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-foreground flex items-center gap-2"><ListChecks size={18} className="text-primary" /> Nova tarefa</h2>
+          <h2 className="text-base font-semibold text-foreground flex items-center gap-2"><ListChecks size={18} className="text-primary" /> {editando ? "Editar tarefa" : "Nova tarefa"}</h2>
           <button onClick={pedirFechar} aria-label="Fechar" className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
         </div>
 
@@ -184,6 +193,7 @@ export function NovaTarefaModal({
             <select value={clientId} onChange={(e) => setClientId(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground focus:border-primary/40 outline-none">
               <option value="">— Sem cliente —</option>
+              {clientId && !clients.some((c) => c.id === clientId) && <option value={clientId}>{inicial?.clientName || "Cliente atual"}</option>}
               {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
@@ -201,7 +211,7 @@ export function NovaTarefaModal({
           <button onClick={pedirFechar} className="px-4 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors">Cancelar</button>
           <button onClick={submit} disabled={!title.trim() || salvando}
             className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/85 transition-all disabled:opacity-50">
-            {salvando ? "Criando…" : "Criar tarefa"}
+            {editando ? (salvando ? "Salvando…" : "Salvar") : (salvando ? "Criando…" : "Criar tarefa")}
           </button>
         </div>
       </div>

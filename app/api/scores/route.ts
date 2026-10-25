@@ -17,6 +17,7 @@ import {
 } from "@/lib/scores/sinais-loninho";
 import type { Indicador } from "@/lib/scores/indicador";
 import { componenteSatisfacao } from "@/lib/cs/nps";
+import { lerTodasAsLinhas, type PaginaLida } from "@/lib/scores/ler-tudo";
 import { notasParaSaude } from "@/lib/cs/nps-server";
 
 // GET /api/scores — a fonte única do Lone Score, da saúde por cliente e do desempenho por pessoa.
@@ -46,16 +47,23 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
 
   const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const desde90 = new Date(Date.now() - 90 * DIAS).toISOString();
 
+  type LinhaCard = Record<string, unknown>;
   const [clientesQ, cardsQ, membrosQ] = await Promise.all([
     supabaseAdmin.from("clients")
       .select("id, name, nome_fantasia, status, active, assigned_social, assigned_designer, assigned_traffic, churned_at, created_at, paused_at, paused_until")
       .is("draft_status", null)
       .or("active.is.null,active.eq.true"),
-    supabaseAdmin.from("content_cards")
-      .select("id, client_id, status, due_date, designer_delivered_at, designer_delivered_by, client_approved_at, blocked_reason, created_at, social_media")
+    // 25/10/2026 (auditoria 6.1): paginado (90 dias de cards de ~50 clientes passam de mil linhas) e com o erro
+    // conferido — antes `cardsQ.error` não era lido e a falha virava "nenhum card": entrega e atraso inventados.
+    lerTodasAsLinhas<LinhaCard>((de, ate, contar) => supabaseAdmin.from("content_cards")
+      .select("id, client_id, status, due_date, designer_delivered_at, designer_delivered_by, client_approved_at, blocked_reason, created_at, social_media", contar ? { count: "exact" } : undefined)
       .is("archived_at", null)
-      .gte("created_at", new Date(Date.now() - 90 * DIAS).toISOString()),
+      .gte("created_at", desde90)
+      .order("created_at", { ascending: true }).order("id", { ascending: true })
+      .range(de, ate) as unknown as PromiseLike<PaginaLida<LinhaCard>>)
+      .then((data) => ({ data, error: null }), (e: unknown) => ({ data: null, error: { message: e instanceof Error ? e.message : String(e) } })),
     // A coluna é `is_active`, não `active`: com o nome errado o PostgREST devolve erro e a
     // lista vem vazia — sem quebrar nada visível, que é o pior tipo de falha.
     supabaseAdmin.from("team_members").select("name, role, is_active"),
@@ -64,6 +72,9 @@ export async function GET(req: NextRequest) {
   // Erro de leitura não pode virar "carteira vazia" — e com ?gravar=1 apagaria a saúde de todos.
   if (clientesQ.error) {
     return NextResponse.json({ ok: false, error: `clients: ${clientesQ.error.message}` }, { status: 500 });
+  }
+  if (cardsQ.error) {
+    return NextResponse.json({ ok: false, error: `Não consegui ler os cards (${cardsQ.error.message}). Nada foi gravado.` }, { status: 500 });
   }
   const clientes = (clientesQ.data ?? []).filter((c) => !/\(teste\)/i.test((c.name as string) || ""));
   const ativos = clientes.filter((c) => c.status !== "onboarding");
@@ -74,7 +85,12 @@ export async function GET(req: NextRequest) {
   const ids = clientes.map((c) => c.id as string);
 
   // ── O QUE O LONINHO VIU ────────────────────────────────────────────────
-  const sinais = await sinaisDoLoninho(ids);
+  // Leitura que falha (conversas, pedidos ou retrabalhos) responde ok:false e NÃO grava (25/10/2026, 6.1): antes virava
+  // "0 reclamações, sentimento 90" e "carteira inteira sem contato" na saúde gravada do dia.
+  let sinais: Awaited<ReturnType<typeof sinaisDoLoninho>>;
+  try { sinais = await sinaisDoLoninho(ids); } catch (e) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+  }
   // O que o CLIENTE respondeu no NPS pós-reunião (lib/cs/nps.ts). Sem tabela/nota → componente null.
   const notasNps = await notasParaSaude(ids);
   const agoraNps = new Date();
@@ -297,9 +313,11 @@ export async function GET(req: NextRequest) {
         meta: 90, unidade: "%", fonte: "carteira por pessoa" },
     ]),
     scoreDimensao("qualidade", [
+      // Numerador e denominador são os MESMOS clientes (os ativos): contar o onboarding em cima e não em baixo
+      // podia passar de 100%. Sem conversa nenhuma em 180 dias conta como sem contato (é o que o número mede).
       { chave: "sem_contato", titulo: "Clientes sem contato +15d", natureza: "inversa",
         valor: ativos.length
-          ? Number((([...sinais.values()].filter((s) => (s.diasSemContato ?? 999) > 15).length / ativos.length) * 100).toFixed(1))
+          ? Number(((ativos.filter((c) => (sinais.get(c.id as string)?.diasSemContato ?? 999) > 15).length / ativos.length) * 100).toFixed(1))
           : null,
         meta: 10, unidade: "%", fonte: "cs_message_corpus (Loninho)" },
     ]),

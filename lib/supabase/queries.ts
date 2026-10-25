@@ -367,7 +367,9 @@ function snakeToTask(row: Record<string, unknown>): Task {
 
 export async function fetchTasks(): Promise<Task[]> {
   const { data, error } = await db.from("tasks").select("*").order("created_at", { ascending: false });
-  if (error) { console.error("[DB] fetchTasks:", error); return []; }
+  // 25/10/2026 (auditoria 13.4/6.4): leitura que falha LANÇA. Devolver [] fazia a lista dizer "Nenhuma tarefa em
+  // aberto" e o Hoje dizer "Tudo em dia!" — falha com cara de dia tranquilo. Quem chama decide como mostrar.
+  if (error) { console.error("[DB] fetchTasks:", error); throw new Error(`Não consegui ler as tarefas (${error.message}).`); }
   return (data ?? []).map(snakeToTask);
 }
 

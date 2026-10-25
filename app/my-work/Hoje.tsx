@@ -7,7 +7,6 @@ import {
   Eye, Bell,
   CalendarClock, History, ChevronDown,
 } from "lucide-react";
-import { toast } from "sonner";
 import { chamar } from "@/lib/api/chamar";
 import { ETAPAS_DE_APROVACAO, corDoStatus, rotuloCompleto, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { ROTULO_ESTADO_DESIGN, designerDeve } from "@/lib/conteudo/producao";
@@ -18,7 +17,9 @@ import { useClientsStore } from "@/stores/useClientsStore";
 import EmptyState from "@/components/ui/EmptyState";
 import { useContentStore } from "@/stores/useContentStore";
 import ErroCargaCards from "@/components/conteudo/ErroCargaCards";
-import { useOperationalStore } from "@/stores/useOperationalStore";
+import ErroCargaTarefas from "@/components/tarefas/ErroCargaTarefas";
+import { useConcluirTarefa } from "@/components/tarefas/useConcluirTarefa";
+import { useOperationalStore, selectTarefasProntas } from "@/stores/useOperationalStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, todaySP, spDateStr } from "@/lib/utils";
@@ -32,6 +33,12 @@ type FilterType = "all" | "tasks" | "content" | "design" | "approvals" | "meetin
 // com você (gestão vê as do time). As vistas Tarefas e Agenda moram ao lado (MeuTrabalho.tsx).
 export default function Hoje() {
   const tasks = useOperationalStore((s) => s.tasks);
+  // 25/10/2026 (auditoria 6.4): "Tudo em dia!" só com tarefas E cards carregados. Antes aparecia enquanto carregava e
+  // também quando a leitura falhava (o store de tarefas engolia o erro e o `loadError` dos cards não era lido).
+  const tarefasProntas = useOperationalStore(selectTarefasProntas);
+  const tarefasErro = useOperationalStore((s) => s.tarefasErro);
+  const cardsProntos = useContentStore((s) => s.initialized && !s.loadError);
+  const cardsErro = useContentStore((s) => s.loadError);
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
   const clients = useClientsStore((s) => s.clients);
@@ -152,24 +159,29 @@ export default function Hoje() {
     : myTasks.length + myCards.length + myDesignReqs.length + pendingApprovals.length + reunioes.length;
 
   // Designer: Artes primeiro; Conteúdo e Aprovações são do social (sempre zero para ele) e saem.
-  const FILTERS: { key: FilterType; label: string; count: number; icon: typeof Check }[] = ehDesigner ? [
-    { key: "all", label: "Tudo", count: totalItems, icon: Inbox },
-    { key: "design", label: "Artes", count: artesDoDesigner, icon: Palette },
-    { key: "tasks", label: "Tarefas", count: myTasks.length, icon: Check },
+  // Contagem de fonte que não carregou é "—", não 0 (25/10/2026, 6.4).
+  const seT = (n: number) => (tarefasProntas ? n : null);
+  const seC = (n: number) => (cardsProntos ? n : null);
+  const tudoPronto = tarefasProntas && cardsProntos && !designerSemCarteira;
+  const FILTERS: { key: FilterType; label: string; count: number | null; icon: typeof Check }[] = ehDesigner ? [
+    { key: "all", label: "Tudo", count: tudoPronto ? totalItems : null, icon: Inbox },
+    { key: "design", label: "Artes", count: seC(artesDoDesigner), icon: Palette },
+    { key: "tasks", label: "Tarefas", count: seT(myTasks.length), icon: Check },
     { key: "meetings", label: "Reuniões", count: reunioes.length, icon: CalendarClock },
   ] : [
-    { key: "all", label: "Tudo", count: totalItems, icon: Inbox },
-    { key: "tasks", label: "Tarefas", count: myTasks.length, icon: Check },
-    { key: "content", label: "Conteúdo", count: myCards.length, icon: FileText },
-    { key: "design", label: "Design", count: myDesignReqs.length, icon: Palette },
-    { key: "approvals", label: "Aprovações", count: pendingApprovals.length, icon: Eye },
+    { key: "all", label: "Tudo", count: tudoPronto ? totalItems : null, icon: Inbox },
+    { key: "tasks", label: "Tarefas", count: seT(myTasks.length), icon: Check },
+    { key: "content", label: "Conteúdo", count: seC(myCards.length), icon: FileText },
+    { key: "design", label: "Design", count: seC(myDesignReqs.length), icon: Palette },
+    { key: "approvals", label: "Aprovações", count: seC(pendingApprovals.length), icon: Eye },
     { key: "meetings", label: "Reuniões", count: reunioes.length, icon: CalendarClock },
   ];
 
   return (
     <div className="space-y-6">
-      {/* Cards que não carregaram não viram "nada para hoje" (25/10/2026, onda 5). */}
+      {/* Cards que não carregaram não viram "nada para hoje" (25/10/2026, onda 5). Tarefas idem (6.4). */}
       <ErroCargaCards variante="faixa" />
+      <ErroCargaTarefas variante="faixa" />
       {/* Filtros com contagem */}
       <div className={`grid grid-cols-2 gap-3 ${ehDesigner ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
         {FILTERS.map((f) => {
@@ -189,7 +201,7 @@ export default function Hoje() {
                 <Icon size={14} className={active ? "text-primary" : "text-muted-foreground"} />
                 <span className={`text-xs font-medium ${active ? "text-primary" : "text-muted-foreground"}`}>{f.label}</span>
               </div>
-              <p className={`text-xl font-semibold tabular-nums ${active ? "text-primary" : "text-foreground"}`}>{f.count}</p>
+              <p className={`text-xl font-semibold tabular-nums ${active ? "text-primary" : "text-foreground"}`}>{f.count ?? "—"}</p>
             </button>
           );
         })}
@@ -366,8 +378,11 @@ export default function Hoje() {
           {designerSemCarteira && (
             <p className="text-xs text-muted-foreground">Carregando sua carteira para listar suas demandas de design…</p>
           )}
-          {totalItems === 0 && !designerSemCarteira && !erroReunioes && (
+          {totalItems === 0 && tudoPronto && !erroReunioes && (
             <EmptyState icon={<CheckCircle size={20} />} title="Tudo em dia!" subtitle="Nenhuma tarefa ou card pendente no momento." />
+          )}
+          {totalItems === 0 && !tudoPronto && !designerSemCarteira && !tarefasErro && !cardsErro && (
+            <p className="text-xs text-muted-foreground">Carregando o que é seu…</p>
           )}
         </div>
 
@@ -428,7 +443,8 @@ export default function Hoje() {
 }
 
 function TaskRow({ task }: { task: Task }) {
-  const updateTask = useOperationalStore((s) => s.updateTask);
+  // Concluir com "Desfazer" e o motivo do servidor na falha — o mesmo da tela de Tarefas (25/10/2026, auditoria 6.6).
+  const { concluir, reabrir } = useConcluirTarefa();
   const statusConfig: Record<string, { label: string; color: string }> = {
     pending: { label: "Aguardando", color: "text-muted-foreground bg-muted border-border" },
     in_progress: { label: "Em execução", color: "text-primary bg-primary/10 border-primary/20" },
@@ -445,7 +461,7 @@ function TaskRow({ task }: { task: Task }) {
       <button
         onClick={(e) => {
           e.preventDefault(); e.stopPropagation();
-          updateTask(task.id, { status: isDone ? "pending" : "done" }).catch(() => toast.error("Não consegui atualizar a tarefa. Tenta de novo?"));
+          void (isDone ? reabrir(task) : concluir(task));
         }}
         className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
           isDone ? "bg-primary border-primary text-primary-foreground" : "border-border hover:border-primary"

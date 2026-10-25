@@ -15,6 +15,7 @@
 // fonte: media adoção de um botão, não relacionamento com o cliente.
 
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { lerTodasAsLinhas, type PaginaLida } from "./ler-tudo";
 
 export interface SinaisCliente {
   clientId: string;
@@ -42,33 +43,60 @@ export interface SinaisCliente {
 
 const DIAS = 86_400_000;
 
+type LinhaCorpus = { client_id: string | null; created_at: string; is_team: boolean | null };
+type LinhaDemanda = { client_id: string | null; tipo: string | null; status: string | null; created_at: string };
+type LinhaRework = { client_id: string | null; reason: string | null; created_at: string };
+
+/** Uma fonte do Loninho, inteira. Erro LANÇA dizendo qual fonte — nunca vira "0 reclamações" ou "sem contato". */
+async function lerFonte<T>(rotulo: string, montar: (de: number, ate: number, contar: boolean) => PromiseLike<PaginaLida<T>>): Promise<T[]> {
+  try { return await lerTodasAsLinhas(montar); } catch (e) {
+    throw new Error(`Não consegui ler ${rotulo} (${e instanceof Error ? e.message : String(e)}). Nada foi gravado.`);
+  }
+}
+
 /**
  * Puxa, de uma vez, os sinais que o agente produziu para todos os clientes.
  *
  * Em lote de propósito: o cockpit precisa disso para ~50 clientes e uma consulta por cliente
  * transformaria o carregamento da tela em 300 idas ao banco.
+ *
+ * 25/10/2026 (auditoria 6.1): LANÇA se alguma das três leituras falhar. Antes `data ?? []` transformava a falha em
+ * "0 reclamações, sentimento 90" e "100% da carteira sem contato" — e isso era gravado como a saúde do dia. As três
+ * leituras são paginadas (ver ./ler-tudo): o corpus de 180 dias passa de mil linhas com folga.
  */
 export async function sinaisDoLoninho(clientIds: string[]): Promise<Map<string, SinaisCliente>> {
   const out = new Map<string, SinaisCliente>();
   if (!clientIds.length) return out;
 
+  // As janelas são fixadas UMA vez: cada página com o seu "agora" deslocaria a janela no meio da leitura.
   const desde30 = new Date(Date.now() - 30 * DIAS).toISOString();
+  const desde180 = new Date(Date.now() - 180 * DIAS).toISOString();
+  const contagem = (contar: boolean) => (contar ? { count: "exact" as const } : undefined);
 
-  const [corpus, demandas, rework] = await Promise.all([
-    supabaseAdmin.from("cs_message_corpus")
-      .select("client_id, created_at, is_team")
+  const [corpusLinhas, demandasLinhas, reworkLinhas] = await Promise.all([
+    // Ordem crescente: o tempo de resposta anda pela conversa na ordem em que aconteceu.
+    lerFonte<LinhaCorpus>("as conversas dos grupos (cs_message_corpus)", (de, ate, contar) => supabaseAdmin.from("cs_message_corpus")
+      .select("client_id, created_at, is_team", contagem(contar))
       .in("client_id", clientIds)
-      .gte("created_at", new Date(Date.now() - 180 * DIAS).toISOString())
-      .order("created_at", { ascending: true }),
-    supabaseAdmin.from("cs_demandas")
-      .select("client_id, tipo, status, created_at")
+      .gte("created_at", desde180)
+      .order("created_at", { ascending: true })
+      .range(de, ate) as unknown as PromiseLike<PaginaLida<LinhaCorpus>>),
+    lerFonte<LinhaDemanda>("os pedidos dos clientes (cs_demandas)", (de, ate, contar) => supabaseAdmin.from("cs_demandas")
+      .select("client_id, tipo, status, created_at", contagem(contar))
       .in("client_id", clientIds)
-      .gte("created_at", desde30),
-    supabaseAdmin.from("cs_rework_events")
-      .select("client_id, reason, created_at")
+      .gte("created_at", desde30)
+      .order("created_at", { ascending: true })
+      .range(de, ate) as unknown as PromiseLike<PaginaLida<LinhaDemanda>>),
+    lerFonte<LinhaRework>("os retrabalhos (cs_rework_events)", (de, ate, contar) => supabaseAdmin.from("cs_rework_events")
+      .select("client_id, reason, created_at", contagem(contar))
       .in("client_id", clientIds)
-      .gte("created_at", desde30),
+      .gte("created_at", desde30)
+      .order("created_at", { ascending: true })
+      .range(de, ate) as unknown as PromiseLike<PaginaLida<LinhaRework>>),
   ]);
+  const corpus = { data: corpusLinhas };
+  const demandas = { data: demandasLinhas };
+  const rework = { data: reworkLinhas };
 
   for (const id of clientIds) {
     out.set(id, {

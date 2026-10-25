@@ -50,10 +50,14 @@ export async function executarCobrancaSetup(opts: {
   const { aplicar, promover = false } = opts;
   const agora = spNow();
 
-  const { data: clientes } = await supabaseAdmin
+  // 25/10/2026 (auditoria 13.3): leitura que falha ABORTA a rodada (lança; a rota responde ok:false com o motivo).
+  // Antes o erro era ignorado: sem as tarefas existentes, o checklist parecia inexistente e era criado de novo para
+  // cada cliente nos 15 primeiros dias — tarefa duplicada e cobrança em dobro. Sem clientes, "ninguém em onboarding".
+  const { data: clientes, error: eClientes } = await supabaseAdmin
     .from("clients")
     .select("id, name, nome_fantasia, status, created_at, meta_ad_account_id, assigned_traffic, assigned_social, assigned_designer, perfil_conteudo, service_type")
     .eq("status", "onboarding").is("draft_status", null).or("active.is.null,active.eq.true");
+  if (eClientes) throw new Error(`Setup: não consegui ler os clientes em onboarding (${eClientes.message}). Nada foi criado nem fechado.`);
 
   const alvo = (clientes ?? []).filter((c) => !/\(teste\)/i.test((c.name as string) || ""));
   if (!alvo.length) {
@@ -65,7 +69,7 @@ export async function executarCobrancaSetup(opts: {
 
   const ids = alvo.map((c) => c.id as string);
   const trintaDias = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-  const [{ data: cards }, { data: tarefas }, { data: gastos }] = await Promise.all([
+  const [{ data: cards, error: eCards }, { data: tarefas, error: eTarefas }, { data: gastos, error: eGastos }] = await Promise.all([
     // `archived_at IS NULL` não é detalhe: card arquivado é trabalho DESCARTADO. Sem este filtro,
     // o UNAFER contava 5 artes entregues — as 5 arquivadas — e GRADUAVA como cliente pronto sem
     // ter nenhuma arte no ar. A prova de entrega tem que ser trabalho que existe hoje.
@@ -75,6 +79,12 @@ export async function executarCobrancaSetup(opts: {
     // Anúncio RODANDO = houve gasto nos últimos 30 dias. Conta vinculada sem verba é conta parada.
     supabaseAdmin.from("metric_snapshots").select("client_id, spend").in("client_id", ids).gte("metric_date", trintaDias).gt("spend", 0),
   ]);
+  const falhaLeitura = [
+    eTarefas && `as tarefas do checklist (${eTarefas.message})`,
+    eCards && `os cards (${eCards.message})`,
+    eGastos && `o gasto dos anúncios (${eGastos.message})`,
+  ].filter(Boolean);
+  if (falhaLeitura.length) throw new Error(`Setup: não consegui ler ${falhaLeitura.join(", ")}. Nada foi criado nem fechado.`);
   const rodando = new Set((gastos ?? []).map((g) => g.client_id as string));
 
   // ── O acesso à conta é CONFERIDO na Meta, não presumido do cadastro ───────

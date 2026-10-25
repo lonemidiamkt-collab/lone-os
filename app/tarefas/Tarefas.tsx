@@ -7,14 +7,18 @@
 import { useMemo, useState } from "react";
 import {
   Check, Clock, AlertTriangle, Calendar, CheckCircle,
-  User, Trash2, CircleDot, Flag, X,
+  User, Trash2, CircleDot, Flag, X, Pencil,
 } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
-import { useOperationalStore } from "@/stores/useOperationalStore";
+import ErroCargaTarefas from "@/components/tarefas/ErroCargaTarefas";
+import { useConcluirTarefa, motivoDoErro } from "@/components/tarefas/useConcluirTarefa";
+import { useOperationalStore, selectTarefasProntas } from "@/stores/useOperationalStore";
+import { useClientsStore } from "@/stores/useClientsStore";
 import { useRole } from "@/lib/context/RoleContext";
-import { useColaboradores } from "./NovaTarefa";
+import { useColaboradores, NovaTarefaModal } from "./NovaTarefa";
 import { getPriorityColor, getPriorityLabel, todaySP } from "@/lib/utils";
 import { ordenarConcluidas } from "@/lib/tarefas/concluidas";
+import { mudancasDaTarefa } from "@/lib/tarefas/editar";
 import type { Task } from "@/lib/types";
 import { toast } from "sonner";
 
@@ -38,6 +42,11 @@ export default function Tarefas({ area, onLimparArea }: { area?: string | null; 
   const tasks = useOperationalStore((s) => s.tasks);
   const updateTask = useOperationalStore((s) => s.updateTask);
   const deleteTask = useOperationalStore((s) => s.deleteTask);
+  // 25/10/2026 (13.4): carregando ou com erro, a lista NÃO diz "Nenhuma tarefa em aberto".
+  const prontas = useOperationalStore(selectTarefasProntas);
+  const tarefasErro = useOperationalStore((s) => s.tarefasErro);
+  const clients = useClientsStore((s) => s.clients);
+  const [editando, setEditando] = useState<Task | null>(null);
   const { role, currentUser } = useRole();
   const isGestao = role === "admin" || role === "manager";
 
@@ -62,31 +71,28 @@ export default function Tarefas({ area, onLimparArea }: { area?: string | null; 
   const venceHoje = abertas.filter((t) => t.dueDate === h);
   const proximas = abertas.filter((t) => !t.dueDate || t.dueDate > h);
   const concluidas = ordenarConcluidas(visiveis.filter((t) => t.status === "done"), recemConcluidas).slice(0, 40);
-  const motivo = (e: unknown) => (e instanceof Error && e.message ? e.message : "sem resposta do servidor");
 
   // Concluir por engano tem volta (24/10/2026, auditoria 4.14): o aviso traz "Desfazer", que devolve o status de antes.
-  async function marcarFeita(t: Task) {
-    const antes = t.status;
-    try { await updateTask(t.id, { status: "done" }); }
-    catch (e) { toast.error(`Não concluí a tarefa: ${motivo(e)}`); return; }
-    setRecemConcluidas((ids) => [t.id, ...ids.filter((x) => x !== t.id)]);
-    toast.success(`Concluída: ${t.title}`, {
-      duration: 8000,
-      action: {
-        label: "Desfazer",
-        onClick: async () => {
-          try { await updateTask(t.id, { status: antes }); toast.success("Tarefa reaberta."); }
-          catch (e) { toast.error(`Não consegui reabrir: ${motivo(e)}`); }
-        },
-      },
-    });
-  }
-  async function reabrir(t: Task) {
-    try { await updateTask(t.id, { status: "pending" }); } catch (e) { toast.error(`Não reabri a tarefa: ${motivo(e)}`); }
-  }
+  // O mesmo gancho serve o Hoje (25/10/2026, 6.6).
+  const { concluir: marcarFeita, reabrir } = useConcluirTarefa({
+    aoConcluir: (t) => setRecemConcluidas((ids) => [t.id, ...ids.filter((x) => x !== t.id)]),
+  });
   async function remover(t: Task) {
     if (!window.confirm(`Excluir a tarefa "${t.title}"?`)) return;
-    try { await deleteTask(t.id); toast.success("Tarefa excluída."); } catch (e) { toast.error(`Não excluí a tarefa: ${motivo(e)}`); }
+    try { await deleteTask(t.id); toast.success("Tarefa excluída."); } catch (e) { toast.error(`Não excluí a tarefa: ${motivoDoErro(e)}`); }
+  }
+  // Editar (25/10/2026, auditoria 13.5): prazo, pessoa, cliente ou título errado se corrige aqui — antes só excluindo
+  // e criando de novo. Só o que mudou vai para o servidor; na falha, o formulário continua aberto com o que foi digitado.
+  async function salvarEdicao(antes: Task, depois: Omit<Task, "id">) {
+    const mudou = mudancasDaTarefa(antes, depois);
+    if (!Object.keys(mudou).length) { setEditando(null); return; }
+    try {
+      await updateTask(antes.id, mudou);
+      toast.success("Tarefa atualizada.");
+      setEditando(null);
+    } catch (e) {
+      toast.error(`Não salvei a tarefa: ${motivoDoErro(e)}. O que você mudou continua aqui.`, { duration: 12000 });
+    }
   }
 
   const podeMexer = (t: Task) => isGestao || t.assignedTo === currentUser || t.createdBy === currentUser;
@@ -122,32 +128,47 @@ export default function Tarefas({ area, onLimparArea }: { area?: string | null; 
           {verConcluidas ? "Ocultar concluídas" : "Ver concluídas"}
         </button>
         <span className="ml-auto text-xs text-muted-foreground">
-          {abertas.length} aberta{abertas.length !== 1 ? "s" : ""}
+          {!prontas ? "—" : <>{abertas.length} aberta{abertas.length !== 1 ? "s" : ""}</>}
           {atrasadas.length > 0 && <span className="text-lone-warning"> · {atrasadas.length} atrasada{atrasadas.length !== 1 ? "s" : ""}</span>}
         </span>
       </div>
 
-      {abertas.length === 0 && !verConcluidas ? (
+      {tarefasErro && tasks.length > 0 && <ErroCargaTarefas variante="faixa" />}
+      {tarefasErro && tasks.length === 0 ? (
+        <ErroCargaTarefas />
+      ) : !prontas && tasks.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Carregando tarefas…</p>
+      ) : abertas.length === 0 && !verConcluidas ? (
         <EmptyState icon={<CheckCircle size={20} />} title="Nenhuma tarefa em aberto" subtitle="Crie uma tarefa pro time no botão “Nova tarefa”." />
       ) : (
         <div className="space-y-6">
-          {atrasadas.length > 0 && <Grupo titulo="Atrasadas" cor="text-lone-warning" icone={<AlertTriangle size={14} />} tarefas={atrasadas} {...{ h, marcarFeita, remover, podeMexer, isGestao }} />}
-          {venceHoje.length > 0 && <Grupo titulo="Vence hoje" cor="text-primary" icone={<Clock size={14} />} tarefas={venceHoje} {...{ h, marcarFeita, remover, podeMexer, isGestao }} />}
-          {proximas.length > 0 && <Grupo titulo="Em aberto" cor="text-muted-foreground" icone={<CircleDot size={14} />} tarefas={proximas} {...{ h, marcarFeita, remover, podeMexer, isGestao }} />}
+          {atrasadas.length > 0 && <Grupo titulo="Atrasadas" cor="text-lone-warning" icone={<AlertTriangle size={14} />} tarefas={atrasadas} {...{ h, marcarFeita, remover, editar: setEditando, podeMexer, isGestao }} />}
+          {venceHoje.length > 0 && <Grupo titulo="Vence hoje" cor="text-primary" icone={<Clock size={14} />} tarefas={venceHoje} {...{ h, marcarFeita, remover, editar: setEditando, podeMexer, isGestao }} />}
+          {proximas.length > 0 && <Grupo titulo="Em aberto" cor="text-muted-foreground" icone={<CircleDot size={14} />} tarefas={proximas} {...{ h, marcarFeita, remover, editar: setEditando, podeMexer, isGestao }} />}
           {verConcluidas && concluidas.length > 0 && (
-            <Grupo titulo="Concluídas" cor="text-lone-success" icone={<Check size={14} />} tarefas={concluidas} concluida {...{ h, marcarFeita: reabrir, remover, podeMexer, isGestao }} />
+            <Grupo titulo="Concluídas" cor="text-lone-success" icone={<Check size={14} />} tarefas={concluidas} concluida {...{ h, marcarFeita: reabrir, remover, editar: setEditando, podeMexer, isGestao }} />
           )}
         </div>
+      )}
+
+      {editando && (
+        <NovaTarefaModal
+          inicial={editando}
+          clients={clients.map((c) => ({ id: c.id, name: c.name }))}
+          currentUser={currentUser}
+          onClose={() => setEditando(null)}
+          onCriar={(dados) => salvarEdicao(editando, dados)}
+        />
       )}
     </div>
   );
 }
 
 function Grupo({
-  titulo, cor, icone, tarefas, h, marcarFeita, remover, podeMexer, isGestao, concluida,
+  titulo, cor, icone, tarefas, h, marcarFeita, remover, editar, podeMexer, isGestao, concluida,
 }: {
   titulo: string; cor: string; icone: React.ReactNode; tarefas: Task[]; h: string;
-  marcarFeita: (t: Task) => void; remover: (t: Task) => void; podeMexer: (t: Task) => boolean;
+  marcarFeita: (t: Task) => void; remover: (t: Task) => void; editar: (t: Task) => void; podeMexer: (t: Task) => boolean;
   isGestao: boolean; concluida?: boolean;
 }) {
   return (
@@ -185,9 +206,14 @@ function Grupo({
               {t.description && <p className="mt-1.5 text-xs text-muted-foreground/90 line-clamp-2">{t.description}</p>}
             </div>
             {podeMexer(t) && (
-              <button onClick={() => remover(t)} title="Excluir" className="shrink-0 text-muted-foreground/50 hover:text-destructive transition-colors">
-                <Trash2 size={14} />
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button onClick={() => editar(t)} title="Editar" aria-label={`Editar a tarefa ${t.title}`} className="text-muted-foreground hover:text-foreground transition-colors">
+                  <Pencil size={14} />
+                </button>
+                <button onClick={() => remover(t)} title="Excluir" aria-label={`Excluir a tarefa ${t.title}`} className="text-muted-foreground hover:text-destructive transition-colors">
+                  <Trash2 size={14} />
+                </button>
+              </div>
             )}
           </div>
         ))}

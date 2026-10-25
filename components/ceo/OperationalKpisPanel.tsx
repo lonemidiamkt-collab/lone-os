@@ -18,10 +18,23 @@ function Tile({ label, value, caption, tone }: { label: string; value: string | 
   );
 }
 
-export function OperationalKpisPanel({ cards }: { cards: ContentCard[] }) {
+export function OperationalKpisPanel({ cards, indisponivel }: {
+  cards: ContentCard[];
+  /** Os cards não estão prontos ("carregando…" / "não carregou"): nada de "0 — nenhuma" em verde (25/10/2026, 6.5). */
+  indisponivel?: string;
+}) {
   const k = useMemo(() => computeOperationalKpis(cards), [cards]);
   const fmt = (v: number | null, suf = "") => (v == null ? "—" : `${v}${suf}`);
   const maxStage = Math.max(1, ...k.stages.map((s) => s.avgDays));
+
+  if (indisponivel) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
+        Indicadores de produção: os cards {indisponivel === "não carregou" ? "não carregaram" : "ainda estão carregando"} — os números
+        aparecem quando a leitura terminar{indisponivel === "não carregou" ? " (use “Tentar de novo” no aviso acima)" : ""}.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
