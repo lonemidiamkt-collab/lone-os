@@ -133,6 +133,8 @@ export interface EmpresaReceita {
   nomeFantasia: string | null;
   situacao: string | null;       // "ATIVA", "BAIXADA", "INAPTA"...
   ativa: boolean;
+  situacaoDesde: string | null;  // "2026-09-21" — desde quando está assim
+  motivoSituacao: string | null; // "Extinção por encerramento liquidação voluntária"
   cnaePrincipal: string | null;  // "4744-0/99"
   cnaeDescricao: string | null;
   cnaesSecundarios: { codigo: string; descricao: string }[];
@@ -155,6 +157,13 @@ export function capitalizar(s: unknown): string | null {
   return t.toLowerCase().split(" ").map((p, i) =>
     i > 0 && PALAVRAS_MINUSCULAS.has(p) ? p : p.charAt(0).toUpperCase() + p.slice(1),
   ).join(" ");
+}
+
+/** "EXTINCAO POR ENCERRAMENTO" → "Extincao por encerramento" (só a primeira maiúscula; "SEM MOTIVO" vira nulo). */
+function capitalizarFrase(v: unknown): string | null {
+  const t = String(v ?? "").trim().replace(/\s+/g, " ");
+  if (!t || /^sem motivo$/i.test(t)) return null;
+  return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
 }
 
 function telefoneDe(v: unknown): string | null {
@@ -189,6 +198,8 @@ export function empresaDaBrasilApi(r: Record<string, unknown>): EmpresaReceita {
     nomeFantasia: String(r.nome_fantasia ?? "").trim() || null,
     situacao,
     ativa: situacao === "ATIVA",
+    situacaoDesde: typeof r.data_situacao_cadastral === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.data_situacao_cadastral) ? r.data_situacao_cadastral : null,
+    motivoSituacao: capitalizarFrase(r.descricao_motivo_situacao_cadastral),
     cnaePrincipal: formatarCnae(r.cnae_fiscal),
     cnaeDescricao: String(r.cnae_fiscal_descricao ?? "").trim() || null,
     cnaesSecundarios: secundarios,
