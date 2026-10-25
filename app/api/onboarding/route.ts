@@ -6,7 +6,7 @@ import { faixaValida } from "@/lib/empresa/receita";
 import { listaDocs, removerDocDaLista } from "@/lib/onboarding/docs";
 import { ACOES_PUBLICAS_DO_CADASTRO } from "@/lib/onboarding/acoes";
 import { sincronizarRascunho } from "@/lib/onboarding/sincronia-server";
-import { acessosDoRascunho, paraPaginaPublica, COLUNAS_SENHA } from "@/lib/onboarding/acessos";
+import { acessosDoRascunho, paraPaginaPublica, faltasNosAcessosDoEnvio, ACESSOS, COLUNAS_SENHA } from "@/lib/onboarding/acessos";
 import { fichaDoEnvio, observacaoDoCliente, COLUNAS_DO_ENVIO } from "@/lib/onboarding/envio";
 import { createClient } from "@supabase/supabase-js";
 import { encryptVault } from "@/lib/crypto/vault";
@@ -14,7 +14,9 @@ import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { dispararLinkDoPortal } from "@/lib/portal/link-automatico";
-import { espelharNoCofre } from "@/lib/cofre/espelhar";
+import { espelharCadastroNoCofre } from "@/lib/onboarding/espelho-server";
+import { COLUNAS_RASCUNHO_ESPELHO } from "@/lib/onboarding/espelho";
+import { enviarBoasVindas, type ResultadoBoasVindas } from "@/lib/email/boas-vindas";
 import {
   itensOnboardingPara, nichoValido, pacoteValido, prazoEm, tarefasDaConversao, PROXIMA_ACAO_CONVERSAO,
 } from "@/lib/clients/conversao";
@@ -84,7 +86,14 @@ export async function GET(req: NextRequest) {
     .eq("token", token)
     .maybeSingle();
 
-  if (error || !data) return NextResponse.json({ error: "Link invalido ou expirado" }, { status: 404 });
+  // 24/10/2026 (item 1.9): erro do banco (deploy, rede interna) virava "Link inválido" e o cliente
+  // desistia de um link bom. Agora falha é 503 ("não consegui abrir agora", com tentar de novo) e só
+  // o token que não existe é 404.
+  if (error) {
+    console.error("[onboarding GET] leitura do cadastro falhou:", error.message);
+    return NextResponse.json({ error: "Não consegui abrir o seu cadastro agora. Tente de novo em instantes." }, { status: 503 });
+  }
+  if (!data) return NextResponse.json({ error: "Link inválido ou expirado." }, { status: 404 });
   const publico = paraPaginaPublica(data as unknown as Record<string, unknown>);
   if (publico.status === "submitted") return NextResponse.json({ error: "already_submitted", submission: publico });
 
@@ -378,12 +387,16 @@ export async function POST(req: NextRequest) {
     if (typeof token !== "string" || !token) {
       return NextResponse.json({ error: "Link de cadastro inválido." }, { status: 400 });
     }
+    // Os acessos já guardados vêm junto para conferir o par login + senha (item 1.6). Ficam só aqui.
     const { data: sub, error: subErr } = await supabase
       .from("client_onboarding_submissions")
-      .select("id, client_id")
+      .select(["id", "client_id", ...ACESSOS.flatMap((a) => [a.login, a.senha, a.status])].join(", "))
       .eq("token", token)
-      .maybeSingle();
-    if (subErr) return NextResponse.json({ error: "Não consegui validar o link de cadastro. Tente de novo." }, { status: 500 });
+      .maybeSingle<Record<string, unknown>>();
+    if (subErr) {
+      console.error("[onboarding submit] leitura do cadastro falhou:", subErr.message);
+      return NextResponse.json({ error: "Não consegui validar o link de cadastro agora. Seus dados continuam aqui — tente de novo em instantes." }, { status: 503 });
+    }
     if (!sub) return NextResponse.json({ error: "Link de cadastro inválido ou expirado." }, { status: 404 });
     const clientId: string | null = (sub.client_id as string | null) ?? null;
 
@@ -406,7 +419,15 @@ export async function POST(req: NextRequest) {
     if (!formData.docContratoSocial) missing.push("Contrato Social");
     if (missing.length > 0) {
       return NextResponse.json({
-        error: `Campos obrigatorios ausentes: ${missing.join(", ")}. Todos sao essenciais para a geracao do contrato e ativacao da conta.`,
+        error: `Faltam campos obrigatórios: ${missing.join(", ")}. Eles são essenciais para o contrato e a ativação da conta.`,
+      }, { status: 400 });
+    }
+    // Login sem senha (ou senha sem login) não passa: o time recebia o par pela metade (item 1.6). A
+    // página já trava na etapa; isto segura aba antiga.
+    const faltasAcesso = faltasNosAcessosDoEnvio(formData, sub, formData.acessosRestaurados === true);
+    if (faltasAcesso.length) {
+      return NextResponse.json({
+        error: `${faltasAcesso.join("; ")}. Volte em Acessos e complete, ou escolha "Não tenho".`,
       }, { status: 400 });
     }
 
@@ -445,11 +466,15 @@ export async function POST(req: NextRequest) {
         status: "submitted",
         submitted_at: new Date().toISOString(),
       })
-      .eq("id", sub.id)
+      .eq("id", sub.id as string)
       .select(COLUNAS_DO_ENVIO)
       .maybeSingle();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    // 24/10/2026 (item 1.10): o texto cru do Postgres ia para a tela do cliente. O detalhe fica no log.
+    if (error) {
+      console.error("[onboarding submit] gravação do cadastro falhou:", error.message);
+      return NextResponse.json({ error: "Não consegui salvar o cadastro agora. Seus dados continuam aqui — tente de novo em instantes." }, { status: 500 });
+    }
     if (!linhaFinal) return NextResponse.json({ error: "Não consegui salvar o cadastro agora. Seus dados continuam aqui — tente de novo." }, { status: 500 });
     const linha = linhaFinal as unknown as Record<string, unknown>;
     const observacao = observacaoDoCliente(linha.notes);
@@ -471,6 +496,12 @@ export async function POST(req: NextRequest) {
       // O cliente já está salvo no rascunho; a falha na ficha não pode virar silêncio para a equipe.
       if (eFicha) console.error("[onboarding submit] ficha não atualizada:", eFicha.message);
 
+      // Cliente JÁ ativo: a senha nova tem que chegar ao cofre que o social usa (achado A, 24/10/2026 —
+      // só o approve copiava, e nenhuma tela chama o approve). Cadastro novo espelha na ativação.
+      const jaAtivo = !!clientRow && !clientRow.draft_status;
+      const espelho = jaAtivo ? await espelharCadastroNoCofre(clientId, linha, { usarFicha: !eFicha }) : null;
+      if (espelho && !espelho.ok) console.error("[onboarding submit] cofre do social não recebeu:", espelho.erro);
+
       // Cadastro preenchido: liga ao lead do Comercial (se ainda não) e avisa se sobrou rascunho duplicado.
       if (clientId) await aoConcluirCadastro(clientId);
 
@@ -479,7 +510,8 @@ export async function POST(req: NextRequest) {
         type: "system",
         title: "Novo cadastro pendente",
         body: `${clientName} finalizou o formulario de onboarding e aguarda revisao.`
-          + (eFicha ? ` ATENÇÃO: os dados não foram copiados para a ficha (${eFicha.message}) — confira em Cadastros Pendentes.` : ""),
+          + (eFicha ? ` ATENÇÃO: os dados não foram copiados para a ficha (${eFicha.message}) — confira em Cadastros Pendentes.` : "")
+          + (espelho && !espelho.ok ? ` ATENÇÃO: a senha não chegou ao cofre do social (${espelho.erro}) — confira o cofre na ficha.` : ""),
         client_id: clientId,
       });
 
@@ -577,17 +609,12 @@ export async function POST(req: NextRequest) {
 
     // ESPELHA A SENHA NO COFRE DO SOCIAL. Aqui era o vazamento: a ativação gravava a senha só em
     // `clients` (criptografada, só admin lê) e o social/gestor ficavam sem — "é como se não
-    // existisse, mas no painel admin tem". Usa os valores em TEXTO do formulário (subRow), nunca
-    // o criptografado: espelhar o cifrado encheria o cofre de string ilegível.
-    if (subRow) {
-      const esp = await espelharNoCofre(clientId, {
-        instagram_login: subRow.instagram_login as string | null,
-        instagram_password: subRow.instagram_password as string | null,
-        facebook_login: subRow.meta_login as string | null,
-        facebook_password: subRow.meta_password as string | null,
-      });
-      if (!esp.ok) console.error("[onboarding] espelho do cofre falhou:", esp.erro);
-    }
+    // existisse, mas no painel admin tem".
+    // 24/10/2026 (achado B): o comentário dizia "valores em TEXTO", mas o rascunho guarda a senha JÁ
+    // CIFRADA (auto_save/submit cifram) e espelharNoCofre cifra de novo — o social veria texto
+    // ilegível. Agora a senha é decifrada antes (lib/onboarding/espelho.ts).
+    const cofre = await espelharCadastroNoCofre(clientId, (subRow as unknown as Record<string, unknown> | null) ?? null);
+    if (!cofre.ok) console.error("[onboarding approve] espelho do cofre falhou:", cofre.erro);
 
     // Generate onboarding checklist items based on service type
     // Checklist por frente contratada — a lista mora em lib/clients/conversao.ts (a conversão do CRM usa a mesma).
@@ -628,30 +655,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Send welcome email — gated: only dispatch if email was persisted (re-read from DB)
-    try {
-      const { data: verifyEmail } = await supabase
-        .from("clients")
-        .select("email, email_corporativo")
-        .eq("id", clientId)
-        .maybeSingle();
-      const persistedEmail = verifyEmail?.email || verifyEmail?.email_corporativo;
-      if (persistedEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(persistedEmail)) {
-        const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace("/supabase", "") || "http://localhost:3000";
-        await fetch(`${baseUrl.startsWith("http") ? "" : "https://"}${baseUrl}/api/emails`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "send_welcome", clientId }),
-        }).catch(() => {});
-      } else {
-        console.warn("[Onboarding] Welcome email skipped: client has no persisted email");
-      }
-    } catch {
-      // Email failure is non-critical — client activation succeeded
-      console.error("[Onboarding] Welcome email failed, but client was activated successfully");
-    }
+    // E-mail de boas-vindas pela função interna (24/10/2026, item 3.9): o fetch na própria API ia
+    // sem login, levava 401 calado e a tela dizia que tinha ido. Falha não desfaz a ativação, mas
+    // volta na resposta para a tela dizer "e-mail não enviado".
+    const email: ResultadoBoasVindas = await enviarBoasVindas(supabase, clientId);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, email, cofre: { ok: cofre.ok, erro: cofre.erro ?? null } });
   }
 
   // ─── Provision setup (checklist + notificação + e-mail) SEM tocar nos campos do cliente ───
@@ -691,21 +700,21 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    try {
-      const { data: verifyEmail } = await supabase.from("clients").select("email, email_corporativo").eq("id", clientId).maybeSingle();
-      const persistedEmail = verifyEmail?.email || verifyEmail?.email_corporativo;
-      if (persistedEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(persistedEmail)) {
-        const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace("/supabase", "") || "http://localhost:3000";
-        await fetch(`${baseUrl.startsWith("http") ? "" : "https://"}${baseUrl}/api/emails`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "send_welcome", clientId }),
-        }).catch(() => {});
-      }
-    } catch {
-      console.error("[Onboarding] provision welcome email falhou (não crítico)");
-    }
+    // A SENHA DO CADASTRO CHEGA AO COFRE DO SOCIAL (achado A, 24/10/2026). Este é o caminho da
+    // tela Cadastros Pendentes — o que de fato ativa cliente — e não espelhava: o social ficava sem a
+    // senha que o cliente mandou. Lê a ficha (que pode ter sido corrigida pelo time) e, onde ela não
+    // tem, o último cadastro; decifra e espelha (lib/onboarding/espelho.ts).
+    const { data: ultimoCadastro, error: eCad } = await supabase.from("client_onboarding_submissions")
+      .select(COLUNAS_RASCUNHO_ESPELHO).eq("client_id", clientId)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (eCad) console.error("[onboarding provision] cadastro não lido para o cofre:", eCad.message);
+    const cofre = await espelharCadastroNoCofre(clientId, (ultimoCadastro as unknown as Record<string, unknown> | null) ?? null);
+    if (!cofre.ok) console.error("[onboarding provision] espelho do cofre falhou:", cofre.erro);
 
-    return NextResponse.json({ success: true });
+    // E-mail de boas-vindas pela função interna (item 3.9): antes um fetch sem login levava 401 calado.
+    const email: ResultadoBoasVindas = await enviarBoasVindas(supabase, clientId);
+
+    return NextResponse.json({ success: true, email, cofre: { ok: cofre.ok, erro: cofre.erro ?? null } });
   }
 
   // ─── Reject/delete draft (admin action) ───

@@ -8,6 +8,7 @@ import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { supabase } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
+import { avisoDoEmail, type ResultadoBoasVindas } from "@/lib/email/boas-vindas-resultado";
 import { toast } from "sonner";
 import type { Client } from "@/lib/types";
 import {
@@ -351,10 +352,20 @@ export default function PendingClientsPage() {
     // Antes a aprovação por esta tela pulava tudo isso (só o botão rápido da lista provisionava) —
     // cliente entrava com onboarding vazio e ninguém era avisado. 'provision' não mexe nos campos
     // que acabamos de salvar (diferente do 'approve', que re-sincroniza a submissão por cima).
-    const prov = await chamar("/api/onboarding", { action: "provision", clientId: selected.id });
+    const prov = await chamar<{ email?: ResultadoBoasVindas; cofre?: { ok: boolean; erro: string | null } }>(
+      "/api/onboarding", { action: "provision", clientId: selected.id });
     if (prov.ok) {
-      pushNotification("system", "Cliente aprovado", `${clientName} foi ativado. Equipe pode iniciar o setup.`);
-      toast.success(`${clientName} aprovado.`);
+      // O que NÃO saiu aparece como falha (24/10/2026): antes o e-mail de boas-vindas levava 401 calado
+      // e esta tela dizia "aprovado" como se ele tivesse ido; a senha não chegava ao cofre do social.
+      const avisos = [
+        avisoDoEmail(prov.data?.email),
+        prov.data?.cofre && !prov.data.cofre.ok ? `a senha do cadastro não chegou ao cofre do social (${prov.data.cofre.erro ?? "erro"}) — confira o cofre na ficha` : null,
+      ].filter((x): x is string => !!x);
+      const emailFoi = prov.data?.email?.enviado ? " E-mail de boas-vindas enviado." : "";
+      pushNotification("system", "Cliente aprovado",
+        `${clientName} foi ativado. Equipe pode iniciar o setup.${emailFoi}${avisos.length ? ` Atenção: ${avisos.join("; ")}.` : ""}`, selected.id);
+      if (avisos.length) toast.warning(`${clientName} aprovado, mas ${avisos.join("; ")}.`);
+      else toast.success(`${clientName} aprovado.${emailFoi}`);
     } else {
       // O cliente já está ativo (draft_status saiu), mas sem checklist/aviso/e-mail — dizer isso.
       pushNotification("system", "Aprovado sem setup", `${clientName} entrou na carteira, mas o setup falhou: ${prov.erro}. Refaça pelo onboarding do cliente.`, selected.id);

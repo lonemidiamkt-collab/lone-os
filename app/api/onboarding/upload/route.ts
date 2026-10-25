@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { limiteDoDocumento } from "@/lib/onboarding/etapas";
+import { valorAposUpload } from "@/lib/onboarding/docs";
+import { LIMITE_UPLOAD, ESPERA_SUGERIDA_S } from "@/lib/onboarding/upload";
+import { criarLimite, ipDe } from "@/lib/portal/limite";
 import { createClient } from "@supabase/supabase-js";
 import { getServerUser } from "@/lib/supabase/auth-server";
 
@@ -17,47 +20,26 @@ const BUCKET_BY_DOC_TYPE: Record<string, "brand-assets" | "legal-docs"> = {
   identidade: "legal-docs",
 };
 
-// ─── Rate limit (in-memory, single-instance) ─────────────────
-// Evita spam de uploads que pode entupir o bucket com arquivos grandes.
-// Limite: 1 upload por IP a cada 5 segundos. Suficiente pra onboarding
-// legítimo (usuário leva >5s entre uploads manuais) e bloqueia automação hostil.
-const uploadWindow = new Map<string, number>();
-const RATE_LIMIT_WINDOW_MS = 5_000;
+// ─── Limite de envios (em memória, uma instância) ────────────────────────────
+// 24/10/2026 (auditoria de erro recuperável, item 1.5): era 1 upload por IP a cada 5 s — o 2º e o 3º
+// arquivo de uma seleção levavam 429. Agora o limite é por LINK de cadastro (token) ou por pessoa
+// logada, N por minuto, e o teto por IP fica só contra robô. Regras em lib/onboarding/upload.ts.
+const LIMITE_IP = criarLimite(LIMITE_UPLOAD.porIp, LIMITE_UPLOAD.janelaMs);
+const LIMITE_TOKEN = criarLimite(LIMITE_UPLOAD.porToken, LIMITE_UPLOAD.janelaMs);
+const LIMITE_USUARIO = criarLimite(LIMITE_UPLOAD.porUsuario, LIMITE_UPLOAD.janelaMs);
 
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const last = uploadWindow.get(ip);
-  if (last && now - last < RATE_LIMIT_WINDOW_MS) return true;
-  uploadWindow.set(ip, now);
-  // GC: em vez de janela deslizante perfeita, limpamos entradas velhas a cada 100 uploads
-  // pra evitar vazamento de memória com muitos IPs distintos.
-  if (uploadWindow.size > 100) {
-    for (const [k, t] of uploadWindow) {
-      if (now - t > RATE_LIMIT_WINDOW_MS) uploadWindow.delete(k);
-    }
-  }
-  return false;
-}
-
-function getClientIp(req: NextRequest): string {
-  // Cloudflare → Nginx → Next: o IP real vem em x-forwarded-for (primeiro IP da lista).
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  const real = req.headers.get("x-real-ip");
-  if (real) return real.trim();
-  return "unknown";
+function muitosEnvios() {
+  return NextResponse.json(
+    { error: "Muitos arquivos seguidos. Aguarde alguns segundos — a página tenta de novo sozinha." },
+    { status: 429, headers: { "Retry-After": String(ESPERA_SUGERIDA_S) } },
+  );
 }
 
 export async function POST(req: NextRequest) {
-  const ip = getClientIp(req);
-  if (isRateLimited(ip)) {
-    return NextResponse.json(
-      { error: "Muitos uploads em pouco tempo. Aguarde 5 segundos e tente novamente." },
-      { status: 429 }
-    );
-  }
+  if (LIMITE_IP.estourou(ipDe(req.headers))) return muitosEnvios();
 
-  const formData = await req.formData();
+  const formData = await req.formData().catch(() => null);
+  if (!formData) return NextResponse.json({ error: "Envio incompleto. Tente de novo." }, { status: 400 });
   const file = formData.get("file") as File | null;
   const clientId = formData.get("clientId") as string;
   const docType = formData.get("docType") as string;
@@ -87,6 +69,10 @@ export async function POST(req: NextRequest) {
     if (!sub || sub.client_id !== clientId) {
       return NextResponse.json({ error: "Token inválido para este cliente." }, { status: 401 });
     }
+    // Só conta depois de validar: token inventado não ocupa lugar no limite.
+    if (LIMITE_TOKEN.estourou(token)) return muitosEnvios();
+  } else if (LIMITE_USUARIO.estourou(user.id)) {
+    return muitosEnvios();
   }
 
   const bucket = BUCKET_BY_DOC_TYPE[docType];
@@ -158,10 +144,19 @@ export async function POST(req: NextRequest) {
 
   // Private: save prefixed path so frontend can distinguish it from legacy public URLs
   const privateRef = `legal://${path}`;
-  // Persist URL to clients table server-side (service role bypasses RLS)
+  // Persist URL to clients table server-side (service role bypasses RLS).
+  // Campo de vários arquivos ACRESCENTA (24/10/2026, item 1.13): gravar só a url nova deixava a ficha
+  // do cliente ativo com o último arquivo. Sem conseguir ler o que já estava lá, não grava — o arquivo
+  // está guardado e o rascunho do cadastro leva a lista inteira; sobrescrever apagaria as outras páginas.
   if (dbColumn) {
-    const { error: dbErr } = await supabase.from("clients").update({ [dbColumn]: privateRef }).eq("id", clientId);
-    if (dbErr) console.error("[Upload] DB update failed:", dbErr);
+    const { data: atual, error: eLe } = await supabase.from("clients").select(dbColumn).eq("id", clientId).maybeSingle();
+    if (eLe) {
+      console.error("[Upload] ficha não lida; arquivo guardado sem atualizar a ficha:", eLe.message);
+    } else {
+      const valor = valorAposUpload(dbColumn, (atual as unknown as Record<string, unknown> | null)?.[dbColumn] as string | null, privateRef);
+      const { error: dbErr } = await supabase.from("clients").update({ [dbColumn]: valor }).eq("id", clientId);
+      if (dbErr) console.error("[Upload] DB update failed:", dbErr);
+    }
   }
   return NextResponse.json({ url: privateRef, path, bucket });
 }

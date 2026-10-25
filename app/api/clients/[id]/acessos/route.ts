@@ -7,7 +7,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { papelDoUsuario } from "@/lib/api/require-role";
 import {
-  PLATAFORMAS, ehStatus, estadoDoAcesso, infoPlataforma, podeMexer,
+  PLATAFORMAS, ehStatus, estadoDoAcesso, infoPlataforma, podeMexer, pedidoAceitaEnvio, situacaoDoPedido,
   type PedidoResumo, type Plataforma, type StatusAcesso,
 } from "@/lib/clients/cofre";
 
@@ -128,12 +128,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (body?.acao === "pedir") {
     const agoraIso = new Date().toISOString();
-    const { data: aberto, error: e1 } = await supabaseAdmin.from("client_access_requests").select("token")
-      .eq("client_id", id).eq("plataforma", plataforma).eq("status", "aberto").gt("expira_em", agoraIso)
+    // 24/10/2026 (item 1.12): o link recebido continua aceitando reenvio até o time marcar "ok" — então
+    // ele também é reaproveitado (é por ele que o cliente corrige a senha que não funcionou).
+    const { data: vivo, error: e1 } = await supabaseAdmin.from("client_access_requests").select("token, status, expira_em, recebido_em")
+      .eq("client_id", id).eq("plataforma", plataforma).in("status", ["aberto", "recebido"]).gt("expira_em", agoraIso)
       .order("criado_em", { ascending: false }).limit(1).maybeSingle();
     if (e1) return NextResponse.json({ error: semTabela(e1.message) ? "Falta aplicar a migration do cofre (20260926100000)." : e1.message }, { status: semTabela(e1.message) ? 503 : 500 });
+    let reaproveitar = !!vivo?.token;
+    if (vivo?.token && vivo.status === "recebido") {
+      const { data: conf } = await supabaseAdmin.from("client_access_status").select("status, atualizado_em")
+        .eq("client_id", id).eq("plataforma", plataforma).maybeSingle();
+      const sit = situacaoDoPedido(
+        { status: vivo.status as string, expiraEm: vivo.expira_em as string, recebidoEm: (vivo.recebido_em as string) ?? null },
+        conf && ehStatus(conf.status) ? { status: conf.status, atualizadoEm: conf.atualizado_em as string } : null,
+      );
+      reaproveitar = pedidoAceitaEnvio(sit);
+    }
     // Um link vivo por plataforma: dois links abertos são duas chances de a senha chegar pela metade.
-    if (aberto?.token) return NextResponse.json({ url: `/onboarding/acesso/${aberto.token}`, reaproveitado: true, cliente: nomeCliente, plataforma: info.rotulo });
+    if (reaproveitar && vivo?.token) return NextResponse.json({ url: `/onboarding/acesso/${vivo.token}`, reaproveitado: true, cliente: nomeCliente, plataforma: info.rotulo });
     const token = `ac-${randomBytes(16).toString("hex")}`;
     const { error } = await supabaseAdmin.from("client_access_requests").insert({ token, client_id: id, plataforma, criado_por: q.nome });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -19,17 +19,17 @@ export type Plataforma = "meta" | "instagram" | "google";
 /** Onde cada acesso mora: no rascunho (client_onboarding_submissions), no formulário e na ficha (clients). */
 export const ACESSOS = [
   {
-    plataforma: "meta", login: "meta_login", senha: "meta_password", status: "meta_status",
+    plataforma: "meta", rotulo: "Facebook / Meta", login: "meta_login", senha: "meta_password", status: "meta_status",
     form: { login: "metaLogin", senha: "metaPassword", status: "metaStatus" },
     ficha: { login: "facebook_login", senha: "facebook_password" },
   },
   {
-    plataforma: "instagram", login: "instagram_login", senha: "instagram_password", status: "instagram_status",
+    plataforma: "instagram", rotulo: "Instagram", login: "instagram_login", senha: "instagram_password", status: "instagram_status",
     form: { login: "instagramLogin", senha: "instagramPassword", status: "instagramStatus" },
     ficha: { login: "instagram_login", senha: "instagram_password" },
   },
   {
-    plataforma: "google", login: "google_login", senha: "google_password", status: "google_status",
+    plataforma: "google", rotulo: "Google Ads / Gmail", login: "google_login", senha: "google_password", status: "google_status",
     form: { login: "googleLogin", senha: "googlePassword", status: "googleStatus" },
     ficha: { login: "google_ads_login", senha: "google_ads_password" },
   },
@@ -117,4 +117,53 @@ export function acessosParaFicha(linha: Record<string, unknown>): Record<string,
     if (preenchido(senha)) out[a.ficha.senha] = senha;
   }
   return out;
+}
+
+// ── Login e senha andam em par (24/10/2026, item 1.6) ──────────────────────────────────────────
+// O cliente digitava só o login, a Revisão dizia "Preenchido" e o time recebia login sem senha —
+// descobria na hora de entrar. Agora, com "Preencher" escolhido, um acesso começado precisa do par
+// (login + senha, ou a senha que já chegou antes); senão o cliente escolhe "Não tenho" ou "Convite".
+// Acesso deixado TODO em branco não trava (a Revisão mostra "Não informado"): exigir uma escolha nos
+// três obrigaria o cliente só de social a responder sobre Google Ads. Se o Roberto quiser, é só
+// tratar "em branco" como falta aqui.
+
+export type FaltaNoAcesso = "login" | "senha" | null;
+
+/** O que falta para o par fechar. `senhaRecebida`: o servidor já tem a senha (ela não volta à página). */
+export function faltaNoAcesso(a: { status: StatusAcesso | null; login: string; senha: string; senhaRecebida: boolean }): FaltaNoAcesso {
+  if (a.status && a.status !== "fill_now") return null;
+  const temLogin = preenchido(a.login);
+  const temSenha = preenchido(a.senha) || a.senhaRecebida;
+  if (temLogin && !temSenha) return "senha";
+  if (!temLogin && temSenha) return "login";
+  return null;
+}
+
+/** Frase da falta, para a etapa, a Revisão e o servidor. */
+export function fraseDaFalta(rotulo: string, falta: Exclude<FaltaNoAcesso, null>): string {
+  return falta === "senha" ? `${rotulo}: falta a senha` : `${rotulo}: falta o login`;
+}
+
+/**
+ * Conferência do ENVIO no servidor (defesa para aba antiga): junta o que veio no corpo com o que o
+ * rascunho já tinha, pela mesma regra do acessosDoRascunho, e devolve as faltas em frase.
+ */
+export function faltasNosAcessosDoEnvio(
+  campos: Record<string, unknown>,
+  linha: Record<string, unknown>,
+  restaurados: boolean,
+): string[] {
+  const faltas: string[] = [];
+  for (const a of ACESSOS) {
+    const loginNovo = campos[a.form.login];
+    const login = preenchido(loginNovo) ? loginNovo : restaurados ? "" : (preenchido(linha[a.login]) ? (linha[a.login] as string) : "");
+    const statusNovo = statusDeAcesso(campos[a.form.status]);
+    const status = statusNovo && (restaurados || statusNovo !== "fill_now") ? statusNovo : statusDeAcesso(linha[a.status]);
+    const senhaNova = campos[a.form.senha];
+    const falta = faltaNoAcesso({
+      status, login, senha: preenchido(senhaNova) ? senhaNova : "", senhaRecebida: preenchido(linha[a.senha]),
+    });
+    if (falta) faltas.push(fraseDaFalta(a.rotulo, falta));
+  }
+  return faltas;
 }

@@ -12,8 +12,10 @@ import { Logo } from "@/components/ui/Logo";
 import { chamar } from "@/lib/api/chamar";
 import { ROTULO_NICHO } from "@/lib/cs/nicho";
 import { FAIXAS_FATURAMENTO, rotuloFaixa, capitalizar, type EmpresaReceita } from "@/lib/empresa/receita";
-import { faltandoNaEtapa, destinoPermitido, limiteDoDocumento, MB } from "@/lib/onboarding/etapas";
-import { lerAcessos, type StatusAcesso, type SenhasRecebidas } from "@/lib/onboarding/acessos";
+import { faltandoNaEtapa, destinoPermitido, limiteDoDocumento, MB, ORDEM_ETAPAS } from "@/lib/onboarding/etapas";
+import { lerAcessos, faltaNoAcesso, type FaltaNoAcesso, type StatusAcesso, type SenhasRecebidas } from "@/lib/onboarding/acessos";
+import { enviarComNovaTentativa, motivoDoArquivoQueNaoSubiu, valeTentarDeNovo } from "@/lib/onboarding/upload";
+import { falhaDeAbertura, fraseDoErroDoEnvio, esperaDoRascunho, deveSalvarAoSair, type FalhaDeAbertura } from "@/lib/onboarding/pagina";
 import { separarNumeroDaRua } from "@/lib/empresa/endereco";
 
 // ─── Types ──────────────────────────────────────────────────
@@ -126,24 +128,17 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
   const [error, setError] = useState("");
   // Nome original de cada arquivo enviado nesta visita: o cliente reconhece "cartao_cnpj.pdf", não "logo-1792….pdf".
   const [nomes, setNomes] = useState<Record<string, string>>({});
+  // O que não subiu, com o motivo (24/10/2026, item 1.5): antes o 2º e o 3º arquivo da seleção levavam
+  // 429 e só sobrava uma frase solta. Agora a página tenta de novo sozinha e lista o que não foi.
+  const [naoSubiram, setNaoSubiram] = useState<{ arquivo: File; motivo: string; podeTentar: boolean }[]>([]);
+  const [aguardando, setAguardando] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   // Uploads em sequência liam o `uploaded` da closure ANTIGA e um sobrescrevia o outro.
   const uploadedRef = useRef(uploaded);
   useEffect(() => { uploadedRef.current = uploaded; }, [uploaded]);
 
-  const handleFile = async (file: File) => {
-    setError("");
-    const limite = limiteDoDocumento(docType);
-    if (file.size > limite) {
-      setError(`Arquivo com ${(file.size / MB).toFixed(1).replace(".", ",")} MB — o limite é ${limite / MB} MB.` +
-        (docType === "contrato_social" ? " Se o PDF for grande, mande o cartão CNPJ ou uma foto de cada página." : ""));
-      return;
-    }
-    const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"];
-    if (!allowed.includes(file.type) && !file.name.match(/\.(jpg|jpeg|png|webp|heic|heif|pdf)$/i)) {
-      setError("Formato não suportado. Use JPG, PNG ou PDF."); return;
-    }
-    setUploading(true);
+  /** Um POST do arquivo. Nunca lança: status 0 = a requisição nem saiu. */
+  const postar = async (file: File): Promise<{ status: number; url?: string; erro?: string; retryAfterS?: number | null }> => {
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -151,18 +146,63 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
       fd.append("docType", docType);
       fd.append("token", token); // portal público: autoriza o upload sem login (validado contra o clientId no server)
       const res = await fetch("/api/onboarding/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || "Erro no servidor."); return; }
-      setNomes((n) => ({ ...n, [data.url]: file.name }));
-      // Acumula em vez de substituir: o cartão CNPJ costuma ter 2-3 páginas, e antes a segunda
-      // apagava a primeira sem aviso — o cliente achava que tinha mandado e só uma chegava.
-      // Campo de um arquivo só (logo): o novo SUBSTITUI — é o "Trocar arquivo".
-      const jaTem = listaDocs(uploadedRef.current);
-      onUploaded(multiplo ? [...jaTem, data.url].join(SEP_DOCS) : data.url);
-      onToast?.(`${label} salvo com sucesso${multiplo && jaTem.length ? ` (${jaTem.length + 1} arquivos)` : ""}`);
+      const txt = await res.text().catch(() => "");
+      let data: { url?: string; error?: string } | null = null;
+      try { data = txt ? JSON.parse(txt) : null; } catch { data = null; }
+      if (!res.ok) return { status: res.status, erro: data?.error, retryAfterS: Number(res.headers.get("Retry-After")) || null };
+      if (!data?.url) return { status: 500, erro: "O servidor não confirmou o arquivo." };
+      return { status: res.status, url: data.url };
     } catch {
-      setError("Falha na conexão. O arquivo não foi enviado — tente de novo.");
-    } finally { setUploading(false); }
+      return { status: 0 };
+    }
+  };
+
+  /** Envia um arquivo (com nova tentativa sozinha). Devolve o motivo se não subiu; null = subiu. */
+  const handleFile = async (file: File): Promise<{ motivo: string; podeTentar: boolean } | null> => {
+    const limite = limiteDoDocumento(docType);
+    if (file.size > limite) {
+      return { podeTentar: false, motivo: `arquivo com ${(file.size / MB).toFixed(1).replace(".", ",")} MB — o limite é ${limite / MB} MB.` +
+        (docType === "contrato_social" ? " Se o PDF for grande, mande o cartão CNPJ ou uma foto de cada página." : "") };
+    }
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"];
+    if (!allowed.includes(file.type) && !file.name.match(/\.(jpg|jpeg|png|webp|heic|heif|pdf)$/i)) {
+      return { podeTentar: false, motivo: "formato não suportado. Use JPG, PNG ou PDF." };
+    }
+    const r = await enviarComNovaTentativa(() => postar(file), {
+      aoEsperar: (_n, ms) => setAguardando(`Muitos arquivos de uma vez — tentando “${file.name}” de novo em ${Math.round(ms / 1000)} s…`),
+    });
+    setAguardando(null);
+    if (!r.url) return { podeTentar: valeTentarDeNovo(r.status), motivo: motivoDoArquivoQueNaoSubiu(r.status, r.erro) };
+    const url = r.url;
+    setNomes((n) => ({ ...n, [url]: file.name }));
+    // Acumula em vez de substituir: o cartão CNPJ costuma ter 2-3 páginas, e antes a segunda
+    // apagava a primeira sem aviso — o cliente achava que tinha mandado e só uma chegava.
+    // Campo de um arquivo só (logo): o novo SUBSTITUI — é o "Trocar arquivo".
+    const jaTem = listaDocs(uploadedRef.current);
+    const novo = multiplo ? [...jaTem, url].join(SEP_DOCS) : url;
+    uploadedRef.current = novo; // o próximo da fila já enxerga este, sem esperar o re-render
+    onUploaded(novo);
+    onToast?.(`${label} salvo com sucesso${multiplo && jaTem.length ? ` (${jaTem.length + 1} arquivos)` : ""}`);
+    return null;
+  };
+
+  /** Manda uma seleção em série (cada um precisa enxergar o anterior) e guarda o que não subiu. */
+  const enviarVarios = async (arquivos: File[]) => {
+    if (!arquivos.length) return;
+    setError("");
+    setUploading(true);
+    const falhas: { arquivo: File; motivo: string; podeTentar: boolean }[] = [];
+    try {
+      for (const f of arquivos) {
+        const falha = await handleFile(f);
+        if (falha) falhas.push({ arquivo: f, ...falha });
+      }
+    } finally {
+      setUploading(false);
+      setAguardando(null);
+    }
+    const tentados = new Set(arquivos);
+    setNaoSubiram((antes) => [...antes.filter((x) => !tentados.has(x.arquivo)), ...falhas]);
   };
 
   const remover = async (url: string) => {
@@ -192,7 +232,7 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
   const abrirCamera = () => {
     const input = document.createElement("input");
     input.type = "file"; input.accept = "image/*"; input.capture = "environment";
-    input.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleFile(f); };
+    input.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void enviarVarios([f]); };
     input.click();
   };
 
@@ -258,11 +298,38 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
       </div>
       <input ref={fileRef} type="file" accept="image/*,.pdf,.heic,.heif" multiple={multiplo} className="hidden" onChange={async (e) => {
         const fs = Array.from(e.target.files ?? []);
-        // Em série, não em paralelo: cada upload precisa enxergar o que o anterior já salvou.
-        for (const f of fs) await handleFile(f);
         e.target.value = ""; // permite reenviar o mesmo arquivo depois de remover
+        // Em série, não em paralelo: cada upload precisa enxergar o que o anterior já salvou.
+        await enviarVarios(fs);
       }} />
+      {aguardando && <p role="status" className="text-[11px] text-muted-foreground flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> {aguardando}</p>}
       {error && <p role="alert" className="text-xs text-lone-danger">{error}</p>}
+      {naoSubiram.length > 0 && (
+        <div role="alert" className="rounded-lg border border-lone-danger-border bg-lone-danger-bg p-2.5 space-y-1.5">
+          <p className="text-xs font-medium text-foreground">
+            {naoSubiram.length === 1 ? "Este arquivo não subiu:" : `Estes ${naoSubiram.length} arquivos não subiram:`}
+          </p>
+          <ul className="space-y-1">
+            {naoSubiram.map((x, i) => (
+              <li key={`${x.arquivo.name}-${i}`} className="flex items-center gap-2 text-[11px]">
+                <span className="min-w-0 flex-1 text-foreground"><span className="font-medium break-all">{x.arquivo.name}</span> — {x.motivo}</span>
+                {x.podeTentar && (
+                  <button type="button" disabled={uploading} onClick={() => void enviarVarios([x.arquivo])}
+                    className="shrink-0 text-primary hover:underline underline-offset-2 disabled:opacity-50">Tentar de novo</button>
+                )}
+                <button type="button" onClick={() => setNaoSubiram((l) => l.filter((y) => y !== x))}
+                  aria-label={`Dispensar ${x.arquivo.name}`} className="shrink-0 text-muted-foreground hover:text-foreground">
+                  <X size={12} />
+                </button>
+              </li>
+            ))}
+          </ul>
+          {naoSubiram.filter((x) => x.podeTentar).length > 1 && (
+            <button type="button" disabled={uploading} onClick={() => void enviarVarios(naoSubiram.filter((x) => x.podeTentar).map((x) => x.arquivo))}
+              className="text-[11px] font-medium text-primary hover:underline underline-offset-2 disabled:opacity-50">Tentar todos de novo</button>
+          )}
+        </div>
+      )}
       <p className="text-[10px] text-muted-foreground/70">
         JPG, PNG ou PDF — máximo {limiteDoDocumento(docType) / MB} MB{multiplo ? " por arquivo. Pode enviar mais de um (frente e verso, várias páginas)." : ""}
       </p>
@@ -270,10 +337,12 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
   );
 }
 
-function AccessField({ platform, icon: Icone, login, password, status, senhaRecebida, onLogin, onPassword, onStatus }: {
+function AccessField({ platform, icon: Icone, login, password, status, senhaRecebida, falta, onLogin, onPassword, onStatus }: {
   platform: string; icon: LucideIcon; login: string; password: string; status: AccessStatus;
   /** A senha já está guardada no servidor (ela nunca volta para a página). */
   senhaRecebida?: boolean;
+  /** Metade do par que falta, para mostrar no campo (só depois de tentar avançar). Item 1.6, 24/10/2026. */
+  falta?: FaltaNoAcesso;
   onLogin: (v: string) => void; onPassword: (v: string) => void; onStatus: (v: AccessStatus) => void;
 }) {
   const [showPw, setShowPw] = useState(false);
@@ -284,6 +353,7 @@ function AccessField({ platform, icon: Icone, login, password, status, senhaRece
   const mostrarRecebida = !!senhaRecebida && !trocandoSenha && !password;
   return (
     <div className={`rounded-xl border p-4 space-y-3 transition-all ${
+      falta ? "border-lone-danger-border bg-lone-danger-bg" :
       status === "waiting_client" ? "border-lone-warning-border bg-lone-warning-bg" :
       status === "partner_invite" ? "border-primary/20 bg-primary/[0.03]" :
       "border-border bg-card"
@@ -330,6 +400,11 @@ function AccessField({ platform, icon: Icone, login, password, status, senhaRece
               ))}
             </>
           )}
+          {falta && (
+            <p role="alert" className="text-[11px] text-lone-danger">
+              {falta === "senha" ? "Falta a senha." : "Falta o login."} Preencha {falta === "senha" ? "a senha" : "o login"} ou escolha “Não tenho”.
+            </p>
+          )}
         </div>
       )}
       {status === "waiting_client" && (
@@ -355,6 +430,11 @@ export default function ExternalOnboardingPage() {
   const [submitted, setSubmitted] = useState(false);
   const [autoSaving, setAutoSaving] = useState(false);
   const [erroRascunho, setErroRascunho] = useState(false);
+  // Abrir o link: 404 é link inválido; o resto é "não consegui abrir agora" + tentar de novo (item 1.9).
+  const [falhaAbrir, setFalhaAbrir] = useState<FalhaDeAbertura | null>(null);
+  const [tentativaAbrir, setTentativaAbrir] = useState(0);
+  // Erro do "Finalizar", mostrado JUNTO do botão (item 1.10).
+  const [erroEnvio, setErroEnvio] = useState("");
   const [cnpjError, setCnpjError] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [emailError, setEmailError] = useState("");
@@ -412,6 +492,10 @@ export default function ExternalOnboardingPage() {
   // These MUST be filled to enable submit. Missing any → contract + automation break.
   const REQUIRED_ERROR = "Este campo é essencial para a geração do seu contrato e ativação da conta.";
 
+  const faltaMeta = faltaNoAcesso({ status: metaStatus, login: metaLogin, senha: metaPassword, senhaRecebida: senhaRecebida.meta });
+  const faltaInsta = faltaNoAcesso({ status: instaStatus, login: instaLogin, senha: instaPassword, senhaRecebida: senhaRecebida.instagram });
+  const faltaGoogle = faltaNoAcesso({ status: googleStatus, login: googleLogin, senha: googlePassword, senhaRecebida: senhaRecebida.google });
+
   const missingRequired: Record<string, boolean> = {
     nomeFantasia: !nomeFantasia.trim(),
     cnpj: !cnpj.trim() || !validateCnpj(cnpj),
@@ -426,6 +510,10 @@ export default function ExternalOnboardingPage() {
     faturamentoFaixa: !faturamentoFaixa,
     docLogo: !docLogo,
     docContrato: !docContrato,
+    // Login e senha em par (item 1.6, 24/10/2026): login sem senha não passa mais como "Preenchido".
+    senhaMeta: faltaMeta === "senha", loginMeta: faltaMeta === "login",
+    senhaInstagram: faltaInsta === "senha", loginInstagram: faltaInsta === "login",
+    senhaGoogle: faltaGoogle === "senha", loginGoogle: faltaGoogle === "login",
   };
   const isFormComplete = Object.values(missingRequired).every((v) => !v);
 
@@ -435,9 +523,9 @@ export default function ExternalOnboardingPage() {
     razaoSocial, cnpj, contactCpf, // business
     enderecoRua, enderecoCep, enderecoCidade, // address
     docContrato, docIdentidade, docLogo, // docs
-    metaStatus !== "fill_now" || metaLogin ? "x" : "", // meta
-    instaStatus !== "fill_now" || instaLogin ? "x" : "", // insta
-    googleStatus !== "fill_now" || googleLogin ? "x" : "", // google
+    metaStatus !== "fill_now" || (metaLogin && !faltaMeta) ? "x" : "", // meta (só o par completo conta)
+    instaStatus !== "fill_now" || (instaLogin && !faltaInsta) ? "x" : "", // insta
+    googleStatus !== "fill_now" || (googleLogin && !faltaGoogle) ? "x" : "", // google
   ].filter(Boolean).length;
   const totalFields = 16;
   const fieldProgress = Math.round((filledCount / totalFields) * 100);
@@ -458,6 +546,16 @@ export default function ExternalOnboardingPage() {
   // já disparava um auto-save que regravava tudo — inclusive as senhas em branco).
   const ultimoSalvo = useRef<string | null>(null);
 
+  // acessosRestaurados: esta página trouxe os logins do servidor — login vazio aqui é o cliente
+  // apagando, não a página recarregada (o servidor só apaga com isso; lib/onboarding/acessos.ts).
+  const corpoDoRascunho = (json: string) => ({ action: "auto_save", token, acessosRestaurados: true, ...JSON.parse(json) });
+  // Falhas seguidas do salvamento: a próxima tentativa sai sozinha, com espera crescente (item 1.14,
+  // 24/10/2026 — antes só tentava de novo quando a pessoa digitava).
+  const falhasRascunho = useRef(0);
+  const [tentativaRascunho, setTentativaRascunho] = useState(0);
+  const rascunhoAtual = useRef(rascunhoJson);
+  useEffect(() => { rascunhoAtual.current = rascunhoJson; }, [rascunhoJson]);
+
   useEffect(() => {
     if (!submission) return;
     if (ultimoSalvo.current === null) { ultimoSalvo.current = rascunhoJson; return; }
@@ -465,15 +563,43 @@ export default function ExternalOnboardingPage() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setAutoSaving(true);
-      // acessosRestaurados: esta página trouxe os logins do servidor — login vazio aqui é o cliente
-      // apagando, não a página recarregada (o servidor só apaga com isso; lib/onboarding/acessos.ts).
-      const r = await chamar("/api/onboarding", { action: "auto_save", token, acessosRestaurados: true, ...JSON.parse(rascunhoJson) });
+      const enviado = rascunhoJson;
+      const r = await chamar("/api/onboarding", corpoDoRascunho(enviado));
       setAutoSaving(false);
-      if (r.ok) { ultimoSalvo.current = rascunhoJson; setErroRascunho(false); }
-      else setErroRascunho(true);
-    }, 3000);
+      if (r.ok) {
+        ultimoSalvo.current = enviado; falhasRascunho.current = 0; setErroRascunho(false);
+      } else {
+        falhasRascunho.current += 1; setErroRascunho(true);
+        setTentativaRascunho((n) => n + 1); // reagenda sozinho, sem esperar a pessoa digitar
+      }
+    }, esperaDoRascunho(falhasRascunho.current));
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [rascunhoJson, submission, token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rascunhoJson, submission, token, tentativaRascunho]);
+
+  // Fechar a aba (ou trocar de app no celular) dentro dos 3 s do salvamento perdia o que foi digitado.
+  // Ao sair, manda o que falta com keepalive — o navegador entrega mesmo com a página fechando.
+  useEffect(() => {
+    if (!submission || submitted) return;
+    const salvarAoSair = () => {
+      const atual = rascunhoAtual.current;
+      if (!deveSalvarAoSair(atual, ultimoSalvo.current)) return;
+      try {
+        void fetch("/api/onboarding", {
+          method: "POST", keepalive: true, headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(corpoDoRascunho(atual)),
+        }).then((res) => { if (res.ok) { ultimoSalvo.current = atual; falhasRascunho.current = 0; } }, () => {});
+      } catch { /* corpo grande demais para keepalive: o salvamento normal continua tentando */ }
+    };
+    const aoEsconder = () => { if (document.visibilityState === "hidden") salvarAoSair(); };
+    window.addEventListener("pagehide", salvarAoSair);
+    document.addEventListener("visibilitychange", aoEsconder);
+    return () => {
+      window.removeEventListener("pagehide", salvarAoSair);
+      document.removeEventListener("visibilitychange", aoEsconder);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submission, submitted, token]);
 
   // Auto-dismiss upload toast after 3s
   useEffect(() => {
@@ -522,11 +648,18 @@ export default function ExternalOnboardingPage() {
 
   // Load submission
   useEffect(() => {
+    setLoading(true);
+    setFalhaAbrir(null);
+    setError("");
     chamar<Record<string, unknown> & { error?: string; submission?: SubmissionData }>(`/api/onboarding?token=${encodeURIComponent(token)}`)
       .then((r) => {
         const data = r.data;
         if (!r.ok || !data) {
-          setError(r.status === 404 ? "Link inválido ou expirado." : "Erro ao carregar. Tente novamente.");
+          // 404 = link que não existe; rede, deploy e erro de banco = "não consegui abrir agora" (item 1.9).
+          const falha = falhaDeAbertura(r.status);
+          setFalhaAbrir(falha);
+          setError(falha === "invalido" ? "Este link de cadastro não existe ou expirou. Peça um novo à equipe da Lone Mídia."
+            : r.status === 0 ? "Sem conexão com a internet agora." : "O sistema não respondeu agora.");
         } else if (data.error === "already_submitted") {
           setSubmitted(true);
           if (data.submission) {
@@ -548,7 +681,7 @@ export default function ExternalOnboardingPage() {
       })
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, tentativaAbrir]);
 
   const currentStep = STEPS.findIndex((s) => s.key === step);
   // O Próximo confere a etapa atual: obrigatório faltando aqui não passa (antes só trocava de etapa e
@@ -719,27 +852,22 @@ export default function ExternalOnboardingPage() {
   const handleSubmit = async () => {
     setShowValidation(true);
     if (!isFormComplete) {
-      const missingCount = Object.values(missingRequired).filter(Boolean).length;
-      setError(`Existem ${missingCount} campo(s) obrigatório(s) pendente(s). ${REQUIRED_ERROR}`);
-      // Jump to first step with missing field for UX
-      if (missingRequired.nomeFantasia || missingRequired.cnpj || missingRequired.faturamentoFaixa || missingRequired.contactName ||
-          missingRequired.contactEmail || missingRequired.contactWhatsapp ||
-          missingRequired.enderecoCep || missingRequired.enderecoRua || missingRequired.enderecoNumero ||
-          missingRequired.enderecoBairro || missingRequired.enderecoCidade) {
-        setStep("dados");
-      } else if (missingRequired.docLogo || missingRequired.docContrato) {
-        setStep("documentos");
-      }
+      // Vai para a primeira etapa com falta e diz ali o que falta (lib/onboarding/etapas.ts).
+      const etapa = ORDEM_ETAPAS.find((e) => faltandoNaEtapa(e, missingRequired).length);
+      if (etapa) { setStep(etapa); setAvisoEtapa(true); window.scrollTo({ top: 0, behavior: "smooth" }); }
+      else setErroEnvio("Ainda falta preencher um campo obrigatório. Confira as etapas acima.");
       return;
     }
 
     // Sem cópia local: o backup em localStorage guardava as senhas em texto puro no aparelho.
     setSubmitting(true);
-    setError("");
+    setErroEnvio("");
     const r = await chamar("/api/onboarding", buildPayload());
     setSubmitting(false);
     if (!r.ok) {
-      setError(`Falha ao enviar: ${r.erro}. Seus dados continuam aqui — tente novamente.`);
+      // Frase humana junto do botão; o detalhe técnico fica no log do servidor (item 1.10).
+      if (r.status >= 500 || r.status === 0) console.error("[cadastro] envio falhou:", r.status, r.erro);
+      setErroEnvio(fraseDoErroDoEnvio(r.status, r.erro));
       return;
     }
     setSubmittedData({ contactName: contactName.trim(), nomeFantasia: nomeFantasia.trim(), cnpj: cnpj.trim() });
@@ -793,8 +921,23 @@ export default function ExternalOnboardingPage() {
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <div className="max-w-md w-full text-center space-y-4">
         <AlertTriangle size={40} className="text-lone-warning mx-auto" />
-        <h1 className="text-xl font-bold text-foreground">Link inválido</h1>
-        <p className="text-muted-foreground text-sm">{error}</p>
+        {falhaAbrir === "indisponivel" ? (
+          <>
+            <h1 className="text-xl font-bold text-foreground">Não consegui abrir agora</h1>
+            <p className="text-muted-foreground text-sm">
+              {error} Isso costuma passar em instantes, e o que você já preencheu continua guardado.
+            </p>
+            <button type="button" onClick={() => setTentativaAbrir((n) => n + 1)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 min-h-[44px] rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-medium transition-colors">
+              <RefreshCw size={14} /> Tentar de novo
+            </button>
+          </>
+        ) : (
+          <>
+            <h1 className="text-xl font-bold text-foreground">Link inválido</h1>
+            <p className="text-muted-foreground text-sm">{error}</p>
+          </>
+        )}
       </div>
     </div>
   );
@@ -823,7 +966,7 @@ export default function ExternalOnboardingPage() {
             </div>
             <div className="flex items-center gap-2">
               {autoSaving && <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Salvando…</span>}
-              {!autoSaving && erroRascunho && <span className="text-[10px] text-lone-warning" role="status">Rascunho não salvo — confira a conexão</span>}
+              {!autoSaving && erroRascunho && <span className="text-[10px] text-lone-warning" role="status">Rascunho não salvo — tentando de novo sozinho</span>}
               <span className="text-[10px] text-primary font-medium">{fieldProgress}%</span>
             </div>
           </div>
@@ -1012,13 +1155,13 @@ export default function ExternalOnboardingPage() {
           <div className="space-y-4 animate-fade-in">
             <p className="text-xs text-muted-foreground">Informe os acessos das plataformas. Se não tiver agora, selecione &quot;Não tenho&quot;.</p>
             <AccessField platform="Facebook / Meta Ads" icon={Facebook} login={metaLogin} password={metaPassword} status={metaStatus}
-              senhaRecebida={senhaRecebida.meta}
+              senhaRecebida={senhaRecebida.meta} falta={showValidation ? faltaMeta : null}
               onLogin={setMetaLogin} onPassword={setMetaPassword} onStatus={setMetaStatus} />
             <AccessField platform="Instagram" icon={Instagram} login={instaLogin} password={instaPassword} status={instaStatus}
-              senhaRecebida={senhaRecebida.instagram}
+              senhaRecebida={senhaRecebida.instagram} falta={showValidation ? faltaInsta : null}
               onLogin={setInstaLogin} onPassword={setInstaPassword} onStatus={setInstaStatus} />
             <AccessField platform="Google Ads / Gmail" icon={Search} login={googleLogin} password={googlePassword} status={googleStatus}
-              senhaRecebida={senhaRecebida.google}
+              senhaRecebida={senhaRecebida.google} falta={showValidation ? faltaGoogle : null}
               onLogin={setGoogleLogin} onPassword={setGooglePassword} onStatus={setGoogleStatus} />
           </div>
         )}
@@ -1051,14 +1194,17 @@ export default function ExternalOnboardingPage() {
                     <span className={ok ? "text-lone-success" : "text-lone-warning"}>{ok ? "Enviado" : "Pendente"}</span></div>
                 ))}
                 <div className="border-t border-border my-2" />
+                {/* Login sem senha não é "Preenchido" (item 1.6, 24/10/2026): a Revisão diz o que falta. */}
                 {[
-                  { label: "Meta Ads", status: metaStatus, login: metaLogin },
-                  { label: "Instagram", status: instaStatus, login: instaLogin },
-                  { label: "Google", status: googleStatus, login: googleLogin },
-                ].map(({ label, status, login }) => (
+                  { label: "Meta Ads", status: metaStatus, login: metaLogin, falta: faltaMeta },
+                  { label: "Instagram", status: instaStatus, login: instaLogin, falta: faltaInsta },
+                  { label: "Google", status: googleStatus, login: googleLogin, falta: faltaGoogle },
+                ].map(({ label, status, login, falta }) => (
                   <div key={label} className="flex justify-between"><span className="text-muted-foreground">{label}</span>
-                    <span className={status === "fill_now" && login ? "text-lone-success" : "text-lone-warning"}>
-                      {status === "fill_now" ? (login ? "Preenchido" : "Vazio") : status === "waiting_client" ? "Pendente" : "Partner"}
+                    <span className={falta ? "text-lone-danger" : status === "fill_now" && login ? "text-lone-success" : "text-lone-warning"}>
+                      {status === "fill_now"
+                        ? (falta === "senha" ? "Falta a senha" : falta === "login" ? "Falta o login" : login ? "Preenchido" : "Não informado")
+                        : status === "waiting_client" ? "Não tenho (pendente)" : "Convite Partner"}
                     </span></div>
                 ))}
               </div>
@@ -1086,6 +1232,12 @@ export default function ExternalOnboardingPage() {
           ) : <div />}
           {step === "review" ? (
             <div className="flex flex-col items-end gap-2">
+              {erroEnvio && (
+                <div role="alert" className="w-full max-w-sm rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-foreground flex gap-2 text-left">
+                  <AlertTriangle size={13} className="text-lone-danger shrink-0 mt-0.5" />
+                  <p>{erroEnvio}</p>
+                </div>
+              )}
               {!isFormComplete && (
                 <p className="text-[10px] text-lone-warning">
                   {Object.values(missingRequired).filter(Boolean).length} campo(s) obrigatório(s) pendente(s)
@@ -1095,7 +1247,7 @@ export default function ExternalOnboardingPage() {
                 className="flex items-center gap-2 px-6 py-2.5 min-h-[44px] rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 title={!isFormComplete ? "Preencha todos os campos obrigatórios para finalizar" : ""}>
                 {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                {submitting ? "Enviando…" : "Finalizar Onboarding"}
+                {submitting ? "Enviando…" : erroEnvio ? "Tentar enviar de novo" : "Finalizar Onboarding"}
               </button>
             </div>
           ) : (

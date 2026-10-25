@@ -10,11 +10,13 @@
 // Mostra o custo por venda (investimento em anúncio ÷ vendas) e o retorno (faturamento ÷ investimento).
 // É o dinheiro do próprio cliente — nada da agência aparece aqui.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, Plus, RefreshCw, ShoppingBag, Trash2 } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 import { cn } from "@/lib/utils";
-import { CANAIS_VENDA, INVESTIMENTO_NAO_APURADO, ROTULO_CANAL, type CanalVenda, type RespostaVendasCliente } from "@/lib/trafego/vendas";
+import {
+  CANAIS_VENDA, INVESTIMENTO_NAO_APURADO, ROTULO_CANAL, mascararReais, previaDoValor, type CanalVenda, type RespostaVendasCliente,
+} from "@/lib/trafego/vendas";
 
 export interface VendasDoClienteProps {
   /** Link do portal (público). Use ESTE ou `clientId`, nunca os dois. */
@@ -82,9 +84,14 @@ export default function VendasDoCliente({ token, clientId, permitirLancar = true
   const publico = !!token;
   const hoje = hojeSP();
   const [mes, setMes] = useState(hoje.slice(0, 7));
-  const [dados, setDados] = useState<RespostaVendasCliente | null>(null);
+  // Os números guardam DE QUAL MÊS são (24/10/2026, item 1.7): ao trocar de mês, a falha deixava os
+  // números do mês anterior na tela com o nome do novo. Agora só aparecem se forem do mês escolhido.
+  const [carga, setCarga] = useState<{ mes: string; dados: RespostaVendasCliente } | null>(null);
   const [carregando, setCarregando] = useState(true);
+  // Erro de CARREGAR (some com os números e oferece tentar de novo) ≠ erro de lançar/apagar (os números ficam).
+  const [erroCarga, setErroCarga] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const pedidoAtual = useRef(0);
   const [abrirForm, setAbrirForm] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [form, setForm] = useState({ soldOn: hoje, quantity: "1", amount: "", channel: "whatsapp" as CanalVenda | "", note: "" });
@@ -94,18 +101,28 @@ export default function VendasDoCliente({ token, clientId, permitirLancar = true
 
   const carregar = useCallback(async () => {
     if (!token && !clientId) return;
+    const meu = ++pedidoAtual.current; // trocar de mês rápido: só a resposta do último pedido vale
     setCarregando(true);
+    setErroCarga(null);
     const r = await pedir<RespostaVendasCliente>(urlLista, undefined, publico);
-    if (r.ok && r.data) { setDados(r.data); setErro(null); } else setErro(r.erro);
+    if (meu !== pedidoAtual.current) return;
+    if (r.ok && r.data) { setCarga({ mes, dados: r.data }); setErro(null); }
+    else { setCarga(null); setErroCarga(r.erro ?? "Não consegui carregar as vendas agora."); }
     setCarregando(false);
-  }, [urlLista, publico, token, clientId]);
+  }, [urlLista, publico, token, clientId, mes]);
   useEffect(() => { carregar(); }, [carregar]);
+  const dados = carga && carga.mes === mes ? carga.dados : null;
+
+  // Valor: o que vai ser gravado aparece antes de salvar (item 1.8 — "1.500" virava R$ 1,50).
+  const previa = previaDoValor(form.amount);
 
   async function lancar(e: React.FormEvent) {
     e.preventDefault();
     if (salvando) return;
+    if (previa && !previa.ok) { setErro(previa.frase); return; }
     setSalvando(true);
-    const corpo = { ...(clientId ? { clientId } : {}), soldOn: form.soldOn, quantity: form.quantity, amount: form.amount, channel: form.channel || null, note: form.note };
+    // Vai o NÚMERO que a prévia mostrou, não o texto: o servidor não reinterpreta o que o cliente viu.
+    const corpo = { ...(clientId ? { clientId } : {}), soldOn: form.soldOn, quantity: form.quantity, amount: previa?.ok ? previa.valor : null, channel: form.channel || null, note: form.note };
     const r = await pedir<{ ok: boolean }>(base, { corpo }, publico);
     setSalvando(false);
     if (!r.ok) { setErro(r.erro); return; }
@@ -151,6 +168,15 @@ export default function VendasDoCliente({ token, clientId, permitirLancar = true
       </div>
 
       {erro && <p role="alert" className="rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-lone-danger">{erro}</p>}
+      {erroCarga && !carregando && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-lone-danger">
+          <span>Não consegui carregar as vendas de {nomeDoMes(mes)}. {erroCarga}</span>
+          <button type="button" onClick={() => carregar()}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-foreground hover:bg-card">
+            <RefreshCw size={12} aria-hidden="true" /> Tentar de novo
+          </button>
+        </div>
+      )}
 
       {abrirForm && (
         <form onSubmit={lancar} className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -164,7 +190,14 @@ export default function VendasDoCliente({ token, clientId, permitirLancar = true
           </div>
           <div className="space-y-1">
             <label htmlFor="venda-valor" className="text-[11px] font-medium text-muted-foreground">Valor total (R$, opcional)</label>
-            <input id="venda-valor" inputMode="decimal" placeholder="ex: 1.500,00" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={campo} />
+            <input id="venda-valor" inputMode="decimal" placeholder="ex: 1.500,00" value={form.amount}
+              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              onBlur={() => setForm((f) => ({ ...f, amount: mascararReais(f.amount) }))}
+              aria-describedby="venda-valor-previa" aria-invalid={previa?.ok === false || undefined}
+              className={cn(campo, previa?.ok === false && "border-lone-danger-border")} />
+            {previa && (
+              <p id="venda-valor-previa" className={cn("text-[11px]", previa.ok ? "text-muted-foreground" : "text-lone-danger")}>{previa.frase}</p>
+            )}
           </div>
           <div className="space-y-1">
             <label htmlFor="venda-canal" className="text-[11px] font-medium text-muted-foreground">Onde fechou</label>
@@ -179,14 +212,14 @@ export default function VendasDoCliente({ token, clientId, permitirLancar = true
           </div>
           <div className="flex items-center justify-end gap-2 sm:col-span-2 lg:col-span-5">
             <button type="button" onClick={() => setAbrirForm(false)} className="h-9 rounded-lg px-3 text-sm text-muted-foreground hover:text-foreground">Cancelar</button>
-            <button type="submit" disabled={salvando} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+            <button type="submit" disabled={salvando || previa?.ok === false} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
               {salvando && <Loader2 size={14} className="animate-spin" aria-hidden="true" />} Salvar venda
             </button>
           </div>
         </form>
       )}
 
-      {carregando && !dados ? (
+      {erroCarga && !dados && !carregando ? null : carregando && !dados ? (
         <div className="flex items-center justify-center py-8" role="status" aria-label="Carregando vendas"><Loader2 size={18} className="animate-spin text-muted-foreground" /></div>
       ) : dados && !dados.disponivel ? (
         <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">O registro de vendas ainda não está disponível.</p>

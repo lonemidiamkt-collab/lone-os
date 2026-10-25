@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendEmail, logEmail } from "@/lib/email/emailService";
-import { welcomeEmail, contractSignedEmail, monthlyReportEmail } from "@/lib/email/templates";
+import { contractSignedEmail, monthlyReportEmail } from "@/lib/email/templates";
+import { enviarBoasVindas } from "@/lib/email/boas-vindas";
 import { getServerUser } from "@/lib/supabase/auth-server";
 
 function getSupabase() {
@@ -22,83 +23,19 @@ export async function POST(req: NextRequest) {
   const supabase = getSupabase();
 
   // ─── Send Welcome Email ───
+  // A regra mora em lib/email/boas-vindas.ts (24/10/2026): a ativação do cadastro chama a mesma
+  // função direto — antes ela fazia fetch aqui sem login, levava 401 e a tela dizia que tinha ido.
   if (body.action === "send_welcome") {
     const { clientId } = body;
-
-    // 1. Fetch client data
-    const { data: client, error: clientErr } = await supabase
-      .from("clients")
-      .select("id, name, nome_fantasia, contact_name, email, email_corporativo, welcome_email_sent, service_type")
-      .eq("id", clientId)
-      .maybeSingle();
-
-    if (clientErr || !client) {
+    const r = await enviarBoasVindas(supabase, clientId, { forcar: body.force === true });
+    if (r.jaEnviado) return NextResponse.json({ success: true, skipped: true, message: "E-mail ja enviado anteriormente" });
+    if (r.codigo === "sem_cliente") {
       return NextResponse.json({ error: "Cliente nao encontrado" }, { status: 404 });
     }
-
-    // 2. Duplicate check — skip if already sent (unless force=true)
-    if (client.welcome_email_sent && !body.force) {
-      await logEmail(supabase, {
-        clientId, templateName: "welcome", recipientEmail: client.email || client.email_corporativo || "",
-        status: "skipped", errorMessage: "E-mail de boas-vindas ja enviado anteriormente",
-      });
-      return NextResponse.json({ success: true, skipped: true, message: "E-mail ja enviado anteriormente" });
-    }
-
-    // 3. Resolve recipient email
-    // Prefer email_corporativo: it's the field edited through the UI (aba Dados).
-    // email is legacy/backup; email_corporativo reflects the most recent user intent.
-    const recipientEmail = client.email_corporativo || client.email;
-    const clientName = client.contact_name || client.name || "Cliente";
-    const companyName = client.nome_fantasia || client.name || "Empresa";
-
-    // 4. Sanity check
-    if (!recipientEmail) {
-      await logEmail(supabase, {
-        clientId, templateName: "welcome", recipientEmail: "(vazio)",
-        recipientName: clientName, status: "failed", errorMessage: "E-mail do cliente nao cadastrado",
-      });
+    if (r.codigo === "sem_email") {
       return NextResponse.json({ error: "E-mail do cliente nao cadastrado. Preencha na aba Dados." }, { status: 400 });
     }
-
-    // 5. Generate template with service type
-    const serviceMap: Record<string, string> = {
-      lone_growth: "marketing digital",
-      assessoria_trafego: "trafego pago",
-      assessoria_social: "social media",
-      assessoria_design: "design",
-    };
-    const serviceLabel = serviceMap[(client as Record<string, unknown>).service_type as string || ""] || "marketing digital";
-    const template = welcomeEmail(clientName, companyName, serviceLabel);
-
-    // 6. Send (isolated — failure here does NOT affect client activation)
-    const result = await sendEmail({
-      to: recipientEmail,
-      toName: clientName,
-      subject: template.subject,
-      html: template.html,
-      clientId,
-      templateName: "welcome",
-    });
-
-    // 7. Log the attempt
-    await logEmail(supabase, {
-      clientId, templateName: "welcome", recipientEmail,
-      recipientName: clientName,
-      status: result.success ? "sent" : "failed",
-      errorMessage: result.error,
-    });
-
-    // 8. Mark as sent (only on success)
-    if (result.success) {
-      await supabase.from("clients").update({ welcome_email_sent: true }).eq("id", clientId);
-    }
-
-    return NextResponse.json({
-      success: result.success,
-      messageId: result.messageId,
-      error: result.error,
-    });
+    return NextResponse.json({ success: r.enviado, messageId: r.messageId, error: r.enviado ? undefined : r.motivo });
   }
 
   // ─── Send Contract Signed Email ───
