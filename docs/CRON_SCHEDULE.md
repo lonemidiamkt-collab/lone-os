@@ -5,7 +5,7 @@
 > Não edite à mão: rode `npx tsx scripts/gerar-agenda-cron.ts`. O teste `tests/agenda-cron-doc.test.ts`
 > quebra quando este arquivo fica para trás do retrato.
 
-**Linhas no crontab:** 84 · **Rotinas:** 82 · **Rotinas que usam IA:** 16
+**Linhas no crontab:** 85 · **Rotinas:** 83 · **Rotinas que usam IA:** 16
 
 - O servidor roda em UTC puro. Horário de Brasília = UTC − 3h (sem horário de verão).
 - Ligar, desligar, pausar, rodar agora e ver o histórico: Central de Automações (`/automations`).
@@ -67,6 +67,7 @@
 | todo dia, de 2 em 2h das 8h às 20h | `0 11-23/2 * * *` | Saldo das contas (2 em 2h) | `POST /api/system/sync-saldos` | — |
 | dia útil, de 15 em 15 min, das 8h às 18h | `*/15 11-20 * * 1-5` | Avisos falados de tráfego | `POST /api/system/avisos-falados` | — |
 | segunda, 8h05 | `5 11 * * 1` | Brief de segunda do tráfego | `POST /api/system/traffic-brief-segunda` | — |
+| todo dia, de 2 em 2h das 8h05 às 20h05 | `5 11-23/2 * * *` | Alarmes de conversa e verba | `POST /api/system/alarmes-trafego` | — |
 | dia 1º de cada mês, 9h | `0 12 1 * *` | Diagnóstico mensal dos clientes | `diagnostico-mensal.sh` | — |
 | sexta, 9h | `0 12 * * 5` | Status dos clientes pelo resultado | `POST /api/system/status-clientes` | — |
 | seg a sex, 9h30 | `30 12 * * 1-5` | Alerta de queda de resultado | `POST /api/system/alerta-queda` | — |
