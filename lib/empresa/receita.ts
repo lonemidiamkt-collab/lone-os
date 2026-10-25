@@ -187,7 +187,7 @@ export function empresaDaBrasilApi(r: Record<string, unknown>): EmpresaReceita {
   const nicho = nichoPorCnae({ codigo: r.cnae_fiscal, descricao: r.cnae_fiscal_descricao }, sec);
   const tipo = capitalizar(r.descricao_tipo_de_logradouro);
   const logradouro = capitalizar(r.logradouro);
-  const numeroCru = String(r.numero ?? "").trim().toUpperCase();
+  const numeroCru = String(r.numero ?? "").trim().toUpperCase().replace(/^(\d{1,3})\.(\d{3})$/, "$1$2"); // "1.610" → "1610"
   const numero = !numeroCru ? null : /^S\/?N$/.test(numeroCru) ? "S/N" : numeroCru;
   const rua = logradouro ? `${tipo && !logradouro.toLowerCase().startsWith(tipo.toLowerCase()) ? `${tipo} ` : ""}${logradouro}` : null;
   const situacao = r.descricao_situacao_cadastral ? String(r.descricao_situacao_cadastral).toUpperCase() : null;

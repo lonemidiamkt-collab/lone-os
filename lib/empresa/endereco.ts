@@ -21,6 +21,8 @@ export function separarNumeroDaRua(rua: string | null | undefined): { rua: strin
 }
 
 const digitos = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
+/** CNPJ baixado/inapto não serve de fonte de endereço (pode ser a filial que fechou). */
+const naoAtiva = (e: Pick<EmpresaReceita, "situacao">) => !!e.situacao && e.situacao !== "ATIVA";
 
 export interface EnderecoDaFicha {
   endereco_cep: string | null;
@@ -29,7 +31,8 @@ export interface EnderecoDaFicha {
 }
 
 /** O que gravar na ficha (só campos vazios, só com o mesmo CEP). Objeto vazio = nada a fazer. */
-export function numeroPelaReceita(ficha: EnderecoDaFicha, e: Pick<EmpresaReceita, "endereco">): { endereco_numero?: string; endereco_complemento?: string } {
+export function numeroPelaReceita(ficha: EnderecoDaFicha, e: Pick<EmpresaReceita, "endereco" | "situacao">): { endereco_numero?: string; endereco_complemento?: string } {
+  if (naoAtiva(e)) return {};
   const cep = digitos(ficha.endereco_cep);
   if (cep.length !== 8 || cep !== digitos(e.endereco.cep)) return {};
   const out: { endereco_numero?: string; endereco_complemento?: string } = {};
@@ -42,19 +45,58 @@ export function numeroPelaReceita(ficha: EnderecoDaFicha, e: Pick<EmpresaReceita
 // Roberto autorizou em 25/10/2026: completar pelo CNPJ quem não tem endereço nos campos da ficha, sem sobrescrever nada.
 // Achado: 33 de 36 desses clientes têm o endereço no campo ANTIGO de texto livre (clients.endereco). Por isso a regra:
 //   • texto antigo vazio → preenche (ficha vazia de verdade);
-//   • texto antigo que bate com o CNPJ (tem o CEP da Receita ou o nome da rua sem o tipo) → preenche os campos;
+//   • texto antigo que bate com o CNPJ (o mesmo CEP — não o genérico da cidade — ou a mesma rua, aceitando inicial e
+//     abreviação de título) → preenche os campos; mesma rua com OUTRO número escrito → não mexe;
 //   • texto antigo com outro endereço (a loja, não a sede) → não mexe; fica na lista para conferir.
 // O texto antigo nunca é apagado.
 
 const TIPOS_DE_RUA = new Set(["rua", "r", "avenida", "av", "estrada", "est", "rodovia", "rod", "travessa", "tv", "alameda", "al", "praca", "pca", "quadra", "largo", "via", "beco", "servidao", "ladeira", "loteamento"]);
+const CONECTIVOS = new Set(["de", "da", "do", "das", "dos", "e", "d"]);
+/** Abreviações de título em nome de rua ("Cel Ribeiro" na Receita, "Coronel Ribeiro" no texto do cliente). */
+const ABREVIACOES: Record<string, string> = {
+  cel: "coronel", dr: "doutor", cap: "capitao", capt: "capitao", gal: "general", gen: "general", pres: "presidente", prof: "professor",
+  sta: "santa", sto: "santo", sen: "senador", dep: "deputado", ten: "tenente", mal: "marechal", alm: "almirante", eng: "engenheiro",
+  pe: "padre", maj: "major", sgt: "sargento", gov: "governador", ver: "vereador", cmte: "comandante", dna: "dona",
+};
+/** Tira acento, pontuação, CEP ("28941-140") e o ponto de milhar ("1.610" → "1610") antes de comparar. */
 const normalizar = (s: string | null | undefined) =>
-  (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  (s ?? "")
+    .replace(/\b\d{5}-?\d{3}\b/g, " ")
+    .replace(/(\d)\.(\d{3})\b/g, "$1$2")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const tokens = (s: string | null | undefined) => normalizar(s).split(" ").filter(Boolean).map((t) => ABREVIACOES[t] ?? t);
 
 /** "Rua Pedro Luiz Souza" → "pedro luiz souza" (sem o tipo, sem acento) — o que se procura no texto antigo. */
 export function nucleoDaRua(rua: string | null | undefined): string {
   const partes = normalizar(rua).split(" ").filter(Boolean);
   if (partes.length > 1 && TIPOS_DE_RUA.has(partes[0])) partes.shift();
   return partes.join(" ");
+}
+
+/**
+ * Procura a rua da Receita dentro do texto antigo, palavra a palavra, aceitando inicial ("Paulino P. Pinheiro") e
+ * abreviação de título ("Cel"/"Coronel"), sem ligar para "de/do/da". Achou → devolve o NÚMERO escrito logo depois
+ * (ou null se o que vem depois não é número de casa: "Km 85", "Lt. 11", "Loja 3"). Não achou → undefined.
+ */
+function procurarRua(ruaReceita: string, antigo: string): { numero: string | null } | undefined {
+  const r = tokens(ruaReceita);
+  if (r.length > 1 && TIPOS_DE_RUA.has(r[0])) r.shift();
+  const alvo = r.filter((t) => !CONECTIVOS.has(t));
+  if (alvo.join("").length < 5) return undefined; // "Rua 7" não prova nada
+  const todos = tokens(antigo);
+  const idx = todos.map((t, i) => ({ t, i })).filter((x) => !CONECTIVOS.has(x.t));
+  for (let k = 0; k + alvo.length <= idx.length; k++) {
+    const casa = alvo.every((a, j) => {
+      const t = idx[k + j].t;
+      return t === a || (t.length === 1 && a.startsWith(t));
+    });
+    if (!casa) continue;
+    let p = idx[k + alvo.length - 1].i + 1;
+    if (["n", "no", "numero"].includes(todos[p] ?? "")) p++;
+    const depois = todos[p] ?? "";
+    return { numero: /^\d+[a-z]?$/.test(depois) ? depois.replace(/^0+(?=\d)/, "") : null };
+  }
+  return undefined;
 }
 
 export interface FichaSemEndereco extends EnderecoDaFicha {
@@ -67,19 +109,24 @@ export interface FichaSemEndereco extends EnderecoDaFicha {
 
 export type DecisaoEndereco =
   | { acao: "preencher"; motivo: "ficha vazia" | "texto antigo bate com o CNPJ"; campos: Record<string, string> }
-  | { acao: "nada"; motivo: "ficha já tem endereço" | "Receita sem endereço completo" | "texto antigo com outro endereço" };
+  | { acao: "nada"; motivo: "ficha já tem endereço" | "CNPJ não ativo" | "Receita sem endereço completo" | "texto antigo com outro endereço" | "mesma rua, outro número" };
 
-export function enderecoPelaReceita(ficha: FichaSemEndereco, e: Pick<EmpresaReceita, "endereco">): DecisaoEndereco {
+export function enderecoPelaReceita(ficha: FichaSemEndereco, e: Pick<EmpresaReceita, "endereco" | "situacao">): DecisaoEndereco {
   if ([ficha.endereco_cep, ficha.endereco_rua, ficha.endereco_cidade].some((v) => v?.trim())) return { acao: "nada", motivo: "ficha já tem endereço" };
+  if (naoAtiva(e)) return { acao: "nada", motivo: "CNPJ não ativo" };
   const r = e.endereco;
   if (!r.cep || !r.rua || !r.cidade) return { acao: "nada", motivo: "Receita sem endereço completo" };
   const antigo = ficha.endereco?.trim() ?? "";
   let motivo: "ficha vazia" | "texto antigo bate com o CNPJ" = "ficha vazia";
   if (antigo) {
-    const nucleo = nucleoDaRua(r.rua);
-    const bateCep = digitos(antigo).includes(digitos(r.cep));
-    const bateRua = nucleo.length >= 5 && ` ${normalizar(antigo)} `.includes(` ${nucleo} `);
-    if (!bateCep && !bateRua) return { acao: "nada", motivo: "texto antigo com outro endereço" };
+    const rua = procurarRua(r.rua, antigo);
+    // CEP genérico da cidade (termina em 000) vale para muitas ruas: não prova nada sozinho.
+    const cepReceita = digitos(r.cep);
+    const bateCep = !cepReceita.endsWith("000") && digitos(antigo.match(/\b\d{5}-?\d{3}\b/)?.[0]) === cepReceita;
+    if (!rua && !bateCep) return { acao: "nada", motivo: "texto antigo com outro endereço" };
+    // O cliente escreveu outro número na mesma rua (a loja não é a sede): o número da Receita estaria errado.
+    const numReceita = r.numero && r.numero !== "S/N" ? r.numero.toLowerCase().replace(/^0+(?=\d)/, "") : null;
+    if (rua?.numero && numReceita && rua.numero !== numReceita) return { acao: "nada", motivo: "mesma rua, outro número" };
     motivo = "texto antigo bate com o CNPJ";
   }
   const campos: Record<string, string> = { endereco_cep: r.cep, endereco_rua: r.rua, endereco_cidade: r.cidade };
