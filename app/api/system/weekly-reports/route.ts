@@ -36,9 +36,15 @@ import { csSendGroupText } from "@/lib/cs/notify";
 import { bloqueiaReenvio, erroParaLog, textoEnviosIncertos } from "@/lib/whatsapp/desfecho-envio";
 import {
   buildClientPdf, selectActiveMetaClients, periodLabelDays, slug,
-  montarHtmlRelatorioCliente, selectReportClient, clientDisplayName,
+  montarHtmlRelatorioCliente, selectReportClient, clientDisplayName, selectActiveClientsWithGroup,
+  type ReportClientRow,
 } from "@/lib/traffic/weekly-report";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
+import { lerRelatorioAnuncios } from "@/lib/reports/relatorioClienteDados";
+import { janelaDosUltimosDias } from "@/lib/reports/relatorioCliente";
+import { hojeSP } from "@/lib/clients/pausa";
+import { podeFalarDeAnuncio } from "@/lib/clients/servico";
+import { montarPlacar, segmentoDeVoz } from "@/lib/traffic/placar-semanal";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
 const REPORTS_BUCKET = "reports";
@@ -105,7 +111,49 @@ async function previa(url: URL): Promise<NextResponse> {
   });
 }
 
-const ehPrevia = (url: URL) => url.searchParams.get("baixar") === "1" || url.searchParams.get("dry") === "1";
+// ── Prévia do PLACAR da segunda (24/10/2026) — não envia, não grava ───────────────────────
+//   ?placar=1&cliente=<id>   → o texto que iria na legenda desse cliente
+//   ?placar=1&todos=1        → o de todos que recebem relatório na segunda (contrato de tráfego + conta + grupo)
+//   &hoje=AAAA-MM-DD         → simula o dia do envio (a dica gira por semana)
+// Os números são os do PDF: mesma leitura (lerRelatorioAnuncios) e mesma janela de 7 dias até ontem.
+async function previaPlacar(url: URL): Promise<NextResponse> {
+  const token = await getMetaToken();
+  if (!token) return NextResponse.json({ ok: false, error: "Token Meta ausente/expirado" }, { status: 503 });
+  const hoje = ISO_DIA.test(url.searchParams.get("hoje") ?? "") ? url.searchParams.get("hoje")! : hojeSP();
+  const cliente = url.searchParams.get("cliente") || url.searchParams.get("clientId") || "";
+  let alvos: ReportClientRow[];
+  if (cliente) {
+    const c = await selectReportClient(cliente);
+    if (!c) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+    alvos = [c];
+  } else if (url.searchParams.get("todos") === "1") {
+    alvos = (await selectActiveClientsWithGroup()).filter((c) => c.whatsapp_group_jid && c.meta_ad_account_id && podeFalarDeAnuncio(c));
+  } else {
+    return NextResponse.json({ error: "Use ?placar=1&cliente=<id> ou ?placar=1&todos=1." }, { status: 400 });
+  }
+  const janela = janelaDosUltimosDias(7, hoje);
+  const conta = (id: string) => (id.startsWith("act_") ? id : `act_${id}`);
+  const saida: Record<string, unknown>[] = [];
+  for (let i = 0; i < alvos.length; i += 3) {
+    const lote = await Promise.all(alvos.slice(i, i + 3).map(async (c) => {
+      const nome = clientDisplayName(c);
+      const segmento = segmentoDeVoz({ nome, nicho: c.nicho, cnae_principal: c.cnae_principal });
+      if (!c.meta_ad_account_id || !podeFalarDeAnuncio(c)) return { cliente: nome, segmento, texto: null, motivo: "sem contrato de tráfego ou sem conta" };
+      try {
+        const r = await lerRelatorioAnuncios(token, conta(c.meta_ad_account_id), janela, nome);
+        if (!r) return { cliente: nome, segmento, texto: null, motivo: "a conta não veiculou nesta semana nem na anterior" };
+        const p = montarPlacar({ relatorio: r, clienteId: c.id, segmento, hoje });
+        return { cliente: nome, segmento, texto: p.texto, alerta: p.alerta, motivo: p.motivo, dica: p.dica };
+      } catch (e) {
+        return { cliente: nome, segmento, texto: null, motivo: `Meta: ${(e instanceof Error ? e.message : String(e)).slice(0, 160)}` };
+      }
+    }));
+    saida.push(...lote);
+  }
+  return NextResponse.json({ ok: true, hoje, janela: `${janela.inicio} a ${janela.fim}`, total: saida.length, placares: saida });
+}
+
+const ehPrevia = (url: URL) => url.searchParams.get("baixar") === "1" || url.searchParams.get("dry") === "1" || url.searchParams.get("placar") === "1";
 
 /** GET só existe pra prévia: nunca envia. */
 export async function GET(req: NextRequest) {
@@ -116,7 +164,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "GET só faz prévia: ?baixar=1&cliente=<id> (PDF) ou ?dry=1&cliente=<id> (HTML)." }, { status: 400 });
   }
   try {
-    return await previa(url);
+    return url.searchParams.get("placar") === "1" ? await previaPlacar(url) : await previa(url);
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
@@ -132,7 +180,7 @@ export async function POST(req: NextRequest) {
   // Prévia pedida por POST: responde aqui e sai — antes de qualquer seleção, trava ou envio.
   if (ehPrevia(url)) {
     try {
-      return await previa(url);
+      return url.searchParams.get("placar") === "1" ? await previaPlacar(url) : await previa(url);
     } catch (e) {
       return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });
     }

@@ -35,6 +35,7 @@ import { csSendGroupText } from "@/lib/cs/notify";
 import { montarMensagemCliente } from "@/lib/cs/mensagem-cliente";
 import { sendGroupText, sendMediaDocument } from "@/lib/whatsapp/evolution";
 import { bloqueiaReenvio, erroParaLog, podeTrocarDeNumero } from "@/lib/whatsapp/desfecho-envio";
+import { montarPlacar, segmentoDeVoz } from "@/lib/traffic/placar-semanal";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -83,6 +84,24 @@ async function modoMensagemIa(): Promise<ModoIa> {
   try {
     const { data } = await supabaseAdmin
       .from("agency_settings").select("value").eq("key", "cs_msg_ia_enabled").maybeSingle();
+    const v = (data?.value ?? "off").trim().toLowerCase();
+    if (v === "true" || v === "on") return "on";
+    if (v === "revisao" || v === "review") return "revisao";
+    return "off";
+  } catch { return "off"; }
+}
+
+/**
+ * PLACAR DA SEGUNDA (24/10/2026): a legenda do relatório vira o placar da semana no jeito de falar
+ * do nicho (lib/traffic/placar-semanal.ts). Os mesmos três estágios da mensagem da IA:
+ *   desligado → a legenda de sempre;  "revisao" → o cliente recebe a de sempre e o placar de cada um
+ *   vai para o grupo do TRÁFEGO ler;  "on" → o placar vai para o cliente.
+ * Chave: agency_settings.placar_semanal.
+ */
+async function modoPlacar(): Promise<ModoIa> {
+  try {
+    const { data } = await supabaseAdmin
+      .from("agency_settings").select("value").eq("key", "placar_semanal").maybeSingle();
     const v = (data?.value ?? "off").trim().toLowerCase();
     if (v === "true" || v === "on") return "on";
     if (v === "revisao" || v === "review") return "revisao";
@@ -206,6 +225,12 @@ export async function POST(req: NextRequest) {
 
     // Mensagens escritas pela IA aguardando a leitura do Roberto (modo revisão).
     const revisar: { cliente: string; texto: string; sinais: string[] }[] = [];
+    // Placar da segunda: o modo, o que ficou para o time ler (revisão) e o que o gestor precisa
+    // explicar hoje (semana zerada, anúncio parado, queda forte — regra 4 do playbook).
+    const placarModo = withReport && !resend ? await modoPlacar() : "off";
+    const placarRevisar: { cliente: string; texto: string }[] = [];
+    const placarAlertas: { cliente: string; motivo: string }[] = [];
+    const hojeSP = todayKeyBRT();
 
     let supportSent = 0, supportFail = 0, reportSent = 0, reportFail = 0;
     const errors: string[] = [];
@@ -228,7 +253,19 @@ export async function POST(req: NextRequest) {
               reportFail++; errors.push(`${name} (relatório): ${pdf.error}`); await logMsg(c.id, dateKey, "report", "failed", pdf.error);
             } else {
               const fileName = `relatorio-${slug(name)}-${dateKey}.pdf`;
-              const res = await sendMediaDocument(jid, pdf.buffer.toString("base64"), fileName, resend ? RESEND_REPORT_MESSAGE : mondayReportMessage());
+              let legenda = resend ? RESEND_REPORT_MESSAGE : mondayReportMessage();
+              if (placarModo !== "off" && pdf.anuncios) {
+                const placar = montarPlacar({
+                  relatorio: pdf.anuncios, clienteId: c.id, hoje: hojeSP,
+                  segmento: segmentoDeVoz({ nome: name, nicho: c.nicho, cnae_principal: c.cnae_principal }),
+                });
+                if (placar.alerta && placar.motivo) placarAlertas.push({ cliente: name, motivo: placar.motivo });
+                if (placar.texto) {
+                  if (placarModo === "on") legenda = placar.texto;
+                  else placarRevisar.push({ cliente: name, texto: placar.texto });
+                }
+              }
+              const res = await sendMediaDocument(jid, pdf.buffer.toString("base64"), fileName, legenda);
               if (res.ok) { reportSent++; await logMsg(c.id, dateKey, "report", "sent"); }
               else { reportFail++; errors.push(`${name} (relatório): ${res.error}`); await logMsg(c.id, dateKey, "report", "failed", erroParaLog(res)); }
             }
@@ -324,6 +361,32 @@ export async function POST(req: NextRequest) {
         if (revisar.length > 6) l.push(`_…e mais ${revisar.length - 6} no painel._`, "");
         l.push("Se estiver bom, me avisa que eu libero pro cliente.");
         await csSendGroupText(jidInterno, l.join("\n"), undefined, { origem: "revisao-mensagem", destino: "interno" });
+      }
+    }
+
+    // PLACAR: o que o gestor precisa explicar hoje e, no modo revisão, os textos para o time ler.
+    // Vai para o grupo do TRÁFEGO (é o gestor que manda a causa e o que já fez — regra 4).
+    if (placarModo !== "off" && !onlyClientId && (placarAlertas.length || placarRevisar.length)) {
+      const jidTrafego = process.env.CS_TRAFFIC_GROUP_JID || process.env.CS_INTERNAL_GROUP_JID;
+      if (jidTrafego) {
+        if (placarAlertas.length) {
+          await csSendGroupText(jidTrafego, [
+            `📉 *Placar de hoje — explicar ao cliente ainda hoje* (${placarAlertas.length})`,
+            ...placarAlertas.map((a) => `• *${a.cliente}* — ${a.motivo}`),
+            "",
+            "_Esses foram com a legenda de sempre. Mandem no grupo deles o número, a causa e o que já foi feito._",
+          ].join("\n"), undefined, { origem: "placar-alertas", destino: "interno" });
+        }
+        for (let k = 0; k < placarRevisar.length; k += 8) {
+          const lote = placarRevisar.slice(k, k + 8);
+          await csSendGroupText(jidTrafego, [
+            `📝 *Placar da semana — revisão* ${k === 0 ? "" : `(continuação)`}`,
+            "_Isto NÃO foi para o cliente: ele recebeu a legenda de sempre._",
+            "",
+            ...lote.flatMap((r) => [`*${r.cliente}*`, r.texto, ""]),
+            k + 8 >= placarRevisar.length ? "Se estiver bom, é só avisar que eu ligo para os clientes." : "",
+          ].join("\n").trim(), undefined, { origem: "placar-revisao", destino: "interno" });
+        }
       }
     }
 

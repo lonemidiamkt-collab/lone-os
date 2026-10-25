@@ -6,7 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { estaPausado, hojeSP, type ClienteComPausa } from "@/lib/clients/pausa";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { getIgSnapshotCached, type IgSnapshot } from "@/lib/meta/igSnapshot";
-import { janelaDoRelatorio, janelaDosUltimosDias } from "@/lib/reports/relatorioCliente";
+import { janelaDoRelatorio, janelaDosUltimosDias, type RelatorioAnuncios } from "@/lib/reports/relatorioCliente";
 import { lerRelatorioAnuncios } from "@/lib/reports/relatorioClienteDados";
 import { relatorioClienteHtml } from "@/lib/reports/relatorioClientePdf";
 import { loadLoneLogo } from "@/lib/cs/roteiro-pdf";
@@ -23,6 +23,9 @@ export interface ReportClientRow {
   ig_public_username?: string | null;
   whatsapp_group_jid?: string | null;
   whatsapp_group_name?: string | null;
+  /** Ramo e CNAE: decidem como o placar da segunda fala com o dono (lib/traffic/placar-semanal.ts). */
+  nicho?: string | null;
+  cnae_principal?: string | null;
 }
 
 export function clientDisplayName(c: { nome_fantasia: string | null; name: string }): string {
@@ -113,7 +116,7 @@ export async function selectActiveClientsWithGroup(onlyClientId?: string | null)
     // Sem esse campo no select, `podeFalarDeAnuncio` receberia undefined e — por ser prudente por
     // desenho — calaria a mensagem de tráfego de TODO MUNDO. O silêncio geral seria pior que o erro
     // que ele corrige.
-    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, status, draft_status, whatsapp_group_jid, whatsapp_group_name, paused_at, paused_until")
+    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, status, draft_status, whatsapp_group_jid, whatsapp_group_name, paused_at, paused_until, nicho, cnae_principal")
     .in("status", ["good", "average", "onboarding", "at_risk"])
     .is("draft_status", null)
     .neq("active", false) // ex-clientes (churned) não recebem mensagem/relatório
@@ -130,7 +133,7 @@ export async function selectActiveClientsWithGroup(onlyClientId?: string | null)
 export async function selectReportClient(id: string): Promise<ReportClientRow | null> {
   const { data, error } = await supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, whatsapp_group_jid, whatsapp_group_name")
+    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, whatsapp_group_jid, whatsapp_group_name, nicho, cnae_principal")
     .eq("id", id)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -182,7 +185,7 @@ export async function montarHtmlRelatorioCliente(
    *  número de julho ao lado de um número de 28 dias achando que são a mesma janela. */
   dateFrom?: string,
   dateTo?: string,
-): Promise<{ ok: boolean; html?: string; error?: string }> {
+): Promise<{ ok: boolean; html?: string; error?: string; anuncios?: RelatorioAnuncios | null }> {
   // Só com contrato de tráfego — ver contaDeAnunciosDoRelatorio.
   const accountId = contaDeAnunciosDoRelatorio(client);
   const clientName = clientDisplayName(client);
@@ -226,7 +229,8 @@ export async function montarHtmlRelatorioCliente(
 
   const logo = (await loadLoneLogo().catch(() => "")) || `${baseUrlPublica()}/logo.png`;
   const html = relatorioClienteHtml({ clienteNome: clientName, logo, geradoEm: hoje, janela, anuncios, instagram: igSnap });
-  return { ok: true, html };
+  // Os dados voltam junto: o placar da segunda (legenda) sai dos MESMOS números do PDF.
+  return { ok: true, html, anuncios };
 }
 
 /** Gera o PDF (Buffer) do relatório de UM cliente. Nunca lança. Ver montarHtmlRelatorioCliente. */
@@ -236,10 +240,10 @@ export async function buildClientPdf(
   periodDays = 7,
   dateFrom?: string,
   dateTo?: string,
-): Promise<{ ok: boolean; buffer?: Buffer; error?: string }> {
+): Promise<{ ok: boolean; buffer?: Buffer; error?: string; anuncios?: RelatorioAnuncios | null }> {
   const h = await montarHtmlRelatorioCliente(token, client, periodDays, dateFrom, dateTo);
   if (!h.ok || !h.html) return { ok: false, error: h.error ?? "falha ao montar o relatório" };
   const pdf = await htmlToPdf(h.html);
   if (!pdf.ok || !pdf.buffer) return { ok: false, error: pdf.error ?? "falha no render" };
-  return { ok: true, buffer: pdf.buffer };
+  return { ok: true, buffer: pdf.buffer, anuncios: h.anuncios ?? null };
 }

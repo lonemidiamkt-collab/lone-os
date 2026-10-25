@@ -560,6 +560,7 @@ const MODULES: Module[] = [
       "Kanban de tarefas de tráfego + rotina diária (checkins por cliente).",
       "Quando percebe algo grande, gera um 'Smart Handoff' pro designer com sugestão de criativo.",
       "VENDAS SEM GASTO LIDO (21/10/2026): quando ainda não há gasto lido no período (todo dia 1º, ou mês sem métrica), o portal e a aba Vendas mostram '—' com 'investimento ainda não apurado', em vez de 'Custo por venda R$ 0,00'. Gasto zero de verdade continua aparecendo como R$ 0.",
+      "PLACAR DA SEGUNDA (24/10/2026): a legenda do relatório de segunda deixa de ser uma frase genérica e vira o placar da semana, no jeito de falar do nicho do cliente: o número (conversas no WhatsApp e custo médio, com a comparação da semana anterior), os dois anúncios que mais trouxeram conversa chamados pelo produto e pela medida ('telha fibrocimento 2,44×1,10', nunca o nome do anúncio nem o preço), uma dica de atendimento do nicho e a pergunta que faz o dono responder ('E aí na loja, a semana vendeu mais ou menos que a anterior?'; na clínica, 'a agenda encheu?'). Os números são os mesmos do PDF. Semana zerada, anúncio parado ou queda de 25% ou mais: o cliente recebe a legenda de sempre e o grupo do tráfego recebe o aviso para explicar ainda hoje, com a causa. Liga em três passos (desligado, revisão no grupo do tráfego, ligado). Para o produto sair certo, nomeie o anúncio com produto e medida: 'ADS - ESTATICO - PORCELANATO 70X70 ACETINADO'.",
     ],
     features: [
       "Integração Meta API (26 contas conectadas)",
