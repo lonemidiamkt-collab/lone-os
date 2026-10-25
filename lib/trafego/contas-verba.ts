@@ -7,6 +7,7 @@
 // Testado em tests/trafego-contas-verba.test.ts.
 
 import { statusPacing, diasEntre, type StatusPacing } from "@/components/traffic/investimento";
+import { previaDoValor, mascararReais } from "@/lib/trafego/vendas";
 
 export interface RitmoMes {
   /** "sem_verba" = conta sem verba mensal definida (não dá pra medir ritmo). */
@@ -222,4 +223,21 @@ export function aportesParaMigrar(
     out.push({ adAccountId: conta.id, clientId: conta.clientId, data });
   }
   return out;
+}
+
+// ─── Campos de valor do modal "Verba e alertas" ─────────────────────────────
+// 25/10/2026 (auditoria 9.4). Os campos eram `type="number"` + parseFloat: "3.000" gravava R$ 3,00 e
+// "3.000,00" chegava vazio e APAGAVA a verba (clients.monthly_budget virava 0). Agora o texto é lido do
+// jeito brasileiro (lib/trafego/vendas.ts) e o que não dá para entender não vira vazio.
+
+/** Número guardado → como aparece no campo ("3.000,00"); sem valor = "". */
+export function paraCampo(v: number | null | undefined): string {
+  return v != null ? mascararReais(String(v)) : "";
+}
+
+/** O que o campo vai salvar: null = vazio (apaga de propósito); undefined = não entendi (não salva). */
+export function lerCampoReais(texto: string): number | null | undefined {
+  const p = previaDoValor(texto);
+  if (p === null) return null;
+  return p.ok ? p.valor : undefined;
 }

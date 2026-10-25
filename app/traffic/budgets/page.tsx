@@ -24,6 +24,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
+import { previaDoValor, mascararReais, formatarReais } from "@/lib/trafego/vendas";
 import {
   getBalanceSeverity,
   type BalanceSeverity,
@@ -37,6 +38,7 @@ import { metaAccountStatus } from "@/lib/budgets/account-status";
 import { cn, todaySP } from "@/lib/utils";
 import {
   ritmoDoMes, lerRitmo, foraDoRitmo, avisoAporte, aportesParaMigrar, syncAtrasado, CHAVE_LOCAL_INVESTIMENTO,
+  paraCampo, lerCampoReais,
   type RitmoMes, type LeituraRitmo, type AvisoAporte,
 } from "@/lib/trafego/contas-verba";
 import type { EstadoConexao } from "@/lib/trafego/anuncios";
@@ -336,6 +338,42 @@ function CelulaGastoDia({ valor }: { valor: number | null }) {
   );
 }
 
+// ── Campo de valor em reais ───────────────────────────────────
+// 25/10/2026 (auditoria 9.4). Os valores eram `type="number"` + parseFloat: "3.000" gravava R$ 3,00 e
+// "3.000,00" chegava vazio e APAGAVA a verba (e clients.monthly_budget virava 0). Agora o campo é texto,
+// entende o jeito brasileiro de escrever ("3.000", "3.000,00", "3000") e mostra embaixo o que vai salvar.
+// A leitura do valor (paraCampo, lerCampoReais) mora em lib/trafego/contas-verba.ts, com teste.
+
+function CampoReais({ id, rotulo, valor, onChange, placeholder, antes, oQueApaga }: {
+  id: string; rotulo: string; valor: string; onChange: (v: string) => void; placeholder?: string;
+  /** Como estava ao abrir (para dizer "vai apagar"). */
+  antes: number | null | undefined;
+  oQueApaga: string;
+}) {
+  const previa = previaDoValor(valor);
+  const apagando = previa === null && antes != null;
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="text-[10px] text-muted-foreground uppercase tracking-wider">{rotulo}</label>
+      <input
+        id={id} type="text" inputMode="decimal"
+        value={valor}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={(e) => onChange(mascararReais(e.target.value))}
+        placeholder={placeholder}
+        aria-invalid={previa?.ok === false}
+        className={cn(
+          "w-full bg-surface border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary",
+          previa?.ok === false ? "border-lone-danger" : "border-border",
+        )}
+      />
+      {previa?.ok === false && <p className="text-[10px] text-lone-danger">{previa.frase}</p>}
+      {previa?.ok && <p className="text-[10px] text-muted-foreground">{previa.frase}</p>}
+      {apagando && <p className="text-[10px] text-lone-warning">Vai apagar {oQueApaga} (estava {formatarReais(antes as number)}).</p>}
+    </div>
+  );
+}
+
 // ── Modal "Verba e alertas" — o ÚNICO lugar que edita verba ────
 
 interface AlertModalProps {
@@ -347,15 +385,15 @@ interface AlertModalProps {
 
 function AlertModal({ account, aporteDisponivel, onClose, onSaved }: AlertModalProps) {
   const [isPrepaid, setIsPrepaid] = useState(account.is_prepaid);
-  const [spendCap, setSpendCap] = useState(account.spend_cap?.toFixed(2) ?? "");
-  const [monthlyBudget, setMonthlyBudget] = useState(account.monthly_budget?.toFixed(2) ?? "");
+  const [spendCap, setSpendCap] = useState(paraCampo(account.spend_cap));
+  const [monthlyBudget, setMonthlyBudget] = useState(paraCampo(account.monthly_budget));
   const [phone, setPhone] = useState(account.clients?.client_finance_phone ?? "");
   const [pixKey, setPixKey] = useState(account.clients?.client_pix_key ?? "");
-  const [dailyBudget, setDailyBudget] = useState(account.clients?.daily_budget?.toFixed(2) ?? "");
+  const [dailyBudget, setDailyBudget] = useState(paraCampo(account.clients?.daily_budget));
   const [paymentMethod, setPaymentMethod] = useState(account.clients?.payment_method ?? "pix");
   const [nextPayment, setNextPayment] = useState(account.clients?.next_payment_date ?? "");
 
-  const [verbaMinima, setVerbaMinima] = useState(account.verba_minima?.toFixed(2) ?? "");
+  const [verbaMinima, setVerbaMinima] = useState(paraCampo(account.verba_minima));
 
   const [saving, setSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -366,20 +404,28 @@ function AlertModal({ account, aporteDisponivel, onClose, onSaved }: AlertModalP
 
   async function handleSave() {
     setValidationError(null);
-    const limite = verbaMinima.trim() ? parseFloat(verbaMinima) : null;
-    if (limite !== null && (!Number.isFinite(limite) || limite < 0)) {
-      setValidationError("Limite de saldo inválido");
+    // Valor que não dá para entender NÃO vira vazio (que apagaria a verba): para aqui e diz qual campo.
+    const campos = [
+      ["Verba mensal", monthlyBudget], ["Verba diária", dailyBudget],
+      ["Spend cap", isPrepaid ? "" : spendCap], ["Limite de saldo", verbaMinima],
+    ] as const;
+    const lidos = campos.map(([nome, texto]) => [nome, lerCampoReais(texto)] as const);
+    const ruim = lidos.find(([, v]) => v === undefined);
+    if (ruim) {
+      setValidationError(`${ruim[0]}: não entendi o valor. Escreva assim: 3.000,00`);
       return;
     }
+    const [mensal, diaria, cap, limite] = lidos.map(([, v]) => v as number | null);
 
     setSaving(true);
     try {
       const res = await chamar<{ ok: boolean; avisos?: string[] }>("/api/traffic/budget-rules", {
           adAccountId: account.id,
           isPrepaid,
-          spendCap: spendCap ? parseFloat(spendCap) : null,
-          monthlyBudget: monthlyBudget ? parseFloat(monthlyBudget) : null,
-          dailyBudget: dailyBudget ? parseFloat(dailyBudget) : null,
+          // Pré-pago não mostra o campo: manda o que estava, para não apagar o spend cap guardado.
+          spendCap: isPrepaid ? account.spend_cap : cap,
+          monthlyBudget: mensal,
+          dailyBudget: diaria,
           paymentMethod: paymentMethod || null,
           // Cartão não tem aporte: limpa a data para ela não virar aviso fantasma depois.
           ...(aporteDisponivel ? { nextPaymentDate: precisaAporte && nextPayment ? nextPayment : null } : {}),
@@ -388,7 +434,7 @@ function AlertModal({ account, aporteDisponivel, onClose, onSaved }: AlertModalP
           pixKey: pixKey || null,
       });
       if (!res.ok) { setValidationError(res.erro ?? "Erro ao salvar"); return; }
-      toast.success(`${account.clientName}: verba e alertas salvos`);
+      toast.success(`${account.clientName}: verba mensal ${mensal != null ? formatarReais(mensal) : "sem valor"}${limite != null ? ` · aviso abaixo de ${formatarReais(limite)}` : ""} — salvo.`);
       res.data?.avisos?.forEach((a) => toast.warning(a));
       onSaved();
       onClose();
@@ -417,26 +463,15 @@ function AlertModal({ account, aporteDisponivel, onClose, onSaved }: AlertModalP
         <div className="p-5 space-y-4">
           {/* Verba */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label htmlFor="verba-mensal" className="text-[10px] text-muted-foreground uppercase tracking-wider">Verba mensal (R$)</label>
-              <input
-                id="verba-mensal" type="number" min="0" step="100"
-                value={monthlyBudget}
-                onChange={(e) => setMonthlyBudget(e.target.value)}
-                placeholder="ex: 3000.00"
-                className={campo}
-              />
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="verba-diaria" className="text-[10px] text-muted-foreground uppercase tracking-wider">Verba diária (R$)</label>
-              <input
-                id="verba-diaria" type="number" min="0" step="10"
-                value={dailyBudget}
-                onChange={(e) => setDailyBudget(e.target.value)}
-                placeholder={monthlyBudget && parseFloat(monthlyBudget) > 0 ? `≈ ${(parseFloat(monthlyBudget) / diasNoMes).toFixed(2)}` : "ex: 100.00"}
-                className={campo}
-              />
-            </div>
+            <CampoReais
+              id="verba-mensal" rotulo="Verba mensal (R$)" valor={monthlyBudget} onChange={setMonthlyBudget}
+              placeholder="ex: 3.000,00" antes={account.monthly_budget} oQueApaga="a verba mensal"
+            />
+            <CampoReais
+              id="verba-diaria" rotulo="Verba diária (R$)" valor={dailyBudget} onChange={setDailyBudget}
+              placeholder={(lerCampoReais(monthlyBudget) ?? 0) > 0 ? `≈ ${mascararReais(String(Math.round(((lerCampoReais(monthlyBudget) as number) / diasNoMes) * 100) / 100))}` : "ex: 100,00"}
+              antes={account.clients?.daily_budget} oQueApaga="a verba diária"
+            />
           </div>
           <p className="text-[10px] text-muted-foreground -mt-2">
             A verba mensal é a que o ritmo do mês e o alerta de saldo usam.
@@ -489,16 +524,10 @@ function AlertModal({ account, aporteDisponivel, onClose, onSaved }: AlertModalP
               </select>
             </div>
             {!isPrepaid && (
-              <div className="space-y-1">
-                <label htmlFor="spend-cap" className="text-[10px] text-muted-foreground uppercase tracking-wider">Spend cap Meta (R$)</label>
-                <input
-                  id="spend-cap" type="number" min="0" step="100"
-                  value={spendCap}
-                  onChange={(e) => setSpendCap(e.target.value)}
-                  placeholder="ex: 2000.00"
-                  className={campo}
-                />
-              </div>
+              <CampoReais
+                id="spend-cap" rotulo="Spend cap Meta (R$)" valor={spendCap} onChange={setSpendCap}
+                placeholder="ex: 2.000,00" antes={account.spend_cap} oQueApaga="o spend cap"
+              />
             )}
           </div>
 
@@ -508,20 +537,16 @@ function AlertModal({ account, aporteDisponivel, onClose, onSaved }: AlertModalP
               {isPrepaid
                 ? "Pré-pago: saldo disponível = carteira na Meta (funding_source_details). Quando zera, campanhas pausam automaticamente."
                 : monthlyBudget
-                  ? `Pós-pago com verba definida: mostra ${formatCurrency(parseFloat(monthlyBudget) || 0)}/mês − gasto do ciclo. Ideal para clientes onde o spend_cap da Meta é maior que o orçamento real.`
+                  ? `Pós-pago com verba definida: mostra ${formatCurrency(lerCampoReais(monthlyBudget) ?? 0)}/mês − gasto do ciclo. Ideal para clientes onde o spend_cap da Meta é maior que o orçamento real.`
                   : "Pós-pago: saldo = spend_cap − gasto do ciclo. Se o spend_cap for um teto de segurança alto, defina a verba mensal acima para precisão."}
             </p>
           </div>
 
           {/* Limite de saldo baixo — client_alert_config.verba_minima, lido pelo alerta do servidor */}
           <div className="space-y-1">
-            <label htmlFor="verba-minima" className="text-[10px] text-muted-foreground uppercase tracking-wider">Avisar quando o saldo ficar abaixo de (R$)</label>
-            <input
-              id="verba-minima" type="number" min="0" step="10"
-              value={verbaMinima}
-              onChange={(e) => setVerbaMinima(e.target.value)}
-              placeholder="em branco = % da verba mensal"
-              className={campo}
+            <CampoReais
+              id="verba-minima" rotulo="Avisar quando o saldo ficar abaixo de (R$)" valor={verbaMinima} onChange={setVerbaMinima}
+              placeholder="em branco = % da verba mensal" antes={account.verba_minima} oQueApaga="o limite próprio (volta ao % da verba)"
             />
             <p className="text-[10px] text-muted-foreground">
               Vale para o aviso de saldo baixo no grupo do tráfego. Em branco, o aviso usa o percentual da verba configurado na agência.
@@ -583,6 +608,8 @@ interface ClientOption {
   id: string;
   name: string;
   nome_fantasia: string | null;
+  /** A conta da ficha (relatório, portal e Instagram leem dela). */
+  meta_ad_account_id?: string | null;
 }
 
 function AddAccountModal({
@@ -600,6 +627,8 @@ function AddAccountModal({
   const [selectedMeta, setSelectedMeta] = useState<MetaAccountOption | null>(null);
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  // O cliente já tem outra conta na ficha: a pessoa escolhe (auditoria 9.6). null = ainda não escolheu.
+  const [trocarFicha, setTrocarFicha] = useState<boolean | null>(null);
 
   useEffect(() => {
     chamar<{ accounts?: MetaAccountOption[]; clients?: ClientOption[] }>("/api/traffic/ad-accounts")
@@ -615,18 +644,30 @@ function AddAccountModal({
     !search || a.name.toLowerCase().includes(search.toLowerCase()) || a.id.includes(search),
   );
 
+  const cliente = clients.find((c) => c.id === selectedClient) ?? null;
+  const semAct = (c: string) => c.replace(/^act_/, "");
+  const contaNaFicha = cliente?.meta_ad_account_id || null;
+  const fichaTemOutra = !!(selectedMeta && contaNaFicha && semAct(contaNaFicha) !== semAct(selectedMeta.id));
+  const falta = !selectedClient ? "Escolha o cliente." : !selectedMeta ? "Escolha a conta." : fichaTemOutra && trocarFicha === null ? "Escolha o que fazer com a conta da ficha." : null;
+
   async function handleAdd() {
-    if (!selectedMeta || !selectedClient) return;
+    if (!selectedMeta || !selectedClient || falta) return;
     setSaving(true);
     try {
-      const res = await chamar("/api/traffic/ad-accounts", {
+      const res = await chamar<{ fichaAtualizada?: boolean; avisoFicha?: string }>("/api/traffic/ad-accounts", {
         clientId: selectedClient,
         metaAccountId: selectedMeta.id,
         accountName: selectedMeta.name,
+        ...(fichaTemOutra ? { trocarFicha: trocarFicha === true } : {}),
       });
       if (!res.ok) {
         toast.error(res.erro ?? "Erro ao adicionar conta");
         return;
+      }
+      // A rota avisa quando a ficha não foi atualizada — antes a tela ignorava, e o cliente seguia
+      // sem relatório nem portal com a conta "cadastrada".
+      if (res.data?.avisoFicha) {
+        toast.warning(`${selectedMeta.name} entrou no controle de verba, mas a ficha do cliente NÃO foi atualizada (${res.data.avisoFicha}). Relatório e portal não leem esta conta até corrigir na ficha (Admin › Conta Meta Ads).`, { duration: 15000 });
       }
       toast.success(`${selectedMeta.name} adicionada — sincronizando...`);
       const sync = await chamar("/api/traffic/sync-balances", { accountIds: [selectedMeta.id] });
@@ -669,7 +710,7 @@ function AddAccountModal({
                 <label className="text-[11px] text-muted-foreground font-medium mb-1.5 block">Cliente</label>
                 <select
                   value={selectedClient}
-                  onChange={(e) => setSelectedClient(e.target.value)}
+                  onChange={(e) => { setSelectedClient(e.target.value); setTrocarFicha(null); }}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary/50"
                 >
                   <option value="">Selecionar cliente...</option>
@@ -708,7 +749,7 @@ function AddAccountModal({
                     {filtered.map((a) => (
                       <button
                         key={a.id}
-                        onClick={() => setSelectedMeta(selectedMeta?.id === a.id ? null : a)}
+                        onClick={() => { setSelectedMeta(selectedMeta?.id === a.id ? null : a); setTrocarFicha(null); }}
                         className={cn(
                           "w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-left transition-all",
                           selectedMeta?.id === a.id
@@ -734,16 +775,32 @@ function AddAccountModal({
           )}
         </div>
 
+        {fichaTemOutra && selectedMeta && cliente && (
+          <div role="group" aria-label="Conta da ficha" className="mx-5 mb-3 rounded-lg border border-lone-warning-border bg-lone-warning-bg p-3 space-y-2">
+            <p className="text-[11px] text-foreground">
+              A ficha de <b>{cliente.nome_fantasia || cliente.name}</b> usa a conta <b className="font-mono">{contaNaFicha}</b> — relatório, portal e Instagram leem dela.
+            </p>
+            <label className="flex items-start gap-2 text-[11px] text-foreground cursor-pointer">
+              <input type="radio" name="trocar-ficha" className="mt-0.5" checked={trocarFicha === true} onChange={() => setTrocarFicha(true)} />
+              <span><b>Trocar a principal</b> por {selectedMeta.name}: relatório, portal e Instagram passam a ler a nova, e a {contaNaFicha} sai do controle de verba.</span>
+            </label>
+            <label className="flex items-start gap-2 text-[11px] text-foreground cursor-pointer">
+              <input type="radio" name="trocar-ficha" className="mt-0.5" checked={trocarFicha === false} onChange={() => setTrocarFicha(false)} />
+              <span><b>Só adicionar ao controle de verba</b>: a ficha continua com a {contaNaFicha}.</span>
+            </label>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="p-5 border-t border-border flex items-center justify-between gap-3">
           <p className="text-[11px] text-muted-foreground">
-            {selectedMeta ? `Selecionada: ${selectedMeta.name}` : "Nenhuma conta selecionada"}
+            {falta ?? (selectedMeta ? `Selecionada: ${selectedMeta.name}` : "Nenhuma conta selecionada")}
           </p>
           <div className="flex gap-2">
             <button onClick={onClose} className="btn-ghost text-xs border border-border px-4">Cancelar</button>
             <button
               onClick={handleAdd}
-              disabled={saving || !selectedMeta || !selectedClient}
+              disabled={saving || !!falta}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium transition-all hover:opacity-90 disabled:opacity-50"
             >
               {saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
@@ -773,6 +830,11 @@ export default function ContasVerbaPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   // Contas ocultas (agency_settings.hidden_ad_accounts): somem do Início, do Hoje e dos Anúncios.
   const [ocultas, setOcultas] = useState<Set<string>>(new Set());
+  // 25/10/2026 (auditoria 9.7): erro ao ler as ocultas virava "nenhuma oculta", e o próximo "Ocultar"
+  // gravava só aquela — as outras voltavam às telas. Agora o erro aparece e o botão trava até ler.
+  const [ocultasErro, setOcultasErro] = useState<string | null>(null);
+  const [ocultasLidas, setOcultasLidas] = useState(false);
+  const [alternandoOculta, setAlternandoOculta] = useState<string | null>(null);
   const [verOcultas, setVerOcultas] = useState(false);
   const [conexao, setConexao] = useState<EstadoConexao>("ok");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -802,7 +864,13 @@ export default function ContasVerbaPage() {
 
   const loadOcultas = useCallback(async () => {
     const r = await chamar<{ ids?: string[] }>("/api/traffic/hidden-accounts");
-    if (r.ok && Array.isArray(r.data?.ids)) setOcultas(new Set(r.data!.ids));
+    if (!r.ok || !Array.isArray(r.data?.ids)) {
+      setOcultasErro(r.erro ?? "Não consegui ler a lista de contas ocultas.");
+      return;
+    }
+    setOcultasErro(null);
+    setOcultasLidas(true);
+    setOcultas(new Set(r.data!.ids));
   }, []);
 
   // Token da Meta: sem ele o "Sincronizar" não faz nada — melhor dizer do que girar em vão.
@@ -859,20 +927,25 @@ export default function ContasVerbaPage() {
   }, [togglingId, load]);
 
   const alternarOculta = useCallback(async (account: EnrichedAccount) => {
-    const next = new Set(ocultas);
-    const ocultar = !next.has(account.meta_account_id);
-    if (ocultar) next.add(account.meta_account_id); else next.delete(account.meta_account_id);
-    setOcultas(next);
-    const r = await chamar("/api/traffic/hidden-accounts", { ids: [...next] });
+    if (!ocultasLidas || alternandoOculta) return;
+    const ocultar = !ocultas.has(account.meta_account_id);
+    setAlternandoOculta(account.meta_account_id);
+    // Uma conta por vez: a rota acrescenta ou tira SÓ esta id (antes a tela mandava a lista inteira e
+    // quem salvasse por último apagava a ocultação da outra pessoa).
+    const r = await chamar<{ ids?: string[] }>("/api/traffic/hidden-accounts", {
+      acao: ocultar ? "ocultar" : "mostrar", id: account.meta_account_id,
+    });
+    setAlternandoOculta(null);
     if (!r.ok) {
       toast.error(`Não consegui ${ocultar ? "ocultar" : "mostrar"} a conta: ${r.erro}`);
       loadOcultas();
       return;
     }
+    if (Array.isArray(r.data?.ids)) setOcultas(new Set(r.data!.ids));
     toast.success(ocultar
       ? `${account.clientName} oculta — sai do Início, do Hoje e dos Anúncios.`
       : `${account.clientName} de volta às telas do tráfego.`);
-  }, [ocultas, loadOcultas]);
+  }, [ocultas, ocultasLidas, alternandoOculta, loadOcultas]);
 
   useEffect(() => {
     load();
@@ -970,6 +1043,7 @@ export default function ContasVerbaPage() {
     const botao = cn(
       "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border text-muted-foreground transition-colors",
       "hover:border-primary/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      "disabled:cursor-not-allowed disabled:opacity-50",
       comRotulo ? "px-2.5 text-xs" : "w-8",
     );
     return (
@@ -1016,7 +1090,8 @@ export default function ContasVerbaPage() {
         <button
           type="button"
           onClick={() => alternarOculta(account)}
-          title={oculta ? "Mostrar de novo nas telas do tráfego" : "Ocultar das telas do tráfego (Início, Hoje, Anúncios)"}
+          disabled={!ocultasLidas || alternandoOculta !== null}
+          title={!ocultasLidas ? "A lista de contas ocultas não carregou — tente de novo no aviso do topo" : oculta ? "Mostrar de novo nas telas do tráfego" : "Ocultar das telas do tráfego (Início, Hoje, Anúncios)"}
           aria-label={oculta ? `Mostrar ${account.clientName}` : `Ocultar ${account.clientName}`}
           className={botao}
         >
@@ -1202,6 +1277,13 @@ export default function ContasVerbaPage() {
         {loadError && (
           <div role="alert" className="rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-lone-danger">
             {loadError}
+          </div>
+        )}
+
+        {ocultasErro && (
+          <div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-lone-danger">
+            <span className="flex-1">Não consegui ler quais contas estão ocultas ({ocultasErro}). Ocultar e mostrar ficam travados até carregar.</span>
+            <button type="button" onClick={() => loadOcultas()} className="font-medium underline">Tentar de novo</button>
           </div>
         )}
 

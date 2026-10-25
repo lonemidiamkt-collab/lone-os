@@ -39,6 +39,10 @@ export interface LinhaPainel extends Automacao {
   ultimoSucessoEm: string | null;
   semana: { ok: number; erro: number; pulado: number };
   config: { ligado: boolean; pausadoAte: string | null; alteradoPor: string | null; alteradoEm: string | null };
+  /** Rodando agora (trava de execução, 25/10/2026 — auditoria 10.3): desde quando. */
+  rodandoDesde?: string | null;
+  /** Quando a última execução foi pulada: o motivo (ex.: a trava interna desligada — auditoria 10.2). */
+  ultimaMotivo?: string | null;
 }
 
 const ms = (iso: string | null | undefined) => (iso ? new Date(iso).getTime() : NaN);

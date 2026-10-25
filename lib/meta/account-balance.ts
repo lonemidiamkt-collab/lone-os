@@ -54,6 +54,13 @@ function centsToReais(centavos: string | null | undefined): number {
   return Number.isFinite(n) ? n / 100 : 0;
 }
 
+/** Centavos → reais; vazio ou ilegível = null (não 0: "não veio" não é "zerado"). */
+function centsToReaisOuNull(centavos: string | null | undefined): number | null {
+  if (centavos == null || String(centavos).trim() === "") return null;
+  const n = parseFloat(centavos);
+  return Number.isFinite(n) ? n / 100 : null;
+}
+
 // Spend caps acima deste valor (em centavos) são o "ilimitado" da Meta (ex: 922337203685477)
 const SPEND_CAP_INFINITY_CENTS = 10_000_000_000; // R$ 100M
 
@@ -100,8 +107,13 @@ export function calculateAvailableBalance(
   if (displayBalance !== null) return displayBalance;
 
   if (isPrepaid) {
-    // Pré-pago sem display_string: usar balance bruto da carteira
-    return centsToReais(meta.balance);
+    // Pré-pago sem display_string (25/10/2026, auditoria 9.9). Antes caía sempre em `balance` — que o
+    // comentário acima diz NÃO ser o saldo nas contas type=20 — e `balance` vazio virava 0: saía "Saldo
+    // zerado" crítico no grupo e o aviso falado, com a conta cheia. Agora só confia em `balance` na conta
+    // pré-paga antiga (type=2) e quando ele veio de verdade; sem leitura confiável o saldo é null
+    // ("não consegui ler o saldo"), nunca 0.
+    if (meta.funding_source_details?.type !== 2) return null;
+    return centsToReaisOuNull(meta.balance);
   }
 
   // Pós-pago: cap - gasto. Precisamos de um cap real.

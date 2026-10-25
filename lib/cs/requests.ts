@@ -129,13 +129,17 @@ export interface RequestVencida {
   texto: string; autor: string | null; topico: TopicoRequest; minutos: number;
 }
 
-/** Pendências que passaram do SLA e ninguém assumiu. */
+/**
+ * Pendências que passaram do SLA e ninguém assumiu.
+ * Leitura que falha LANÇA (25/10/2026, auditoria 10.1): antes virava "0 vencidas" e a rotina dizia ok.
+ */
 export async function vencidas(): Promise<RequestVencida[]> {
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("customer_requests")
     .select("id, client_id, group_jid, origin_text, author_name, topico, aberta_em, clients(name, nome_fantasia)")
     .eq("status", "aberta").lte("vence_em", new Date().toISOString())
     .order("aberta_em", { ascending: true });
+  if (error) throw new Error(`não consegui ler as perguntas abertas: ${error.message}`);
 
   return (data ?? []).map((r) => {
     const cl = r.clients as unknown as { name?: string; nome_fantasia?: string } | null;
@@ -152,9 +156,31 @@ export async function vencidas(): Promise<RequestVencida[]> {
   });
 }
 
-/** Marca como expirada depois de avisar — o alerta sai UMA vez por pendência. */
-export async function marcarExpirada(id: string): Promise<void> {
+/**
+ * Marca como expirada depois de avisar — o alerta sai UMA vez por pendência.
+ * Só pode ser chamada quando o aviso saiu (ou pode ter saído). Devolve o erro, se houver: sem marcar, a
+ * pergunta vai de novo na próxima rodada.
+ */
+export async function marcarExpirada(id: string): Promise<string | null> {
   const agora = new Date().toISOString();
-  await supabaseAdmin.from("customer_requests")
-    .update({ status: "expirada", fechada_por: "tempo", updated_at: agora }).eq("id", id);
+  const { error } = await supabaseAdmin.from("customer_requests")
+    .update({ status: "expirada", fechada_por: "tempo", updated_at: agora }).eq("id", id).eq("status", "aberta");
+  return error ? error.message : null;
+}
+
+/**
+ * O que fazer com as perguntas depois de tentar avisar o time (25/10/2026, auditoria 10.1). Antes o resultado
+ * do envio era ignorado e TODAS eram marcadas como avisadas — se o WhatsApp recusava, a pergunta do cliente
+ * nunca mais era lembrada, e a rotina respondia ok. Agora, com o desfecho do envio (lib/whatsapp/desfecho-envio):
+ *   · enviado → marca;
+ *   · falhou (certo que nada saiu) → NÃO marca: a próxima rodada (15 min) avisa de novo;
+ *   · incerto (pode ter saído) → marca, para não duplicar no grupo, e a rotina responde falha para o time
+ *     conferir o grupo.
+ */
+export function desfechoDoAvisoSemResposta(r: { ok: boolean; error?: string; incerto?: boolean }): {
+  marcar: boolean; falha: string | null;
+} {
+  if (r.ok) return { marcar: true, falha: null };
+  if (r.incerto) return { marcar: true, falha: `${r.error ?? "sem resposta do WhatsApp"} — pode ter saído; não reenvio para não duplicar. Confira o grupo interno.` };
+  return { marcar: false, falha: `${r.error ?? "o WhatsApp recusou"} — não saiu; aviso de novo na próxima rodada.` };
 }

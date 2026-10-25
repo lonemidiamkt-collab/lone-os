@@ -146,13 +146,18 @@ export async function POST(req: NextRequest) {
   try {
     // Trava global (exceto dryRun / teste de 1 cliente / testJid)
     if (!dryRun && !onlyClientId && !testJid && !(await calendarEnabled())) {
-      return NextResponse.json({ ok: true, status: "disabled", message: "traffic_monthly_calendar_enabled=false" });
+      // `executado: false` (25/10/2026, auditoria 10.2): "Rodar agora" e o registro do cron dizem "não enviou".
+      return NextResponse.json({
+        ok: true, executado: false, motivo: "calendário mensal desligado (traffic_monthly_calendar_enabled = false)",
+        status: "disabled", message: "traffic_monthly_calendar_enabled=false",
+      });
     }
 
     // Só envia no dia efetivo (a menos de force/teste/dryRun)
     if (!force && !dryRun && !onlyClientId && !testJid && !isSendDay) {
       return NextResponse.json({
-        ok: true, status: "skipped",
+        ok: true, executado: false, esperado: true, motivo: `hoje não é o dia de envio — o deste mês é o dia ${sendDay}`,
+        status: "skipped",
         message: `Hoje (${dateKey}) não é o dia de envio deste mês — dia efetivo = ${sendDay}.`,
       });
     }

@@ -40,7 +40,9 @@ export async function POST(req: NextRequest) {
     .in("status", ["good", "average", "onboarding"]).is("draft_status", null)
     .or("active.is.null,active.eq.true");
   if (onlyClient) q = supabaseAdmin.from("clients").select("id, name, nome_fantasia").eq("id", onlyClient);
-  const { data: clients } = await q;
+  const { data: clients, error: cliErr } = await q;
+  // 25/10/2026 (auditoria 10.4): leitura que falha não é "nenhum cliente com Instagram".
+  if (cliErr) return NextResponse.json({ ok: false, erro: `não consegui ler os clientes: ${cliErr.message}` }, { status: 500 });
 
   const feitos: string[] = [];
   // FALHA TEM QUE APARECER. Antes só o sucesso entrava na resposta: o @ do Dumar deixou de existir
@@ -69,12 +71,21 @@ export async function POST(req: NextRequest) {
   for (const f of falhas) if (!porCliente.has(f.cliente)) porCliente.set(f.cliente, f.motivo);
   const mortos = [...porCliente.entries()].filter(([cli]) => falhas.filter((f) => f.cliente === cli).length >= IG_PERIODS.length);
   const internalJid = process.env.CS_INTERNAL_GROUP_JID;
+  let avisoErro: string | null = null;
   if (mortos.length && internalJid && !onlyClient) {
     const linhas = mortos.map(([cli, motivo]) => `• *${cli}* — ${motivo}`).join("\n");
-    await csSendGroupText(internalJid,
+    const aviso = await csSendGroupText(internalJid,
       `📉 *Instagram sem dados* — ${mortos.length} cliente(s) não vão ter a parte de Instagram no relatório:\n\n${linhas}\n\n` +
       `_Geralmente é o @ que mudou ou a conta saiu de Comercial. Vale conferir com o cliente._`);
+    if (!aviso.ok) avisoErro = `o aviso "Instagram sem dados" não saiu no grupo interno (${aviso.error ?? "falhou"})`;
   }
 
-  return NextResponse.json({ ok: true, gerados: feitos.length, detalhe: feitos, falhas, clientes_sem_ig: mortos.map(([c]) => c), auto_vinculados: autoMapeados });
+  // `ok` (auditoria 10.4): antes era sempre true — 0 gerados com clientes para gerar ficava verde na
+  // Central. Agora: nenhum relatório gerado (com cliente para gerar) ou o aviso ao time que não saiu = falha.
+  const total = (clients ?? []).length;
+  const nadaGerado = total > 0 && feitos.length === 0;
+  const erro = nadaGerado
+    ? `nenhum relatório de Instagram foi gerado para ${total} cliente(s) (${falhas[0]?.motivo ?? "sem motivo"})`
+    : avisoErro;
+  return NextResponse.json({ ok: !erro, ...(erro ? { erro } : {}), gerados: feitos.length, detalhe: feitos, falhas, clientes_sem_ig: mortos.map(([c]) => c), auto_vinculados: autoMapeados });
 }
