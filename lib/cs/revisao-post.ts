@@ -12,6 +12,12 @@ const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
 export interface RevisaoPostInput {
   imageUrl?: string;         // arte (URL pública) — opcional: sem arte, revisa só a legenda
+  /**
+   * As artes do post, na ordem (data URI já reduzida ou URL). 24/10/2026 (2.10): a revisão final
+   * olhava só a capa — num carrossel, a legenda era conferida contra a 1ª arte (ou a referência).
+   * Quando vem, substitui `imageUrl`.
+   */
+  imagens?: string[];
   clienteNome: string;
   clienteNicho?: string;
   titulo: string;            // tema do card
@@ -105,6 +111,7 @@ export async function revisarPost(inp: RevisaoPostInput): Promise<RevisaoPostRes
   if (!key) return { ok: false, data: null, error: "OPENAI_API_KEY não configurada" };
   const regras = inp.regras?.length ? inp.regras.map((r) => `- ${r}`).join("\n") : "(nenhuma)";
   const ficha = fichaDoCliente(inp.clienteNome); // voz + CONTATO exato do guia — checar contra a legenda
+  const imagens = inp.imagens?.length ? inp.imagens : inp.imageUrl ? [inp.imageUrl] : [];
   const contexto =
     `Cliente: ${inp.clienteNome}${inp.clienteNicho ? ` (${inp.clienteNicho})` : ""}\n` +
     (ficha ? `${ficha}\n` : "") +
@@ -113,12 +120,17 @@ export async function revisarPost(inp: RevisaoPostInput): Promise<RevisaoPostRes
     (inp.hashtags ? `Hashtags: ${inp.hashtags.slice(0, 300)}\n` : "") +
     `Briefing do cliente: ${inp.briefing?.slice(0, 1200) || "(sem briefing)"}\n` +
     `Do's & don'ts:\n${regras}\n\n` +
-    (inp.imageUrl
+    (imagens.length > 1
+      ? `Revise o post completo. É um CARROSSEL: as ${imagens.length} artes estão anexadas NA ORDEM (arte 1 é a capa). Cada slide tem o próprio texto — a legenda deve falar do post como um todo; nunca exija que um slide repita o texto de outro.`
+      : imagens.length === 1
       ? `Revise o post completo (a arte está anexada).`
       : `SEM ARTE anexada — revise só a legenda/hashtags (ignore checagens de arte e coerência com arte). ` +
         `Preço/condição na legenda que não esteja no briefing: NÃO afirme que é inventado (pode estar na arte, que não veio) — aponte como gravidade "media", área "dados", detalhe "confirmar preço/condição (não deu pra checar contra a arte)".`);
   const userContent: unknown[] = [{ type: "text", text: contexto }];
-  if (inp.imageUrl) userContent.push({ type: "image_url", image_url: { url: inp.imageUrl, detail: "high" } });
+  imagens.forEach((url, i) => {
+    if (imagens.length > 1) userContent.push({ type: "text", text: `Arte ${i + 1} de ${imagens.length}:` });
+    userContent.push({ type: "image_url", image_url: { url, detail: "high" } });
+  });
   const t0 = Date.now();
   try {
     const res = await fetch(OPENAI_API_URL, {
@@ -134,7 +146,8 @@ export async function revisarPost(inp: RevisaoPostInput): Promise<RevisaoPostRes
           { role: "user", content: userContent },
         ],
       }),
-      signal: AbortSignal.timeout(40_000),
+      // Carrossel com várias artes leva mais tempo para a IA ler.
+      signal: AbortSignal.timeout(imagens.length > 3 ? 60_000 : 40_000),
     });
     const body = await res.text();
     if (!res.ok) {

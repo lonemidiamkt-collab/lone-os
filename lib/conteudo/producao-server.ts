@@ -27,7 +27,7 @@ const COLS_PEDIDO = "id, status, content_card_id, assigned_designer, client_id, 
 type Linha = Record<string, unknown>;
 
 export type ResultadoTransicao =
-  | { ok: true; card: Linha; pedido: Linha | null; semEfeito: boolean; designer?: EscolhaDesigner | null; pedidoRemovido?: string | null }
+  | { ok: true; card: Linha; pedido: Linha | null; semEfeito: boolean; designer?: EscolhaDesigner | null; pedidoRemovido?: string | null; pedidoCriado?: boolean }
   | { ok: false; status: number; erro: string };
 
 /** De onde veio o pedido de alteração — decide se vira avaliação do social. */
@@ -149,8 +149,12 @@ export async function executarTransicao(cardId: string, acao: AcaoDesign, op: Op
   // 3) Pedido existente: muda o status (trava no status lido) ou apaga.
   if (plano.pedido && pedido && !("criar" in plano.pedido)) {
     if ("apagar" in plano.pedido) {
-      const { error } = await supabaseAdmin.from("design_requests").delete().eq("id", pedido.id as string);
+      // Trava no status lido (24/10/2026, 2.6): o social cancela só o pedido NA FILA — se o designer
+      // pegou no meio do clique, o pedido dele não some.
+      const { data: apagado, error } = await supabaseAdmin.from("design_requests").delete()
+        .eq("id", pedido.id as string).eq("status", pedido.status as string).select("id");
       if (error) console.error("[producao] cancelar pedido:", error.message);
+      else if (!apagado?.length) console.error("[producao] cancelar pedido: o pedido mudou de status no meio — ficou de pé", pedido.id);
     } else {
       const { error } = await supabaseAdmin.from("design_requests")
         .update({ status: plano.pedido.status, updated_at: agora })
@@ -173,6 +177,8 @@ export async function executarTransicao(cardId: string, acao: AcaoDesign, op: Op
   return {
     ok: true, card: depois.card ?? card, pedido: cancelou ? null : depois.pedido, semEfeito: false, designer,
     pedidoRemovido: cancelou ? ((pedido?.id as string) ?? null) : null,
+    // Só o pedido que nasceu NESTA transição pode ser desfeito pelo "Desfazer" (24/10/2026, 2.6).
+    pedidoCriado: criado,
   };
 }
 

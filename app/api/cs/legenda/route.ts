@@ -9,6 +9,16 @@ import { fetchClientCsRules } from "@/lib/supabase/queries";
 import { loadBriefingCombinado } from "@/lib/cs/load-briefing";
 import { gerarLegenda } from "@/lib/cs/legenda";
 import { describeImage } from "@/lib/cs/vision";
+import { carregarArtesParaIa } from "@/lib/conteudo/artes-para-ia-server";
+import { descricaoDasArtes } from "@/lib/conteudo/artes-para-ia";
+
+/**
+ * Quantas artes a legenda descreve (uma chamada de visão por arte, em paralelo).
+ * 24/10/2026 (auditoria de erro recuperável, 2.11): descrevia só a capa do card — num carrossel a
+ * legenda falava da 1ª arte, e quando a capa era a referência do social, falava da referência.
+ * Agora são as artes da ENTREGA ATUAL, na ordem; a tela diz quantas a IA viu.
+ */
+const MAX_ARTES = 5;
 
 // Busca a arte (image_url do card) e descreve o que aparece nela por visão. É isso que faz a
 // legenda BATER com a arte (antes ela escrevia só do nicho do cliente e descasava). Nunca lança.
@@ -49,7 +59,13 @@ export async function POST(req: NextRequest) {
     .from("clients").select("name, nome_fantasia, nicho, industry, fixed_briefing, campaign_briefing").eq("id", card.client_id as string).maybeSingle();
   const briefing = await loadBriefingCombinado(card.client_id as string, (cli?.fixed_briefing as string) || (cli?.campaign_briefing as string));
   const rules = (await fetchClientCsRules(card.client_id as string)).filter((r) => r.escopo !== "roteiro").map((r) => `${r.texto} (${r.escopo})`);
-  const arteDescricao = await descreverArteDoCard(card.image_url as string | null); // legenda BATE com a arte
+  // A legenda BATE com a arte: descreve as artes ENTREGUES (nunca a referência), na ordem.
+  const lidas = await carregarArtesParaIa(cardId, card.image_url as string | null, MAX_ARTES);
+  if (!lidas.ok) return NextResponse.json({ error: `Não consegui ler as artes do card (${lidas.erro}) — tente de novo.` }, { status: 500 });
+  const escolha = lidas.artes;
+  const descricoes = await Promise.all(escolha.artes.map((a) => descreverArteDoCard(a.url)));
+  const vistas = descricoes.filter(Boolean).length;
+  const arteDescricao = descricaoDasArtes(descricoes);
 
   const r = await gerarLegenda({
     clienteNome: (cli?.nome_fantasia as string) || (cli?.name as string) || (card.client_name as string) || "Cliente",
@@ -61,5 +77,11 @@ export async function POST(req: NextRequest) {
     arteDescricao,
   });
   if (!r.ok || !r.data) return NextResponse.json({ error: r.error || "falha ao gerar" }, { status: 500 });
-  return NextResponse.json({ legenda: r.data.legenda, hashtags: r.data.hashtags });
+  // O que a IA olhou — a tela mostra junto da sugestão ("vendo 3 de 3 artes" / "sem arte entregue").
+  const nota = escolha.total === 0
+    ? "Sem arte entregue no card: a legenda foi escrita pelo tema e pelo briefing — confira quando a arte chegar."
+    : vistas === 0
+      ? "Não consegui ver a arte: a legenda foi escrita pelo tema e pelo briefing — confira se bate com a arte."
+      : `Escrita vendo ${vistas} de ${escolha.total} arte${escolha.total > 1 ? "s" : ""} da entrega.`;
+  return NextResponse.json({ legenda: r.data.legenda, hashtags: r.data.hashtags, artes: { vistas, total: escolha.total }, nota });
 }

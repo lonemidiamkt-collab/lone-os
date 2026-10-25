@@ -2,7 +2,7 @@
 // 21/10/2026, item 2.1: o "Entregar arte" mandava TODOS os anexos, inclusive a referência do social
 // e a versão anterior, e o banco marcava tudo como entrega.
 import { describe, it, expect } from "vitest";
-import { faltaParaEntregar, planejarEntrega, resumoDaEntrega, type AnexoParaEntrega } from "@/lib/conteudo/entrega-anexos";
+import { bloqueioDoFoco, faltaParaEntregar, planejarEntrega, resumoDaEntrega, versaoAnteriorParaTirar, type AnexoParaEntrega } from "@/lib/conteudo/entrega-anexos";
 
 const ref: AnexoParaEntrega = { id: "ref1", tipo: "referencia", delivery_id: null };
 const v1a: AnexoParaEntrega = { id: "v1a", tipo: "entrega", delivery_id: "d1" };
@@ -66,5 +66,17 @@ describe("planejarEntrega", () => {
     expect(linhas.join(" ")).toMatch(/1 arte nova/);
     expect(linhas.join(" ")).toMatch(/versão anterior \(1 arte\) sai do card/);
     expect(linhas.join(" ")).toMatch(/1 referência do social fica de fora/);
+  });
+});
+
+describe("Modo foco: substituir a versão anterior (2.13)", () => {
+  it("lista que não carregou bloqueia a entrega com o erro (antes virava lista vazia e as duas versões iam ao cliente)", () => {
+    expect(bloqueioDoFoco({ carregando: false, erro: "O painel está reiniciando." })).toMatch(/^Não consegui carregar as artes que já estão no card \(O painel está reiniciando\.\)/);
+    expect(bloqueioDoFoco({ carregando: true, erro: null })).toMatch(/Carregando/);
+    expect(bloqueioDoFoco({ carregando: false, erro: null })).toBeNull();
+  });
+  it("tira só a entrega anterior — nunca a referência nem as artes novas", () => {
+    expect(versaoAnteriorParaTirar([ref, v1a, v1b, nova], ["nova"], true)).toEqual(["v1a", "v1b"]);
+    expect(versaoAnteriorParaTirar([ref, v1a, nova], ["nova"], false)).toEqual([]);
   });
 });

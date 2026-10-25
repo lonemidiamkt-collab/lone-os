@@ -29,6 +29,7 @@ import { trilha } from "@/lib/obs/trilha";
 import { cn, todaySP } from "@/lib/utils";
 import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
 import { entregarArte, novoOperationId } from "@/lib/ops/entregar-arte";
+import { bloqueioDoFoco, versaoAnteriorParaTirar } from "@/lib/conteudo/entrega-anexos";
 import { designerDeve, ROTULO_ESTADO_DESIGN } from "@/lib/conteudo/producao";
 import { compararItens, montarItens, passaNoFiltro } from "@/lib/conteudo/quadro";
 import { cronometroDaEtapa } from "@/lib/conteudo/capacidade";
@@ -70,6 +71,10 @@ export default function ModoFoco({ pessoa, onClose, onAbrirCard }: {
   const [entregando, setEntregando] = useState(false);
   const [substituir, setSubstituir] = useState(true);
   const [anexos, setAnexos] = useState<CardAttachment[] | null>(null);
+  // A lista que não carrega NÃO vira lista vazia (24/10/2026, 2.13): com ela vazia o foco entregava
+  // sem tirar a versão anterior e as duas iam ao cliente. Erro fica na tela, com "tentar de novo".
+  const [erroAnexos, setErroAnexos] = useState<string | null>(null);
+  const [tentativaAnexos, setTentativaAnexos] = useState(0);
   const [arrastando, setArrastando] = useState(false);
   const operationRef = useRef<string | null>(null);
   // Artes que já subiram mas cuja entrega falhou: a nova tentativa reaproveita (não sobe de novo).
@@ -81,14 +86,20 @@ export default function ModoFoco({ pessoa, onClose, onAbrirCard }: {
     setColadas([]);
     operationRef.current = null;
     subidasRef.current = null;
+  }, [cardId]);
+  // A lista do card: carrega na troca de card e no "Tentar de novo" (sem apagar o que foi colado).
+  useEffect(() => {
     setAnexos(null);
+    setErroAnexos(null);
     if (!cardId) return;
     let vivo = true;
     chamar<{ attachments?: CardAttachment[] }>(`/api/cards/${cardId}/attachments`).then((r) => {
-      if (vivo) setAnexos(r.ok ? r.data?.attachments ?? [] : []);
+      if (!vivo) return;
+      if (r.ok) setAnexos(r.data?.attachments ?? []);
+      else { trilha("foco:anexos:erro", { card: cardId, status: r.status }); setErroAnexos(r.erro ?? "erro ao carregar"); }
     });
     return () => { vivo = false; };
-  }, [cardId]);
+  }, [cardId, tentativaAnexos]);
 
   // Miniaturas do que foi colado (URLs locais, liberadas na troca).
   useEffect(() => {
@@ -108,8 +119,12 @@ export default function ModoFoco({ pessoa, onClose, onAbrirCard }: {
     setIndice((i) => Math.max(0, Math.min(fila.length - 1, Math.min(i, fila.length - 1) + passo)));
   }, [fila.length]);
 
+  const bloqueio = bloqueioDoFoco({ carregando: anexos === null && !erroAnexos, erro: erroAnexos });
+
   const entregar = useCallback(async () => {
     if (!atual || !coladas.length || entregando) return;
+    // Sem a lista do card não dá pra saber o que substituir — entregar agora deixaria as duas versões.
+    if (anexos === null) { toast.error(bloqueioDoFoco({ carregando: !erroAnexos, erro: erroAnexos }) ?? "Espere carregar as artes do card."); return; }
     const card = atual.card;
     setEntregando(true);
     try {
@@ -136,12 +151,22 @@ export default function ModoFoco({ pessoa, onClose, onAbrirCard }: {
       trilha("foco:entregue", { card: card.id, artes: novos.length });
 
       // 3) A versão anterior sai do card (o arquivo fica guardado para a comparação de versões).
-      const anteriores = substituir ? (anexos ?? []).filter((a) => a.tipo === "entrega" && !novos.some((n) => n.id === a.id)) : [];
-      for (const a of anteriores) await chamar(`/api/cards/${card.id}/attachments/${a.id}`, undefined, { method: "DELETE" });
-      if (anteriores.length) {
+      const idsAnteriores = versaoAnteriorParaTirar(anexos, novos.map((n) => n.id), substituir);
+      // A remoção que falha não passa calada: a versão velha ficaria no card ao lado da nova.
+      const tiradas: string[] = [];
+      let erroAoTirar: string | null = null;
+      for (const id of idsAnteriores) {
+        const del = await chamar(`/api/cards/${card.id}/attachments/${id}`, undefined, { method: "DELETE" });
+        if (del.ok) tiradas.push(id); else erroAoTirar = del.erro;
+      }
+      if (tiradas.length) {
         useContentStore.setState((s) => ({
-          contentCards: s.contentCards.map((c) => c.id === card.id ? { ...c, imageUrl: novos[0].url, cardAttachments: [...(c.cardAttachments ?? []).filter((x) => !anteriores.some((a) => a.id === x.id)), ...novos] } : c),
+          contentCards: s.contentCards.map((c) => c.id === card.id ? { ...c, imageUrl: novos[0].url, cardAttachments: [...(c.cardAttachments ?? []).filter((x) => !tiradas.includes(x.id)), ...novos] } : c),
         }));
+      }
+      if (erroAoTirar) {
+        const ficaram = idsAnteriores.length - tiradas.length;
+        toast.warning(`Entregue, mas ${ficaram === 1 ? "1 arte da versão anterior não saiu" : `${ficaram} artes da versão anterior não saíram`} do card (${erroAoTirar}). Abra o card e remova antes de enviar ao cliente.`, { duration: 12_000 });
       }
 
       pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para conferir.`, card.clientId, card.id);
@@ -151,7 +176,7 @@ export default function ModoFoco({ pessoa, onClose, onAbrirCard }: {
     } finally {
       setEntregando(false);
     }
-  }, [atual, coladas, entregando, substituir, anexos, pushNotification]);
+  }, [atual, coladas, entregando, substituir, anexos, erroAnexos, pushNotification]);
 
   // Teclado e colar: → próximo, ← anterior, Esc sai, Enter entrega o que foi colado.
   useEffect(() => {
@@ -162,7 +187,7 @@ export default function ModoFoco({ pessoa, onClose, onAbrirCard }: {
       if (e.key === "ArrowRight") { e.preventDefault(); ir(1); }
       else if (e.key === "ArrowLeft") { e.preventDefault(); ir(-1); }
       else if (e.key === "Escape") { e.preventDefault(); if (!entregando) onClose(); }
-      else if (e.key === "Enter" && coladas.length) { e.preventDefault(); void entregar(); }
+      else if (e.key === "Enter" && coladas.length) { e.preventDefault(); void entregar(); } // entregar() recusa sem a lista do card
     };
     const colar = (e: ClipboardEvent) => {
       if (outraJanela() || emCampo(e.target)) return;
@@ -281,8 +306,20 @@ export default function ModoFoco({ pessoa, onClose, onAbrirCard }: {
                       Substituir a versão anterior no card ({entregaAnterior.length} arte{entregaAnterior.length > 1 ? "s" : ""}) — ela continua guardada para a comparação
                     </label>
                   )}
+                  {bloqueio && (
+                    <div role={erroAnexos ? "alert" : "status"} className={cn("flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs",
+                      erroAnexos ? "border-lone-danger-border bg-lone-danger-bg text-destructive" : "border-border bg-muted text-muted-foreground")}>
+                      <span className="flex-1 min-w-[200px]">{bloqueio}</span>
+                      {erroAnexos && (
+                        <button type="button" onClick={() => setTentativaAnexos((n) => n + 1)}
+                          className="h-7 px-2.5 rounded-md border border-border bg-card text-foreground hover:border-primary inline-flex items-center gap-1.5">
+                          <RotateCcw size={12} aria-hidden="true" /> Tentar de novo
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={() => void entregar()} disabled={entregando}
+                    <button type="button" onClick={() => void entregar()} disabled={entregando || !!bloqueio}
                       className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-1.5">
                       {entregando ? <Loader size={14} className="animate-spin" aria-hidden="true" /> : <Upload size={14} aria-hidden="true" />}
                       {entregando ? "Entregando…" : `Entregar ${coladas.length} arte${coladas.length > 1 ? "s" : ""}`}

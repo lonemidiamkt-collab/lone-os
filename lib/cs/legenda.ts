@@ -66,7 +66,8 @@ export async function gerarLegenda(inp: LegendaInput): Promise<OpenAiResult<Lege
   const ficha = fichaDoCliente(inp.clienteNome); // voz + contato exato + condições + o que observar (guia)
   const user = [
     inp.arteDescricao
-      ? `Arte (o que aparece na imagem — ESTE é o assunto do post): ${inp.arteDescricao.slice(0, 600)}`
+      // 24/10/2026 (2.11): num carrossel vêm várias ("Arte 1 de 3: …") — o corte de 600 deixava só a capa.
+      ? `Arte (o que aparece na imagem — ESTE é o assunto do post): ${inp.arteDescricao.slice(0, 2600)}`
       : `⚠️ Sem arte anexada — escreva a partir do tema/briefing (mais genérico).`,
     ``,
     `Cliente: ${inp.clienteNome}${inp.clienteNicho ? ` (${inp.clienteNicho})` : ""}`,

@@ -84,6 +84,32 @@ export function resumoDaEntrega(p: PlanoDeEntrega, link?: string | null): string
   return linhas;
 }
 
+// ─── Modo foco: substituir a versão anterior ────────────────────────────────
+
+/**
+ * O Modo foco pode entregar agora? null = pode.
+ *
+ * 24/10/2026 (auditoria de erro recuperável, 2.13): a lista de anexos do card que NÃO carregava
+ * virava lista vazia — o foco achava que não havia versão anterior, entregava a nova e deixava a
+ * antiga no card; as duas versões apareciam juntas para o cliente. Sem a lista, não há como saber o
+ * que substituir: a entrega espera a lista carregar (com o erro e "tentar de novo").
+ */
+export function bloqueioDoFoco(lista: { carregando: boolean; erro: string | null }): string | null {
+  if (lista.erro) return `Não consegui carregar as artes que já estão no card (${lista.erro}). Sem essa lista eu não sei se há versão anterior para substituir — tente de novo antes de entregar.`;
+  if (lista.carregando) return "Carregando as artes que já estão no card…";
+  return null;
+}
+
+/** A versão anterior que sai do card depois da entrega no foco (só anexos de entrega que não são os novos). */
+export function versaoAnteriorParaTirar(
+  anexos: readonly { id: string; tipo?: TipoDoAnexo }[],
+  novosIds: readonly string[],
+  substituir: boolean,
+): string[] {
+  if (!substituir) return [];
+  return anexos.filter((a) => a.tipo === "entrega" && !novosIds.includes(a.id)).map((a) => a.id);
+}
+
 /** Por que não dá pra entregar (nada a entregar). null = dá. */
 export function faltaParaEntregar(p: PlanoDeEntrega, link?: string | null): string | null {
   if (p.entregar.length || link?.trim()) return null;

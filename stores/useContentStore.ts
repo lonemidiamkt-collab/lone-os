@@ -15,6 +15,15 @@ export interface EstadoDoServidor {
   card?: ContentCard | null;
   pedido?: DesignRequest | null;
   pedidoRemovido?: string | null;
+  /** /api/conteudo/design: o clique não mudou nada (pedido já aberto, card já na etapa). */
+  semEfeito?: boolean;
+  /** Quem ficou com o pedido e por quê (pedir arte). */
+  designer?: string | null;
+  atribuicao?: MotivoEscolha | null;
+  /** Pedido aberto sem designer no pedido nem na ficha do cliente (24/10/2026, 2.12). */
+  semDesigner?: boolean;
+  /** O pedido de arte nasceu nesta transição (só ele pode ser desfeito — 2.6). */
+  pedidoCriado?: boolean;
 }
 
 interface ContentState {
@@ -35,8 +44,10 @@ interface ContentState {
   updateContentCard: (id: string, updates: Partial<ContentCard>, options?: { bypassWorkflow?: boolean }) => Promise<void>;
   deleteContentCard: (id: string) => Promise<void>;
 
-  approveContent: (cardId: string, reviewer: string) => void;
-  rejectContent: (cardId: string, reviewer: string, reason: string) => void;
+  /** true = gravou. Em falha, desfaz na tela e avisa no sino (nunca lança). */
+  approveContent: (cardId: string, reviewer: string) => Promise<boolean>;
+  /** true = gravou. Em falha, desfaz na tela e avisa no sino (nunca lança). */
+  rejectContent: (cardId: string, reviewer: string, reason: string) => Promise<boolean>;
 
   addDesignRequest: (req: Omit<DesignRequest, "id"> & { contentCardId?: string }) => Promise<DesignRequest>;
   updateDesignRequest: (id: string, updates: Partial<DesignRequest>) => Promise<void>;
@@ -288,14 +299,17 @@ export const useContentStore = create<ContentState>()(
         // O save NÃO pode falhar em silêncio: antes era .catch(() => {}), então uma falha no
         // servidor deixava a UI mostrando "aprovado" sem ter gravado nada. Agora desfaz o
         // update otimista e avisa o social via notificação.
-        authedFetch("/api/content-cards/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cardId, status: statusDaEtapa("agendado"), contentApproval: { status: "approved", reviewedBy: reviewer, reviewedAt: new Date().toISOString() } }) })
+        // 24/10/2026 (2.5): devolve se gravou — o card aberto só fecha depois do sim do servidor
+        // (antes fechava no clique e a legenda digitada sumia junto com a falha).
+        return chamar("/api/content-cards/update", { id: cardId, status: statusDaEtapa("agendado"), contentApproval: { status: "approved", reviewedBy: reviewer, reviewedAt: new Date().toISOString() } })
           .then((res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            if (!res.ok) throw new Error(res.erro ?? `HTTP ${res.status}`);
             if (card) {
               import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
                 useNotificationsStore.getState().push("content", "Conteúdo aprovado", `"${card.title}" de ${card.clientName} foi aprovado por ${reviewer}. Pronto para agendamento.`, card.clientId, card.id);
               });
             }
+            return true;
           })
           .catch(() => {
             set((s) => ({
@@ -305,6 +319,7 @@ export const useContentStore = create<ContentState>()(
             import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
               useNotificationsStore.getState().push("system", "Falha ao confirmar a arte", `Não deu pra salvar a aprovação${card ? ` de "${card.title}"` : ""}. Verifique a conexão e tente de novo.`, card?.clientId);
             });
+            return false;
           });
       },
 
@@ -330,7 +345,8 @@ export const useContentStore = create<ContentState>()(
         // Leva 5b: reprovar = PEDIR ALTERAÇÃO — uma transição só no servidor (card volta pro designer,
         // entrega anterior deixa de valer, pedido reaberto, reprovação e retrabalho gravados). Antes
         // eram dois fetches daqui: o card e, se desse certo, a demanda — e o segundo falhava calado.
-        get().transicaoDesign(cardId, { tipo: "pedir_alteracao", motivo: reason })
+        // 24/10/2026 (2.5): devolve se gravou — quem chamou mantém o motivo digitado quando falha.
+        return get().transicaoDesign(cardId, { tipo: "pedir_alteracao", motivo: reason })
           .then(() => {
             if (card) {
               import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
@@ -338,6 +354,7 @@ export const useContentStore = create<ContentState>()(
                 useNotificationsStore.getState().push("content", "Conteúdo reprovado", `"${card.title}" de ${card.clientName} foi reprovado: ${reason}`, card.clientId, card.id);
               });
             }
+            return true;
           })
           .catch((err: unknown) => {
             set((s) => ({
@@ -347,6 +364,7 @@ export const useContentStore = create<ContentState>()(
             import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
               useNotificationsStore.getState().push("system", "Falha ao reprovar a arte", `Não deu pra salvar a reprovação${card ? ` de "${card.title}"` : ""}: ${err instanceof Error ? err.message : "erro"}. Tente de novo.`, card?.clientId);
             });
+            return false;
           });
       },
 

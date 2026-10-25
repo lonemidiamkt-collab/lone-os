@@ -42,7 +42,7 @@ describe("briefing resumido", () => {
   });
 });
 
-import { comentarioDaRevisao, avisoSemConferencia } from "@/lib/cs/revisao-agrupar";
+import { comentarioDaRevisao, avisoSemConferencia, avisoRevisaoNaoRodou } from "@/lib/cs/revisao-agrupar";
 
 describe("comentarioDaRevisao — falha de revisão nunca vira aprovação", () => {
   it("nenhuma arte vista (as imagens deram 502 de 16 a 19/10): sem selo, o chamador avisa", () => {
@@ -62,5 +62,12 @@ describe("comentarioDaRevisao — falha de revisão nunca vira aprovação", () 
     const t = comentarioDaRevisao(["Preço diferente do briefing"], [{ n: 3, motivo: "erro" }], 3)!;
     expect(t).toMatch(/^⚠️ Revisão automática encontrou pontos a conferir:\n• Preço diferente do briefing/);
     expect(t).toMatch(/1 de 3 artes NÃO foram conferidas/);
+  });
+  it("2.9: diz quantas artes conferiu e quais ficaram de fora pelo limite", () => {
+    const t = comentarioDaRevisao([], [], 6, "Conferi 6 de 9 artes da entrega. As artes 7 a 9 ficaram de fora (limite de 6 por conferência) — confira à mão.")!;
+    expect(t).toBe("✅ Revisão automática: arte conferida contra o briefing, nenhum erro aparente.\n\nConferi 6 de 9 artes da entrega. As artes 7 a 9 ficaram de fora (limite de 6 por conferência) — confira à mão.");
+  });
+  it("2.9: revisão que não rodou deixa aviso no card (antes voltava calada)", () => {
+    expect(avisoRevisaoNaoRodou("a IA não está configurada no servidor.")).toBe('⚠️ Revisão automática NÃO rodou nesta entrega (a IA não está configurada no servidor). Ninguém conferiu a arte ainda: confira à mão ou use "Revisar arte" no card antes de enviar ao cliente.');
   });
 });

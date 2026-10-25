@@ -4,8 +4,10 @@
 // (/api/ops/entregar-arte). Um lugar só para o "Entregar arte" do card e o modo foco do designer
 // (Leva 7B, N19): o estado final vem do servidor; o store só reflete.
 
+import { toast } from "sonner";
 import { useContentStore, marcarMutacao } from "@/stores/useContentStore";
 import { chamar } from "@/lib/api/chamar";
+import { trilha } from "@/lib/obs/trilha";
 import type { EstadoEntrega } from "@/lib/ops/entregar-arte";
 import type { ContentCard, DesignRequest } from "@/lib/types";
 
@@ -29,6 +31,12 @@ export function aplicarEntregaNoStore(card: Pick<ContentCard, "id">, estado: Est
 
 /** Efeitos que não decidem nada: revisão automática por IA contra o briefing e o som. Best-effort. */
 export function depoisDaEntrega(card: Pick<ContentCard, "id">): void {
-  void chamar("/api/cs/revisar-entrega", { cardId: card.id });
+  // 24/10/2026 (2.9): a revisão que não chegava ao servidor (rede, deploy) não deixava rastro. O
+  // servidor comenta no card quando não roda; se nem chegou lá, quem entregou fica sabendo aqui.
+  void chamar("/api/cs/revisar-entrega", { cardId: card.id }).then((r) => {
+    if (r.ok) return;
+    trilha("entrega:revisao-nao-rodou", { card: card.id, status: r.status });
+    toast.warning(`A revisão automática da arte não rodou (${r.erro ?? "erro"}). A entrega valeu — confira a arte à mão ou use "Revisar arte" no card.`, { duration: 9000 });
+  });
   import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
 }
