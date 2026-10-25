@@ -39,7 +39,8 @@ describe("empresaDaBrasilApi — a resposta da Receita, limpa", () => {
     expect(e.porte).toBe("EPP");
     expect(e.capitalSocial).toBe(150000);
     expect(e.telefone).toBe("(22) 2665-1234");
-    expect(e.endereco).toEqual({ cep: "28970-000", rua: "Rua Pedro Luiz Souza, 172", bairro: "Centro", cidade: "Araruama", uf: "RJ" });
+    // Número e complemento separados da rua (vão para os campos próprios do cadastro).
+    expect(e.endereco).toEqual({ cep: "28970-000", rua: "Rua Pedro Luiz Souza", numero: "172", complemento: null, bairro: "Centro", cidade: "Araruama", uf: "RJ" });
     expect(e.nicho).toBe("construcao");
     expect(e.nichoRotulo).toBe("Construção e materiais");
   });
@@ -48,13 +49,13 @@ describe("empresaDaBrasilApi — a resposta da Receita, limpa", () => {
     const e = empresaDaBrasilApi({ ...loja, descricao_situacao_cadastral: "BAIXADA", numero: "SN", nome_fantasia: "" });
     expect(e.ativa).toBe(false);
     expect(e.situacao).toBe("BAIXADA");
-    expect(e.endereco.rua).toBe("Rua Pedro Luiz Souza, s/n");
+    expect(e.endereco).toMatchObject({ rua: "Rua Pedro Luiz Souza", numero: "S/N" });
     expect(e.nomeFantasia).toBeNull();
   });
 
   it("logradouro que já traz o tipo não repete ('QUADRA SAUN' com tipo QUADRA)", () => {
     const e = empresaDaBrasilApi({ ...loja, descricao_tipo_de_logradouro: "QUADRA", logradouro: "QUADRA 5 BLOCO B" });
-    expect(e.endereco.rua).toBe("Quadra 5 Bloco B, 172");
+    expect(e.endereco).toMatchObject({ rua: "Quadra 5 Bloco B", numero: "172" });
   });
 });
 

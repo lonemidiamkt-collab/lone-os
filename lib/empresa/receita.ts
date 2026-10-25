@@ -140,7 +140,8 @@ export interface EmpresaReceita {
   capitalSocial: number | null;
   inicioAtividade: string | null;
   telefone: string | null;       // "(22) 2665-1234"
-  endereco: { cep: string | null; rua: string | null; bairro: string | null; cidade: string | null; uf: string | null };
+  /** Rua SEM o número (desde 24/10/2026 o número e o complemento vêm separados, para os campos próprios do cadastro). */
+  endereco: { cep: string | null; rua: string | null; numero: string | null; complemento: string | null; bairro: string | null; cidade: string | null; uf: string | null };
   nicho: Nicho | null;
   nichoRotulo: string | null;
 }
@@ -177,10 +178,9 @@ export function empresaDaBrasilApi(r: Record<string, unknown>): EmpresaReceita {
   const nicho = nichoPorCnae({ codigo: r.cnae_fiscal, descricao: r.cnae_fiscal_descricao }, sec);
   const tipo = capitalizar(r.descricao_tipo_de_logradouro);
   const logradouro = capitalizar(r.logradouro);
-  const numero = String(r.numero ?? "").trim();
-  const rua = logradouro
-    ? `${tipo && !logradouro.toLowerCase().startsWith(tipo.toLowerCase()) ? `${tipo} ` : ""}${logradouro}${numero && numero !== "SN" ? `, ${numero}` : numero === "SN" ? ", s/n" : ""}`
-    : null;
+  const numeroCru = String(r.numero ?? "").trim().toUpperCase();
+  const numero = !numeroCru ? null : /^S\/?N$/.test(numeroCru) ? "S/N" : numeroCru;
+  const rua = logradouro ? `${tipo && !logradouro.toLowerCase().startsWith(tipo.toLowerCase()) ? `${tipo} ` : ""}${logradouro}` : null;
   const situacao = r.descricao_situacao_cadastral ? String(r.descricao_situacao_cadastral).toUpperCase() : null;
   const capital = Number(r.capital_social);
   return {
@@ -197,7 +197,7 @@ export function empresaDaBrasilApi(r: Record<string, unknown>): EmpresaReceita {
     inicioAtividade: typeof r.data_inicio_atividade === "string" ? r.data_inicio_atividade : null,
     telefone: telefoneDe(r.ddd_telefone_1),
     endereco: {
-      cep: cepDe(r.cep), rua, bairro: capitalizar(r.bairro), cidade: capitalizar(r.municipio),
+      cep: cepDe(r.cep), rua, numero, complemento: capitalizar(r.complemento), bairro: capitalizar(r.bairro), cidade: capitalizar(r.municipio),
       uf: r.uf ? String(r.uf).toUpperCase() : null,
     },
     nicho,

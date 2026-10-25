@@ -13,6 +13,7 @@ import { chamar } from "@/lib/api/chamar";
 import { ROTULO_NICHO } from "@/lib/cs/nicho";
 import { FAIXAS_FATURAMENTO, rotuloFaixa, capitalizar, type EmpresaReceita } from "@/lib/empresa/receita";
 import { faltandoNaEtapa, destinoPermitido, limiteDoDocumento, MB } from "@/lib/onboarding/etapas";
+import { separarNumeroDaRua } from "@/lib/empresa/endereco";
 
 // ─── Types ──────────────────────────────────────────────────
 interface SubmissionData {
@@ -465,6 +466,12 @@ export default function ExternalOnboardingPage() {
       ["notes", setNotes], ["faturamento_faixa", setFaturamentoFaixa],
     ];
     for (const [k, set] of campos) if (txt(k)) set(txt(k));
+    // Rascunho de antes do campo Número (ou da busca que grudava o número na rua): "Rua X, 123" vai para os dois campos.
+    const separado = !txt("endereco_numero") ? separarNumeroDaRua(txt("endereco_rua")) : null;
+    if (separado) {
+      setEnderecoRua(separado.rua);
+      setEnderecoNumero(separado.numero);
+    }
     // Já consultado antes: mostra de novo o que a Receita disse, sem gastar outra consulta.
     if (txt("receita_consultada_em") && txt("cnpj")) {
       ultimoCnpjConsultado.current = txt("cnpj").replace(/\D/g, "");
@@ -601,6 +608,8 @@ export default function ExternalOnboardingPage() {
     preencher("companyPhone", e.telefone, setCompanyPhone);
     preencher("enderecoCep", e.endereco.cep, setEnderecoCep);
     preencher("enderecoRua", e.endereco.rua, setEnderecoRua);
+    preencher("enderecoNumero", e.endereco.numero, setEnderecoNumero);
+    preencher("enderecoComplemento", e.endereco.complemento, setEnderecoComplemento);
     preencher("enderecoBairro", e.endereco.bairro, setEnderecoBairro);
     preencher("enderecoCidade", e.endereco.cidade, setEnderecoCidade);
     preencher("enderecoEstado", e.endereco.uf, setEnderecoEstado);
