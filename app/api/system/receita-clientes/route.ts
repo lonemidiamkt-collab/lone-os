@@ -69,7 +69,9 @@ export async function POST(req: NextRequest) {
       nicho_atual: (c.nicho as string) || null, nicho_sugerido: e.nichoRotulo, nicho_gravado: "nicho" in campos ? e.nichoRotulo : null,
       numero_endereco: endereco.endereco_numero ?? null,
       sem_numero: !(c.endereco_numero as string | null)?.trim() && !endereco.endereco_numero
-        ? (e.endereco.numero ? "CEP da ficha diferente do da Receita" : "a Receita também não tem número") : null,
+        ? (!String(c.endereco_cep ?? "").replace(/\D/g, "") ? "ficha sem endereço"
+          : !e.endereco.numero ? "a Receita também não tem número" : "CEP da ficha diferente do da Receita")
+        : null,
     });
     if (!r.doCache) await espera(PAUSA_MS);
   }
