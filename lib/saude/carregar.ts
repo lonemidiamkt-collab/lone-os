@@ -77,6 +77,8 @@ export async function carregarCarteira(
     historico,
     recomendacoes: recomendacoes.map((r) => ({ ...r, fato: Array.isArray(r.fato) ? r.fato : [], score: Number(r.score) || 0 })),
     jornadas,
+    // 25/10/2026 (11.3): falha na leitura não pode montar a ficha vazia e editável.
+    jornadaNaoLida: falhas.includes("ficha de relacionamento"),
     viewer,
   });
 

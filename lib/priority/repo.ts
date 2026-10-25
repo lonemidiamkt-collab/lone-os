@@ -73,6 +73,26 @@ export async function feed(f: FiltroFeed): Promise<LinhaRecomendacao[] & { total
 
 export type Decisao = "vista" | "aceita" | "ignorada" | "incorreta" | "executada";
 
+/** Estados em que a recomendação está no feed. */
+export const ESTADOS_ABERTOS = ["nova", "vista", "aceita"] as const;
+export type EstadoAberto = (typeof ESTADOS_ABERTOS)[number];
+
+/**
+ * Desfaz Feito/Ignorar/Incorreta (25/10/2026, auditoria 11.8): a recomendação volta para o estado em que
+ * estava, sem a marca de quem decidiu (senão contaria na taxa de decisão). Se o motor já recriou uma igual
+ * aberta (índice único por fingerprint), diz isso em vez de falhar calado.
+ */
+export async function reabrir(id: string, estado: EstadoAberto = "vista") {
+  const { data, error } = await supabaseAdmin.from("recommendations")
+    .update({ estado, decidido_por: null, decidido_em: null, motivo_decisao: null, updated_at: new Date().toISOString() })
+    .eq("id", id).in("estado", ["ignorada", "incorreta", "executada"]).select("id, estado, titulo").maybeSingle();
+  if (error) {
+    if (error.code === "23505") throw new Error("o feed já recriou essa mesma recomendação — recarregue a lista");
+    throw new Error(error.message);
+  }
+  return data;
+}
+
 export async function decidir(id: string, decisao: Decisao, quem: string, motivo?: string | null) {
   const patch: Record<string, unknown> = { estado: decisao, updated_at: new Date().toISOString() };
   if (decisao !== "vista") { patch.decidido_por = quem; patch.decidido_em = new Date().toISOString(); patch.motivo_decisao = motivo ?? null; }

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { chamar } from "@/lib/api/chamar";
 import { Button } from "@/components/ui/button";
 import { ChipEstagio, ChipClasse, Linha, Campo, inputCls, Erro, fmtDataHora, fmtExtenso, telFmt, ROTULO_ESTAGIO } from "./ui";
+import { textoConfirmarReuniao } from "@/lib/prospeccao/resumo-disparo";
 
 interface Prospect {
   id: string; nome: string; razao_social: string | null; cnpj: string | null; cnae: string | null; cnae_descricao: string | null; segmento: string | null;
@@ -68,12 +69,24 @@ export default function FichaProspect({ id, onClose, onChange }: { id: string; o
     return true;
   };
 
+  // 25/10/2026 (auditoria 14.2): envio "incerto" (pode ter saído) mantém o texto, avisa para conferir e
+  // pede confirmação antes de mandar o MESMO texto de novo. Enviar enquanto já está enviando não faz nada
+  // (o Ctrl+Enter duplo mandava 2x).
+  const [incertoTexto, setIncertoTexto] = useState<string | null>(null);
   const enviar = async () => {
-    if (!texto.trim()) return;
+    if (!texto.trim() || ocupado) return;
+    if (incertoTexto === texto && !window.confirm("Esse texto pode já ter chegado ao prospect (o WhatsApp não confirmou). Mandar de novo mesmo assim?")) return;
     setOcupado("Enviando");
-    const r = await chamar(`/api/prospeccao/prospects/${id}/enviar`, { texto });
+    const r = await chamar<{ incerto?: boolean; aviso?: string }>(`/api/prospeccao/prospects/${id}/enviar`, { texto });
     setOcupado(null);
     if (!r.ok) { toast.error(r.erro ?? "Não enviei"); return; }
+    if (r.data?.incerto) {
+      setIncertoTexto(texto);
+      toast.warning(r.data.aviso ?? "O WhatsApp não confirmou o envio — pode ter saído. Confira antes de mandar de novo.", { duration: 12000 });
+      await carregar(); onChange?.();
+      return;
+    }
+    setIncertoTexto(null);
     setTexto(""); toast.success("Enviada (o agente ficou pausado neste prospect)"); await carregar(); onChange?.();
   };
 
@@ -183,7 +196,12 @@ export default function FichaProspect({ id, onClose, onChange }: { id: string; o
           <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
             <input type="datetime-local" className={inputCls} value={reuniao.quando} onChange={(e) => setReuniao({ ...reuniao, quando: e.target.value })} />
             <select className={inputCls} value={reuniao.tipo} onChange={(e) => setReuniao({ ...reuniao, tipo: e.target.value as "visita" | "online" })}><option value="online">Google Meet</option><option value="visita">Visita presencial</option></select>
-            <div className="flex gap-1"><Button size="sm" disabled={!reuniao.quando || !!ocupado} onClick={async () => { if (await acao({ acao: "marcar_reuniao", inicioIso: new Date(reuniao.quando).toISOString(), tipo: reuniao.tipo }, "Reunião marcada + handoff")) setReuniao(null); }}>Marcar</Button><Button size="sm" variant="ghost" onClick={() => setReuniao(null)}>Cancelar</Button></div>
+            <div className="flex gap-1"><Button size="sm" disabled={!reuniao.quando || !!ocupado} onClick={async () => {
+              // 25/10/2026 (auditoria 14.3): prévia de quem recebe o convite e quando, antes de o Google mandar.
+              const inicioIso = new Date(reuniao.quando).toISOString();
+              if (!window.confirm(textoConfirmarReuniao({ nome: p.decisor_nome || p.nome, email: p.email, quandoIso: inicioIso, tipo: reuniao.tipo }))) return;
+              if (await acao({ acao: "marcar_reuniao", inicioIso, tipo: reuniao.tipo }, "Reunião marcada + handoff")) setReuniao(null);
+            }}>Marcar</Button><Button size="sm" variant="ghost" onClick={() => setReuniao(null)}>Cancelar</Button></div>
           </div>
           <p className="mt-1 text-lone-caption text-muted-foreground">Cria no Google Calendar (se conectado), na agenda do time e no funil comercial, e faz o handoff. A confirmação ao prospect você manda pela conversa.</p>
         </div>

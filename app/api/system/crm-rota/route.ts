@@ -12,6 +12,7 @@ import { gravarPlano } from "@/lib/crm/gravar-plano";
 import { textoRotaGrupo } from "@/lib/crm/grupo-vendas";
 import { mandarNoGrupoVendas } from "@/lib/crm/grupo-vendas-envio";
 import { hojeSP } from "@/lib/crm/meta";
+import { CHAVE_AVISO_ROTA, juntarAvisos, lerPendentes } from "@/lib/crm/rota-aviso-pendente";
 
 // POST /api/system/crm-rota — as VISITAS da Rota de Prospecção entram sozinhas no funil.
 // Lê quem foi visitado (rota_visitas, gravado pelo app rota-lagos.vercel.app) e os dados das lojas
@@ -20,6 +21,11 @@ import { hojeSP } from "@/lib/crm/meta";
 // loja que já está no funil ganha a visita no histórico (uma por dia); cliente fica de fora.
 // Lojas novas vão numa mensagem só para o grupo de vendas, com o WhatsApp de cada uma.
 // Cron: a cada 30 min, 8h–20h30 BRT (`*/30 11-23 * * *`). ?dry=1 mostra o plano sem gravar.
+//
+// 25/10/2026 (auditoria de erro recuperável): 14.4 — erro ao ler as visitas já registradas era ignorado e
+// cada rodada regravava "Visita presencial" de todos os leads (histórico duplicado); agora a rodada para
+// antes de gravar. 14.5 — o aviso ao grupo que falhava era esquecido (na rodada seguinte as lojas já não
+// eram novas); agora fica guardado, sai na próxima, e `ok` só é true quando o aviso saiu.
 
 export async function POST(req: NextRequest) {
   const denied = requireCron(req);
@@ -64,9 +70,13 @@ export async function POST(req: NextRequest) {
   const porLoja = new Map(lojas.map((l) => [l.rota_loja_id, l]));
   const jaNoFunil = plano.linhas.filter((l) => l.acao === "ignorar" && l.leadId && !/cliente/i.test(l.motivo));
   const idsExistentes = jaNoFunil.map((l) => l.leadId!);
-  const { data: visitasRegistradas } = idsExistentes.length
+  const { data: visitasRegistradas, error: errRegistradas } = idsExistentes.length
     ? await supabaseAdmin.from("crm_lead_activities").select("lead_id, created_at").eq("tipo", "visita").in("lead_id", idsExistentes)
-    : { data: [] as { lead_id: string; created_at: string }[] };
+    : { data: [] as { lead_id: string; created_at: string }[], error: null };
+  // Sem saber quais visitas já estão no histórico, toda visita pareceria nova e seria gravada de novo.
+  if (errRegistradas) {
+    return NextResponse.json({ ok: false, error: `não consegui ler as visitas já registradas: ${errRegistradas.message}` }, { status: 503 });
+  }
   const diasPorLead = new Map<string, Set<string>>();
   for (const a of visitasRegistradas ?? []) {
     const s = diasPorLead.get(a.lead_id as string) ?? new Set<string>();
@@ -93,17 +103,40 @@ export async function POST(req: NextRequest) {
   if (dry) return NextResponse.json({ ok: true, dry, visitas: visitas.length, catalogo: catalogo.length, novas: novas.map((l) => l.titulo), revisitas: revisitas.length, semCadastro });
 
   const gravado = await gravarPlano(novas);
+  const errosRevisita: string[] = [];
   for (const r of revisitas) {
-    await supabaseAdmin.from("crm_lead_activities").insert({ lead_id: r.leadId, tipo: "visita", texto: `Visita presencial (Rota Lagos)${r.por ? ` — ${r.por}` : ""}.`, autor: r.por, created_at: r.quando });
+    const { error: eAt } = await supabaseAdmin.from("crm_lead_activities").insert({ lead_id: r.leadId, tipo: "visita", texto: `Visita presencial (Rota Lagos)${r.por ? ` — ${r.por}` : ""}.`, autor: r.por, created_at: r.quando });
+    if (eAt) { errosRevisita.push(`visita do lead ${r.leadId}: ${eAt.message}`); continue; }
     if (r.semNumero) await supabaseAdmin.from("crm_leads").update({ rota_loja_id: r.rotaLojaId }).eq("id", r.leadId);
   }
-  let grupo = false;
-  const texto = textoRotaGrupo(gravado.criadas.map(({ linha }) => ({
+
+  // O aviso ao grupo de vendas: as lojas desta rodada + as que não chegaram na anterior.
+  const { data: pend, error: errPend } = await supabaseAdmin.from("agency_settings").select("value").eq("key", CHAVE_AVISO_ROTA).maybeSingle();
+  if (errPend) console.error("[crm-rota] não li o aviso pendente:", errPend.message);
+  const lojasAviso = juntarAvisos(lerPendentes(pend?.value as string | null | undefined), gravado.criadas.map(({ linha }) => ({
     empresa: linha.titulo, contatoNome: (linha.campos.contatoNome as string) ?? null, telefone: (linha.campos.telefone as string) ?? null,
     cidade: (linha.campos.cidade as string) ?? null, segmento: (linha.campos.segmento as string) ?? null, por: (linha.campos.responsavel as string) ?? null,
   })));
-  if (texto) grupo = (await mandarNoGrupoVendas(texto, "crm-rota")).ok;
+  const texto = textoRotaGrupo(lojasAviso);
+  let grupo: boolean | null = null; // null = não havia o que avisar
+  let erroAviso: string | null = null;
+  if (texto) {
+    const env = await mandarNoGrupoVendas(texto, "crm-rota");
+    grupo = env.ok;
+    if (env.ok) {
+      if (pend) await supabaseAdmin.from("agency_settings").delete().eq("key", CHAVE_AVISO_ROTA);
+    } else {
+      erroAviso = env.error ?? "aviso não saiu";
+      const { error: eGuarda } = await supabaseAdmin.from("agency_settings").upsert({ key: CHAVE_AVISO_ROTA, value: JSON.stringify(lojasAviso) }, { onConflict: "key" });
+      if (eGuarda) erroAviso += ` (e não consegui guardar para a próxima rodada: ${eGuarda.message})`;
+    }
+  }
   if (semCadastro.length) console.warn(`[crm-rota] lojas marcadas que sumiram da página: ${semCadastro.join(", ")}`);
-  console.log(`[crm-rota] visitas=${visitas.length} criados=${gravado.criados} revisitas=${revisitas.length} erros=${gravado.erros.length} grupo=${grupo}`);
-  return NextResponse.json({ ok: gravado.erros.length === 0, criados: gravado.criados, revisitas: revisitas.length, erros: gravado.erros, semCadastro, grupo });
+  console.log(`[crm-rota] visitas=${visitas.length} criados=${gravado.criados} revisitas=${revisitas.length} erros=${gravado.erros.length + errosRevisita.length} grupo=${grupo}`);
+  const erros = [...gravado.erros, ...errosRevisita];
+  return NextResponse.json({
+    ok: erros.length === 0 && grupo !== false,
+    criados: gravado.criados, revisitas: revisitas.length - errosRevisita.length, erros, semCadastro, grupo,
+    ...(erroAviso ? { error: `aviso ao grupo de vendas não saiu (${lojasAviso.length} loja(s) guardadas para a próxima rodada): ${erroAviso}` } : {}),
+  });
 }

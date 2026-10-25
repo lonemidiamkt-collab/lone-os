@@ -10,9 +10,13 @@
 // Quem não pode recebe UMA frase dizendo por quê. Calar parece que o agente não ouviu, e a pessoa repete.
 // Quando a lista da equipe não carregou, a frase diz isso — "você não é da equipe" seria falha com cara de veredito.
 
-export type AcaoDoTime = "onboarding" | "ausencia" | "mover_card" | "ajustar_pedido" | "link_reuniao" | "contrato";
+export type AcaoDoTime = "onboarding" | "ausencia" | "mover_card" | "ajustar_pedido" | "link_reuniao" | "contrato"
+  | "cards_do_plano" | "baixa_pendencia";
 
 const ACOES: Record<AcaoDoTime, { pode: string; nada: string }> = {
+  // 25/10/2026 (onda 6): abrir/desfazer os cards de um plano e dar baixa em pendência do cliente.
+  cards_do_plano: { pode: "abrir ou arquivar os cards de um plano", nada: "Não mexi em nenhum card." },
+  baixa_pendencia: { pode: "dar baixa em pendência de cliente", nada: "As pendências ficaram como estavam." },
   onboarding: { pode: "começar o onboarding de um cliente (eu converso com ele no grupo dele)", nada: "Não comecei nada." },
   ausencia: { pode: "marcar férias ou a volta de alguém (isso muda para quem eu mando as demandas)", nada: "Não anotei nada." },
   mover_card: { pode: "mover card do quadro", nada: "Não mexi em nenhum card." },

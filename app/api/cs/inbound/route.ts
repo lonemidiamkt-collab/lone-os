@@ -54,7 +54,11 @@ function csSendGroupText(
 ) {
   return csSendRaw(jid, text, quotedMsgId, { origem: "inbound", destino: destinoDoJid(jid), ...(meta ?? {}) }, mencionados);
 }
-import { transcribeAudio } from "@/lib/cs/transcribe";
+import { ouvirAudio } from "@/lib/cs/transcribe";
+import {
+  rotuloMotivoAudio, tentarDeNovo, textoAudioDoTime, textoOnboardingAudio, textoAudioSemFila,
+  midiaParaGuardar, passoOnboardingDaReleitura, deveResponderAudioDoTime,
+} from "@/lib/cs/audio-nao-lido";
 import { describeImage } from "@/lib/cs/vision";
 import {
   ehOnboardingTrigger, parseOnboardingTrigger, onboardingWelcome, onboardingQuestion,
@@ -75,7 +79,13 @@ import { montarSnapshotCS } from "@/lib/cs/snapshot";
 import { ehPerguntaProLone, ehVisaoGeralDemandas } from "@/lib/cs/intent";
 import { gerarRoteiros, formatRoteiro, extrairPreferenciaRoteiro } from "@/lib/cs/criativo";
 import { revisarComoCS, textoDoVeredito, liberado } from "@/lib/cs/revisor";
-import { guardarPendente, planoPendenteDe, criarCardsDoPlano, fecharPendente, pediuParaCriar } from "@/lib/cs/plano-em-cards";
+import {
+  guardarPendente, criarCardsDoPlano, pediuParaCriar, planoCitado, planosPendentes, reservarPlano,
+  registrarCardsDoPlano, marcarMensagensDoPlano, planoDosCardsCitados, arquivarCardsDoPlano,
+} from "@/lib/cs/plano-em-cards";
+import {
+  decidirPedidoDoPlano, textoCiteOPlano, textoCardsAbertos, textoPerguntaCriar, pediuDesfazer, textoCalendarioPronto,
+} from "@/lib/cs/plano-confirmacao";
 import { planejarPeriodo, executarPlano, datasDoPeriodo } from "@/lib/cs/motor";
 import { calendarioPdfHtml } from "@/lib/cs/calendario-pdf";
 import { proximaPergunta, registrarEnvio, capturarResposta, textoParaEnvio } from "@/lib/cs/checkin";
@@ -406,6 +416,21 @@ function histTexto(jid: string): string {
 type PendPapo = { timer: ReturnType<typeof setTimeout>; partes: string[] };
 const pendPapo = new Map<string, PendPapo>();
 const PAPO_DEBOUNCE_MS = 2600;
+
+// 25/10/2026 (11.1): grupo da equipe → quando foi o último "não consegui ouvir esse áudio". Com a IA fora,
+// todo áudio do time falharia — uma resposta a cada 30 min por grupo basta (lib/cs/audio-nao-lido.ts).
+const audioDoTimeRespondido = new Map<string, number>();
+
+// 25/10/2026 (11.11): baixas de pendência dadas pelo WhatsApp, pelo id da mensagem "✅ Baixa dada" — o
+// "desfaz" citando ela devolve as pendências. Em memória por 24h: depois disso (ou se o painel reiniciar),
+// a volta é pela ficha de relacionamento em /saude.
+type Pendencia = { item: string; desde?: string; impacto?: string };
+const baixasRecentes = new Map<string, { clientId: string; cliente: string; baixadas: Pendencia[]; em: number }>();
+function guardarBaixa(msgId: string, b: { clientId: string; cliente: string; baixadas: Pendencia[] }) {
+  const limite = Date.now() - 24 * 3600_000;
+  for (const [k, v] of baixasRecentes) if (v.em < limite) baixasRecentes.delete(k);
+  baixasRecentes.set(msgId, { ...b, em: Date.now() });
+}
 
 // ── TERMÔMETRO DE SATISFAÇÃO ── lê a mensagem do CLIENTE e, se houver insatisfação/risco de churn,
 // avisa o time (grupo Equipe) pra agir cedo. Cooldown por cliente pra não spammar. Fire-and-forget.
@@ -1021,16 +1046,39 @@ async function processarInbound(req: NextRequest) {
 
   // ─── Onboarding em andamento neste grupo? A mensagem do cliente é uma RESPOSTA do onboarding. ───
   // Vem ANTES da allowlist: o grupo do cliente novo pode ainda não estar na allowlist.
-  if (!releitura) {
-    const { data: sess } = await supabaseAdmin
+  // 25/10/2026 (11.1): a releitura de um ÁUDIO de onboarding também passa aqui — só se a sessão ainda
+  // estiver no mesmo passo de quando o áudio chegou (senão o time já resolveu e a resposta é velha).
+  const passoReleitura = releitura ? passoOnboardingDaReleitura(payload) : null;
+  if (!releitura || passoReleitura !== null) {
+    const { data: sessLida } = await supabaseAdmin
       .from("cs_onboarding_sessions").select("*").eq("group_jid", msg.groupJid).eq("status", "coletando").maybeSingle();
+    const sess = sessLida && (!releitura || (sessLida.step as number) === passoReleitura) ? sessLida : null;
+    if (releitura && !sess) return NextResponse.json({ ok: true, skip: "onboarding já andou desde o áudio" });
     // Resposta de onboarding por NOTA DE VOZ (comum em briefing longo): transcreve AQUI — o bloco
-    // geral de transcrição roda depois da allowlist, e grupo em onboarding pode nem estar nela;
-    // sem isso o áudio sumia em silêncio e a sessão travava no mesmo passo.
-    if (sess && msg.isAudio && !msg.text && !isLoneTeam(msg.authorJid, equipeJids) && isOpenAIConfigured()) {
-      const media = await csFetchMediaBase64(payload.data ?? {});
-      if (media.base64 && media.base64.length <= 8_000_000) {
-        msg.text = await transcribeAudio(media.base64, media.mimetype);
+    // geral de transcrição roda depois da allowlist, e grupo em onboarding pode nem estar nela.
+    // 25/10/2026 (11.1): áudio que não dá pra ouvir não trava mais calado — vai para a fila de não
+    // lidas (a rotina tenta de novo e segue o onboarding sozinha) e o time é avisado NA HORA.
+    if (sess && msg.isAudio && !msg.text && !isLoneTeam(msg.authorJid, equipeJids)) {
+      const ouvido = await ouvirAudio(payload.data ?? {});
+      if (ouvido.ok) msg.text = ouvido.texto;
+      else {
+        const motivo = rotuloMotivoAudio(ouvido.motivo, ouvido.detalhe);
+        console.warn(`[CS/inbound] 🎤 áudio do onboarding não ouvido (${sess.cliente_nome}): ${motivo} — ${ouvido.detalhe}`);
+        if (releitura) return NextResponse.json({ ok: true, classified: false, reason: `áudio: ${motivo}`, soEsta: ouvido.motivo === "midia" });
+        const cliente = (sess.cliente_nome as string) || "cliente";
+        const { guardarNaoLida } = await import("@/lib/cs/nao-lidas-server");
+        const guardado = await guardarNaoLida({
+          messageId: msg.messageId, groupJid: msg.groupJid, clientId: (sess.client_id as string) ?? null, clienteNome: cliente,
+          authorJid: msg.authorJid, authorName: msg.authorName, texto: "", recebidaEmSeg: msg.timestamp, erro: motivo,
+          audio: { midia: midiaParaGuardar(payload.data, (sess.step as number) ?? 0), desistir: !tentarDeNovo(ouvido.motivo), avisado: true },
+        });
+        const internoOnb = internalGroupJid();
+        if (internoOnb) {
+          await csSendGroupText(internoOnb, textoOnboardingAudio({
+            cliente, passo: (sess.step as number) ?? 0, total: ONBOARDING_TOTAL, motivo: ouvido.motivo, detalhe: ouvido.detalhe, guardado,
+          }), undefined, { origem: "onboarding-audio", destino: "interno" });
+        }
+        return NextResponse.json({ ok: true, onboarding: "audio_nao_ouvido", motivo: ouvido.motivo, guardada: guardado });
       }
     }
     if (sess && !isLoneTeam(msg.authorJid, equipeJids) && !isTrivial(msg.text)) {
@@ -1055,6 +1103,8 @@ async function processarInbound(req: NextRequest) {
       console.log(`[CS/inbound] onboarding concluído → ${cliente} (briefing salvo=${salvou})`);
       return NextResponse.json({ ok: true, onboarding: "concluido", cliente });
     }
+    // Releitura de áudio do onboarding que não virou resposta (áudio sem fala): nada mais a fazer com ele.
+    if (releitura) return NextResponse.json({ ok: true, skip: "áudio do onboarding sem resposta" });
   }
 
   // ─── NPS pós-reunião (lib/cs/nps-server.ts). Estreito: só age quando há pesquisa pendente PARA
@@ -1100,24 +1150,56 @@ async function processarInbound(req: NextRequest) {
 
   // ─── Nota de voz: baixa o áudio (Evolution) e TRANSCREVE (Whisper) → segue o fluxo com o texto.
   // Sem isso o agente é cego pra demanda mandada por áudio (muito comum no WhatsApp do cliente). ───
+  // 25/10/2026 (auditoria 11.1): áudio que não dá pra ouvir (IA desligada ou sem crédito, mídia que não
+  // baixa, longo demais) não some mais com "ok, skip". Do CLIENTE → fila de não lidas com o motivo (a
+  // rotina cs-nao-lidas tenta de novo e avisa o time). Do TIME num grupo nosso → resposta na hora,
+  // "não ouvi, manda por escrito". Do time no grupo do cliente → segue ignorado, como o texto dele.
   if (msg.isAudio && !msg.text) {
-    if (!isOpenAIConfigured()) return NextResponse.json({ ok: true, skip: "áudio mas IA off" });
-    const media = await csFetchMediaBase64(payload.data ?? {});
-    if (!media.base64) {
-      console.warn("[CS/inbound] áudio sem mídia:", media.error);
-      return NextResponse.json({ ok: true, skip: "áudio sem mídia" });
-    }
-    // Áudio de 1h+ estouraria memória e o limite do Whisper (~25MB) — demanda real é curta.
-    if (media.base64.length > 8_000_000) return NextResponse.json({ ok: true, skip: "áudio muito longo" });
     // Nome do cliente (por grupo) viesa a grafia do Whisper — evita errar nome próprio na demanda.
     const { data: cliAud } = await supabaseAdmin
-      .from("clients").select("name, nome_fantasia, nicho").eq("whatsapp_group_jid", msg.groupJid).limit(1).maybeSingle();
-    const ctxAud = cliAud
-      ? [(cliAud.nome_fantasia as string) || (cliAud.name as string), cliAud.nicho as string].filter(Boolean).join(", ")
-      : undefined;
-    msg.text = await transcribeAudio(media.base64, media.mimetype, ctxAud);
-    if (!msg.text) return NextResponse.json({ ok: true, skip: "áudio sem transcrição" });
+      .from("clients").select("id, name, nome_fantasia, nicho, agente_ativo").eq("whatsapp_group_jid", msg.groupJid).limit(1).maybeSingle();
+    const nomeAud = cliAud ? ((cliAud.nome_fantasia as string) || (cliAud.name as string)) : null;
+    const ctxAud = cliAud ? [nomeAud, cliAud.nicho as string].filter(Boolean).join(", ") : undefined;
+    const ouvido = await ouvirAudio(payload.data ?? {}, ctxAud);
+    if (!ouvido.ok) {
+      const motivo = rotuloMotivoAudio(ouvido.motivo, ouvido.detalhe);
+      console.warn(`[CS/inbound] 🎤 áudio não ouvido (${msg.authorName || msg.authorJid} em ${msg.groupJid}): ${motivo} — ${ouvido.detalhe}`);
+      // Releitura: continua na fila, a rotina tenta de novo na próxima rodada.
+      // `soEsta`: mídia que não baixa é problema DESTA mensagem — a rotina segue para as outras em vez de parar.
+      if (releitura) return NextResponse.json({ ok: true, classified: false, reason: `áudio: ${motivo}`, soEsta: ouvido.motivo === "midia" });
+      if (grupoNosso) {
+        // Pedido do time por áudio: quem falou está ali — responde uma vez (a cada 30 min por grupo).
+        if (deveResponderAudioDoTime(audioDoTimeRespondido.get(msg.groupJid), Date.now())) {
+          audioDoTimeRespondido.set(msg.groupJid, Date.now());
+          await csSendGroupText(msg.groupJid, textoAudioDoTime(ouvido.motivo, ouvido.detalhe), msg.messageId, { origem: "audio-nao-ouvido", destino: "interno" });
+        }
+        return NextResponse.json({ ok: true, skip: "áudio do time não ouvido", motivo: ouvido.motivo });
+      }
+      const doTime = isLoneTeam(msg.authorJid, equipeJids) || ehNomeEquipeLone(msg.authorName);
+      if (doTime || !cliAud || cliAud.agente_ativo === false) {
+        return NextResponse.json({ ok: true, skip: "áudio não ouvido (não é pedido de cliente)", motivo: ouvido.motivo });
+      }
+      const { guardarNaoLida } = await import("@/lib/cs/nao-lidas-server");
+      const guardado = await guardarNaoLida({
+        messageId: msg.messageId, groupJid: msg.groupJid, clientId: (cliAud.id as string) ?? null, clienteNome: nomeAud,
+        authorJid: msg.authorJid, authorName: msg.authorName, texto: "", recebidaEmSeg: msg.timestamp, erro: motivo,
+        audio: { midia: midiaParaGuardar(payload.data), desistir: !tentarDeNovo(ouvido.motivo) },
+      });
+      if (!guardado) {
+        // Nem a fila guardou: o time fica sabendo agora, para o áudio não sumir.
+        const internoAud = internalGroupJid();
+        if (internoAud) await csSendGroupText(internoAud, textoAudioSemFila(nomeAud || "cliente", ouvido.motivo, ouvido.detalhe), undefined, { origem: "audio-nao-ouvido", destino: "interno" });
+      }
+      return NextResponse.json({ ok: true, skip: "áudio não ouvido", motivo: ouvido.motivo, guardada: guardado });
+    }
+    msg.text = ouvido.texto;
+    if (!msg.text) return NextResponse.json({ ok: true, skip: "áudio sem fala" });
     console.log(`[CS/inbound] 🎤 áudio transcrito (${msg.authorName || "?"}): "${msg.text.slice(0, 80)}"`);
+    // Releitura que ouviu: a fila passa a guardar o texto (se a classificação falhar, não paga o Whisper de novo).
+    if (releitura) {
+      const textoOuvido = msg.text;
+      void import("@/lib/cs/nao-lidas-server").then((m) => m.trocarAudioPorTexto(msg.messageId, textoOuvido), () => {});
+    }
     gravarNoCorpus(msg.text); // a fala do cliente entra no aprendizado igual a uma mensagem escrita
   }
 
@@ -1440,6 +1522,14 @@ async function processarInbound(req: NextRequest) {
     const vaiEscreverRoteiro = pedidoPdf.modo === "criar" && grupoNosso && ehPedidoRoteiro(msg.text);
 
     if (pedidoPdf.quer && !vaiEscreverRoteiro) {
+      // 25/10/2026 (11.10): "cria uma proposta/briefing/pauta" não é diagramação — eu não escrevo isso
+      // do zero, e o texto cru sairia rotulado como peça pronta. Diz o que existe em vez de fingir.
+      const { pedidoParaEscrever, textoNaoEscrevo } = await import("@/lib/cs/pedido-pdf");
+      const tipoParaEscrever = pedidoParaEscrever(msg.text);
+      if (tipoParaEscrever) {
+        await csSendGroupText(msg.groupJid, textoNaoEscrevo(tipoParaEscrever), msg.messageId, { origem: "pdf-nao-escrevo", destino: "interno" });
+        return NextResponse.json({ ok: true, acao: "pdf_nao_escrevo", tipo: tipoParaEscrever });
+      }
       if (pedidoPdf.conteudo.length < 30) {
         await csSendGroupText(msg.groupJid,
           "Manda o texto junto (ou logo abaixo) que eu monto o PDF. Só com o pedido eu faria um documento de uma linha.",
@@ -1472,8 +1562,17 @@ async function processarInbound(req: NextRequest) {
       }
 
       const nomeArq = `${pedidoPdf.tipo.toLowerCase().replace(/[^a-z]+/g, "-")}-${nomeCliente.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf`;
-      await csSendGroupDocument(msg.groupJid, arquivo.buffer.toString("base64"), nomeArq,
+      const envPdf = await csSendGroupDocument(msg.groupJid, arquivo.buffer.toString("base64"), nomeArq,
         `📄 *${pedidoPdf.tipo} — ${nomeCliente}*\n${blocos.length} ${blocos.length === 1 ? "bloco" : "blocos"} · ${dataLabel}`);
+      // 25/10/2026 (11.9): o resultado do envio era ignorado — o "Montando…" ficava sem PDF e sem aviso.
+      if (!envPdf.ok) {
+        console.error(`[CS/inbound] pdf diagramado (${nomeCliente}) não saiu:`, envPdf.error);
+        await csSendGroupText(msg.groupJid, envPdf.incerto
+          ? `O WhatsApp não confirmou o envio do PDF do *${nomeCliente}* — pode ter chegado. Se não chegou, me pede de novo.`
+          : `Montei o PDF do *${nomeCliente}*, mas não consegui mandar aqui (${(envPdf.error ?? "erro").slice(0, 80)}). Me pede de novo em alguns minutos.`,
+          undefined, { origem: "pdf-erro", destino: "interno" });
+        return NextResponse.json({ ok: true, acao: "pdf_nao_enviado", incerto: !!envPdf.incerto });
+      }
       return NextResponse.json({ ok: true, acao: "pdf", cliente: nomeCliente, blocos: blocos.length });
     }
   }
@@ -1602,24 +1701,53 @@ async function processarInbound(req: NextRequest) {
     }
   }
 
+  // ─── "desfaz" citando a mensagem dos cards abertos de um plano: arquiva esses cards ───
+  // 25/10/2026 (11.2): abrir os N cards de um plano é uma ação grande; quem abriu errado desfaz sozinho.
+  if (msg.quotedMsgId && grupoNosso && pediuDesfazer(msg.text)) {
+    const feito = await planoDosCardsCitados(msg.groupJid, msg.quotedMsgId);
+    if (feito) {
+      if (!podeAgirC) return recusarSemAutoridade("cards_do_plano", { plano_desfazer: "sem_autoridade" });
+      if (feito.desfeitoEm) {
+        await csSendGroupText(msg.groupJid, `Esses cards do *${feito.clienteNome}* já foram arquivados. 👍`, msg.messageId, { origem: "plano-desfazer", destino: "interno" });
+        return NextResponse.json({ ok: true, plano_desfazer: "ja_desfeito" });
+      }
+      const r = await arquivarCardsDoPlano(feito.jobId, feito.cardIds, autoridade.autor?.nome ?? msg.authorName ?? null);
+      await csSendGroupText(msg.groupJid, r.ok
+        ? `↩️ Arquivei ${r.arquivados} card(s) do plano do *${feito.clienteNome}*.${r.arquivados < feito.cardIds.length ? ` (${feito.cardIds.length - r.arquivados} já tinham saído do board.)` : ""}`
+        : `Não consegui arquivar os cards do *${feito.clienteNome}* (${r.erro}) — continuam no board. Tenta de novo ou arquiva por lá.`,
+        msg.messageId, { origem: "plano-desfazer", destino: "interno" });
+      return NextResponse.json({ ok: true, plano_desfazer: r.ok ? r.arquivados : "erro" });
+    }
+  }
+
   // ─── "cria" depois de um plano: transforma o planejamento em cards ───
   // Vem ANTES do handler de calendário pra "cria" não ser lido como pedido de novo calendário.
-  if (!demandaDaSugestao && podeAgirC && pediuParaCriar(msg.text)) {
-    // Aprovação de PLANEJAMENTO/CALENDÁRIO busca numa janela de uma semana: o mensal sai dia 1º e
-    // o social só aprova depois do cliente responder.
-    const falaDePeriodo = /\b(planejamento|calend[áa]rio|linha editorial|quinzenal?|mensal|do m[êe]s)\b/i.test(msg.text || "");
-    const pend = await planoPendenteDe(msg.groupJid, falaDePeriodo);
-    if (pend) {
-      await csSendGroupText(msg.groupJid, `Fechou! Abrindo os cards do *${pend.clienteNome}*…`);
-      const res = await criarCardsDoPlano(pend);
-      await fecharPendente(pend.jobId);
-      const falta = res.falharam.length ? `\n_Não consegui ${res.falharam.length}: ${res.falharam.join(", ")}._` : "";
-      await csSendGroupText(msg.groupJid,
-        `✅ ${res.criados} de ${res.total} card(s) do *${pend.clienteNome}* no board, cada um na data.${falta}\n` +
-        `Já dá pro designer pegar.`);
-      return NextResponse.json({ ok: true, plano_em_cards: res.criados, cliente: pend.clienteNome });
+  // 25/10/2026 (auditoria 11.2): só vale CITANDO a mensagem do plano (lib/cs/plano-confirmacao.ts). Antes um
+  // "ok" solto — dado para confirmar uma demanda — abria os cards do plano mais novo do grupo, e a demanda
+  // ficava sem confirmar. Agora: "ok" solto segue para a demanda; pedido explícito sem citar recebe a
+  // instrução; com a citação, o plano é reservado ANTES de criar ("ok" + "cria" não duplicam).
+  // Só nos grupos nossos: plano só nasce de pedido do time, e "ok" de cliente não deve custar consulta.
+  if (!demandaDaSugestao && grupoNosso && pediuParaCriar(msg.text)) {
+    const citado = await planoCitado(msg.groupJid, msg.quotedMsgId);
+    const pendentes = citado ? [] : await planosPendentes(msg.groupJid);
+    const decisao = decidirPedidoDoPlano({ texto: msg.text, citouPlano: !!citado, temPlanoPendente: pendentes.length > 0 });
+    if (decisao !== "seguir" && !podeAgirC) return recusarSemAutoridade("cards_do_plano", { plano_em_cards: "sem_autoridade" });
+    if (decisao === "pedir_citacao") {
+      await csSendGroupText(msg.groupJid, textoCiteOPlano(pendentes), msg.messageId, { origem: "plano-citar", destino: "interno" });
+      return NextResponse.json({ ok: true, plano_em_cards: "pedir_citacao" });
     }
-    // Sem plano pendente, segue o fluxo normal — "ok" também responde sugestão de demanda.
+    if (decisao === "criar" && citado) {
+      if (citado.jaAberto || !(await reservarPlano(citado.jobId))) {
+        await csSendGroupText(msg.groupJid, `Os cards do *${citado.clienteNome}* já foram abertos (ou estão sendo abertos agora). Não abri de novo. 👍`, msg.messageId, { origem: "plano-em-cards", destino: "interno" });
+        return NextResponse.json({ ok: true, plano_em_cards: "ja_aberto" });
+      }
+      await csSendGroupText(msg.groupJid, `Fechou! Abrindo os cards do *${citado.clienteNome}*…`, undefined, { origem: "plano-em-cards", destino: "interno" });
+      const res = await criarCardsDoPlano(citado);
+      const conf = await csSendGroupText(msg.groupJid, textoCardsAbertos(res, citado.clienteNome), msg.messageId, { origem: "plano-em-cards", destino: "interno" });
+      await registrarCardsDoPlano(citado.jobId, res.cardIds, conf.ok ? conf.id : null, autoridade.autor?.nome ?? msg.authorName ?? null);
+      return NextResponse.json({ ok: true, plano_em_cards: res.criados, cliente: citado.clienteNome });
+    }
+    // "ok" solto (ou sem plano pendente): segue o fluxo normal — é resposta de demanda.
   }
 
   // ─── Agente "Lone": pedido de CALENDÁRIO ("Lone, monta o calendário mensal do X") ───
@@ -1652,13 +1780,17 @@ async function processarInbound(req: NextRequest) {
         // função pela plataforma grava em content_period_plans. O planejamento do mês existia apenas
         // como arquivo num grupo — e a mensagem de erro ainda mandava "abrir em Planejamento", onde
         // não estava. Agora os dois caminhos gravam no mesmo lugar.
+        // 25/10/2026 (11.9): "ficou salvo" só quando o upsert deu certo — antes o erro era engolido.
         const obj = r.plano.objetivo;
+        let planejamentoSalvo = false;
         if (obj && periodo) {
-          await supabaseAdmin.from("content_period_plans").upsert({
+          const { error: errPlano } = await supabaseAdmin.from("content_period_plans").upsert({
             client_id: alvo.id, periodo,
             objetivo_principal: obj.objetivoPrincipal, narrativa: obj.narrativa,
             mix_pilares: obj.mixPilares, diagnostico_snapshot: r.plano.diagnostico ?? null,
-          }, { onConflict: "client_id,periodo" }).then(() => {}, () => {});
+          }, { onConflict: "client_id,periodo" });
+          planejamentoSalvo = !errPlano;
+          if (errPlano) console.error(`[CS/inbound] calendário ${alvo.nome}: planejamento não salvo:`, errPlano.message);
         }
 
         // O LONINHO REVISA o plano antes de mostrar — mesmo papel que faz no roteiro.
@@ -1668,23 +1800,31 @@ async function processarInbound(req: NextRequest) {
           briefing: r.plano.objetivo ? `Objetivo do período: ${r.plano.objetivo.objetivoPrincipal}` : undefined,
         });
 
+        // 25/10/2026 (11.9): o PDF sai PRIMEIRO, com a legenda; se não chegou (ou não deu pra saber), a
+        // lista das peças vai em texto. Antes o "📅 Pronto!" saía antes e o resultado do PDF era ignorado.
         const pdf = await htmlToPdf(calendarioPdfHtml({ cliente: r.nome, nicho: alvo.nicho, periodo, modo, pecas }));
+        const ressalva = liberado(revPlano) ? "" : textoDoVeredito(revPlano, alvo.nome);
+        const base = { cliente: alvo.nome, rotuloModo: rotuloModo(modo), pecas, salvo: planejamentoSalvo, ressalva };
+        let envioPdf: "enviado" | "falhou" | "incerto" | "nao_gerou" = "nao_gerou";
         if (pdf.ok && pdf.buffer) {
-          const ressalva = liberado(revPlano) ? "" : `\n\n${textoDoVeredito(revPlano, alvo.nome)}`;
-          await csSendGroupText(msg.groupJid, `📅 Pronto! Calendário ${rotuloModo(modo)} do *${alvo.nome}* — ${pecas.length} peça(s), cada uma com direção de arte pro designer:${ressalva}`);
-          await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), `Calendario ${alvo.nome} - ${periodo}.pdf`);
+          const env = await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), `Calendario ${alvo.nome} - ${periodo}.pdf`,
+            textoCalendarioPronto({ ...base, pdf: "enviado" }));
+          envioPdf = env.ok ? "enviado" : env.incerto ? "incerto" : "falhou";
+          if (!env.ok) console.error(`[CS/inbound] calendário ${alvo.nome}: PDF não saiu:`, env.error);
+        }
+        const pronto = envioPdf === "enviado" ? null : await csSendGroupText(msg.groupJid, textoCalendarioPronto({ ...base, pdf: envioPdf }));
 
-          // FECHA O CICLO. Antes o plano morria como PDF no grupo: 7 gerados na vida, ZERO cards.
-          // Continua human-gate — ele pergunta, não abre sozinho.
-          await guardarPendente(msg.groupJid, {
-            clientId: alvo.id, clienteNome: r.nome, periodo,
-            decisoes: r.plano.decisoes, pecas,
-          });
-          await csSendGroupText(msg.groupJid,
-            `Quer que eu já abra os *${r.plano.decisoes.length} cards* no board do social, cada um na data certa? ` +
-            `Responde *cria* que eu abro. 😉`);
+        // FECHA O CICLO. Antes o plano morria como PDF no grupo: 7 gerados na vida, ZERO cards.
+        // Continua human-gate — ele pergunta, não abre sozinho; e o "cria" tem que CITAR a pergunta (11.2).
+        const jobId = await guardarPendente(msg.groupJid, {
+          clientId: alvo.id, clienteNome: r.nome, periodo,
+          decisoes: r.plano.decisoes, pecas,
+        });
+        if (jobId) {
+          const pergunta = await csSendGroupText(msg.groupJid, textoPerguntaCriar(r.plano.decisoes.length));
+          await marcarMensagensDoPlano(jobId, { msgIdPergunta: pergunta.ok ? pergunta.id : null, msgIdPronto: pronto?.ok ? pronto.id : null });
         } else {
-          await csSendGroupText(msg.groupJid, `Montei o calendário do *${alvo.nome}* mas o PDF falhou 😕 — o planejamento ficou salvo, abre em *Planejamento* na ficha do cliente.`);
+          await csSendGroupText(msg.groupJid, `Não consegui guardar o plano do *${alvo.nome}* pra abrir os cards por aqui — monta os cards pelo Planejamento da plataforma.`);
         }
       } catch {
         await csSendGroupText(msg.groupJid, `Deu ruim ao montar o calendário do *${alvo.nome}* 😕 tenta de novo?`);
@@ -1776,32 +1916,62 @@ async function processarInbound(req: NextRequest) {
   // Nada nunca REMOVIA de pendencias_cliente: a lista só crescia (merge aditivo no resumo de
   // reunião), então o raio-x mostrava "o cliente deve: fotos" eternamente e a cobrança pedia de novo
   // algo já entregue — na cara do cliente.
+  // 25/10/2026 (auditoria 11.11): só a pendência que a mensagem nomeia sai (lib/cs/baixa-pendencia.ts);
+  // duas empatadas → pergunta; a leitura e a gravação são conferidas; e tem "desfaz" citando a confirmação.
+  if (msg.quotedMsgId && grupoNosso && pediuDesfazer(msg.text) && baixasRecentes.has(msg.quotedMsgId)) {
+    const b = baixasRecentes.get(msg.quotedMsgId)!;
+    if (!podeAgirC) return recusarSemAutoridade("baixa_pendencia", { baixa_desfazer: "sem_autoridade" });
+    const { data: jrAtual, error: errAtual } = await supabaseAdmin.from("client_journey").select("pendencias_cliente").eq("client_id", b.clientId).maybeSingle();
+    if (errAtual) {
+      await csSendGroupText(msg.groupJid, `Não consegui ler as pendências do *${b.cliente}* agora — não mudei nada. Tenta de novo?`, msg.messageId, { origem: "baixa-pendencia", destino: "interno" });
+      return NextResponse.json({ ok: true, baixa_desfazer: "erro_leitura" });
+    }
+    const { devolverPendencias } = await import("@/lib/cs/baixa-pendencia");
+    const lista = devolverPendencias((jrAtual?.pendencias_cliente as Pendencia[]) || [], b.baixadas);
+    const { error: errVolta } = await supabaseAdmin.from("client_journey").upsert({
+      client_id: b.clientId, pendencias_cliente: lista, updated_by: msg.authorName || "equipe", updated_at: new Date().toISOString(),
+    }, { onConflict: "client_id" });
+    if (errVolta) {
+      await csSendGroupText(msg.groupJid, `Não consegui devolver as pendências do *${b.cliente}* (${errVolta.message}) — confere na ficha de relacionamento.`, msg.messageId, { origem: "baixa-pendencia", destino: "interno" });
+      return NextResponse.json({ ok: true, baixa_desfazer: "erro_gravacao" });
+    }
+    baixasRecentes.delete(msg.quotedMsgId);
+    await csSendGroupText(msg.groupJid, `↩️ Voltei para as pendências do *${b.cliente}*: ${b.baixadas.map((p) => `*${p.item}*`).join(", ")}.`, msg.messageId, { origem: "baixa-pendencia", destino: "interno" });
+    return NextResponse.json({ ok: true, baixa_desfazer: b.baixadas.length });
+  }
+  if (!demandaDaSugestao && grupoNosso && !podeAgirC && ehBaixaPendencia(msg.text)) {
+    return recusarSemAutoridade("baixa_pendencia", { baixa: "sem_autoridade" });
+  }
   if (!demandaDaSugestao && podeAgirC && ehBaixaPendencia(msg.text)) {
     const alvo = await resolveClientePorNome(msg.text);
     if (!alvo) { await csSendGroupText(msg.groupJid, "Dar baixa na pendência de qual cliente? Me diz o nome."); return NextResponse.json({ ok: true, baixa: "sem_cliente" }); }
-    const { data: jr } = await supabaseAdmin.from("client_journey").select("pendencias_cliente").eq("client_id", alvo.id).maybeSingle();
-    const pend = (jr?.pendencias_cliente as { item: string; desde?: string; impacto?: string }[]) || [];
+    const { data: jr, error: errJr } = await supabaseAdmin.from("client_journey").select("pendencias_cliente").eq("client_id", alvo.id).maybeSingle();
+    // Leitura que falha não é "sem pendência": diz que não conseguiu e não mexe em nada.
+    if (errJr) {
+      await csSendGroupText(msg.groupJid, `Não consegui ler as pendências do *${alvo.nome}* agora — não tirei nada. Tenta de novo em um minuto?`, msg.messageId, { origem: "baixa-pendencia", destino: "interno" });
+      return NextResponse.json({ ok: true, baixa: "erro_leitura" });
+    }
+    const pend = (jr?.pendencias_cliente as Pendencia[]) || [];
     if (!pend.length) { await csSendGroupText(msg.groupJid, `O *${alvo.nome}* não tem pendência registrada. 👍`); return NextResponse.json({ ok: true, baixa: "sem_pendencia" }); }
 
-    // Casa pelo item citado; se não citou nenhum e só há uma, dá baixa nela.
-    const norm = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    const t = norm(msg.text);
-    const casaram = pend.filter((p) => norm(p.item).split(/\s+/).some((w) => w.length >= 4 && t.includes(w)));
-    const baixar = casaram.length ? casaram : (pend.length === 1 ? pend : []);
-
-    if (!baixar.length) {
-      await csSendGroupText(msg.groupJid,
-        `Qual pendência do *${alvo.nome}* posso tirar?\n${pend.map((p, i) => `${i + 1}. ${p.item}`).join("\n")}`);
+    const { escolherPendencia, textoQualPendencia, textoBaixaDada } = await import("@/lib/cs/baixa-pendencia");
+    const escolha = escolherPendencia(msg.text, pend, alvo.nome);
+    if (escolha.tipo === "nenhuma" || escolha.tipo === "varias") {
+      await csSendGroupText(msg.groupJid, textoQualPendencia(alvo.nome, escolha.tipo === "varias" ? escolha.candidatas : [], pend), msg.messageId, { origem: "baixa-pendencia", destino: "interno" });
       return NextResponse.json({ ok: true, baixa: "ambiguo" });
     }
+    const baixar = escolha.tipo === "todas" ? pend : [escolha.pendencia];
     const restantes = pend.filter((p) => !baixar.includes(p));
-    await supabaseAdmin.from("client_journey").upsert({
+    const { error: errBaixa } = await supabaseAdmin.from("client_journey").upsert({
       client_id: alvo.id, pendencias_cliente: restantes,
       updated_by: msg.authorName || "equipe", updated_at: new Date().toISOString(),
     }, { onConflict: "client_id" });
-    await csSendGroupText(msg.groupJid,
-      `✅ Baixa dada em: ${baixar.map((p) => `*${p.item}*`).join(", ")}.` +
-      (restantes.length ? `\nAinda falta: ${restantes.map((p) => p.item).join(" · ")}` : `\nO *${alvo.nome}* está sem pendências agora. 🎯`));
+    if (errBaixa) {
+      await csSendGroupText(msg.groupJid, `Não consegui dar baixa nas pendências do *${alvo.nome}* (${errBaixa.message}) — continuam lá. Tenta de novo?`, msg.messageId, { origem: "baixa-pendencia", destino: "interno" });
+      return NextResponse.json({ ok: true, baixa: "erro_gravacao" });
+    }
+    const conf = await csSendGroupText(msg.groupJid, textoBaixaDada(alvo.nome, baixar, restantes), msg.messageId, { origem: "baixa-pendencia", destino: "interno" });
+    if (conf.ok && conf.id) guardarBaixa(conf.id, { clientId: alvo.id, cliente: alvo.nome, baixadas: baixar });
     console.log(`[CS] baixa de pendência: ${alvo.nome} -${baixar.length}`);
     return NextResponse.json({ ok: true, baixa: baixar.length });
   }
@@ -2023,14 +2193,28 @@ async function processarInbound(req: NextRequest) {
     const logo = await loadLoneLogo();
     const pdf = await htmlToPdf(roteirosPdfHtml(alvo.nome, versoes, logo, dataLabel));
     const prontoPraCliente = liberado(revisao);
+    // 25/10/2026 (11.5): revisor que caiu NÃO vira "revisei e tá pronto pro cliente".
     const chamada = prontoPraCliente
       ? `🎬 Bora${quem ? `, ${quem}` : ""}! Montei ${versoes.length > 1 ? `${versoes.length} versões` : "1 versão"} de roteiro pro *${alvo.nome}*${obs} — revisei aqui e tá pronto pro cliente:`
-      : `🎬 Montei o roteiro do *${alvo.nome}*${obs}, mas *revisei e não liberaria como está*:\n${textoDoVeredito(revisao, alvo.nome)}\n\nSegue pra você julgar:`;
+      : revisao.veredito === "nao_revisado"
+        ? `🎬 Montei ${versoes.length > 1 ? `${versoes.length} versões` : "1 versão"} de roteiro pro *${alvo.nome}*${obs}, mas *não consegui revisar* (a IA de revisão falhou) — confere antes de mandar pro cliente:`
+        : `🎬 Montei o roteiro do *${alvo.nome}*${obs}, mas *revisei e não liberaria como está*:\n${textoDoVeredito(revisao, alvo.nome)}\n\nSegue pra você julgar:`;
     await csSendGroupText(msg.groupJid, chamada);
+    // 25/10/2026 (11.9): o envio do PDF é conferido. Antes "tá pronto pro cliente:" saía e o PDF podia não
+    // chegar, sem ninguém saber. Falhou → segue em texto; incerto → diz que pode ter chegado.
+    let pdfChegou = false;
     if (pdf.ok && pdf.buffer) {
-      await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), `Roteiro ${alvo.nome} - ${dataLabel}.pdf`);
-    } else {
-      // Fallback: PDF falhou → manda em texto pra não deixar o time sem nada.
+      const env = await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), `Roteiro ${alvo.nome} - ${dataLabel}.pdf`);
+      pdfChegou = env.ok;
+      if (!env.ok) {
+        console.error(`[CS/inbound] roteiro ${alvo.nome}: PDF não saiu:`, env.error);
+        await csSendGroupText(msg.groupJid, env.incerto
+          ? "_O WhatsApp não confirmou o envio do PDF (pode ter chegado). Segue também em texto:_"
+          : "_Não consegui mandar o PDF. Segue em texto:_");
+      }
+    }
+    if (!pdfChegou) {
+      // Fallback: PDF falhou (no render ou no envio) → manda em texto pra não deixar o time sem nada.
       for (const [i, rot] of versoes.entries()) await csSendGroupText(msg.groupJid, formatRoteiro(rot, alvo.nome, i + 1));
     }
     await csSendGroupText(msg.groupJid, "Me diz o que ajustar (gancho, CTA, mais curto, outro produto…) que eu refaço — assim eu vou pegando o estilo de cada cliente. 😉");

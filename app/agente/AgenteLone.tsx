@@ -23,19 +23,29 @@ import { cn } from "@/lib/utils";
 import EstiloPerfis from "@/components/agente/EstiloPerfis";
 import FeedPrioridades from "@/components/agente/FeedPrioridades";
 
+// 25/10/2026 (auditoria 11.7): seção que não foi lida vem null (e o nome em `falhas`) — a tela diz "não
+// consegui ler" em vez de "0 sugeridas" / "Nada aprendido ainda". O selo da IA vem de llm_calls.
 interface DashData {
   ok: boolean;
-  config: { iaOk: boolean; grupoInterno: boolean; gruposMonitorados: number; modoTeste: boolean };
+  falhas?: string[];
+  config: {
+    iaOk: boolean; grupoInterno: boolean; gruposMonitorados: number; modoTeste: boolean;
+    ia?: { estado: "ok" | "desligada" | "fora" | "nao_conferida"; texto: string; detalhe?: string };
+  };
   acuracia: {
     total: number; aprovadas: number; recusadas: number; pendentes: number;
     taxaAprovacao: number | null; taxaFalsoPositivo: number | null;
     recorrentesTipo: { tipo: string; recusas: number }[];
     recorrentesCliente: { cliente: string; recusas: number }[];
-  };
-  aprendizado: { cliente: string; texto: string; escopo: string; origem: string; created_at: string }[];
-  recentes: { cliente: string; tipo: string; status: string; resumo: string; created_at: string }[];
-  onboardings: { cliente_nome: string; status: string; created_at: string }[];
-  roteiros: { cliente_nome: string; scorecard: number | null; created_at: string }[];
+  } | null;
+  aprendizado: { cliente: string; texto: string; escopo: string; origem: string; created_at: string }[] | null;
+  recentes: { cliente: string; tipo: string; status: string; resumo: string; created_at: string }[] | null;
+  onboardings: { cliente_nome: string; status: string; created_at: string }[] | null;
+  roteiros: { cliente_nome: string; scorecard: number | null; created_at: string }[] | null;
+}
+
+function NaoLi({ oQue }: { oQue: string }) {
+  return <p className="text-sm text-lone-warning">Não consegui ler {oQue} agora. Recarregue a página em instantes.</p>;
 }
 
 type Vista = "hoje" | "desempenho";
@@ -68,9 +78,17 @@ function Estado({ data }: { data: DashData | null }) {
       <span className={`rounded-full px-2.5 py-1 ${config.modoTeste ? "bg-lone-warning-bg text-lone-warning" : "bg-lone-success-bg text-lone-success"}`}>
         {config.modoTeste ? "Modo teste" : "Produção"}
       </span>
-      <span className={`rounded-full px-2.5 py-1 ${config.iaOk ? "bg-lone-success-bg text-lone-success" : "bg-destructive/10 text-destructive"}`}>
-        IA {config.iaOk ? "ok" : "desligada"}
-      </span>
+      {config.ia ? (
+        <span title={config.ia.detalhe}
+          className={`rounded-full px-2.5 py-1 ${config.ia.estado === "ok" ? "bg-lone-success-bg text-lone-success"
+            : config.ia.estado === "nao_conferida" ? "bg-lone-warning-bg text-lone-warning" : "bg-destructive/10 text-destructive"}`}>
+          {config.ia.texto}
+        </span>
+      ) : (
+        <span className={`rounded-full px-2.5 py-1 ${config.iaOk ? "bg-lone-success-bg text-lone-success" : "bg-destructive/10 text-destructive"}`}>
+          IA {config.iaOk ? "ok" : "desligada"}
+        </span>
+      )}
       <span className="rounded-full bg-muted px-2.5 py-1 text-muted-foreground">{config.gruposMonitorados} grupos monitorados</span>
     </div>
   );
@@ -83,14 +101,20 @@ function Desempenho({ data, erro, carregando }: { data: DashData | null; erro: s
 
   const { acuracia: a, aprendizado, recentes } = data;
   const q = busca.trim().toLowerCase();
-  const aprendFiltrado = q
+  const aprendFiltrado = !aprendizado ? null : q
     ? aprendizado.filter((r) => r.cliente.toLowerCase().includes(q) || r.texto.toLowerCase().includes(q))
     : aprendizado;
 
   return (
     <div className="space-y-8">
+      {!!data.falhas?.length && (
+        <p className="rounded-xl border border-lone-warning-border bg-lone-warning-bg px-4 py-3 text-lone-caption text-lone-warning">
+          Não consegui ler {data.falhas.join(", ")} — essas seções não aparecem até carregar.
+        </p>
+      )}
       <section>
         <h2 className="mb-3 text-sm font-semibold text-foreground">Acurácia (últimos 30 dias)</h2>
+        {!a ? <NaoLi oQue="as demandas dos últimos 30 dias" /> : (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <Tile label="Sugeridas" value={a.total} />
           <Tile label="Aprovadas" value={a.aprovadas} tone="good" />
@@ -98,11 +122,12 @@ function Desempenho({ data, erro, carregando }: { data: DashData | null; erro: s
           <Tile label="Taxa de acerto" value={a.taxaAprovacao == null ? "—" : `${a.taxaAprovacao}%`} sub="meta >75%" tone={a.taxaAprovacao != null && a.taxaAprovacao >= 75 ? "good" : a.taxaAprovacao == null ? undefined : "bad"} />
           <Tile label="Falso positivo" value={a.taxaFalsoPositivo == null ? "—" : `${a.taxaFalsoPositivo}%`} sub="meta <10%" tone={a.taxaFalsoPositivo == null ? undefined : a.taxaFalsoPositivo <= 10 ? "good" : "bad"} />
         </div>
+        )}
       </section>
 
       <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 text-sm font-semibold text-foreground">Áreas de melhoria (erros que se repetem)</h2>
-        {a.recorrentesTipo.length === 0 && a.recorrentesCliente.length === 0 ? (
+        {!a ? <NaoLi oQue="as demandas dos últimos 30 dias" /> : a.recorrentesTipo.length === 0 && a.recorrentesCliente.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nenhum erro recorrente — recuse (&quot;não&quot;) o que estiver errado pra eu aprender.</p>
         ) : (
           <div className="space-y-1.5 text-sm">
@@ -123,8 +148,8 @@ function Desempenho({ data, erro, carregando }: { data: DashData | null; erro: s
             <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Filtrar…" aria-label="Filtrar o que o agente aprendeu"
               className="w-32 rounded-lg border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none" />
           </div>
-          {aprendFiltrado.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nada aprendido ainda.</p>
+          {!aprendFiltrado ? <NaoLi oQue="o que o agente aprendeu" /> : aprendFiltrado.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{q ? "Nada com esse filtro." : "Nada aprendido ainda."}</p>
           ) : (
             <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
               {aprendFiltrado.map((r, i) => (
@@ -139,7 +164,7 @@ function Desempenho({ data, erro, carregando }: { data: DashData | null; erro: s
 
         <section className="rounded-xl border border-border bg-card p-5">
           <h2 className="mb-3 text-sm font-semibold text-foreground">Demandas recentes</h2>
-          {recentes.length === 0 ? (
+          {!recentes ? <NaoLi oQue="as demandas recentes" /> : recentes.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sem demandas recentes.</p>
           ) : (
             <div className="max-h-80 space-y-2 overflow-y-auto pr-1">

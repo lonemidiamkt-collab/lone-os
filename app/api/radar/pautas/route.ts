@@ -14,6 +14,8 @@ const PAPEIS = ["admin", "manager", "social", "designer"] as const;
 //      do card ("Usar esta pauta" cria o card já no próximo dia de postagem livre).
 // POST /api/radar/pautas — registra a decisão (usada / descartada / guardada). Com `cardId`, liga a
 //      pauta ao card que saiu dela (radar_pautas.content_card_id, migration 20260924190000).
+//      25/10/2026 (auditoria 14.6): decisao "nova" devolve uma pauta GUARDADA ou DESCARTADA para as novas
+//      (o "Desfazer" e o "Voltar para novas" da aba Guardadas). Antes guardar equivalia a perder.
 //
 // Sem esta tela o Radar produz e ninguém vê — foi o que aconteceu com os alertas de queda, que
 // ficaram meses sendo detectados sem nunca chegar a ninguém. E a decisão não é só burocracia: pauta
@@ -93,6 +95,15 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json().catch(() => ({}))) as { id?: string; decisao?: string; motivo?: string; cardId?: string };
   if (!body.id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
+  if (body.decisao === "nova") {
+    // Só o que foi guardado ou descartado volta: a usada já virou card (desfaz no board).
+    const { data: voltou, error: eVolta } = await supabaseAdmin.from("radar_pautas")
+      .update({ status: "nova", decidido_por: null, decidido_em: null, motivo_descarte: null })
+      .eq("id", body.id).in("status", ["guardada", "descartada"]).select("id");
+    if (eVolta) return NextResponse.json({ error: `Não consegui voltar a pauta: ${eVolta.message}` }, { status: 500 });
+    if (!voltou?.length) return NextResponse.json({ error: "Essa pauta não está mais guardada nem descartada (pode ter virado card)." }, { status: 409 });
+    return NextResponse.json({ ok: true });
+  }
   if (!["usada", "descartada", "guardada"].includes(String(body.decisao))) {
     return NextResponse.json({ error: "decisão inválida" }, { status: 400 });
   }

@@ -8,6 +8,7 @@ import { confirmarDemanda } from "@/lib/cs/confirmar-demanda-server";
 import { textoPautaParcial } from "@/lib/cs/confirmar-demanda";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { papelDoUsuario } from "@/lib/api/require-role";
+import { nomeDeQuemDecide, podeDecidirDemanda, podeReabrir, SEM_PERMISSAO_DECIDIR } from "@/lib/cs/decidir-demanda";
 
 // GET /api/cs/decide?codigos=a1b2,c3d4 — o "Decidir" do feed do Agente (Leva 7C, N25) abre a
 // sugestão antes de decidir: o que o cliente escreveu, o que o agente entendeu e o briefing que vai
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const papel = await papelDoUsuario(user);
-  if (!papel || papel === "designer" || papel === "comercial") {
+  if (!podeDecidirDemanda(papel)) {
     return NextResponse.json({ error: "Sem permissão para esta área." }, { status: 403 });
   }
   const codigos = (req.nextUrl.searchParams.get("codigos") ?? "")
@@ -39,19 +40,26 @@ export async function GET(req: NextRequest) {
 // POST /api/cs/decide — a equipe decide uma sugestão do Agente CS PELA PLATAFORMA (painel Agente
 // Lone), espelhando o "ok/não" do WhatsApp: cria o ContentCard (ou descarta), marca a demanda e
 // avisa o grupo interno pra manter os dois lados em sincronia. Suggest-only continua: só age no ok.
-//   body: { id, acao: "confirmar" | "descartar", ajuste?: string }
+//   body: { id, acao: "confirmar" | "descartar" | "reabrir", ajuste?: string }
+//
+// 25/10/2026 (auditoria 11.4): a mesma autoridade do WhatsApp e do GET — gestão, social e tráfego;
+// designer e comercial não decidem pedido de cliente. O descarte confere o update, grava QUEM descartou
+// (nome do cadastro) e tem volta: "reabrir" devolve o pedido descartado para pendente (o "Desfazer" da tela).
 export async function POST(req: NextRequest) {
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const papel = await papelDoUsuario(user);
+  if (!podeDecidirDemanda(papel)) return NextResponse.json({ error: SEM_PERMISSAO_DECIDIR }, { status: 403 });
 
   const body = await req.json().catch(() => null);
   const idBody = body?.id as string | undefined;
   const codigo = (body?.codigo as string | undefined)?.trim();
   const acao = body?.acao as string | undefined;
   const ajuste = (body?.ajuste as string | undefined)?.trim();
-  if ((!idBody && !codigo) || (acao !== "confirmar" && acao !== "descartar")) {
-    return NextResponse.json({ error: "id (ou codigo) e acao (confirmar|descartar) obrigatórios" }, { status: 400 });
+  if ((!idBody && !codigo) || (acao !== "confirmar" && acao !== "descartar" && acao !== "reabrir")) {
+    return NextResponse.json({ error: "id (ou codigo) e acao (confirmar|descartar|reabrir) obrigatórios" }, { status: 400 });
   }
+  if (acao === "reabrir" && !idBody) return NextResponse.json({ error: "reabrir precisa do id do pedido" }, { status: 400 });
 
   // O feed de prioridades só conhece o código curto (o mesmo do "ok <código>" no grupo); código só é
   // único entre as pendentes, então a busca por código filtra status pendente.
@@ -64,21 +72,44 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: idBody ? "demanda não encontrada" : "Essa demanda já foi decidida ou não existe mais." }, { status: 404 });
   }
   const id = d.id as string;
-  // Idempotente: se já foi decidida (no zap ou por outra pessoa), não refaz nem duplica card.
-  if (d.status !== "pendente") return NextResponse.json({ ok: true, jaDecidida: d.status as string });
-
-  const quem = user.email.split("@")[0]; // nome curto p/ auditoria/decided_by
+  // Nome de quem decide (cadastro da equipe) — é ele que fica em decided_by e no aviso do grupo.
+  const { data: tm } = await supabaseAdmin.from("team_members").select("name").eq("email", user.email).maybeSingle();
+  const quem = nomeDeQuemDecide(tm?.name as string | undefined, user.email);
   const resumo = (d.resumo as string) || (d.message_text as string) || "demanda";
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   const sug = (d.msg_id_sugestao as string) || undefined; // threading: responde a sugestão no grupo
 
+  // ── Voltar para pendente (o "Desfazer" do descarte) ──
+  if (acao === "reabrir") {
+    const { data: outra, error: errOutra } = await supabaseAdmin.from("cs_demandas").select("id")
+      .eq("codigo", d.codigo as string).eq("status", "pendente").neq("id", id).limit(1).maybeSingle();
+    if (errOutra) return NextResponse.json({ error: "Não consegui conferir o código do pedido. Tente de novo." }, { status: 500 });
+    const pode = podeReabrir({ status: d.status as string }, !!outra);
+    if (!pode.ok) return NextResponse.json({ error: pode.erro }, { status: 409 });
+    const { data: voltou, error: errVolta } = await supabaseAdmin.from("cs_demandas")
+      .update({ status: "pendente", decided_at: null, decided_by: null })
+      .eq("id", id).eq("status", "descartada").select("id");
+    if (errVolta) return NextResponse.json({ error: `Não consegui voltar o pedido para pendente: ${errVolta.message}` }, { status: 500 });
+    if (!voltou?.length) return NextResponse.json({ error: "O pedido mudou enquanto isso — recarregue." }, { status: 409 });
+    if (internalJid) await csSendGroupText(internalJid, `↩️ *${resumo}* voltou para pendente — ${quem} desfez o descarte (pela plataforma). Vale o mesmo: *ok* · *não* · *ajustar*.`, sug);
+    console.log(`[CS/decide] ${d.codigo} reaberta por ${quem}`);
+    return NextResponse.json({ ok: true, decision: "pendente", id });
+  }
+
+  // Idempotente: se já foi decidida (no zap ou por outra pessoa), não refaz nem duplica card.
+  if (d.status !== "pendente") return NextResponse.json({ ok: true, jaDecidida: d.status as string });
+
   if (acao === "descartar") {
-    await supabaseAdmin.from("cs_demandas")
+    // Só descarta se AINDA está pendente (o "ok" no WhatsApp pode ter chegado no meio) e confere o erro:
+    // antes a rota respondia "descartada" mesmo quando o update falhava.
+    const { data: desc, error: errDesc } = await supabaseAdmin.from("cs_demandas")
       .update({ status: "descartada", decided_at: new Date().toISOString(), decided_by: quem })
-      .eq("id", id);
+      .eq("id", id).eq("status", "pendente").select("id");
+    if (errDesc) return NextResponse.json({ error: `Não consegui descartar: ${errDesc.message}. O pedido continua pendente.` }, { status: 500 });
+    if (!desc?.length) return NextResponse.json({ ok: true, jaDecidida: "decidida no meio-tempo" });
     if (internalJid) await csSendGroupText(internalJid, `🗑️ *${resumo}* descartada por ${quem} (pela plataforma).`, sug);
     console.log(`[CS/decide] ${d.codigo} descartada por ${quem}`);
-    return NextResponse.json({ ok: true, decision: "descartada" });
+    return NextResponse.json({ ok: true, decision: "descartada", id, por: quem });
   }
 
   // confirmar → cria o card (ajuste opcional entra no briefing antes).

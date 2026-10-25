@@ -10,6 +10,12 @@
 // Agora a mensagem entra numa fila com o texto que o inbound já tinha (áudio transcrito, imagem
 // descrita). A rotina a passa de novo pelo MESMO inbound — a sugestão nasce normalmente, com a nota
 // de que é leitura atrasada — e avisa o time quando um grupo fica com mensagem sem leitura.
+//
+// 25/10/2026 (auditoria 11.1): ÁUDIO que não foi transcrito também entra (tipo "audio"), com o que é
+// preciso para baixar de novo (`midia`). A releitura manda o áudio original pelo inbound, que
+// transcreve outra vez. Regras do áudio em lib/cs/audio-nao-lido.ts.
+
+import type { MidiaGuardada } from "./audio-nao-lido";
 
 /** Uma linha de cs_mensagens_nao_lidas. */
 export interface NaoLida {
@@ -26,7 +32,14 @@ export interface NaoLida {
   status: string;
   ultima_tentativa_em?: string | null;
   avisado_em?: string | null;
+  /** "audio" = nota de voz que não foi transcrita; `texto` fica vazio e `midia` guarda como baixar de novo. */
+  tipo?: "texto" | "audio" | null;
+  midia?: MidiaGuardada | null;
 }
+
+export const ehAudio = (m: Pick<NaoLida, "tipo">) => m.tipo === "audio";
+/** Resposta de onboarding por áudio: a releitura manda a próxima pergunta AO CLIENTE — só no expediente. */
+const ehOnboarding = (m: NaoLida) => ehAudio(m) && typeof m.midia?.onboardingPasso === "number";
 
 /** Passou disso sem conseguir ler: desiste e pede ao time para ler à mão. */
 export const DESISTIR_H = 48;
@@ -51,6 +64,7 @@ export function planejarReleitura(fila: NaoLida[], agora: Date): { tentar: NaoLi
   const expirar = vivas.filter((m) => t - ms(m.recebida_em) > DESISTIR_H * 3600_000);
   const tentar = vivas
     .filter((m) => !expirar.includes(m))
+    .filter((m) => !ehOnboarding(m) || noHorarioDeAviso(agora))
     .sort((a, b) => ms(a.recebida_em) - ms(b.recebida_em))
     .slice(0, LOTE);
   return { tentar, expirar };
@@ -61,6 +75,23 @@ export function planejarReleitura(fila: NaoLida[], agora: Date): { tentar: NaoLi
  * reconhece a releitura pelo cabeçalho (x-cs-releitura) e pula o que já aconteceu na primeira vez.
  */
 export function payloadDaReleitura(m: NaoLida) {
+  // Áudio: manda a mensagem ORIGINAL (key + audioMessage) — o inbound baixa e transcreve de novo.
+  if (ehAudio(m) && m.midia?.key && m.midia?.message) {
+    const key = m.midia.key as { remoteJid?: string; participant?: string; participantPn?: string; participantAlt?: string };
+    return {
+      event: "messages.upsert",
+      data: {
+        key: {
+          remoteJid: key.remoteJid || m.group_jid, fromMe: false, id: m.message_id,
+          participant: key.participant || m.author_jid || undefined, participantPn: key.participantPn, participantAlt: key.participantAlt,
+        },
+        pushName: m.author_name || "",
+        message: m.midia.message as Record<string, unknown>,
+        messageTimestamp: Math.floor(ms(m.recebida_em) / 1000) || 0,
+      },
+      ...(typeof m.midia.onboardingPasso === "number" ? { cs: { onboardingPasso: m.midia.onboardingPasso } } : {}),
+    };
+  }
   return {
     event: "messages.upsert",
     data: {
@@ -77,11 +108,15 @@ export function payloadDaReleitura(m: NaoLida) {
  * de 2xx mantêm a mensagem na fila. Qualquer outro desfecho — virou sugestão, era trivial, era
  * aprovação, juntou num pedido aberto — é leitura feita.
  */
-export function lerResultadoReleitura(httpStatus: number, corpo: unknown): { lida: boolean; motivo: string } {
+export function lerResultadoReleitura(httpStatus: number, corpo: unknown): { lida: boolean; motivo: string; soEsta?: true } {
   if (httpStatus < 200 || httpStatus >= 300) return { lida: false, motivo: `HTTP ${httpStatus}` };
   const b = (corpo && typeof corpo === "object" ? corpo : {}) as Record<string, unknown>;
   if (b.ok === false) return { lida: false, motivo: String(b.error ?? "erro no inbound") };
-  if (b.classified === false) return { lida: false, motivo: String(b.reason ?? "a IA não classificou") };
+  // `soEsta` (25/10/2026, 11.1): a falha é desta mensagem (o áudio dela não baixa), não da IA — a rodada
+  // segue para as outras em vez de parar no disjuntor.
+  if (b.classified === false) {
+    return { lida: false, motivo: String(b.reason ?? "a IA não classificou"), ...(b.soEsta === true ? { soEsta: true as const } : {}) };
+  }
   const desfecho = b.skip ? `pulada: ${String(b.skip)}`
     : b.coalesced ? `juntou no pedido ${String(b.coalesced)}`
     : Array.isArray(b.sugeridas) ? `${(b.sugeridas as unknown[]).length} sugestão(ões)`
@@ -140,12 +175,19 @@ const trecho = (s: string) => {
   return t.length > 110 ? `${t.slice(0, 107)}…` : t;
 };
 
+/** O que a linha do aviso mostra da mensagem: o texto, ou que é um áudio (e por que não ouvi). */
+const conteudo = (m: NaoLida) => (ehAudio(m)
+  ? `🎤 áudio que eu não consegui ouvir${m.erro ? ` — ${trecho(m.erro).slice(0, 90)}` : ""}`
+  : `"${trecho(m.texto)}"`);
+
 /** O aviso ao time: quais grupos têm mensagem sem leitura, desde quando, e o que fazer. */
 export function textoAvisoNaoLidas(grupos: GrupoSemLeitura[], erro: string | null | undefined, agora: Date): string {
   const linhas = grupos.slice(0, 8).map((g) => {
     const n = g.mensagens.length;
     const primeira = g.mensagens[0];
-    return `• *${g.cliente}* — ${n} mensage${n === 1 ? "m" : "ns"}, desde ${quandoSP(primeira.recebida_em, agora)}\n  _"${trecho(primeira.texto)}"_`;
+    const audios = g.mensagens.filter(ehAudio).length;
+    const extra = audios && audios < n ? ` (${audios} em áudio)` : "";
+    return `• *${g.cliente}* — ${n} mensage${n === 1 ? "m" : "ns"}${extra}, desde ${quandoSP(primeira.recebida_em, agora)}\n  _${conteudo(primeira)}_`;
   });
   const partes = [
     `⚠️ *Tem mensagem de cliente que eu não consegui ler*${erro ? `\n_(a IA está falhando: ${trecho(erro).slice(0, 90)})_` : ""}`,
@@ -153,19 +195,23 @@ export function textoAvisoNaoLidas(grupos: GrupoSemLeitura[], erro: string | nul
     linhas.join("\n"),
   ];
   if (grupos.length > 8) partes.push(`_e mais ${grupos.length - 8} grupo(s)._`);
-  partes.push("", "Tô tentando de novo a cada 15 min e crio a sugestão assim que conseguir. Enquanto isso, dá uma olhada nesses grupos — pode ter pedido esperando.");
+  const temAudio = grupos.some((g) => g.mensagens.some(ehAudio));
+  partes.push("", `Tô tentando de novo a cada 15 min e crio a sugestão assim que conseguir. Enquanto isso, dá uma olhada nesses grupos${temAudio ? " (e ouve os áudios)" : ""} — pode ter pedido esperando.`);
   return partes.join("\n");
 }
 
 /** Desistiu (48h sem conseguir): o time lê à mão. */
 export function textoDesistencia(expiradas: NaoLida[], agora: Date): string {
   const linhas = expiradas.slice(0, 10).map((m) =>
-    `• *${m.cliente_nome || "cliente"}* (${quandoSP(m.recebida_em, agora)}): _"${trecho(m.texto)}"_`);
+    `• *${m.cliente_nome || "cliente"}* (${quandoSP(m.recebida_em, agora)}): _${conteudo(m)}_`);
   return [
-    `🚫 *Não consegui ler ${expiradas.length} mensage${expiradas.length === 1 ? "m" : "ns"} de cliente em ${DESISTIR_H}h* — parei de tentar:`,
+    // Áudio longo demais entra aqui na hora (não adianta tentar de novo); o resto, depois de 48h.
+    expiradas.every(ehAudio)
+      ? `🚫 *Não consegui ouvir ${expiradas.length} áudio${expiradas.length === 1 ? "" : "s"} de cliente* — parei de tentar:`
+      : `🚫 *Não consegui ler ${expiradas.length} mensage${expiradas.length === 1 ? "m" : "ns"} de cliente em ${DESISTIR_H}h* — parei de tentar:`,
     linhas.join("\n"),
     expiradas.length > 10 ? `_e mais ${expiradas.length - 10}._` : "",
-    "Lê no grupo e, se for pedido, cria o card à mão.",
+    expiradas.some(ehAudio) ? "Ouve/lê no grupo e, se for pedido, cria o card à mão." : "Lê no grupo e, se for pedido, cria o card à mão.",
   ].filter(Boolean).join("\n");
 }
 

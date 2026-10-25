@@ -129,3 +129,33 @@ export function lerPedidoPdf(texto: string): PedidoPdf {
   const doConteudo = TIPOS.find(([rx]) => rx.test(conteudo));
   return { quer: true, conteudo, tipo: doConteudo ? doConteudo[1] : "Documento", modo };
 }
+
+// "cria UMA proposta", "escreve UM briefing", "monta UMA pauta" — artigo indefinido = a peça ainda não
+// existe. "monta A proposta em pdf" (artigo definido) é a proposta que veio colada: diagramar.
+const CRIAR_PECA = /\b(cri|escrev|elabor|desenvolv|redig|mont|fa[zç]|prepar|produz)\w*\s+(um|uma)\s+(nov[oa]\s+)?(proposta|briefing|pauta|planejamento|calend[áa]rio|rotei)/i;
+
+/**
+ * 25/10/2026 (auditoria de erro recuperável, 11.10). Só o ROTEIRO tem quem escreva do zero (o fluxo de
+ * roteiro). "Cria uma proposta/briefing/pauta em PDF com essas informações" caía na diagramação: o texto
+ * cru saía rotulado "Proposta — Cliente", com cara de peça pronta — o mesmo bug já corrigido para o
+ * roteiro. Devolve o tipo pedido quando é pedido de ESCREVER uma peça (para o inbound responder "ainda
+ * não escrevo isso; quer que eu só diagrame?"), ou null quando é diagramação.
+ */
+export function pedidoParaEscrever(texto: string): string | null {
+  const p = lerPedidoPdf(texto);
+  if (!p.quer || p.modo !== "criar") return null;
+  const pedido = (texto || "").split("\n").filter((l) => ehLinhaDePedido(l)).join(" ");
+  const tipo = TIPOS.find(([rx]) => rx.test(pedido));
+  if (!tipo) return null; // "faz um pdf com essas informações" é documento genérico: diagramar não engana ninguém
+  const escrever = CRIAR_PECA.test(pedido) || (MATERIA_PRIMA.test(pedido) && VERBO_CRIAR.test(pedido));
+  return escrever ? tipo[1] : null;
+}
+
+/** A resposta para o pedido de escrever o que eu ainda não escrevo — com a saída que existe. */
+export function textoNaoEscrevo(tipo: string): string {
+  if (tipo === "Roteiro de Vídeo") {
+    return "Roteiro eu escrevo quando o pedido vem no grupo da equipe ou no de artes: \"Lone, cria um roteiro pro <cliente> com essas informações\". Por aqui eu só diagramo — se o texto já é o roteiro pronto, manda de novo começando com *transforma em PDF*.";
+  }
+  const nome = tipo.toLowerCase();
+  return `Ainda não escrevo *${nome}* do zero — o que eu faço é diagramar: o texto que você mandar vai pro PDF do jeito que está, sem eu mexer. Se é isso, manda de novo começando com *transforma em PDF* e o texto. Não montei nada.`;
+}

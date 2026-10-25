@@ -2,7 +2,7 @@
 
 import { infoEtapa } from "@/lib/conteudo/etapas";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExternalLink, Check, X, Bookmark, TrendingUp, Loader2, CalendarDays } from "lucide-react";
+import { ExternalLink, Check, X, Bookmark, TrendingUp, Loader2, CalendarDays, Undo2 } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 import { todaySP } from "@/lib/utils";
 import { useClientsStore } from "@/stores/useClientsStore";
@@ -20,6 +20,10 @@ import { toast } from "sonner";
 //
 // A decisão do social media também é dado: descarte com motivo é como o sistema aprende o que não
 // serve para este time.
+//
+// 25/10/2026 (auditoria 14.6): "Guardar para depois" e "Não serve" tinham sumiço sem volta — nenhuma tela
+// listava as guardadas. Agora há a aba Guardadas (com "Voltar para novas") e Desfazer logo depois de
+// guardar ou descartar.
 
 interface Referencia {
   url: string; perfil?: string; seguidores?: number | null;
@@ -50,6 +54,9 @@ function dataCurta(ymd: string): string {
 
 export default function RadarOportunidades() {
   const [pautas, setPautas] = useState<Pauta[] | null>(null);
+  const [guardadas, setGuardadas] = useState<Pauta[] | null>(null);
+  const [erroGuardadas, setErroGuardadas] = useState<string | null>(null);
+  const [aba, setAba] = useState<"novas" | "guardadas">("novas");
   // Datas que cada cliente já tem no board (do servidor) + as que esta sessão acabou de ocupar:
   // duas pautas do mesmo cliente usadas em seguida não caem no mesmo dia.
   const [ocupadas, setOcupadas] = useState<Record<string, string[]>>({});
@@ -66,6 +73,20 @@ export default function RadarOportunidades() {
     if (!res.ok) { setErro(res.erro); setPautas(null); return; }
     setPautas(res.data?.pautas ?? []);
     setOcupadas(res.data?.ocupadas ?? {});
+    const g = await chamar<{ pautas?: Pauta[]; ocupadas?: Record<string, string[]> }>("/api/radar/pautas?status=guardada");
+    if (!g.ok) { setErroGuardadas(g.erro); setGuardadas(null); return; }
+    setErroGuardadas(null);
+    setGuardadas(g.data?.pautas ?? []);
+    setOcupadas((o) => ({ ...(g.data?.ocupadas ?? {}), ...o }));
+  }, []);
+
+  // Desfazer (guardar/descartar) e "Voltar para novas" (aba Guardadas): a pauta volta para as novas.
+  const voltarParaNovas = useCallback(async (pauta: Pauta) => {
+    const r = await chamar("/api/radar/pautas", { id: pauta.id, decisao: "nova" });
+    if (!r.ok) { toast.error(`Não consegui voltar a pauta: ${r.erro}`); return; }
+    setGuardadas((g) => (g ?? []).filter((x) => x.id !== pauta.id));
+    setPautas((p) => (p ?? []).some((x) => x.id === pauta.id) ? p : [pauta, ...(p ?? [])]);
+    toast.success("A pauta voltou para as novas.");
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
@@ -100,23 +121,30 @@ export default function RadarOportunidades() {
           action: { label: "Abrir", onClick: () => { window.location.href = `/social?card=${cardId}`; } },
         });
       } else {
-        toast.success(decisao === "guardada" ? "Guardada." : "Descartada — isso ajuda o Radar a melhorar.");
+        toast.success(decisao === "guardada" ? "Guardada — está na aba Guardadas." : "Descartada — isso ajuda o Radar a melhorar.", {
+          duration: 8000, action: { label: "Desfazer", onClick: () => { void voltarParaNovas(pauta); } },
+        });
       }
       setDescartando(null);
       setPautas((p) => (p ?? []).filter((x) => x.id !== id));
+      setGuardadas((g) => {
+        const sem = (g ?? []).filter((x) => x.id !== id);
+        return decisao === "guardada" ? [pauta, ...sem] : sem;
+      });
     } finally { setOcupado(null); }
-  }, [clients, currentUser, sugestao]);
+  }, [clients, currentUser, sugestao, voltarParaNovas]);
 
+  const lista = aba === "guardadas" ? guardadas : pautas;
   // Agrupa por cliente: o social media trabalha cliente a cliente, não ideia a ideia.
   const porCliente = useMemo(() => {
     const m = new Map<string, Pauta[]>();
-    for (const p of pautas ?? []) m.set(p.cliente_nome, [...(m.get(p.cliente_nome) ?? []), p]);
+    for (const p of lista ?? []) m.set(p.cliente_nome, [...(m.get(p.cliente_nome) ?? []), p]);
     return [...m.entries()].sort((a, b) => b[1].length - a[1].length);
-  }, [pautas]);
+  }, [lista]);
 
-  // Sem nada novo e sem estar carregando, a seção inteira some: espaço vazio com título é ruído na
-  // página que o social usa todo dia.
-  if (pautas?.length === 0) return null;
+  // Sem nada novo NEM guardado, a seção inteira some: espaço vazio com título é ruído na página que o
+  // social usa todo dia. Com guardadas, fica a aba para achá-las.
+  if (pautas?.length === 0 && !guardadas?.length && !erroGuardadas) return null;
 
   if (erro) {
     return (
@@ -129,15 +157,34 @@ export default function RadarOportunidades() {
 
   return (
     <section className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-foreground">O que o mercado está mostrando</h2>
-        <p className="text-xs text-muted-foreground">
-          Conteúdos que performaram muito acima do normal no nicho dos nossos clientes, virados em pauta.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">O que o mercado está mostrando</h2>
+          <p className="text-xs text-muted-foreground">
+            Conteúdos que performaram muito acima do normal no nicho dos nossos clientes, virados em pauta.
+          </p>
+        </div>
+        <div className="flex rounded-lg border border-border p-0.5 text-xs" role="tablist" aria-label="Pautas do Radar">
+          {(["novas", "guardadas"] as const).map((a) => (
+            <button key={a} type="button" role="tab" aria-selected={aba === a} onClick={() => setAba(a)}
+              className={`rounded-md px-3 py-1.5 font-medium transition-colors ${aba === a ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+              {a === "novas" ? `Novas${pautas ? ` (${pautas.length})` : ""}` : `Guardadas${guardadas ? ` (${guardadas.length})` : ""}`}
+            </button>
+          ))}
+        </div>
       </div>
+      {aba === "guardadas" && erroGuardadas && (
+        <p className="text-sm text-destructive">Não consegui carregar as guardadas: {erroGuardadas}</p>
+      )}
+      {aba === "novas" && pautas?.length === 0 && (
+        <p className="text-sm text-muted-foreground">Nada novo do Radar agora.</p>
+      )}
+      {aba === "guardadas" && guardadas?.length === 0 && (
+        <p className="text-sm text-muted-foreground">Nenhuma pauta guardada.</p>
+      )}
 
       <div className="space-y-6">
-        {pautas === null && (
+        {lista === null && !(aba === "guardadas" && erroGuardadas) && (
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
             <Loader2 className="animate-spin" size={16} /> carregando…
           </div>
@@ -253,15 +300,25 @@ export default function RadarOportunidades() {
                       >
                         <X size={14} /> Não serve
                       </button>
-                      <button
-                        onClick={() => decidir(p, "guardada")}
-                        disabled={ocupado === p.id}
-                        title="guardar para depois"
-                        aria-label="Guardar para depois"
-                        className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-muted-foreground hover:text-foreground disabled:opacity-50"
-                      >
-                        <Bookmark size={14} />
-                      </button>
+                      {aba === "guardadas" ? (
+                        <button
+                          onClick={() => void voltarParaNovas(p)}
+                          disabled={ocupado === p.id}
+                          className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-muted-foreground hover:text-foreground disabled:opacity-50"
+                        >
+                          <Undo2 size={14} aria-hidden /> Voltar para novas
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => decidir(p, "guardada")}
+                          disabled={ocupado === p.id}
+                          title="guardar para depois (fica na aba Guardadas)"
+                          aria-label="Guardar para depois"
+                          className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-muted-foreground hover:text-foreground disabled:opacity-50"
+                        >
+                          <Bookmark size={14} />
+                        </button>
+                      )}
                       <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground" title="Próximo dia de postagem (seg/qua/sex) sem card deste cliente">
                         <CalendarDays size={12} aria-hidden /> {dataCurta(sugestao(p))}
                       </span>

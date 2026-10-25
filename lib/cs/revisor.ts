@@ -16,10 +16,19 @@
 // A diferença entre este revisor e as revisões que já existem: aquelas olham a PEÇA (tem erro de
 // preço? o texto está certo?). Esta olha o ENCAIXE — este roteiro conversa com o negócio dele,
 // com o que ele já pediu, com o que já foi feito?
+//
+// 25/10/2026 (11.5): revisor que caiu vira "nao_revisado" e o roteiro sai com "não consegui revisar —
+// confere antes de mandar", nunca com "revisei aqui e tá pronto pro cliente".
 
 import { chatJson } from "@/lib/ai/openai";
 
-export type Veredito = "aprovado" | "ajustar" | "refazer";
+/**
+ * "nao_revisado" (25/10/2026, auditoria 11.5): o revisor caiu (IA fora, sem crédito, timeout). A peça
+ * segue — travar a entrega seria pior —, mas NUNCA como "revisei e tá pronto pro cliente". Antes a falha
+ * virava "aprovado" com nota 70, o mesmo padrão ("✅" sem ter visto) que originou a regra do erro recuperável.
+ * Só o código produz este veredito; a IA continua escolhendo entre os outros três.
+ */
+export type Veredito = "aprovado" | "ajustar" | "refazer" | "nao_revisado";
 
 export interface RevisaoCS {
   veredito: Veredito;
@@ -97,19 +106,26 @@ export async function revisarComoCS(p: PedidoRevisao): Promise<RevisaoCS> {
     schema: SCHEMA, schemaName: "revisao_cs", maxTokens: 700, temperature: 0.2,
   });
 
-  // Revisor fora do ar NÃO pode virar bloqueio: a peça segue, marcada como não revisada.
+  // Revisor fora do ar NÃO pode virar bloqueio: a peça segue, marcada como NÃO REVISADA (não "aprovada").
   // Travar a entrega porque o revisor caiu seria pior que entregar sem revisão.
   if (!r.ok || !r.data) {
-    return { veredito: "aprovado", motivo: "não consegui revisar agora — segue sem revisão", ajustes: [], nota: 70 };
+    console.error("[revisor] não revisei:", r.error ?? "sem resposta da IA");
+    return revisaoQueFalhou();
   }
   return r.data;
 }
 
-/** Vai pro cliente? Só o que passou. "ajustar" volta pro executor, não pro cliente. */
+/** O que o revisor devolve quando não conseguiu revisar. */
+export function revisaoQueFalhou(): RevisaoCS {
+  return { veredito: "nao_revisado", motivo: "não consegui revisar agora (a IA de revisão falhou)", ajustes: [], nota: 0 };
+}
+
+/** Vai pro cliente? Só o que passou. "ajustar" volta pro executor, não pro cliente; o não revisado, ao time conferir. */
 export const liberado = (r: RevisaoCS) => r.veredito === "aprovado" && r.nota >= 60;
 
 /** Como o Loninho conta o veredito no grupo, pro time ver a decisão e discordar se quiser. */
 export function textoDoVeredito(r: RevisaoCS, cliente: string): string {
+  if (r.veredito === "nao_revisado") return `⚠️ Não consegui revisar o do *${cliente}* agora — confere antes de mandar pro cliente.`;
   if (r.veredito === "aprovado") {
     return r.nota >= 90
       ? `✅ Revisei e tá bom pro *${cliente}* — pode mandar.`
