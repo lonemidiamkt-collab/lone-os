@@ -115,6 +115,7 @@ async function previa(url: URL): Promise<NextResponse> {
 //   ?placar=1&cliente=<id>   → o texto que iria na legenda desse cliente
 //   ?placar=1&todos=1        → o de todos que recebem relatório na segunda (contrato de tráfego + conta + grupo)
 //   &hoje=AAAA-MM-DD         → simula o dia do envio (a dica gira por semana)
+//   &dados=1                 → junto, os números que montaram cada texto
 // Os números são os do PDF: mesma leitura (lerRelatorioAnuncios) e mesma janela de 7 dias até ontem.
 async function previaPlacar(url: URL): Promise<NextResponse> {
   const token = await getMetaToken();
@@ -143,7 +144,13 @@ async function previaPlacar(url: URL): Promise<NextResponse> {
         const r = await lerRelatorioAnuncios(token, conta(c.meta_ad_account_id), janela, nome);
         if (!r) return { cliente: nome, segmento, texto: null, motivo: "a conta não veiculou nesta semana nem na anterior" };
         const p = montarPlacar({ relatorio: r, clienteId: c.id, segmento, hoje });
-        return { cliente: nome, segmento, texto: p.texto, alerta: p.alerta, motivo: p.motivo, dica: p.dica };
+        // &dados=1: os números que montaram o texto, para ajustar a redação sem novo deploy.
+        const dados = url.searchParams.get("dados") === "1" ? {
+          clienteId: c.id, tipo: r.tipo, total: r.total, kpis: r.kpis, janela: r.janela, semVeiculacao: r.semVeiculacao,
+          criativosIndisponiveis: r.criativosIndisponiveis,
+          criativos: r.criativos.map(({ miniatura: _m, ...resto }) => resto),
+        } : undefined;
+        return { cliente: nome, segmento, texto: p.texto, alerta: p.alerta, motivo: p.motivo, dica: p.dica, dados };
       } catch (e) {
         return { cliente: nome, segmento, texto: null, motivo: `Meta: ${(e instanceof Error ? e.message : String(e)).slice(0, 160)}` };
       }

@@ -106,8 +106,8 @@ describe("segmentoDeVoz — o nome, o nicho solar, o CNAE e o nicho, nessa ordem
   });
 });
 
-const kpis = (custo: number | null, varRes: number | null) => [
-  { chave: "resultados" as const, rotulo: "Conversas", valor: 38, anterior: 34, variacaoPct: varRes, natureza: "maior_melhor" as never, tom: "neutro" as never },
+const kpis = (custo: number | null, varRes: number | null, anterior = 34) => [
+  { chave: "resultados" as const, rotulo: "Conversas", valor: 38, anterior, variacaoPct: varRes, natureza: "maior_melhor" as never, tom: "neutro" as never },
   { chave: "investimento" as const, rotulo: "Investimento", valor: 159.6, anterior: 150, variacaoPct: 6, natureza: "neutra" as never, tom: "neutro" as never },
   { chave: "custo" as const, rotulo: "Custo por conversa", valor: custo, anterior: 4.4, variacaoPct: -4, natureza: "menor_melhor" as never, tom: "neutro" as never },
 ];
@@ -152,7 +152,7 @@ describe("montarPlacar — o texto da segunda", () => {
 
   it("variação pequena vira 'no mesmo ritmo'; queda forte avisa o time", () => {
     expect(montarPlacar(entrada({ kpis: kpis(4.2, 3) as never })).texto).toMatch(/no mesmo ritmo da semana anterior/);
-    const queda = montarPlacar(entrada({ kpis: kpis(4.2, -40) as never }));
+    const queda = montarPlacar(entrada({ kpis: kpis(4.2, -40, 63) as never }));
     expect(queda.texto).toMatch(/40% a menos que na semana anterior/);
     expect(queda.alerta).toBe("queda");
   });
@@ -168,12 +168,32 @@ describe("montarPlacar — o texto da segunda", () => {
     expect(t.split("\n")).toHaveLength(4);
   });
 
-  it("produto bem mais barato que a média vira a dica (pedido de estoque)", () => {
-    const p = montarPlacar(entrada({
-      criativos: [criativo("ADS - ESTATICO - PORCELANATO 70X70 ACETINADO", 20, 2.5), criativo("ADS - CIMENTO CP3", 9, 4.5)],
-    }));
+  it("produto bem mais barato que a média vira a dica (pedido de estoque) — só em loja", () => {
+    const criativos = [criativo("ADS - ESTATICO - PORCELANATO 70X70 ACETINADO", 20, 2.0), criativo("ADS - CIMENTO CP3", 9, 4.5)];
+    const p = montarPlacar(entrada({ criativos }));
     expect(p.dica).toBe("dados");
-    expect(p.texto).toMatch(/\*Dica:\* Porcelanato 70×70 acetinado trouxe conversa mais barata que a média da semana — se tiver estoque pra mais 15 dias/);
+    expect(p.texto).toMatch(/\*Dica:\* Porcelanato 70×70 acetinado trouxe conversa bem mais barata que a média da semana — se tiver estoque pra mais 15 dias/);
+    // serviço não tem estoque: a dica é a do nicho
+    expect(montarPlacar(entrada({ criativos }, "contabilidade")).dica).toBe("nicho");
+  });
+
+  it("cópias do mesmo anúncio somam; anúncio com 1 ou 2 não é citado", () => {
+    const t = montarPlacar(entrada({
+      criativos: [criativo("ADS - IMAGEM - COMBO LEVANTE", 15, 5), criativo("ADS - IMAGEM - COMBO LEVANTE — Cópia", 13, 5), criativo("ADS - ESTATICO - CIMENTO CP3", 2, 5)],
+    })).texto!;
+    expect(t).toMatch(/\*O que mais puxou conversa:\* combo levante \(28 conversas\)\./);
+    expect(t).not.toMatch(/cimento/);
+  });
+
+  it("frase de vídeo com palavra de produto continua sendo frase", () => {
+    expect(citacaoDoAnuncio({ nome: "ADS - VIDEO - TA PRECISANDO DE UM POSTE" })).toBe('o vídeo "Tá precisando de um poste"');
+    expect(citacaoDoAnuncio({ nome: "ADS - ESTATICO - A PORTA IDEAL" })).toBe('o anúncio "A porta ideal"');
+  });
+
+  it("base pequena ou salto grande: o número da semana anterior, não a %", () => {
+    expect(montarPlacar(entrada({ kpis: kpis(4.2, 2000, 1) as never })).texto).toMatch(/na semana anterior foi 1\./);
+    expect(montarPlacar(entrada({ kpis: kpis(4.2, 233, 12) as never })).texto).toMatch(/na semana anterior foram 12\./);
+    expect(montarPlacar(entrada({ kpis: kpis(4.2, -40, 8) as never })).alerta).toBeNull(); // queda sobre base pequena não alarma
   });
 
   it("clínica fala de agenda; contato no lugar de lead", () => {

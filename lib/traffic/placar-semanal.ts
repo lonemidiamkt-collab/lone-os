@@ -148,6 +148,7 @@ const ACENTOS: Record<string, string> = {
   comoda: "cômoda", armario: "armário", armarios: "armários", marmore: "mármore", tambem: "também", voce: "você",
   caminhao: "caminhão", gratis: "grátis", liquida: "líquida", campeao: "campeão", padrao: "padrão",
   mao: "mão", movel: "móvel", moveis: "móveis", disponivel: "disponível", feirao: "feirão",
+  area: "área", areas: "áreas", unamar: "Unamar",
   // cidades de uma palavra só; as compostas ("Cabo Frio") ficam em CIDADES, depois de montar a frase
   araruama: "Araruama", saquarema: "Saquarema", marica: "Maricá", iguaba: "Iguaba", macae: "Macaé", buzios: "Búzios",
   niteroi: "Niterói", brasil: "Brasil",
@@ -168,7 +169,7 @@ const comCidades = (t: string) => CIDADES.reduce((acc, [re, nome]) => acc.replac
 const UNIDADES: Record<string, string> = { mm: "mm", cm: "cm", m: "m", kg: "kg", ml: "ml", l: "L", kwp: "kWp", kw: "kW" };
 const UNIDADES_ESCRITAS = new Set(Object.values(UNIDADES));
 
-const ROTULOS_DE_FORMATO = /\b(ads?|anuncio|es?a?t[aá]ticos?|imagem|iamgem|imagens|v[ií]deos?|carrossel|reels?|stories|story|motion|gif|teste|fecha mes)\b/gi;
+const ROTULOS_DE_FORMATO = /\b(ads?|anuncio|es?a?t[aá]ticos?|imagem|iamgem|imagens|v[oó]?[ií]deos?|carrossel|reels?|stories|story|motion|gif|teste|fecha mes)\b/gi;
 
 export type FormatoAnuncio = "imagem" | "video" | "post" | "outro";
 
@@ -230,6 +231,7 @@ export function produtoDoAnuncio(nomeBruto: string, segmento?: SegmentoVoz): Pro
     .replace(/R\$\s*[\d.,:]+/gi, " ")            // R$ 59:00, R$59,90
     .replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, " ") // datas 16/10
     .replace(/\.{2,}|…/g, " ")
+    .replace(/\s+\+\s+/g, " e ").replace(/\s+\/\s+/g, ", ")   // "SOFÁS + COLCHÕES", "LOJA / SOFÁS"
     .replace(/\s+v\d+\s*$/i, " ")                  // "... ENTREGANDO V3" (versão do criativo)
     .replace(ROTULOS_DE_FORMATO, " ")
     .replace(/(\d)\s*[xX×]\s*(\d)/g, "$1×$2")    // 2,44 X 1,10 → 2,44×1,10
@@ -250,7 +252,10 @@ export function produtoDoAnuncio(nomeBruto: string, segmento?: SegmentoVoz): Pro
   if (segmento === "veiculos" && !generico && palavras.length <= 4) {
     return { texto: palavras.map((p) => palavraLegivel(p, true)).join(" "), ehProduto: true, formato };
   }
-  const ehProduto = temMedida || palavras.some((p) => PRODUTOS.has(sem(p)));
+  // Começa como gente fala ("Tá precisando de um poste", "A porta ideal", "Procurando contabilidade"):
+  // é a frase do vídeo/post, mesmo com palavra de produto no meio — cita entre aspas.
+  const abertura = /^(t[aá]|tava|se|voc[eê]|vc|ei|olha|vem|venha|quer|precisa|precisando|procurando|est[aá]|estava|a|o|as|os|para|pra|hoje|j[aá]|chegou|conhe[cç]a|aten[cç][aã]o|sabia)$/i.test(palavras[0] ?? "");
+  const ehProduto = !abertura && (temMedida || palavras.some((p) => PRODUTOS.has(sem(p))));
   if (ehProduto) {
     const texto = comCidades(palavras.map((p) => palavraLegivel(p)).join(" ").replace(/\s+([,.;:])/g, "$1"));
     return { texto, ehProduto: true, formato };
@@ -356,6 +361,12 @@ export interface Placar {
 
 /** Queda (em %) a partir da qual o time é avisado para explicar a causa no mesmo dia (regra 4). */
 export const QUEDA_ALERTA = 25;
+/** Abaixo disto na semana anterior, a comparação vai em número, não em %. */
+export const BASE_MINIMA_PCT = 10;
+/** Anúncio com menos que isto não "puxou" nada: não é citado. */
+export const MINIMO_PARA_CITAR = 3;
+/** Segmentos que vendem produto de estoque: só neles a dica dos números fala de estoque. */
+const COM_ESTOQUE = new Set<SegmentoVoz>(["construcao", "tintas", "pisos", "madeira", "ferragens", "moveis", "bazar", "autopecas", "pneus", "suplementos", "pet", "plantas", "varejo"]);
 /** Variação até este limite (em pontos %) é "no mesmo ritmo" — o mesmo limiar do PDF e do portal. */
 export const LIMIAR_RITMO = 5;
 
@@ -370,24 +381,42 @@ export function montarPlacar(e: EntradaPlacar): Placar {
 
   const fala = falaDoResultado(r.tipo, r.total);
   const custo = r.kpis.find((k) => k.chave === "custo")?.valor ?? null;
-  const varRes = r.kpis.find((k) => k.chave === "resultados")?.variacaoPct ?? null;
+  const kRes = r.kpis.find((k) => k.chave === "resultados");
+  const varRes = kRes?.variacaoPct ?? null;
+  const anterior = kRes?.anterior ?? null;
 
   let placar = `*Placar:* ${fala.placar}`;
   if (custo != null && custo > 0) placar += `, ${reais(custo)} em média ${fala.porUm}`;
   let alerta: Placar["alerta"] = null;
   let motivo: string | null = null;
-  if (varRes != null) {
+  if (varRes != null && anterior != null) {
     const pct = Math.round(Math.abs(varRes));
-    if (pct <= LIMIAR_RITMO) placar += " — no mesmo ritmo da semana anterior";
+    // Base pequena faz porcentagem gritar ("2000% a mais" com 1 conversa antes): diz o número.
+    // e salto grande também: o número antigo diz mais que "233% a mais".
+    if (anterior < BASE_MINIMA_PCT || varRes >= 100) placar += ` — na semana anterior ${anterior === 1 ? "foi" : "foram"} ${inteiro(anterior)}`;
+    else if (pct <= LIMIAR_RITMO) placar += " — no mesmo ritmo da semana anterior";
     else placar += ` — ${pct}% ${varRes > 0 ? "a mais" : "a menos"} que na semana anterior`;
-    if (varRes <= -QUEDA_ALERTA) { alerta = "queda"; motivo = `${pct}% a menos que na semana anterior`; }
+    if (varRes <= -QUEDA_ALERTA && anterior >= BASE_MINIMA_PCT) { alerta = "queda"; motivo = `${pct}% a menos que na semana anterior (${inteiro(anterior)} → ${inteiro(r.total)})`; }
   }
   placar += ".";
 
   // Os dois que mais trouxeram, pelo produto (ou pela frase do vídeo). Anúncio sem nome citável sai.
-  const citados = (r.criativosIndisponiveis ? [] : r.criativos)
-    .map((c) => ({ c, cita: citacaoDoAnuncio(c, e.segmento) }))
-    .filter((x): x is { c: Criativo; cita: string } => !!x.cita && x.c.resultados > 0)
+  // Cópias do mesmo anúncio ("— Cópia", mesmo produto) somam: "combo levante (15) e combo levante (13)"
+  // é um anúncio só para o dono.
+  const porCitacao = new Map<string, { c: Criativo; cita: string }>();
+  for (const c of r.criativosIndisponiveis ? [] : r.criativos) {
+    const cita = citacaoDoAnuncio(c, e.segmento);
+    if (!cita || c.resultados <= 0) continue;
+    const chave = sem(cita);
+    const ja = porCitacao.get(chave);
+    if (!ja) { porCitacao.set(chave, { c: { ...c }, cita }); continue; }
+    ja.c.resultados += c.resultados;
+    ja.c.investimento += c.investimento;
+    ja.c.custo = ja.c.resultados > 0 ? ja.c.investimento / ja.c.resultados : null;
+  }
+  const citados = [...porCitacao.values()]
+    .filter((x) => x.c.resultados >= MINIMO_PARA_CITAR)
+    .sort((a, b) => b.c.resultados - a.c.resultados)
     .slice(0, 2);
   let linhaTop: string | null = null;
   if (citados.length === 2) {
@@ -402,9 +431,9 @@ export function montarPlacar(e: EntradaPlacar): Placar {
   let origemDica: Placar["dica"];
   const top = citados[0];
   const produtoTop = top && produtoDoAnuncio(top.c.nome, e.segmento).ehProduto ? top.cita : null;
-  if (produtoTop && custo && top.c.custo != null && top.c.resultados >= 5 && top.c.custo <= custo * 0.75) {
+  if (produtoTop && COM_ESTOQUE.has(e.segmento) && custo && top.c.custo != null && top.c.resultados >= 10 && top.c.custo <= custo * 0.6) {
     const nomeTop = produtoTop.charAt(0).toUpperCase() + produtoTop.slice(1);
-    dica = `${nomeTop} trouxe ${fala.um} mais barat${fala.feminino ? "a" : "o"} que a média da semana — se tiver estoque pra mais 15 dias, me avisa que a gente segura esse anúncio no ar.`;
+    dica = `${nomeTop} trouxe ${fala.um} bem mais barat${fala.feminino ? "a" : "o"} que a média da semana — se tiver estoque pra mais 15 dias, me avisa que a gente segura esse anúncio no ar.`;
     origemDica = "dados";
   } else {
     dica = perfil.dicas[(semanaDoAno(e.hoje) + hash(e.clienteId)) % perfil.dicas.length];
