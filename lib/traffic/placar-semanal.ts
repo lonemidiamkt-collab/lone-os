@@ -49,7 +49,7 @@ export function segmentoDeVoz(c: ClienteParaVoz): SegmentoVoz {
   const cnae = (c.cnae_principal ?? "").replace(/\D/g, "");
 
   if (/\btinta/.test(nome)) return "tintas";
-  if (/\bpiso|porcelanat|revestiment/.test(nome)) return "pisos";
+  if (/\bpiso|porcelanat|revestiment|acabament/.test(nome)) return "pisos";
   if (/\boticas?\b/.test(nome)) return "otica";
   if (/barbear/.test(nome)) return "barbearia";
   if (/solar|fotovolt/.test(nome) || /solar|energia/.test(nicho)) return "solar";
@@ -148,7 +148,7 @@ const ACENTOS: Record<string, string> = {
   comoda: "cômoda", armario: "armário", armarios: "armários", marmore: "mármore", tambem: "também", voce: "você",
   caminhao: "caminhão", gratis: "grátis", liquida: "líquida", campeao: "campeão", padrao: "padrão",
   mao: "mão", movel: "móvel", moveis: "móveis", disponivel: "disponível", feirao: "feirão",
-  area: "área", areas: "áreas", unamar: "Unamar",
+  area: "área", areas: "áreas", unamar: "Unamar", whatsapp: "WhatsApp", instagram: "Instagram", pix: "Pix",
   // cidades de uma palavra só; as compostas ("Cabo Frio") ficam em CIDADES, depois de montar a frase
   araruama: "Araruama", saquarema: "Saquarema", marica: "Maricá", iguaba: "Iguaba", macae: "Macaé", buzios: "Búzios",
   niteroi: "Niterói", brasil: "Brasil",
@@ -212,7 +212,7 @@ function palavraLegivel(p: string, titulo = false): string {
 }
 
 /** Palavras que não podem terminar uma citação ("Se você é de…" não diz nada). */
-const PENDURADAS = new Set(["de", "da", "do", "das", "dos", "a", "o", "as", "os", "e", "em", "com", "para", "pra", "que", "um", "uma", "no", "na", "te", "se", "eu"]);
+const PENDURADAS = new Set(["de", "da", "do", "das", "dos", "a", "o", "as", "os", "e", "em", "com", "para", "pra", "que", "um", "uma", "no", "na", "te", "se", "eu", "é", "partir", "apenas", "por", "só", "so", "r$", "até"]);
 
 /**
  * Do nome do anúncio ao produto que o dono reconhece.
@@ -254,10 +254,14 @@ export function produtoDoAnuncio(nomeBruto: string, segmento?: SegmentoVoz): Pro
   }
   // Começa como gente fala ("Tá precisando de um poste", "A porta ideal", "Procurando contabilidade"):
   // é a frase do vídeo/post, mesmo com palavra de produto no meio — cita entre aspas.
-  const abertura = /^(t[aá]|tava|se|voc[eê]|vc|ei|olha|vem|venha|quer|precisa|precisando|procurando|est[aá]|estava|a|o|as|os|para|pra|hoje|j[aá]|chegou|conhe[cç]a|aten[cç][aã]o|sabia)$/i.test(palavras[0] ?? "");
-  const ehProduto = !abertura && (temMedida || palavras.some((p) => PRODUTOS.has(sem(p))));
+  const abertura = /^(t[aá]|tava|se|voc[eê]|vc|ei|olha|vem|venha|quer|precisa|precisando|procurando|est[aá]|estava|a|o|as|os|para|pra|hoje|j[aá]|chegou|chegaram|acabamos|temos|confira|aproveite|garanta|imagina|conhe[cç]a|aten[cç][aã]o|sabia)$/i.test(palavras[0] ?? "");
+  // Nome de cidade não conta como produto: "LOJA CABO FRIO" não é cabo elétrico.
+  const semCidade = comCidades(t).replace(/(S[aã]o Pedro da Aldeia|Cabo Frio|Arraial do Cabo|Rio das Ostras|Campos dos Goytacazes|Iguaba Grande|Rio de Janeiro|S[aã]o Gon[cç]alo)/g, " ");
+  const ehProduto = !abertura && (temMedida || semCidade.split(/\s+/).some((p) => PRODUTOS.has(sem(p))));
   if (ehProduto) {
-    const texto = comCidades(palavras.map((p) => palavraLegivel(p)).join(" ").replace(/\s+([,.;:])/g, "$1"));
+    const limpas = [...palavras];
+    while (limpas.length > 1 && PENDURADAS.has(sem(limpas[limpas.length - 1]))) limpas.pop();
+    const texto = comCidades(limpas.map((p) => palavraLegivel(p)).join(" ").replace(/\s+([,.;:])/g, "$1"));
     return { texto, ehProduto: true, formato };
   }
   // Não é produto: frase de abertura de vídeo/post ("CHEGOU A HORA DE VOCE REFORMAR"). Vira citação
@@ -271,12 +275,29 @@ export function produtoDoAnuncio(nomeBruto: string, segmento?: SegmentoVoz): Pro
 }
 
 /** Como o anúncio aparece na linha "o que mais puxou": produto direto; vídeo/post entre aspas. */
+/**
+ * O que a regra do setor não deixa escrever, mesmo numa mensagem só para o dono (pesquisa de 24/10/2026,
+ * .claude/skills/placar-semanal/nichos.md): marca de remédio de receita vira o procedimento (Lei 9.294,
+ * art. 7º) e "grátis" sai — chamariz amarrado à compra é venda casada (CDC, art. 39, I).
+ */
+function semTermoProibido(t: string): string {
+  return t
+    .replace(/\b(botox|dysport)\b/gi, "toxina botulínica")
+    .replace(/\s*\bgr[aá]tis\b/gi, "")
+    .replace(/\s{2,}/g, " ").trim();
+}
+
 export function citacaoDoAnuncio(c: Pick<Criativo, "nome">, segmento?: SegmentoVoz): string | null {
   const p = produtoDoAnuncio(c.nome, segmento);
   if (!p.texto) return null;
-  if (p.ehProduto) return p.texto;
+  // Farmácia de manipulação: fórmula não se cita pelo nome (RDC 67/2007, item 5.14) — fica a frase
+  // do anúncio ("Envie sua receita"), nunca o produto.
+  if (segmento === "farmacia" && p.ehProduto) return null;
+  const texto = semTermoProibido(p.texto);
+  if (!texto) return null;
+  if (p.ehProduto) return texto;
   const tipo = p.formato === "post" ? "o post" : p.formato === "video" ? "o vídeo" : "o anúncio";
-  return `${tipo} "${p.texto}"`;
+  return `${tipo} "${texto}"`;
 }
 
 // ── A mensagem ────────────────────────────────────────────────────────────────────────────────
@@ -370,9 +391,21 @@ const COM_ESTOQUE = new Set<SegmentoVoz>(["construcao", "tintas", "pisos", "made
 /** Variação até este limite (em pontos %) é "no mesmo ritmo" — o mesmo limiar do PDF e do portal. */
 export const LIMIAR_RITMO = 5;
 
+/**
+ * O cadastro às vezes erra o ramo (Calábria está como "Móveis", Hentzy pelo CNAE como "construção";
+ * as duas vendem piso). Quando o que mais roda é piso, porcelanato ou tinta, a voz segue o anúncio.
+ */
+export function segmentoPelosAnuncios(segmento: SegmentoVoz, nomes: string[]): SegmentoVoz {
+  if (segmento !== "construcao" && segmento !== "moveis" && segmento !== "varejo") return segmento;
+  const t = sem(nomes.join(" "));
+  if (/\b(piso|pisos|porcelanato|revestimento|ceramica)\b/.test(t)) return "pisos";
+  if (segmento !== "moveis" && /\b(tinta|tintas|suvinil|coral)\b/.test(t)) return "tintas";
+  return segmento;
+}
+
 export function montarPlacar(e: EntradaPlacar): Placar {
   const r = e.relatorio;
-  const perfil = PERFIS_VOZ[e.segmento];
+  const perfil = PERFIS_VOZ[segmentoPelosAnuncios(e.segmento, (r.criativosIndisponiveis ? [] : r.criativos).map((c) => c.nome))];
   const periodo = `(${ddmm(r.janela.inicio)} a ${ddmm(r.janela.fim)})`;
 
   // Notícia ruim não sai em placar automático: o gestor manda com a causa e o que já fez (regra 4).

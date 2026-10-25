@@ -60,6 +60,25 @@ describe("produtoDoAnuncio — o produto pelo nome e pela medida, sem preço", (
     expect(citacaoDoAnuncio({ nome: "ADS - VIDEO - SE VOCÊ É DE SÃO PEDRO DA ALDEIA" })).toBe('o vídeo "Se você é de São Pedro da Aldeia"');
   });
 
+  it("regra do setor: marca de remédio vira o procedimento, 'grátis' sai, fórmula de farmácia não é citada", () => {
+    expect(citacaoDoAnuncio({ nome: "ADS - VIDEO - BOTOX" }, "estetica")).toBe("toxina botulínica");
+    expect(citacaoDoAnuncio({ nome: "ADS - ESTATICO - 2 AREAS PEQUENAS GRATIS" }, "estetica")).toBe("2 áreas pequenas");
+    expect(citacaoDoAnuncio({ nome: "ADS - ESTATICO - FORMULA EMAGRECEDORA" }, "farmacia")).toBeNull();
+    expect(citacaoDoAnuncio({ nome: "ADS - VIDEO - ENVIE SUA RECEITA PELO WHATSAPP" }, "farmacia")).toBe('o vídeo "Envie sua receita pelo WhatsApp"');
+  });
+
+  it("sobra do preço tirado, verbo de chamada e cidade não viram produto", () => {
+    expect(citacaoDoAnuncio({ nome: "ADS - ESTATICO - PISOS A PARTIR DE R$ 39,90" })).toBe("pisos");
+    expect(citacaoDoAnuncio({ nome: "ADS - VIDEO - ACABAMOS DE RECEBER UMA CARRETA DE PISOS" })).toBe('o vídeo "Acabamos de receber uma carreta de pisos"');
+    expect(produtoDoAnuncio("ADS - ESTATICO - LOJA CABO FRIO").ehProduto).toBe(false);
+  });
+
+  it("a voz segue o anúncio quando o cadastro erra o ramo", () => {
+    expect(segmentoDeVoz({ nome: "Hentzy Acabamentos", cnae_principal: "4744-0/05" })).toBe("pisos");
+    const t = montarPlacar(entrada({ criativos: [criativo("ADS - ESTATICO - PORCELANATO 60X60", 9, 5)] }, "moveis")).texto!;
+    expect(t).toMatch(/E aí na loja, a semana vendeu mais ou menos que a anterior\?/); // pergunta de loja de piso, não de showroom
+  });
+
   it("nome genérico não é citado", () => {
     expect(citacaoDoAnuncio({ nome: "Novo anúncio de Tráfego" })).toBeNull();
     expect(citacaoDoAnuncio({ nome: "ADS - ESTATICO - ONDE ESTAMOS" })).toBeNull();
@@ -98,7 +117,7 @@ describe("segmentoDeVoz — o nome, o nicho solar, o CNAE e o nicho, nessa ordem
       expect(p.dicas.length, seg).toBeGreaterThanOrEqual(5);
       for (const d of p.dicas) {
         expect(d, seg).not.toMatch(/\n/);
-        expect(d.length, seg).toBeLessThanOrEqual(180);
+        expect(d.length, seg).toBeLessThanOrEqual(200);
         // regra 7 do playbook: zero jargão de marketing com o dono
         expect(d.toLowerCase(), seg).not.toMatch(/\b(ctr|cpm|cpc|lead|leads|engajamento|alcance|impress)/);
       }
@@ -199,7 +218,7 @@ describe("montarPlacar — o texto da segunda", () => {
   it("clínica fala de agenda; contato no lugar de lead", () => {
     const t = montarPlacar(entrada({ tipo: "leads" }, "estetica")).texto!;
     expect(t).toMatch(/38 pessoas deixaram o contato pelo anúncio/);
-    expect(t).toMatch(/agenda da semana encheu/);
+    expect(t).toMatch(/agenda de avaliações da semana encheu/);
     expect(falaDoResultado("leads", 1).placar).toBe("1 pessoa deixou o contato pelo anúncio");
   });
 

@@ -16,7 +16,33 @@ abre o PDF. O texto é o relatório que ele de fato lê.
 
 A base de tudo é o **Playbook Lone Construção** (Claude Docs,
 https://claude.ai/artifact/CRijErDknxkzfVp486SMRC), seções "Quem é o dono de loja", "Como o time
-conversa com ele", "Tráfego pago" e "Ritual da conta". Para os outros nichos, `nichos.md` nesta pasta.
+conversa com ele", "Tráfego pago" e "Ritual da conta". Para os outros 17 nichos, **`nichos.md`** nesta
+pasta (pesquisa de 24/10/2026, com fontes abertas e lidas): o que o dono mede, a palavra honesta para
+o resultado, glossário com medidas, pergunta de fechamento, 6 dicas e **o que a lei e o conselho não
+deixam dizer** — leia a seção do nicho antes de escrever para um cliente dele.
+
+## Regras do setor (o que não se escreve)
+
+Resumo da "Lista vermelha" de `nichos.md` — vale para o placar, para mensagem ao cliente e para
+revisar anúncio:
+
+| Nicho | Não escrever | Por quê |
+|---|---|---|
+| todos | agendamento, orçamento, pedido, venda, paciente, lead (como resultado do anúncio) | o anúncio só mede conversa |
+| estética | Botox®, Dysport®, preço por unidade de toxina; "resultado garantido", "sem dor" | Lei 9.294/96, art. 7º; CFM 2.336 |
+| farmácia de manipulação | fórmula com nome ou preço ("Mounjaro manipulado") | RDC 67/2007, item 5.14 |
+| veterinária e pet shop | preço de castração/cirurgia, "grátis", promoção; pet shop sem veterinário anunciando castração ou vacina | CFMV 1.649/2025; Lei 5.517, art. 5º |
+| ótica | exame de vista "grátis" amarrado à compra; "consulta" para optometrista | Decreto 24.492/34; CDC, art. 39, I |
+| suplementos | termogênico, queima gordura, hipertrofia | Anvisa (RDC 243, IN 28) |
+| solar | zerar a conta, conta zero, payback garantido | Lei 14.300; CDC, art. 37 |
+| carros, móveis, solar | aprovação garantida, sem consulta ao SPC | CDC, art. 54-C |
+| bazar | TV box com canais liberados, IPTV | Anatel, Ato 9.281/2023 |
+| comércio | preço não confirmado; "não aceitamos devolução" em venda pelo WhatsApp | CDC, arts. 30, 35 e 49 |
+
+No código (`citacaoDoAnuncio`): Botox/Dysport viram "toxina botulínica", "grátis" sai do nome
+citado, e na farmácia de manipulação nenhum produto é citado (só a frase do anúncio). Em clínica,
+consultório, veterinária, ótica e farmácia, **nunca** nome, foto ou print de quem chamou (dado de saúde
+é sensível — LGPD, art. 5º, II).
 
 ## A mensagem (até 5 linhas)
 
