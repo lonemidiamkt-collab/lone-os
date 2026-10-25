@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { nomesPorEmail } from "@/lib/equipe/email";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { decryptVault } from "@/lib/crypto/vault";
 import { registrarAcessoCofre } from "@/lib/cofre/registro-acesso";
@@ -71,13 +72,14 @@ export async function GET(req: NextRequest) {
   }
   const linhas = (data ?? []) as unknown as LinhaVersao[];
 
-  // Nome de quem trocou (a tabela guarda o id de login e o e-mail). Sem conseguir ler a equipe, fica o e-mail.
-  const ids = [...new Set(linhas.map((l) => l.trocado_por_id).filter((x): x is string => !!x))];
-  const nomes = new Map<string, string>();
-  if (ids.length) {
-    const { data: equipe, error: eEquipe } = await supabaseAdmin.from("team_members").select("auth_id, name").in("auth_id", ids);
+  // Nome de quem trocou. A tabela guarda o id de login e o e-mail; a equipe NÃO tem `auth_id` (25/10/2026,
+  // onda 6, item 8.12 — a busca por essa coluna falhava e todo mundo aparecia pelo e-mail). O elo é o e-mail,
+  // sem diferença de maiúsculas. A equipe é pequena: lê inteira. Sem conseguir ler, fica o e-mail.
+  let nomes = new Map<string, string>();
+  if (linhas.some((l) => l.trocado_por_email)) {
+    const { data: equipe, error: eEquipe } = await supabaseAdmin.from("team_members").select("email, name");
     if (eEquipe) console.warn("[client-vault/anteriores] nomes da equipe não lidos:", eEquipe.message);
-    for (const m of equipe ?? []) if (m.auth_id && m.name) nomes.set(m.auth_id as string, m.name as string);
+    else nomes = nomesPorEmail(equipe as Array<{ email?: unknown; name?: unknown }>);
   }
   return NextResponse.json({ disponivel: true, versoes: montarVersoes(linhas, nomes) }, { headers: SEM_CACHE });
 }

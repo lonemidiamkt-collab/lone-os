@@ -8,7 +8,14 @@ const equipe: Record<string, { is_active: boolean; deleted_at: string | null }> 
 vi.mock("@/lib/supabase/server", () => ({
   supabaseAdmin: {
     auth: { getUser: async () => (usuario ? { data: { user: usuario }, error: null } : { data: { user: null }, error: { message: "invalid" } }) },
-    from: () => ({ select: () => ({ eq: (_c: string, email: string) => ({ maybeSingle: async () => ({ data: equipe[email] ?? null, error: null }) }) }) }),
+    from: () => ({ select: () => ({
+      eq: (_c: string, email: string) => ({ maybeSingle: async () => ({ data: equipe[email] ?? null, error: null }) }),
+      // 25/10/2026 (onda 6, 8.12): a equipe é achada pelo e-mail sem diferença de maiúsculas (ilike sem curinga).
+      ilike: (_c: string, padrao: string) => ({ limit: async () => {
+        const email = padrao.replace(/\\(.)/g, "$1");
+        return { data: equipe[email] ? [{ ...equipe[email], email }] : [], error: null };
+      } }),
+    }) }),
   },
 }));
 

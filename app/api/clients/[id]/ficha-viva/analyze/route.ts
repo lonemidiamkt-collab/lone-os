@@ -10,6 +10,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { analisarDiagnostico } from "@/lib/cs/diagnostico-comercial";
 import { computeGrowth, type GrowthRow } from "@/lib/fichaViva/growth";
+import { refazerComIa } from "@/lib/fichaViva/analise";
 
 function fmtBRL(v: number): string {
   return `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -29,14 +30,15 @@ export async function POST(
     .from("clients").select("id, name, nome_fantasia, industry").eq("id", clientId).single();
   if (!client) return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
 
-  // Diagnóstico mais recente do cliente
-  const { data: diag } = await supabaseAdmin
+  // Diagnóstico mais recente do cliente. Falha de leitura não vira "ainda não respondeu" (25/10/2026, 12.1).
+  const { data: diag, error: eDiag } = await supabaseAdmin
     .from("client_diagnostics")
-    .select("id, respostas")
+    .select("id, respostas, analise")
     .eq("client_id", clientId)
     .order("answered_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
+  if (eDiag) return NextResponse.json({ error: "Não consegui ler o diagnóstico agora. Tente de novo em instantes." }, { status: 503 });
   if (!diag) return NextResponse.json({ error: "O cliente ainda não respondeu o diagnóstico." }, { status: 404 });
 
   // Contexto de crescimento (faturamento que a Lone acompanha)
@@ -69,11 +71,15 @@ export async function POST(
     return NextResponse.json({ error: result.error ?? "A IA não conseguiu analisar agora." }, { status: 502 });
   }
 
+  // 25/10/2026 (onda 6, 12.2): "Refazer" trocava a estrutura (às vezes editada à mão) sem guardar nada. A
+  // versão que estava fica em `anterior` — a tela oferece "Desfazer" e "Voltar à anterior".
+  const agora = new Date().toISOString();
+  const analise = refazerComIa(result.data, diag.analise, agora);
   const { error: updErr } = await supabaseAdmin
     .from("client_diagnostics")
-    .update({ analise: result.data, status: "analisado", analyzed_at: new Date().toISOString() })
+    .update({ analise, status: "analisado", analyzed_at: agora })
     .eq("id", diag.id);
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
 
-  return NextResponse.json({ success: true, analise: result.data });
+  return NextResponse.json({ success: true, analise, diagId: diag.id, guardouAnterior: !!analise.anterior });
 }

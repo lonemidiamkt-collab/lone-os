@@ -37,12 +37,15 @@ export interface VersaoAnterior {
 
 const MOTIVOS: MotivoVersao[] = ["troca", "remocao", "restauracao"];
 
-/** Monta a lista para a tela. `nomes`: auth_id → nome na equipe. */
+/**
+ * Monta a lista para a tela. `nomes`: e-mail (minúsculo) → nome na equipe. Era auth_id → nome, mas a
+ * equipe não tem essa coluna (25/10/2026, onda 6, item 8.12): o elo com o login é o e-mail.
+ */
 export function montarVersoes(linhas: LinhaVersao[], nomes: Map<string, string>): VersaoAnterior[] {
   return linhas.map((l) => ({
     id: l.id,
     em: l.trocado_em,
-    quem: (l.trocado_por_id && nomes.get(l.trocado_por_id)) || l.trocado_por_email || "—",
+    quem: (l.trocado_por_email && nomes.get(l.trocado_por_email.trim().toLowerCase())) || l.trocado_por_email || "—",
     motivo: MOTIVOS.includes(l.motivo as MotivoVersao) ? (l.motivo as MotivoVersao) : "troca",
   }));
 }

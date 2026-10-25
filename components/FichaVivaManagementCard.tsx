@@ -7,17 +7,26 @@
 // 21/10/2026 (auditoria de erro recuperável, 3.2): "Novo link" trocava em um clique, sem confirmar,
 // e o link enviado ao cliente morria na hora. Agora pede confirmação (como o portal) dizendo isso.
 // O `onUpdate` precisa chegar ao extra da página (token é campo sensível) — ver AbaMarca.
+//
+// 25/10/2026 (onda 6, itens 12.1–12.3): o diagnóstico vem da rota (/ficha-viva/analise, GET) e falha de
+// leitura aparece como falha, com "Tentar de novo" — antes virava "O cliente ainda não respondeu" e a
+// estrutura automática não rodava. "Refazer" pede confirmação quando a estrutura foi editada à mão e
+// sempre guarda a anterior (Desfazer + "Voltar à anterior"). A edição guarda o texto cru: o Enter dos
+// campos "1 por linha" não some mais.
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  ClipboardList, Copy, Check, X, Link2, MessageSquare, Sparkles, Loader2, RotateCcw, Pencil, Save, FileDown,
+  ClipboardList, Copy, Check, X, Link2, MessageSquare, Sparkles, Loader2, RotateCcw, Pencil, Save, FileDown, Undo2,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Client } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
-import { supabase } from "@/lib/supabase/client";
 import { DIAG_QUESTIONS } from "@/lib/fichaViva/questions";
+import {
+  descreverEdicao, doRascunho, lerEstrutura, paraRascunho, precisaConfirmarRefazer,
+  type EstruturaGuardada, type RascunhoEstrutura,
+} from "@/lib/fichaViva/analise";
 
 const PORTAL_DOMAIN = process.env.NEXT_PUBLIC_PORTAL_DOMAIN ?? "https://resultados.lonemidia.com";
 
@@ -26,16 +35,10 @@ interface Props {
   onUpdate: (patch: Partial<Client>) => void;
 }
 
-interface DiagAnalise {
-  diagnostico: string;
-  swot: { forcas: string[]; fraquezas: string[]; oportunidades: string[]; ameacas: string[] };
-  prioridades: string[];
-  scripts: string[];
-}
 interface DiagRow {
   id: string;
   respostas: Record<string, string>;
-  analise: DiagAnalise | null;
+  analise: EstruturaGuardada | null;
   status: string;
   answered_at: string;
 }
@@ -50,10 +53,15 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
   const [error, setError] = useState("");
   const [diag, setDiag] = useState<DiagRow | null>(null);
   const [loadingDiag, setLoadingDiag] = useState(true);
+  // Falha ao ler o diagnóstico ≠ "o cliente não respondeu" (12.1).
+  const [erroDiag, setErroDiag] = useState<string | null>(null);
+  // "Refazer" de uma estrutura editada à mão pede confirmação (12.2).
+  const [confirmarRefazer, setConfirmarRefazer] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [showAnswers, setShowAnswers] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<DiagAnalise | null>(null);
+  // Rascunho com o TEXTO CRU dos campos "1 por linha" — converter a cada tecla engolia o Enter (12.3).
+  const [draft, setDraft] = useState<RascunhoEstrutura | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [pdfing, setPdfing] = useState(false);
   const autoRef = useRef(false);
@@ -66,14 +74,15 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
 
   const loadDiag = useCallback(async () => {
     setLoadingDiag(true);
-    const { data } = await supabase
-      .from("client_diagnostics")
-      .select("id, respostas, analise, status, answered_at")
-      .eq("client_id", client.id)
-      .order("answered_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    setDiag((data as DiagRow) ?? null);
+    setErroDiag(null);
+    const r = await chamar<{ diagnostico: DiagRow | null }>(`/api/clients/${client.id}/ficha-viva/analise`);
+    if (!r?.ok) {
+      setErroDiag(r?.erro ?? "Não consegui carregar o diagnóstico agora.");
+      setLoadingDiag(false);
+      return;
+    }
+    const d = r.data?.diagnostico ?? null;
+    setDiag(d ? { ...d, analise: lerEstrutura(d.analise) } : null);
     setLoadingDiag(false);
   }, [client.id]);
 
@@ -115,40 +124,48 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
   async function analyze() {
     setAnalyzing(true);
     setError("");
-    try {
-      const res = await authedFetch(`/api/clients/${client.id}/ficha-viva/analyze`, { method: "POST" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Erro na análise");
-      setDiag((d) => (d ? { ...d, analise: json.analise, status: "analisado" } : d));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro na análise");
-    } finally {
-      setAnalyzing(false);
+    setConfirmarRefazer(false);
+    const r = await chamar<{ analise: EstruturaGuardada; guardouAnterior?: boolean }>(`/api/clients/${client.id}/ficha-viva/analyze`, undefined, { method: "POST" });
+    setAnalyzing(false);
+    if (!r?.ok || !r.data?.analise) { setError(r?.erro ?? "A IA não conseguiu gerar a estrutura agora."); return; }
+    setDiag((d) => (d ? { ...d, analise: lerEstrutura(r.data!.analise), status: "analisado" } : d));
+    // A versão que estava ficou guardada: dá para voltar na hora (e depois, pelo "Voltar à anterior").
+    if (r.data.guardouAnterior) {
+      toast.success("Estrutura refeita pela IA. A anterior ficou guardada.", {
+        duration: 15000,
+        action: { label: "Desfazer", onClick: () => { void voltarParaAnterior(); } },
+      });
     }
+  }
+
+  /** "Refazer": se alguém editou à mão, pergunta antes (12.2). */
+  function pedirRefazer() {
+    if (precisaConfirmarRefazer(a)) { setConfirmarRefazer(true); return; }
+    void analyze();
+  }
+
+  async function voltarParaAnterior() {
+    setError("");
+    const r = await chamar<{ analise: EstruturaGuardada }>(`/api/clients/${client.id}/ficha-viva/analise`, { acao: "voltar_anterior", diagId: diag?.id });
+    if (!r?.ok || !r.data?.analise) { setError(r?.erro ?? "Não consegui voltar à versão anterior."); return; }
+    setDiag((d) => (d ? { ...d, analise: lerEstrutura(r.data!.analise), status: "analisado" } : d));
+    toast.success("Voltou à versão anterior. A que estava ficou guardada — dá para voltar de novo.");
   }
 
   function startEdit() {
     if (!a) return;
-    setDraft(JSON.parse(JSON.stringify(a)) as DiagAnalise);
+    setDraft(paraRascunho(a));
+    setConfirmarRefazer(false);
     setEditing(true);
   }
   async function saveEdit() {
     if (!draft) return;
     setSavingEdit(true); setError("");
-    try {
-      const res = await authedFetch(`/api/clients/${client.id}/ficha-viva/analise`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ analise: draft }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Erro ao salvar");
-      setDiag((d) => (d ? { ...d, analise: json.analise, status: "analisado" } : d));
-      setEditing(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao salvar");
-    } finally {
-      setSavingEdit(false);
-    }
+    const r = await chamar<{ analise: EstruturaGuardada }>(`/api/clients/${client.id}/ficha-viva/analise`, { analise: doRascunho(draft), diagId: diag?.id });
+    setSavingEdit(false);
+    if (!r?.ok || !r.data?.analise) { setError(r?.erro ?? "Não consegui salvar a estrutura. O que você escreveu continua aqui."); return; }
+    setDiag((d) => (d ? { ...d, analise: lerEstrutura(r.data!.analise), status: "analisado" } : d));
+    setEditing(false);
   }
 
   async function downloadPdf() {
@@ -290,6 +307,11 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
 
         {loadingDiag ? (
           <div className="flex justify-center py-3"><Loader2 size={16} className="text-primary animate-spin" /></div>
+        ) : erroDiag ? (
+          <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-lone-danger">
+            <span>{erroDiag} Isso não quer dizer que o cliente não respondeu.</span>
+            <button type="button" onClick={() => void loadDiag()} className="shrink-0 rounded-md bg-card px-2.5 py-1 font-medium text-foreground hover:bg-accent">Tentar de novo</button>
+          </div>
         ) : !diag ? (
           <p className="text-xs text-muted-foreground">O cliente ainda não respondeu. Envie o link acima.</p>
         ) : (
@@ -327,11 +349,38 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
                       {pdfing ? <Loader2 size={11} className="animate-spin" /> : <FileDown size={11} />} PDF
                     </button>
                     <button onClick={startEdit} className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1"><Pencil size={11} /> Editar</button>
-                    <button onClick={analyze} disabled={analyzing} className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1">
+                    <button onClick={pedirRefazer} disabled={analyzing} className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1">
                       {analyzing ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />} Refazer
                     </button>
                   </div>
                 </div>
+                {(descreverEdicao(a) || a.anterior) && (
+                  <div className="flex items-center gap-3 flex-wrap text-[11px] text-muted-foreground">
+                    {descreverEdicao(a) && <span>Estrutura {descreverEdicao(a)}.</span>}
+                    {a.anterior && (
+                      <button type="button" onClick={() => void voltarParaAnterior()} className="flex items-center gap-1 text-primary hover:underline">
+                        <Undo2 size={11} /> Voltar à versão anterior
+                      </button>
+                    )}
+                  </div>
+                )}
+                {confirmarRefazer && (
+                  <div role="alertdialog" aria-label="Refazer a estrutura com a IA" className="space-y-2 rounded-lg border border-lone-warning-border bg-lone-warning-bg p-3">
+                    <p className="text-[11px] leading-relaxed text-foreground">
+                      Esta estrutura foi {descreverEdicao(a)}. Refazer troca o diagnóstico, o SWOT, as prioridades e os scripts pela nova
+                      saída da IA. A versão atual fica guardada e dá para voltar a ela.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => void analyze()} disabled={analyzing}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[11px] font-semibold hover:bg-primary/90 disabled:opacity-50">
+                        {analyzing && <Loader2 size={11} className="animate-spin" />} Refazer mesmo assim
+                      </button>
+                      <button type="button" onClick={() => setConfirmarRefazer(false)} className="px-3 py-1.5 rounded-lg bg-surface text-muted-foreground text-[11px] hover:text-foreground">
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   {([
                     ["Forças", a.swot.forcas, "text-lone-success"],
@@ -373,13 +422,13 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
               <div className="space-y-3">
                 <EditTA label="Diagnóstico" rows={3} value={draft.diagnostico} onChange={(v) => setDraft({ ...draft, diagnostico: v })} />
                 <div className="grid grid-cols-2 gap-2">
-                  {([["Forças", "forcas"], ["Fraquezas", "fraquezas"], ["Oportunidades", "oportunidades"], ["Ameaças", "ameacas"]] as [string, keyof DiagAnalise["swot"]][]).map(([label, key]) => (
-                    <EditTA key={key} label={`${label} (1 por linha)`} rows={4} value={arrToText(draft.swot[key])}
-                      onChange={(v) => setDraft({ ...draft, swot: { ...draft.swot, [key]: textToArr(v) } })} />
+                  {([["Forças", "forcas"], ["Fraquezas", "fraquezas"], ["Oportunidades", "oportunidades"], ["Ameaças", "ameacas"]] as [string, "forcas" | "fraquezas" | "oportunidades" | "ameacas"][]).map(([label, key]) => (
+                    <EditTA key={key} label={`${label} (1 por linha)`} rows={4} value={draft[key]}
+                      onChange={(v) => setDraft({ ...draft, [key]: v })} />
                   ))}
                 </div>
-                <EditTA label="Prioridades — 90 dias (1 por linha)" rows={4} value={arrToText(draft.prioridades)} onChange={(v) => setDraft({ ...draft, prioridades: textToArr(v) })} />
-                <EditTA label="Scripts pro time (1 por linha)" rows={5} value={arrToText(draft.scripts)} onChange={(v) => setDraft({ ...draft, scripts: textToArr(v) })} />
+                <EditTA label="Prioridades — 90 dias (1 por linha)" rows={4} value={draft.prioridades} onChange={(v) => setDraft({ ...draft, prioridades: v })} />
+                <EditTA label="Scripts pro time (1 por linha)" rows={5} value={draft.scripts} onChange={(v) => setDraft({ ...draft, scripts: v })} />
                 <div className="flex gap-2">
                   <button onClick={saveEdit} disabled={savingEdit} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
                     {savingEdit ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {savingEdit ? "Salvando…" : "Salvar estrutura"}
@@ -397,15 +446,12 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
   );
 }
 
-const arrToText = (arr: string[]) => (arr || []).join("\n");
-const textToArr = (t: string) => t.split("\n").map((s) => s.trim()).filter(Boolean);
-
 function EditTA({ label, value, onChange, rows }: { label: string; value: string; onChange: (v: string) => void; rows: number }) {
   return (
-    <div className="space-y-1">
-      <label className="text-[11px] text-muted-foreground">{label}</label>
+    <label className="block space-y-1">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
       <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={rows}
         className="w-full bg-surface border border-border rounded-lg px-2.5 py-2 text-xs text-foreground outline-none focus:border-primary/50 resize-none" />
-    </div>
+    </label>
   );
 }

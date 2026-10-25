@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRole } from "@/lib/context/RoleContext";
 import { Logo } from "@/components/ui/Logo";
 import { fotoDaPessoa } from "@/lib/equipe/fotos";
+import { apagaSenha } from "@/lib/auth/login-erro";
 import { Eye, EyeOff, ArrowRight, ChevronDown, Check, Loader2 } from "lucide-react";
 
 // Login: vídeo de fundo (handoff LoneHub) + card. Regras da Lone PRESERVADAS: fonte Montserrat,
@@ -82,24 +83,17 @@ export default function LoginScreen() {
     setLoading(true);
     setError("");
     try {
-      const success = await login(selectedUser, password);
-      if (!success) {
-        setError("Senha incorreta. Verifique e tente novamente.");
-        setPassword("");
+      // 25/10/2026 (onda 6, 8.5): o login diz POR QUE não entrou. Antes rede caída, deploy no meio, o Kong
+      // recusando as chaves e o limite de tentativas viravam "Senha incorreta" — e a senha era apagada.
+      // Só a senha errada apaga o campo; o "modo local" prometido aqui nunca existiu e saiu.
+      const r = await login(selectedUser, password);
+      if (!r.ok) {
+        setError(r.frase);
+        if (apagaSenha(r.motivo)) setPassword("");
+        setTimeout(() => passwordRef.current?.focus(), 30);
       } else if (!duasEtapasPendenteRef.current) {
         const profile = profiles.find((p) => p.id === selectedUser);
         if (profile) setWelcomeState({ show: true, name: profile.name.split(" ")[0], role: profile.role });
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message.toLowerCase() : "";
-      if (msg.includes("perfil-nao-encontrado")) {
-        // Não é senha. Falar "senha incorreta" aqui faz a pessoa trocar a senha à toa.
-        setError("Não encontrei esse perfil no sistema. Recarregue a página — se persistir, é falha nossa, me avise.");
-        setPassword("");
-      } else if (msg.includes("fetch") || msg.includes("network") || msg.includes("timeout")) {
-        setError("Sem conexão com o servidor. O sistema funcionará em modo local.");
-      } else {
-        setError("Erro inesperado. Tente novamente em instantes.");
       }
     } finally {
       setLoading(false);

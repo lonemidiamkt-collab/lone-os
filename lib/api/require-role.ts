@@ -18,9 +18,12 @@ export const GESTAO: Papel[] = ["admin", "manager"];
 
 export interface Autorizado { user: ServerUser; papel: Papel | null }
 
-/** Papel do usuário (team_members por e-mail). isAdmin do JWT tem precedência. */
+/** Papel do usuário (team_members por e-mail). isAdmin da sessão tem precedência. */
 export async function papelDoUsuario(user: ServerUser): Promise<Papel | null> {
   if (user.isAdmin) return "admin";
+  // getServerUser já leu a equipe para barrar desativado (25/10/2026, onda 6): reaproveita em vez de
+  // consultar de novo. `undefined` = não leu (falha ou sessão montada à mão) → consulta aqui.
+  if (user.papel !== undefined) return (user.papel as Papel) || null;
   const email = (user.email || "").toLowerCase();
   if (!email) return null;
   // Só quem está ATIVO tem papel. Desativado/removido continua com o login até a sessão vencer

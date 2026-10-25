@@ -3,6 +3,9 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { estadoDuasEtapas, verificarCodigo } from "@/lib/auth/duas-etapas";
+import { falhaDeLogin, fraseDoLogin, type ErroDeLogin, type ResultadoLogin } from "@/lib/auth/login-erro";
+import { faseDaInatividade, lerAtividadeCompartilhada } from "@/lib/auth/inatividade";
+import { registrarReentrada } from "@/lib/auth/reentrada";
 import type { Role } from "@/lib/types";
 
 export interface UserProfile {
@@ -51,6 +54,19 @@ const ROLE_LABELS: Record<Role, string> = {
   comercial: "Comercial (SDR)",
 };
 
+/**
+ * A sessão caiu com a pessoa no meio do trabalho (25/10/2026, onda 6, itens 8.3 e 8.4). A página NÃO é
+ * trocada pela tela de login: fica montada por baixo de "Entre de novo para continuar"
+ * (components/ReentrarSessao), com o formulário aberto do jeito que estava.
+ *  · "inatividade": 4 h sem uso em nenhuma aba deste navegador (lib/auth/inatividade.ts);
+ *  · "expirou": o servidor recusou a sessão mesmo depois de renovar, ou ela foi encerrada em outra aba.
+ */
+export interface SessaoInterrompida {
+  motivo: "inatividade" | "expirou";
+  email: string;
+  nome: string;
+}
+
 interface RoleContextValue {
   /** A equipe de verdade (banco). Use isto em vez de importar USER_PROFILES. */
   profiles: UserProfile[];
@@ -63,7 +79,9 @@ interface RoleContextValue {
   roleLabel: string;
   isAuthenticated: boolean;
   hydrated: boolean;
-  login: (userId: string, password: string) => Promise<boolean>;
+  /** Entrar pela tela de login. A falha diz POR QUÊ (senha × rede × limite × servidor) — 8.5. */
+  login: (userId: string, password: string) => Promise<ResultadoLogin>;
+  /** "Sair" de propósito: fecha a sessão SÓ neste navegador e volta para a tela de login. */
   logout: () => Promise<void>;
   /**
    * Senha certa, mas a conta tem autenticador e a sessão ainda está em aal1: falta o código.
@@ -71,6 +89,12 @@ interface RoleContextValue {
    */
   duasEtapasPendente: boolean;
   confirmarDuasEtapas: (codigo: string) => Promise<{ ok: boolean; erro?: string }>;
+  /** Sessão que caiu com a página aberta (ver SessaoInterrompida). null = nada interrompido. */
+  sessaoInterrompida: SessaoInterrompida | null;
+  /** Entrar de novo como a MESMA pessoa, sem sair da página. */
+  reentrar: (senha: string) => Promise<ResultadoLogin>;
+  /** 4 h sem uso em nenhuma aba: fecha a sessão só neste navegador e guarda a página por baixo. */
+  encerrarPorInatividade: () => Promise<void>;
 }
 
 const DEFAULT_PROFILE = USER_PROFILES[0];
@@ -86,27 +110,49 @@ const RoleContext = createContext<RoleContextValue>({
   roleLabel: "CEO",
   isAuthenticated: false,
   hydrated: false,
-  login: async () => false,
+  login: async () => ({ ok: false, motivo: "desconhecido", frase: "" }),
   logout: async () => {},
   duasEtapasPendente: false,
   confirmarDuasEtapas: async () => ({ ok: false }),
+  sessaoInterrompida: null,
+  reentrar: async () => ({ ok: false, motivo: "desconhecido", frase: "" }),
+  encerrarPorInatividade: async () => {},
 });
 
-async function fetchTeamMemberId(authId: string): Promise<string | undefined> {
+/**
+ * Quem o SERVIDOR acha que é este token: 200 com o id da equipe; 401 quando recusa (sessão vencida,
+ * acesso desativado, autenticador pendente); 0 = sem rede.
+ *
+ * fetch direto, NÃO `chamar`/authedFetch: esta consulta faz parte da própria entrada. Pelo authedFetch,
+ * um 401 aqui ficaria esperando a pessoa entrar de novo — que é justamente o que está acontecendo.
+ * 25/10/2026 (8.12): antes ia SEM o token e a rota procurava `team_members.auth_id` (coluna que não
+ * existe) — o id da equipe voltava sempre nulo.
+ */
+async function quemSouEu(token: string | null | undefined): Promise<{ status: number; teamMemberId?: string }> {
+  if (!token) return { status: 401 };
   try {
-    const res = await fetch(`/api/auth/team-member?auth_id=${authId}`);
-    const data = await res.json();
-    return data?.id ?? undefined;
+    const res = await fetch("/api/auth/team-member", { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return { status: res.status };
+    const d = await res.json().catch(() => null);
+    return { status: res.status, teamMemberId: (d?.id as string | null) ?? undefined };
   } catch {
-    return undefined;
+    return { status: 0 };
   }
 }
+
+async function tokenAtual(): Promise<string | null> {
+  try { return (await supabase.auth.getSession()).data.session?.access_token ?? null; } catch { return null; }
+}
+
+/** Quanto um pedido espera a pessoa entrar de novo antes de desistir e devolver o 401. */
+const ESPERA_REENTRADA_MS = 30 * 60 * 1000;
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [currentProfile, setCurrentProfileState] = useState<UserProfile>(DEFAULT_PROFILE);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [duasEtapasPendente, setDuasEtapasPendente] = useState(false);
+  const [sessaoInterrompida, setSessaoInterrompida] = useState<SessaoInterrompida | null>(null);
   // Perfil que passou pela senha e espera o código — vira currentProfile só depois de confirmar.
   const perfilEmEsperaRef = useRef<UserProfile | null>(null);
   // A equipe de verdade, do banco. Começa na reserva pra tela ter o que mostrar no primeiro quadro.
@@ -119,6 +165,48 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   /** id do usuário já autenticado nesta aba — SIGNED_IN repetido para ele (aba voltando) é ignorado. */
   const usuarioAtivoRef = useRef<string | null>(null);
   useEffect(() => { profilesRef.current = profiles; }, [profiles]);
+  // Espelhos para o ouvinte de sessão (criado uma vez) e para a espera do authedFetch.
+  const autenticadoRef = useRef(false);
+  const perfilAtualRef = useRef<UserProfile>(DEFAULT_PROFILE);
+  const interrompidaRef = useRef<SessaoInterrompida | null>(null);
+  useEffect(() => { perfilAtualRef.current = currentProfile; }, [currentProfile]);
+  /** Saída feita por esta aba: o SIGNED_OUT que vem em seguida sabe se foi "Sair" ou inatividade. */
+  const saidaRef = useRef<null | "explicita" | "inatividade">(null);
+  /** Login/reentrada desta aba em andamento: o SIGNED_IN que ele dispara é tratado por quem chamou. */
+  const entrandoRef = useRef(false);
+  /** Pedidos (authedFetch) esperando a pessoa entrar de novo. */
+  const retomadaRef = useRef<{ promessa: Promise<boolean>; resolver: (v: boolean) => void } | null>(null);
+
+  const abrirRetomada = useCallback((): Promise<boolean> => {
+    if (retomadaRef.current) return retomadaRef.current.promessa;
+    let resolver: (v: boolean) => void = () => {};
+    const promessa = new Promise<boolean>((r) => { resolver = r; });
+    retomadaRef.current = { promessa, resolver };
+    return promessa;
+  }, []);
+  const fecharRetomada = useCallback((voltou: boolean) => {
+    const r = retomadaRef.current;
+    retomadaRef.current = null;
+    r?.resolver(voltou);
+  }, []);
+
+  const marcarAutenticado = useCallback((sim: boolean) => {
+    autenticadoRef.current = sim;
+    setIsAuthenticated(sim);
+  }, []);
+  const marcarInterrompida = useCallback((s: SessaoInterrompida | null) => {
+    interrompidaRef.current = s;
+    setSessaoInterrompida(s);
+  }, []);
+
+  /** A sessão caiu com a página aberta: guarda a página e pede a senha por cima. */
+  const interromper = useCallback((motivo: SessaoInterrompida["motivo"]) => {
+    const p = perfilAtualRef.current;
+    usuarioAtivoRef.current = null;
+    marcarInterrompida(interrompidaRef.current ?? { motivo, email: p.email, nome: p.name });
+    marcarAutenticado(false);
+    void abrirRetomada();
+  }, [abrirRetomada, marcarAutenticado, marcarInterrompida]);
 
   /** Quem é o dono deste e-mail. Tenta a lista viva; cai na reserva se não achar. */
   const acharPorEmail = useCallback((email?: string | null): UserProfile | undefined => {
@@ -146,6 +234,56 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   }, []);
   useEffect(() => { void carregarRoster(); }, [carregarRoster]);
 
+  /**
+   * Põe esta sessão para dentro: perfil, id da equipe e — se a conta tem autenticador e a sessão está
+   * em aal1 — o pedido do código. Um caminho só para restaurar, login, reentrada e outra aba.
+   */
+  const aplicarSessao = useCallback(async (user: { id: string; email?: string | null }, token?: string | null): Promise<"ok" | "codigo" | "sem-perfil"> => {
+    if (!acharPorEmail(user.email)) await carregarRoster(); // fora da reserva: espera a lista viva
+    const profile = acharPorEmail(user.email);
+    if (!profile) return "sem-perfil";
+    // O roster já traz o id da equipe (team_members.id). Só a lista de reserva (roster fora do ar) não
+    // tem — aí pergunta ao servidor, junto com o estado das duas etapas, sem somar espera na entrada.
+    const [eu, de] = await Promise.all([
+      profile.teamMemberId ? Promise.resolve({ status: 200, teamMemberId: profile.teamMemberId }) : (async () => quemSouEu(token ?? await tokenAtual()))(),
+      // Sessão de quem tem autenticador precisa estar em aal2 — senão o servidor recusa tudo
+      // (auth-server.ts). Pede o código antes de deixar entrar.
+      estadoDuasEtapas(),
+    ]);
+    const teamMemberId = eu.teamMemberId ?? profile.teamMemberId;
+    if (de.precisaCodigo) {
+      perfilEmEsperaRef.current = { ...profile, teamMemberId };
+      setDuasEtapasPendente(true);
+      return "codigo";
+    }
+    usuarioAtivoRef.current = user.id;
+    setCurrentProfileState({ ...profile, teamMemberId });
+    perfilAtualRef.current = { ...profile, teamMemberId };
+    marcarAutenticado(true);
+    marcarInterrompida(null);
+    fecharRetomada(true);
+    return "ok";
+  }, [acharPorEmail, carregarRoster, fecharRetomada, marcarAutenticado, marcarInterrompida]);
+
+  // O authedFetch pergunta aqui quando o servidor recusa a sessão mesmo depois de renovar (8.4).
+  useEffect(() => {
+    let conferindo: Promise<number> | null = null;
+    registrarReentrada(async () => {
+      if (!autenticadoRef.current && !interrompidaRef.current) return false; // ninguém logado: nada a retomar
+      if (!interrompidaRef.current) {
+        // 401 nem sempre é sessão: algumas rotas respondem 401 para "não é admin". Antes de cobrir a
+        // página, confere com o servidor se ESTE token ainda vale.
+        conferindo ??= tokenAtual().then(quemSouEu).then((r) => r.status).finally(() => { conferindo = null; });
+        const status = await conferindo;
+        if (status !== 401) return false; // sessão boa (era permissão) ou sem rede: não tranca a página
+        if (!interrompidaRef.current) interromper("expirou");
+      }
+      const espera = retomadaRef.current?.promessa ?? abrirRetomada();
+      return Promise.race([espera, new Promise<boolean>((r) => setTimeout(() => r(false), ESPERA_REENTRADA_MS))]);
+    });
+    return () => registrarReentrada(null);
+  }, [interromper, abrirRetomada]);
+
   // Restore session from Supabase on mount
   useEffect(() => {
     let mounted = true;
@@ -156,22 +294,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         const { data: { session } } = await supabase.auth.getSession();
 
         if (session?.user && mounted) {
-          if (!acharPorEmail(session.user.email)) await carregarRoster(); // fora da reserva: espera a lista viva
-          const profile = acharPorEmail(session.user.email);
-          if (profile) {
-            const teamMemberId = await fetchTeamMemberId(session.user.id);
-            // Sessão de quem tem autenticador precisa estar em aal2 — senão o servidor recusa
-            // tudo (auth-server.ts). Pede o código antes de deixar entrar.
-            const de = await estadoDuasEtapas();
-            if (de.precisaCodigo) {
-              perfilEmEsperaRef.current = { ...profile, teamMemberId };
-              setDuasEtapasPendente(true);
-            } else {
-              usuarioAtivoRef.current = session.user.id;
-              setCurrentProfileState({ ...profile, teamMemberId });
-              setIsAuthenticated(true);
-            }
-          }
+          await aplicarSessao(session.user, session.access_token);
         }
 
         // Listen for auth state changes
@@ -192,33 +315,43 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             (event, session) => {
               if (!mounted) return;
               if (event === "SIGNED_OUT") {
+                const saida = saidaRef.current;
+                saidaRef.current = null;
                 usuarioAtivoRef.current = null;
-                setIsAuthenticated((prev) => {
-                  if (prev) setCurrentProfileState(DEFAULT_PROFILE);
-                  return false;
-                });
+                // "Sair" de propósito nesta aba: o logout() já limpou tudo e a tela de login aparece.
+                if (saida === "explicita") return;
+                // A sessão caiu com a página aberta (inatividade, outra aba saiu, renovação recusada):
+                // a página fica guardada por baixo do pedido de senha (25/10/2026, 8.3). Sem ninguém
+                // logado antes, segue o caminho antigo (tela de login).
+                if (autenticadoRef.current || interrompidaRef.current) {
+                  let pelaInatividade = saida === "inatividade";
+                  if (!pelaInatividade) {
+                    const ultima = lerAtividadeCompartilhada(() => window.localStorage);
+                    pelaInatividade = ultima !== null && faseDaInatividade(Date.now(), ultima).fase === "sair";
+                  }
+                  interromper(pelaInatividade ? "inatividade" : "expirou");
+                  return;
+                }
+                marcarAutenticado(false);
+                setCurrentProfileState(DEFAULT_PROFILE);
                 return;
               }
-              if (event !== "SIGNED_IN" || !session?.user) return;
+              // MFA_CHALLENGE_VERIFIED: outra aba confirmou o código — esta também pode entrar.
+              if ((event !== "SIGNED_IN" && event !== "MFA_CHALLENGE_VERIFIED") || !session?.user) return;
               if (usuarioAtivoRef.current === session.user.id) return; // aba voltou; já está logado
+              if (entrandoRef.current) return; // login/reentrada desta aba: quem chamou cuida
               const user = session.user;
               setTimeout(() => {
                 void (async () => {
-                  if (!mounted) return;
-                  if (!acharPorEmail(user.email)) await carregarRoster();
-                  const profile = acharPorEmail(user.email);
-                  if (!profile) return;
-                  const teamMemberId = await fetchTeamMemberId(user.id);
-                  const de = await estadoDuasEtapas();
-                  if (!mounted) return;
-                  if (de.precisaCodigo) {
-                    perfilEmEsperaRef.current = { ...profile, teamMemberId };
-                    setDuasEtapasPendente(true);
-                  } else {
-                    usuarioAtivoRef.current = user.id;
-                    setCurrentProfileState({ ...profile, teamMemberId });
-                    setIsAuthenticated(true);
+                  if (!mounted || usuarioAtivoRef.current === user.id || entrandoRef.current) return;
+                  // Outra pessoa entrou em outra aba enquanto esta guardava a página de alguém: a página
+                  // é de quem saiu. Recarrega limpo para a pessoa nova (nada de formulário de outro).
+                  const interrompida = interrompidaRef.current;
+                  if (interrompida && interrompida.email.toLowerCase() !== (user.email ?? "").toLowerCase()) {
+                    window.location.reload();
+                    return;
                   }
+                  await aplicarSessao(user);
                 })();
               }, 0);
             }
@@ -236,6 +369,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription?.unsubscribe();
     };
+  // O ouvinte é criado UMA vez (ver acima); tudo o que ele usa é estável (useCallback/ref).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const setProfile = useCallback((profile: UserProfile) => {
@@ -252,7 +387,31 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     if (found) setCurrentProfileState(found);
   }, []);
 
-  const login = useCallback(async (userId: string, password: string): Promise<boolean> => {
+  /** Senha → sessão. Usado pelo login e pela reentrada; nunca lança. */
+  const entrarComSenha = useCallback(async (email: string, password: string, reentrada: boolean): Promise<ResultadoLogin> => {
+    entrandoRef.current = true;
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error || !data.session) return falhaDeLogin(error ?? null);
+      if (reentrada) {
+        // A senha passou no Auth, mas o painel pode continuar recusando (acesso desativado ou removido).
+        // Diz isso em vez de abrir a página e cair de novo no primeiro clique.
+        const eu = await quemSouEu(data.session.access_token);
+        if (eu.status === 401 && !(await estadoDuasEtapas()).precisaCodigo) {
+          return { ok: false, motivo: "bloqueado", frase: "A senha está certa, mas o seu acesso ao painel está desativado. Fale com o administrador." };
+        }
+      }
+      const r = await aplicarSessao(data.user, data.session.access_token);
+      if (r === "sem-perfil") return { ok: false, motivo: "perfil", frase: fraseDoLogin("perfil") };
+      return { ok: true };
+    } catch (e) {
+      return falhaDeLogin(e as ErroDeLogin);
+    } finally {
+      entrandoRef.current = false;
+    }
+  }, [aplicarSessao]);
+
+  const login = useCallback(async (userId: string, password: string): Promise<ResultadoLogin> => {
     // PROCURA NA LISTA VIVA, não na de reserva. Quando a equipe passou a vir do banco, o id de
     // cada perfil mudou (o do Roberto era "roberto" e virou "lonemidiamkt", derivado do e-mail) —
     // e esta busca continuou na lista chumbada. Resultado: o perfil não era encontrado, a função
@@ -268,55 +427,59 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       // Distingue "não achei esse perfil" de "senha errada". Dizer senha incorreta quando o
       // problema é outro manda a pessoa procurar no lugar errado — foi o que aconteceu aqui.
       console.error("[login] perfil não encontrado:", userId);
-      throw new Error("perfil-nao-encontrado");
+      return { ok: false, motivo: "perfil", frase: fraseDoLogin("perfil") };
     }
+    // 25/10/2026 (8.5): cada falha com o seu motivo — antes toda falha virava "Senha incorreta".
+    return entrarComSenha(profile.email, password, false);
+  }, [entrarComSenha]);
 
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: profile.email,
-        password,
-      });
+  const reentrar = useCallback(async (senha: string): Promise<ResultadoLogin> => {
+    const alvo = interrompidaRef.current;
+    if (!alvo) return { ok: true };
+    return entrarComSenha(alvo.email, senha, true);
+  }, [entrarComSenha]);
 
-      if (!error && data.session) {
-        const teamMemberId = await fetchTeamMemberId(data.user.id);
-        const de = await estadoDuasEtapas();
-        if (de.precisaCodigo) {
-          // Senha certa, falta o código: a tela troca para o campo do autenticador.
-          perfilEmEsperaRef.current = { ...profile, teamMemberId };
-          setDuasEtapasPendente(true);
-          return true;
-        }
-        usuarioAtivoRef.current = data.user.id;
-        setCurrentProfileState({ ...profile, teamMemberId });
-        setIsAuthenticated(true);
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  }, []);
-
+  // "Sair" de propósito. Escopo LOCAL (25/10/2026, 8.3): o padrão do supabase-js é global e derrubava o
+  // celular e os outros computadores da pessoa junto. Aqui sai só deste navegador.
   const logout = useCallback(async () => {
-    try { await supabase.auth.signOut(); } catch { /* ignore */ }
+    saidaRef.current = "explicita";
+    try { await supabase.auth.signOut({ scope: "local" }); } catch { /* ignore */ }
+    saidaRef.current = null; // o SIGNED_OUT já passou; o próximo não é deste clique
     usuarioAtivoRef.current = null;
-    setIsAuthenticated(false);
+    marcarAutenticado(false);
     setDuasEtapasPendente(false);
     perfilEmEsperaRef.current = null;
+    marcarInterrompida(null);
+    fecharRetomada(false); // pedidos esperando a reentrada desistem (devolvem o 401)
     setCurrentProfileState(DEFAULT_PROFILE);
-  }, []);
+  }, [fecharRetomada, marcarAutenticado, marcarInterrompida]);
+
+  const encerrarPorInatividade = useCallback(async () => {
+    if (!autenticadoRef.current) return;
+    saidaRef.current = "inatividade";
+    interromper("inatividade");
+    try { await supabase.auth.signOut({ scope: "local" }); } catch { /* a sessão some deste navegador de qualquer jeito */ }
+    saidaRef.current = null;
+  }, [interromper]);
 
   const confirmarDuasEtapas = useCallback(async (codigo: string) => {
-    const r = await verificarCodigo(codigo);
-    if (!r.ok) return r;
-    const perfil = perfilEmEsperaRef.current;
-    perfilEmEsperaRef.current = null;
-    setDuasEtapasPendente(false);
-    if (perfil) setCurrentProfileState(perfil);
-    try { const { data } = await supabase.auth.getSession(); usuarioAtivoRef.current = data.session?.user.id ?? null; } catch { /* sem sessão */ }
-    setIsAuthenticated(true);
-    return { ok: true };
-  }, []);
+    entrandoRef.current = true;
+    try {
+      const r = await verificarCodigo(codigo);
+      if (!r.ok) return r;
+      const perfil = perfilEmEsperaRef.current;
+      perfilEmEsperaRef.current = null;
+      setDuasEtapasPendente(false);
+      if (perfil) { setCurrentProfileState(perfil); perfilAtualRef.current = perfil; }
+      try { const { data } = await supabase.auth.getSession(); usuarioAtivoRef.current = data.session?.user.id ?? null; } catch { /* sem sessão */ }
+      marcarAutenticado(true);
+      marcarInterrompida(null);
+      fecharRetomada(true);
+      return { ok: true };
+    } finally {
+      entrandoRef.current = false;
+    }
+  }, [fecharRetomada, marcarAutenticado, marcarInterrompida]);
 
   return (
     <RoleContext.Provider
@@ -335,6 +498,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         logout,
         duasEtapasPendente,
         confirmarDuasEtapas,
+        sessaoInterrompida,
+        reentrar,
+        encerrarPorInatividade,
       }}
     >
       {children}

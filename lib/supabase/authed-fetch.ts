@@ -11,6 +11,7 @@
  */
 
 import { supabase } from "./client";
+import { aguardarReentrada } from "@/lib/auth/reentrada";
 
 /** Disparado quando o servidor recusa por sessão inválida — a UI avisa em vez de mostrar tela vazia. */
 export const SESSAO_EXPIRADA = "lone:sessao-expirada";
@@ -58,7 +59,23 @@ export async function authedFetch(input: RequestInfo | URL, init?: RequestInit):
         res = await fetch(input, { ...init, headers: h2 });
       }
     } catch { /* sem sessão para renovar */ }
-    if (res.status === 401) window.dispatchEvent(new CustomEvent(SESSAO_EXPIRADA));
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent(SESSAO_EXPIRADA));
+      // 25/10/2026 (onda 6, 8.4): em vez de "recarregue a página" (que apagava o formulário), o painel
+      // pede a senha por cima da página. Se a pessoa entrar de novo, este pedido é repetido UMA vez com o
+      // token novo — o "Salvando…" termina sozinho. Ninguém esperando (teste, página pública): volta o 401.
+      if (await aguardarReentrada()) {
+        try {
+          const { data } = await supabase.auth.getSession();
+          const tok = data.session?.access_token;
+          if (tok) {
+            const h3 = new Headers(init?.headers);
+            h3.set("Authorization", `Bearer ${tok}`);
+            res = await fetch(input, { ...init, headers: h3 });
+          }
+        } catch { /* fica o 401 original */ }
+      }
+    }
   }
   return res;
 }
