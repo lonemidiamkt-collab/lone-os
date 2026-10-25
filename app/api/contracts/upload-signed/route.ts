@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { anterioresDepoisDaTroca, decidirEnvioAssinado, textoDaTroca } from "@/lib/contracts/pdf-assinado";
 
 const MAX_SIZE = 20 * 1024 * 1024; // 20MB — contrato PDF raramente passa disso
 const BUCKET = "legal-docs";
@@ -37,12 +38,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "signature_method inválido" }, { status: 400 });
   }
 
-  // Busca o contrato pra pegar clientId + version
-  const { data: contract } = await supabaseAdmin.from("contracts").select("id, client_id, version").eq("id", contractId).maybeSingle();
+  // Busca o contrato inteiro: clientId + version, e o PDF assinado que já existe (para a troca).
+  // `*` e não a lista de colunas: a coluna de anteriores pode ainda não existir (migration 20261024120000).
+  const { data: contract, error: errContrato } = await supabaseAdmin.from("contracts").select("*").eq("id", contractId).maybeSingle();
+  if (errContrato) return NextResponse.json({ error: `Não consegui ler o contrato (${errContrato.message}). Nada foi enviado.` }, { status: 503 });
   if (!contract) return NextResponse.json({ error: "Contrato não encontrado" }, { status: 404 });
+  const contrato = contract as Record<string, unknown>;
 
-  const clientId = (contract as Record<string, unknown>).client_id as string;
-  const version = (contract as Record<string, unknown>).version as number | undefined;
+  // 24/10/2026 (auditoria 3.13): já assinado só se troca com `substituir=1` (botão "Trocar PDF
+  // assinado", com confirmação) — e a referência do anterior é guardada, nunca apagada.
+  const decisao = decidirEnvioAssinado(contrato, form.get("substituir") === "1");
+  if (!decisao.ok) return NextResponse.json({ error: decisao.erro }, { status: decisao.status });
+
+  const clientId = contrato.client_id as string;
+  const version = contrato.version as number | undefined;
 
   // Path: contracts-signed/{clientId}/{contractId}-v{N}-signed-{timestamp}.pdf
   // Timestamp pra permitir re-upload sem sobrescrever (rastreabilidade).
@@ -60,21 +69,41 @@ export async function POST(req: NextRequest) {
   }
 
   const refPath = `legal://${storagePath}`;
-  const { error: updateErr } = await supabaseAdmin.from("contracts").update({
+  const agora = new Date().toISOString();
+  const anteriores = decisao.troca ? anterioresDepoisDaTroca(contrato, user.email || "equipe", agora) : null;
+  // O update só vale se o PDF ainda é o que foi lido: duas trocas ao mesmo tempo não podem fazer a
+  // segunda apagar a referência que a primeira acabou de guardar.
+  const base = supabaseAdmin.from("contracts").update({
     signed_pdf_path: refPath,
-    signed_at: new Date().toISOString(),
+    signed_at: agora,
     signed_uploaded_by: user.email,
     signature_method: method,
     status: "active",
+    ...(anteriores ? { signed_pdf_anteriores: anteriores } : {}),
   }).eq("id", contractId);
+  const lido = (contrato.signed_pdf_path as string | null | undefined) ?? null;
+  const { data: gravado, error: updateErr } = await (lido === null ? base.is("signed_pdf_path", null) : base.eq("signed_pdf_path", lido))
+    .select("id").maybeSingle();
 
-  if (updateErr) {
-    console.error("[upload-signed] DB update error:", updateErr);
-    // Cleanup: remove arquivo órfão do storage pra não acumular
+  if (updateErr || !gravado) {
+    console.error("[upload-signed] DB update error:", updateErr ?? "nenhuma linha (PDF mudou no meio)");
+    // Cleanup: remove SÓ o arquivo novo, que ficou órfão. O anterior não é tocado.
     await supabaseAdmin.storage.from(BUCKET).remove([storagePath]).catch((cleanupErr) => {
       console.warn("[upload-signed] orphan cleanup failed:", cleanupErr);
     });
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    if (!updateErr) {
+      return NextResponse.json({ error: "Alguém enviou outro PDF assinado para este contrato agora há pouco. Recarregue e confira antes de trocar." }, { status: 409 });
+    }
+    return NextResponse.json({ error: `Não consegui gravar o PDF assinado: ${updateErr.message}. O contrato ficou como estava.` }, { status: 500 });
+  }
+
+  // A troca entra no histórico do contrato (o que a tela mostra em "Histórico").
+  const avisos: string[] = [];
+  if (anteriores) {
+    const { error: eAud } = await supabaseAdmin.from("contract_audit_log").insert({
+      contract_id: contractId, action: "signed_replaced", actor: user.email, details: textoDaTroca(anteriores[0]),
+    });
+    if (eAud) avisos.push("o histórico do contrato não registrou a troca (o PDF anterior continua guardado)");
   }
 
   // Timeline + audit
@@ -82,7 +111,9 @@ export async function POST(req: NextRequest) {
     client_id: clientId,
     type: "manual",
     actor: user.email,
-    description: `Contrato V${version ?? 1} marcado como assinado (${method === "d4sign_manual" ? "D4Sign" : method}).`,
+    description: decisao.troca
+      ? `PDF assinado do Contrato V${version ?? 1} trocado (o anterior ficou guardado).`
+      : `Contrato V${version ?? 1} marcado como assinado (${method === "d4sign_manual" ? "D4Sign" : method}).`,
     timestamp: new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
   }).then(({ error }) => {
     if (error) console.warn("[upload-signed] timeline log failed:", error.message);
@@ -103,7 +134,9 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
+    troca: decisao.troca,
     signedPdfPath: refPath,
-    signedAt: new Date().toISOString(),
+    signedAt: agora,
+    avisos,
   });
 }

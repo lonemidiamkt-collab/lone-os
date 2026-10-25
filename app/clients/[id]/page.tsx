@@ -23,6 +23,7 @@ import { chamar } from "@/lib/api/chamar";
 import { cn } from "@/lib/utils";
 import { nivelDoCliente, scoreDoCliente } from "@/lib/saude/carteira";
 import type { Client } from "@/lib/types";
+import type { ClientPatch } from "@/stores/useClientsStore";
 import CabecalhoCliente from "@/components/client/ficha/CabecalhoCliente";
 import PedirArteModal from "@/components/client/ficha/PedirArteModal";
 import PainelPortal, { BotaoPortal } from "@/components/client/ficha/PortalDoCliente";
@@ -64,6 +65,8 @@ export default function ClientDetailPage() {
 
   // ── Stores ────────────────────────────────────────────────────────────────
   const clients = useClientsStore((s) => s.clients);
+  const carteiraErro = useClientsStore((s) => s.erro);
+  const carregandoCarteira = useClientsStore((s) => s.loading);
   const updateClientData = useClientsStore((s) => s.updateClient);
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
@@ -176,6 +179,13 @@ export default function ClientDetailPage() {
     setClientExtra((e) => ({ ...e, ...extra }));
     if (Object.keys(comuns).length) patchClientLocal(clientId, comuns);
   }, [clientId, patchClientLocal]);
+  // Salvar o cadastro (modal Editar, abas Marca e Admin): grava pelo store e leva os campos sensíveis
+  // ao extra — 24/10/2026 (auditoria 3.1): sem isto o CPF/login salvo continuava aparecendo o antigo,
+  // porque na junção o extra tem a palavra final (lib/clients/ficha-sensiveis.ts).
+  const salvarCliente = useCallback(async (id: string, patch: ClientPatch) => {
+    await updateClientData(id, patch);
+    if (id === clientId) setClientExtra((e) => ({ ...e, ...(separarPatchFicha(patch as Partial<Client>).extra) }));
+  }, [clientId, updateClientData]);
   const fecharPortal = useCallback(() => {
     setPortalAberto(false);
     // Veio por ?tab=portal: fechar deixa o endereço no Resumo (recarregar não reabre o painel).
@@ -207,7 +217,22 @@ export default function ClientDetailPage() {
     return () => clearTimeout(t);
   }, [client]);
 
-  if (!client && esperando) {
+  // A carteira não carregou: dizer "não encontrado" seria mentir (24/10/2026, auditoria 3.11).
+  if (!client && carteiraErro) {
+    return (
+      <div className="flex flex-1 flex-col overflow-auto">
+        <Header title="Não consegui abrir o cliente" />
+        <div className="flex flex-1 items-center justify-center p-6">
+          <div role="alert" className="max-w-md space-y-3 rounded-xl border border-lone-danger-border bg-lone-danger-bg p-5 text-center">
+            <p className="text-sm text-lone-danger">A lista de clientes não carregou: {carteiraErro}</p>
+            <button onClick={() => { void initClients(); }} className="btn-primary">Tentar de novo</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!client && (esperando || carregandoCarteira)) {
     return (
       <div className="flex flex-1 flex-col overflow-auto">
         <Header title="Carregando..." subtitle="Preparando dados do cliente" />
@@ -272,7 +297,8 @@ export default function ClientDetailPage() {
         saude={{ nivel: nivelSaude, score: scoreSaude === null ? null : Math.round(scoreSaude) }}
         isAdmin={isAdmin}
         podePedirArte={role !== "comercial"}
-        onEditar={() => setEditando(true)}
+        onEditar={() => { if (dadosCompletos) setEditando(true); }}
+        dadosParaEditar={extraStatus}
         onPedirArte={() => setPedindoArte(true)}
         onLinkOnboarding={gerarLinkOnboarding}
         gerandoLink={gerandoLink}
@@ -304,14 +330,14 @@ export default function ClientDetailPage() {
             faltaNoCadastro={isAdmin && dadosCompletos ? faltaNoCadastro(client) : null} />
         )}
         {aba === "marca" && (
-          <AbaMarca ctx={ctx} dadosCompletos={dadosCompletos} updateClientData={updateClientData} onNavigateTab={irParaAntiga}
+          <AbaMarca ctx={ctx} dadosCompletos={dadosCompletos} updateClientData={salvarCliente} onNavigateTab={irParaAntiga}
             aoMudarLinkPublico={aoMudarLinkPublico} />
         )}
         {aba === "entregas" && <AbaEntregas ctx={ctx} cards={cards} pedidos={pedidos} tarefas={tarefas} />}
         {aba === "resultados" && <AbaResultados ctx={ctx} />}
         {aba === "relacionamento" && <AbaRelacionamento ctx={ctx} />}
         {aba === "admin" && (
-          <AbaAdmin ctx={ctx} onboarding={obItens} dadosCompletos={dadosCompletos} updateClientData={updateClientData}
+          <AbaAdmin ctx={ctx} onboarding={obItens} dadosCompletos={dadosCompletos} updateClientData={salvarCliente}
             onNavigateTab={irParaAntiga} onboardingLink={onboardingLink} gerandoLink={gerandoLink} gerarLink={gerarLinkOnboarding} />
         )}
       </main>
@@ -321,7 +347,8 @@ export default function ClientDetailPage() {
           podeGerir={isAdmin} dados={extraStatus} onMudou={aoMudarLinkPublico} />
       )}
       {pedindoArte && <PedirArteModal client={client} currentUser={currentUser} aoFechar={() => setPedindoArte(false)} />}
-      {editando && <EditClientModal client={client} onClose={() => setEditando(false)} />}
+      {/* Só abre com os dados completos (auditoria 3.1, 24/10/2026) — e o modal grava só o que mudou. */}
+      {editando && dadosCompletos && <EditClientModal client={client} salvar={salvarCliente} onClose={() => setEditando(false)} />}
     </div>
   );
 }

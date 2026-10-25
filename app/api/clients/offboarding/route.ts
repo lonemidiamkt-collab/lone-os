@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { avaliar, type Offboarding } from "@/lib/clients/offboarding";
+import { executarPassos, respostaDosPassos, type ResultadoGravacao } from "@/lib/clients/offboarding-passos";
 
 // O ENCERRAMENTO DE UM CLIENTE, do pedido à conclusão.
 //
@@ -16,16 +17,31 @@ type Acao =
   | "iniciar" | "atualizar" | "marcar_enviado" | "marcar_confirmado"
   | "concluir" | "desistir" | "reativar";
 
+// Devolve o resultado (antes engolia): nos passos de concluir/iniciar/desistir/reativar, auditoria que
+// não gravou vira pendência dita na tela (24/10/2026, auditoria 3.10).
 async function auditar(e: {
   offboardingId?: string | null; clientId: string; acao: string; ator: string;
   detalhe?: Record<string, unknown>;
-}) {
+}): Promise<ResultadoGravacao> {
   try {
-    await supabaseAdmin.from("offboarding_events").insert({
+    const { error } = await supabaseAdmin.from("offboarding_events").insert({
       offboarding_id: e.offboardingId ?? null, client_id: e.clientId,
       acao: e.acao, ator: e.ator, detalhe: e.detalhe ?? null,
     });
-  } catch (err) { console.error("[offboarding_events]", e.acao, err); }
+    if (error) console.error("[offboarding_events]", e.acao, error.message);
+    return { error };
+  } catch (err) {
+    console.error("[offboarding_events]", e.acao, err);
+    return { error: { message: err instanceof Error ? err.message : String(err) } };
+  }
+}
+
+/** Linha na memória do cliente (timeline_entries), como passo conferido. */
+function naLinhaDoTempo(clientId: string, ator: string, description: string) {
+  return () => supabaseAdmin.from("timeline_entries").insert({
+    client_id: clientId, type: "status", actor: ator, description,
+    timestamp: new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+  });
 }
 
 /** Linha do banco → o objeto que a regra pura entende. */
@@ -97,19 +113,20 @@ export async function POST(req: NextRequest) {
       }, { status: jaTem ? 409 : 500 });
     }
 
-    await supabaseAdmin.from("clients").update({ lifecycle: "encerrando" }).eq("id", clientId);
-    await auditar({ offboardingId: data.id, clientId, acao: "client_offboarding_started", ator: quem,
-      detalhe: { motivo, solicitado, encerra, iniciativa: b?.iniciativa } });
-
-    // Entra na memória do cliente no MESMO instante: o encerramento é parte da história dele,
-    // não um sumiço.
-    await supabaseAdmin.from("timeline_entries").insert({
-      client_id: clientId, type: "status", actor: quem,
-      description: `Encerramento iniciado — efetivo em ${encerra.split("-").reverse().join("/")}`,
-      timestamp: new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
-    }).then(() => {}, () => {});
-
-    return NextResponse.json({ ok: true, offboarding: data });
+    // O encerramento já existe; o resto é marcação e registro — o que falhar volta como pendência.
+    const r = await executarPassos([
+      { rotulo: "marcar o cliente como \"em encerramento\"", essencial: false,
+        rodar: () => supabaseAdmin.from("clients").update({ lifecycle: "encerrando" }).eq("id", clientId) },
+      { rotulo: "registrar na auditoria", essencial: false,
+        rodar: () => auditar({ offboardingId: data.id, clientId, acao: "client_offboarding_started", ator: quem,
+          detalhe: { motivo, solicitado, encerra, iniciativa: b?.iniciativa } }) },
+      // Entra na memória do cliente no MESMO instante: o encerramento é parte da história dele,
+      // não um sumiço.
+      { rotulo: "registrar na linha do tempo do cliente", essencial: false,
+        rodar: naLinhaDoTempo(clientId, quem, `Encerramento iniciado — efetivo em ${encerra.split("-").reverse().join("/")}`) },
+    ]);
+    const resp = respostaDosPassos(r, { semEfeito: "" });
+    return NextResponse.json({ ...resp.corpo, offboarding: data }, { status: resp.status });
   }
 
   // As demais agem sobre um processo existente.
@@ -179,62 +196,74 @@ export async function POST(req: NextRequest) {
     }
 
     const hoje = new Date().toISOString().slice(0, 10);
-    await supabaseAdmin.from("client_offboardings").update({ estado: "concluido" }).eq("id", id);
-
-    // O cliente NÃO é apagado: muda de estado e o ciclo se fecha com a data efetiva.
-    await supabaseAdmin.from("clients").update({
-      lifecycle: "inativo", active: false,
-      churned_at: off.encerra_em as string,
-      churn_category: off.motivo as string,
-      churn_reason: (off.motivo_detalhe as string) || null,
-    }).eq("id", clientId);
-
-    await supabaseAdmin.from("client_lifecycles")
-      .update({ encerrou_em: (off.encerra_em as string) || hoje, offboarding_id: id, motivo: off.motivo as string })
-      .eq("client_id", clientId).is("encerrou_em", null);
-
-    await auditar({ offboardingId: id, clientId, acao: "client_deactivated", ator: quem,
-      detalhe: { incompleto: !situacao.completo, faltando: situacao.faltandoEssencial.map((i) => i.chave) } });
-
-    await supabaseAdmin.from("timeline_entries").insert({
-      client_id: clientId, type: "status", actor: quem,
-      description: `Parceria encerrada — ${off.motivo}${off.motivo_detalhe ? `: ${off.motivo_detalhe}` : ""}`,
-      timestamp: new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
-    }).then(() => {}, () => {});
-
-    return NextResponse.json({ ok: true, incompleto: !situacao.completo });
+    // 24/10/2026 (auditoria 3.10): a ordem importa. Antes o encerramento era marcado "concluído"
+    // PRIMEIRO e as outras gravações não eram conferidas: se tirar o cliente da carteira falhasse, a
+    // tela dizia "concluído" com ele ainda ativo. Agora tirar da carteira vem primeiro e é essencial;
+    // o resto, se falhar, volta como pendência e a tela não fecha como se estivesse tudo certo.
+    const r = await executarPassos([
+      // O cliente NÃO é apagado: muda de estado e o ciclo se fecha com a data efetiva.
+      { rotulo: "tirar o cliente da carteira ativa", essencial: true,
+        rodar: () => supabaseAdmin.from("clients").update({
+          lifecycle: "inativo", active: false,
+          churned_at: off.encerra_em as string,
+          churn_category: off.motivo as string,
+          churn_reason: (off.motivo_detalhe as string) || null,
+        }).eq("id", clientId) },
+      { rotulo: "fechar o ciclo de parceria", essencial: false,
+        rodar: () => supabaseAdmin.from("client_lifecycles")
+          .update({ encerrou_em: (off.encerra_em as string) || hoje, offboarding_id: id, motivo: off.motivo as string })
+          .eq("client_id", clientId).is("encerrou_em", null) },
+      { rotulo: "marcar o encerramento como concluído", essencial: false,
+        rodar: () => supabaseAdmin.from("client_offboardings").update({ estado: "concluido" }).eq("id", id) },
+      { rotulo: "registrar na auditoria", essencial: false,
+        rodar: () => auditar({ offboardingId: id, clientId, acao: "client_deactivated", ator: quem,
+          detalhe: { incompleto: !situacao.completo, faltando: situacao.faltandoEssencial.map((i) => i.chave) } }) },
+      { rotulo: "registrar na linha do tempo do cliente", essencial: false,
+        rodar: naLinhaDoTempo(clientId, quem, `Parceria encerrada — ${off.motivo}${off.motivo_detalhe ? `: ${off.motivo_detalhe}` : ""}`) },
+    ]);
+    const resp = respostaDosPassos(r, { semEfeito: "O cliente continua ATIVO na carteira." });
+    return NextResponse.json(resp.status === 200 ? { ...resp.corpo, incompleto: !situacao.completo } : resp.corpo, { status: resp.status });
   }
 
   if (acao === "desistir") {
-    await supabaseAdmin.from("client_offboardings")
-      .update({ cancelado_em: new Date().toISOString() }).eq("id", id);
-    await supabaseAdmin.from("clients").update({ lifecycle: "ativo" }).eq("id", clientId);
-    await auditar({ offboardingId: id, clientId, acao: "client_offboarding_cancelled", ator: quem });
-    return NextResponse.json({ ok: true });
+    const r = await executarPassos([
+      { rotulo: "cancelar o encerramento", essencial: true,
+        rodar: () => supabaseAdmin.from("client_offboardings").update({ cancelado_em: new Date().toISOString() }).eq("id", id) },
+      { rotulo: "voltar o cliente para \"ativo\"", essencial: false,
+        rodar: () => supabaseAdmin.from("clients").update({ lifecycle: "ativo" }).eq("id", clientId) },
+      { rotulo: "registrar na auditoria", essencial: false,
+        rodar: () => auditar({ offboardingId: id, clientId, acao: "client_offboarding_cancelled", ator: quem }) },
+    ]);
+    const resp = respostaDosPassos(r, { semEfeito: "O encerramento continua em andamento." });
+    return NextResponse.json(resp.corpo, { status: resp.status });
   }
 
   // ── REATIVAR: mesmo cliente, ciclo novo ─────────────────────────────────
   if (acao === "reativar") {
-    const { data: ciclos } = await supabaseAdmin.from("client_lifecycles")
+    const { data: ciclos, error: errCiclos } = await supabaseAdmin.from("client_lifecycles")
       .select("ciclo").eq("client_id", clientId).order("ciclo", { ascending: false }).limit(1);
+    if (errCiclos) return NextResponse.json({ error: `Não consegui ler os ciclos do cliente (${errCiclos.message}). Nada foi feito.` }, { status: 500 });
     const proximo = ((ciclos?.[0]?.ciclo as number) ?? 0) + 1;
     const hoje = new Date().toISOString().slice(0, 10);
 
-    const { error } = await supabaseAdmin.from("client_lifecycles").insert({
-      client_id: clientId, ciclo: proximo, iniciou_em: hoje, criado_por: quem,
-    });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    // O mesmo client_id, com o histórico inteiro atrás. Nada de cadastro novo.
-    await supabaseAdmin.from("clients")
-      .update({ lifecycle: "ativo", active: true, churned_at: null }).eq("id", clientId);
-    await auditar({ offboardingId: id, clientId, acao: "client_reactivated", ator: quem, detalhe: { ciclo: proximo } });
-    await supabaseAdmin.from("timeline_entries").insert({
-      client_id: clientId, type: "status", actor: quem,
-      description: `Cliente reativado — ${proximo}º ciclo de parceria`,
-      timestamp: new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
-    }).then(() => {}, () => {});
-    return NextResponse.json({ ok: true, ciclo: proximo });
+    // Trazer de volta é o essencial e vem primeiro (24/10/2026, auditoria 3.10): antes o ciclo novo
+    // era aberto e a volta à carteira não era conferida — ciclo aberto com cliente ainda inativo.
+    const r = await executarPassos([
+      // O mesmo client_id, com o histórico inteiro atrás. Nada de cadastro novo.
+      { rotulo: "trazer o cliente de volta para a carteira", essencial: true,
+        rodar: () => supabaseAdmin.from("clients")
+          .update({ lifecycle: "ativo", active: true, churned_at: null }).eq("id", clientId) },
+      { rotulo: `abrir o ${proximo}º ciclo de parceria`, essencial: false,
+        rodar: () => supabaseAdmin.from("client_lifecycles").insert({
+          client_id: clientId, ciclo: proximo, iniciou_em: hoje, criado_por: quem,
+        }) },
+      { rotulo: "registrar na auditoria", essencial: false,
+        rodar: () => auditar({ offboardingId: id, clientId, acao: "client_reactivated", ator: quem, detalhe: { ciclo: proximo } }) },
+      { rotulo: "registrar na linha do tempo do cliente", essencial: false,
+        rodar: naLinhaDoTempo(clientId, quem, `Cliente reativado — ${proximo}º ciclo de parceria`) },
+    ]);
+    const resp = respostaDosPassos(r, { semEfeito: "O cliente continua fora da carteira." });
+    return NextResponse.json(resp.status === 200 ? { ...resp.corpo, ciclo: proximo } : resp.corpo, { status: resp.status });
   }
 
   return NextResponse.json({ error: `ação desconhecida: ${acao}` }, { status: 400 });

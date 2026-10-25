@@ -21,6 +21,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { dispararLinkDoPortal } from "@/lib/portal/link-automatico";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { MOTIVOS_SAIDA } from "@/lib/clients/churn";
+import { podeArquivar, podeReativar, textoArquivamentoDesfeito, type EstadoArquivo } from "@/lib/clients/arquivar";
 
 const Schema = z.discriminatedUnion("action", [
   z.object({
@@ -33,7 +34,9 @@ const Schema = z.discriminatedUnion("action", [
   }).refine((d) => d.category !== "outro" || (d.reason?.trim().length ?? 0) >= 3, {
     message: "Com motivo \"Outro\", descreva o que aconteceu.", path: ["reason"],
   }),
-  z.object({ action: z.literal("reactivate") }),
+  // desfazer = "Desfazer" do aviso da lista, logo depois de arquivar (24/10/2026, auditoria 3.7):
+  // além de reativar, reabre o ciclo que o arquivamento fechou e avisa o grupo que foi engano.
+  z.object({ action: z.literal("reactivate"), desfazer: z.boolean().optional() }),
   // PAUSA (23/09): estado novo, entre ativo e arquivado. Não recebe nada, mas CONTINUA na carteira
   // do time — que é a diferença para o arquivamento. Ver lib/clients/pausa.ts.
   z.object({
@@ -84,6 +87,18 @@ export async function POST(
     return NextResponse.json({ ok: true, client: cli });
   }
 
+  // 24/10/2026 (auditoria 3.7): arquivar o que já está arquivado regravava a data de saída e mandava
+  // o aviso de churn de novo ao grupo. Confere o estado antes, e o update só pega quem ainda está no
+  // estado esperado — dois cliques ao mesmo tempo não passam os dois.
+  const { data: atual, error: errAtual } = await supabaseAdmin
+    .from("clients").select("id, name, nome_fantasia, active, churned_at").eq("id", id).maybeSingle();
+  if (errAtual) return NextResponse.json({ error: `Não consegui ler o cliente: ${errAtual.message}` }, { status: 500 });
+  const desfazer = d.action === "reactivate" && d.desfazer === true;
+  const decisao = d.action === "archive"
+    ? podeArquivar(atual as EstadoArquivo | null)
+    : podeReativar(atual as EstadoArquivo | null, { desfazer, agora: new Date() });
+  if (!decisao.ok) return NextResponse.json({ error: decisao.erro }, { status: decisao.status });
+
   const row =
     d.action === "archive"
       ? {
@@ -93,14 +108,17 @@ export async function POST(
         }
       : { active: true, churned_at: null, churn_category: null, churn_reason: null };
 
-  const { data, error } = await supabaseAdmin
-    .from("clients")
-    .update(row)
-    .eq("id", id)
+  const base = supabaseAdmin.from("clients").update(row).eq("id", id);
+  const { data, error } = await (d.action === "archive" ? base.or("active.is.null,active.eq.true") : base.eq("active", false))
     .select("id, name, active, churned_at, churn_category, churn_reason")
-    .single();
+    .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) {
+    return NextResponse.json({
+      error: d.action === "archive" ? "Alguém acabou de arquivar este cliente — nada foi feito." : "Alguém acabou de reativar este cliente — nada foi feito.",
+    }, { status: 409 });
+  }
 
   // ── O TIME PRECISA SABER ────────────────────────────────────────────────
   //
@@ -163,6 +181,27 @@ export async function POST(
         clientId: id, tipo: "status", ator: quem,
         descricao: `Cliente arquivado — ${d.category}${d.reason ? `: ${d.reason}` : ""}`,
       });
+    } else if (desfazer) {
+      await supabaseAdmin.from("clients").update({ lifecycle: "ativo" }).eq("id", id);
+      // Reabre o ciclo que o arquivamento acabou de fechar: o cliente nunca saiu, e "há quanto tempo
+      // é cliente" não pode recomeçar do zero por causa de um clique errado.
+      const { data: fechado } = await supabaseAdmin.from("client_lifecycles")
+        .select("id").eq("client_id", id).not("encerrou_em", "is", null).is("offboarding_id", null)
+        .order("ciclo", { ascending: false }).limit(1).maybeSingle();
+      if (fechado?.id) {
+        const { error: errCiclo } = await supabaseAdmin.from("client_lifecycles")
+          .update({ encerrou_em: null, motivo: null }).eq("id", fechado.id);
+        if (errCiclo) console.error("[lifecycle] desfazer: ciclo não reaberto:", errCiclo.message);
+      }
+      // O aviso de saída já foi ao grupo: o time precisa saber que era engano.
+      const antes = atual as EstadoArquivo | null;
+      const nome = antes?.nome_fantasia || antes?.name || "Cliente";
+      const jid = process.env.CS_CADASTRO_GROUP_JID || process.env.CS_INTERNAL_GROUP_JID || null;
+      if (jid) {
+        await csSendGroupText(jid, textoArquivamentoDesfeito({ cliente: nome, porQuem: quem }), undefined, { origem: "churn-desfeito", destino: "interno" })
+          .catch((e) => console.error("[lifecycle] aviso de arquivamento desfeito:", e));
+      }
+      await registrarHistorico({ clientId: id, tipo: "status", ator: quem, descricao: "Arquivamento desfeito — o cliente continua ativo" });
     } else {
       await supabaseAdmin.from("clients").update({ lifecycle: "ativo" }).eq("id", id);
       await registrarHistorico({ clientId: id, tipo: "status", ator: quem, descricao: "Cliente reativado" });
@@ -174,8 +213,8 @@ export async function POST(
   }
 
   // Voltou a ser cliente: se nunca teve link do portal, ganha agora (e o grupo de cadastro recebe uma
-  // vez). Link revogado de propósito continua revogado.
-  if (d.action === "reactivate") dispararLinkDoPortal(id, "reativacao");
+  // vez). Link revogado de propósito continua revogado. Desfazer não é "voltar": o cliente nunca saiu.
+  if (d.action === "reactivate" && !desfazer) dispararLinkDoPortal(id, "reativacao");
 
   return NextResponse.json({ success: true, client: data });
 }

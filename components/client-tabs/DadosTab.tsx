@@ -18,6 +18,7 @@ import { listaDocs, adicionarDoc, removerDocDaLista } from "@/lib/onboarding/doc
 import { limiteDoDocumento, MB } from "@/lib/onboarding/etapas";
 import { trocarDocNaLista, cabeMaisUmDoc, descreverDoc, rotuloDoc } from "@/lib/clients/documentos-legais";
 import { rotuloDoCampo } from "@/lib/cofre/versoes";
+import { ACEITA_LOGO, DICA_LOGO, validarLogo } from "@/lib/clients/logo-upload";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import MarcaDoCliente from "@/components/clients/MarcaDoCliente";
 import CofreStatus from "@/components/client/ficha/CofreStatus";
@@ -298,6 +299,11 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   // Se ele falhar, a ficha ficaria só com o novo: guardamos o valor certo para "Tentar salvar de novo".
   const [salvarPendente, setSalvarPendente] = useState<{ field: "docContratoSocial" | "docIdentidade" | "docLogo"; valor: string | null; rotulo: string } | null>(null);
   const [salvandoDoc, setSalvandoDoc] = useState(false);
+  // 24/10/2026 (auditoria 3.12): o erro do logo aparece junto do botão "Trocar logo" (aba Marca). Antes
+  // ia para o aviso dos Documentos Legais — que fica na aba Admin — e na Marca não aparecia nada.
+  const [erroLogo, setErroLogo] = useState<string | null>(null);
+  const avisarDoc = (field: "docContratoSocial" | "docIdentidade" | "docLogo", msg: string | null) =>
+    field === "docLogo" ? setErroLogo(msg) : setUploadError(msg);
 
   const gravarCampoDoc = async (field: "docContratoSocial" | "docIdentidade" | "docLogo", valor: string | null, rotulo: string): Promise<boolean> => {
     setSalvandoDoc(true);
@@ -307,7 +313,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       return true;
     } catch (e) {
       setSalvarPendente({ field, valor, rotulo });
-      setUploadError(`${rotulo}: a ficha não foi atualizada (${e instanceof Error && e.message ? e.message : "erro"}). Use "Tentar salvar de novo" — sem isso a ficha pode ficar só com o último arquivo.`);
+      avisarDoc(field, `${rotulo}: a ficha não foi atualizada (${e instanceof Error && e.message ? e.message : "erro"}). Use "Tentar salvar de novo"${field === "docLogo" ? "." : " — sem isso a ficha pode ficar só com o último arquivo."}`);
       return false;
     } finally { setSalvandoDoc(false); }
   };
@@ -322,14 +328,19 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       setUploadError(`${rotulo}: não cabe mais um arquivo neste campo. Junte as páginas num PDF só, ou remova uma antes.`);
       return;
     }
+    // Logo: formato e tamanho conferidos antes de enviar, com o motivo junto do botão (auditoria 3.12).
+    if (docType === "logo") {
+      const problema = validarLogo(file);
+      if (problema) { setErroLogo(problema); return; }
+    }
     setUploading(substituir ? `troca:${substituir}` : docType);
-    setUploadError(null);
+    avisarDoc(field, null);
     try {
       const fd = new FormData();
       fd.append("file", file); fd.append("clientId", client.id); fd.append("docType", docType);
       const r = await chamar<{ url?: string }>("/api/onboarding/upload", fd);
       if (!r.ok || !r.data?.url) {
-        setUploadError(`${rotulo} (${file.name}): ${r.erro ?? "o arquivo não subiu"}. Nada mudou na ficha.`);
+        avisarDoc(field, `${rotulo} (${file.name}): ${r.erro ?? "o arquivo não subiu"}. Nada mudou na ficha.`);
         return;
       }
       const url = r.data.url;
@@ -551,11 +562,28 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
               <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface text-foreground text-xs font-medium border border-dashed border-border hover:border-primary/30 transition-colors cursor-pointer">
                 {uploading === "logo" ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
                 {uploading === "logo" ? "Enviando..." : (client.docLogo ? "Trocar Logo" : "Enviar Logo")}
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                <input type="file" accept={ACEITA_LOGO} className="hidden" disabled={uploading === "logo"} onChange={(e) => {
                   const f = e.target.files?.[0]; if (f) handleDocUpload(f, "logo"); e.target.value = "";
                 }} />
               </label>
             </div>
+            {/* O limite dito antes de escolher, e o erro no lugar onde nasce (24/10/2026, auditoria 3.12). */}
+            <p className="mt-2 text-[10px] text-muted-foreground">{DICA_LOGO}</p>
+            {erroLogo && (
+              <div role="alert" className="mt-2 flex items-start gap-2 rounded-lg border border-lone-danger-border bg-lone-danger-bg p-2.5">
+                <AlertTriangle size={12} className="mt-0.5 shrink-0 text-lone-danger" />
+                <span className="flex-1 text-[11px] text-lone-danger">{erroLogo}</span>
+                {salvarPendente?.field === "docLogo" ? (
+                  <button onClick={() => gravarCampoDoc("docLogo", salvarPendente.valor, salvarPendente.rotulo).then((ok) => { if (ok) { setErroLogo(null); toast.success("Logo: ficha atualizada."); } })}
+                    disabled={salvandoDoc}
+                    className="flex shrink-0 items-center gap-1 rounded-lg border border-lone-danger-border px-2 py-0.5 text-[10px] text-lone-danger hover:bg-card disabled:opacity-50">
+                    {salvandoDoc ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />} Tentar salvar de novo
+                  </button>
+                ) : (
+                  <button onClick={() => setErroLogo(null)} className="shrink-0 text-lone-danger hover:text-foreground" aria-label="Fechar aviso"><X size={12} /></button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -760,14 +788,14 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             <div className="flex items-start gap-2 p-3 rounded-lg bg-lone-danger-bg border border-lone-danger-border">
               <AlertTriangle size={13} className="text-lone-danger shrink-0 mt-0.5" />
               <span className="text-xs text-lone-danger flex-1">{uploadError ?? openError}</span>
-              {salvarPendente && (
+              {salvarPendente && salvarPendente.field !== "docLogo" && (
                 <button onClick={() => gravarCampoDoc(salvarPendente.field, salvarPendente.valor, salvarPendente.rotulo).then((ok) => { if (ok) { setUploadError(null); toast.success(`${salvarPendente.rotulo}: ficha atualizada.`); } })}
                   disabled={salvandoDoc}
                   className="text-[11px] px-2.5 py-1 rounded-lg border border-lone-danger-border text-lone-danger hover:bg-card flex items-center gap-1 shrink-0 disabled:opacity-50">
                   {salvandoDoc ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />} Tentar salvar de novo
                 </button>
               )}
-              {!salvarPendente && (
+              {(!salvarPendente || salvarPendente.field === "docLogo") && (
                 <button onClick={() => { setUploadError(null); setOpenError(null); }} className="text-lone-danger hover:text-foreground shrink-0" aria-label="Fechar aviso"><X size={12} /></button>
               )}
             </div>

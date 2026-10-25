@@ -27,6 +27,8 @@ import {
 import Link from "next/link";
 import { fetchDraftClients, fetchChurnedClients } from "@/lib/supabase/queries";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
+import { toast } from "sonner";
 import { rotuloPausa } from "@/lib/clients/pausa";
 
 // Mesma régua da ficha e do termômetro (lib/scores/health.ts) — cor e rótulo do mesmo nível.
@@ -46,6 +48,8 @@ function HealthBar({ client }: { client: Client }) {
 export default function ClientsPage() {
   const router = useRouter();
   const clients = useClientsStore((s) => s.clients);
+  const carteiraPronta = useClientsStore((s) => s.initialized);
+  const carteiraErro = useClientsStore((s) => s.erro);
   const init = useClientsStore((s) => s.init);
   const subscribeRealtime = useClientsStore((s) => s.subscribeRealtime);
   const patchClientLocal = useClientsStore((s) => s.patchClientLocal);
@@ -145,9 +149,15 @@ export default function ClientsPage() {
     } finally { setExcluindo(false); }
   };
 
+  // 24/10/2026 (auditoria 3.11): erro de leitura aparecia como "Nenhum cliente arquivado".
+  const [archivedErro, setArchivedErro] = useState<string | null>(null);
   const loadArchived = () => {
     setArchivedLoading(true);
-    fetchChurnedClients().then(setArchived).finally(() => setArchivedLoading(false));
+    setArchivedErro(null);
+    fetchChurnedClients()
+      .then(setArchived)
+      .catch((e: unknown) => setArchivedErro(`Não consegui carregar os arquivados${e && typeof e === "object" && "message" in e ? ` (${String((e as { message: unknown }).message)})` : ""}.`))
+      .finally(() => setArchivedLoading(false));
   };
   useEffect(() => {
     if (showArchived && isAdmin) loadArchived();
@@ -184,31 +194,40 @@ export default function ClientsPage() {
     } finally { setLifecycleBusy(false); }
   };
 
+  // 24/10/2026 (auditoria 3.7): "o realtime patcha active=false" — mas o realtime está desligado, e o
+  // cliente arquivado continuava na lista; arquivar de novo mandava o aviso de churn duas vezes. Agora
+  // a tela tira o cliente na hora (a rota já gravou), oferece "Desfazer" e a rota recusa o repetido.
   const confirmArchive = async () => {
-    if (!archiveTarget) return;
+    if (!archiveTarget || lifecycleBusy) return;
+    const alvo = archiveTarget;
     setLifecycleBusy(true);
     setLifecycleError(null);
-    try {
-      const res = await authedFetch(`/api/clients/${archiveTarget.id}/lifecycle`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "archive",
-          category: archiveCategory,
-          reason: archiveReason.trim() || undefined,
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`);
-      // O realtime patcha active=false → o cliente sai da lista ativa (filtro abaixo).
-      setArchiveTarget(null);
-      setArchiveReason("");
-      setArchiveCategory("");
-      if (showArchived) loadArchived();
-    } catch (e) {
-      setLifecycleError(e instanceof Error ? e.message : "Erro ao arquivar");
-    } finally {
-      setLifecycleBusy(false);
-    }
+    const r = await chamar<{ client?: { churned_at?: string | null } }>(`/api/clients/${alvo.id}/lifecycle`, {
+      action: "archive",
+      category: archiveCategory,
+      reason: archiveReason.trim() || undefined,
+    });
+    setLifecycleBusy(false);
+    if (!r.ok) { setLifecycleError(r.erro ?? "Não consegui arquivar."); return; }
+    patchClientLocal(alvo.id, { active: false, churnedAt: r.data?.client?.churned_at ?? new Date().toISOString() });
+    setArchiveTarget(null);
+    setArchiveReason("");
+    setArchiveCategory("");
+    if (showArchived) loadArchived();
+    toast.success(`${alvo.name} arquivado.`, {
+      duration: 15000,
+      action: { label: "Desfazer", onClick: () => { void desfazerArquivamento(alvo); } },
+    });
+  };
+
+  // Desfazer = reativar dizendo à rota que foi engano: ela reabre o ciclo e avisa o grupo para
+  // desconsiderar o aviso de saída (que já tinha ido).
+  const desfazerArquivamento = async (alvo: Client) => {
+    const r = await chamar(`/api/clients/${alvo.id}/lifecycle`, { action: "reactivate", desfazer: true });
+    if (!r.ok) { toast.error(`Não consegui desfazer: ${r.erro}`); return; }
+    patchClientLocal(alvo.id, { active: true, churnedAt: null });
+    setArchived((a) => a.filter((c) => c.id !== alvo.id));
+    toast.success(`Arquivamento desfeito: ${alvo.name} voltou para a carteira.`);
   };
 
   const handleReactivate = async (clientId: string) => {
@@ -438,12 +457,13 @@ export default function ClientsPage() {
           <div className="flex-1 p-6 overflow-auto space-y-5">
             {/* Summary cards */}
             <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+              {/* Sem a carteira carregada, "—" e não 0: falha não vira zero (auditoria 3.11). */}
               {[
                 { label: filtroResp === "mine" ? "Meus Clientes" : "Total de Clientes", value: filtered.length, color: "text-foreground", bg: "bg-muted" },
                 { label: `${TITULO_RESULTADO_ANUNCIO}: bom`, value: filtered.filter((c) => c.status === "good").length, color: "text-primary", bg: "bg-primary/10" },
                 { label: `${TITULO_RESULTADO_ANUNCIO}: ruim`, value: filtered.filter((c) => c.status === "at_risk").length, color: "text-lone-danger", bg: "bg-lone-danger-bg" },
                 { label: "Em Onboarding", value: filtered.filter((c) => c.status === "onboarding").length, color: "text-primary", bg: "bg-primary/10" },
-              ].map((stat) => (
+              ].map((s) => ({ ...s, value: carteiraPronta || clients.length ? s.value : "—" })).map((stat) => (
                 <div key={stat.label} className={`rounded-xl p-4 ${stat.bg} border border-border`}>
                   <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
                   <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
@@ -589,7 +609,10 @@ export default function ClientsPage() {
                     <Loader2 className="animate-spin" size={16} /> Carregando…
                   </div>
                 )}
-                {!archivedLoading && archived.length === 0 && (
+                {!archivedLoading && archivedErro && (
+                  <ErroDeCarga texto={archivedErro} aoTentar={loadArchived} />
+                )}
+                {!archivedLoading && !archivedErro && archived.length === 0 && (
                   <div className="card text-center py-10 text-muted-foreground">Nenhum cliente arquivado.</div>
                 )}
                 {archived.map((c) => (
@@ -633,7 +656,16 @@ export default function ClientsPage() {
               </div>
             ) : abaLista !== "ativos" ? null : (
             <div className="space-y-3">
-              {filtered.length === 0 && (
+              {/* 24/10/2026 (auditoria 3.11): carregando, falhou e vazio de verdade são três telas. */}
+              {filtered.length === 0 && !carteiraPronta && !carteiraErro && (
+                <div className="card text-center py-10 text-muted-foreground flex items-center justify-center gap-2">
+                  <Loader2 className="animate-spin" size={16} /> Carregando a carteira…
+                </div>
+              )}
+              {filtered.length === 0 && !carteiraPronta && carteiraErro && (
+                <ErroDeCarga texto={`Não consegui carregar os clientes: ${carteiraErro}`} aoTentar={() => { void init(); }} />
+              )}
+              {filtered.length === 0 && carteiraPronta && (
                 <div className="card text-center py-10 text-muted-foreground">
                   Nenhum cliente encontrado.
                 </div>
@@ -795,6 +827,19 @@ export default function ClientsPage() {
         </div>
       </div>
     </>
+  );
+}
+
+// Falha de leitura com saída: diz o que não carregou e deixa tentar de novo (auditoria 3.11, 24/10/2026).
+function ErroDeCarga({ texto, aoTentar }: { texto: string; aoTentar: () => void }) {
+  return (
+    <div role="alert" className="card flex flex-wrap items-center justify-between gap-3 border-lone-danger-border bg-lone-danger-bg py-4">
+      <p className="text-sm text-lone-danger">{texto}</p>
+      <button onClick={aoTentar}
+        className="flex items-center gap-1.5 rounded-lg border border-lone-danger-border bg-card px-3 py-1.5 text-xs font-medium text-lone-danger hover:opacity-90">
+        <RotateCcw size={12} aria-hidden="true" /> Tentar de novo
+      </button>
+    </div>
   );
 }
 

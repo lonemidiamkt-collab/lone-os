@@ -8,6 +8,7 @@ import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { supabase } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
+import { textoRejeitarCadastro } from "@/lib/clients/rejeitar-cadastro";
 import { toast } from "sonner";
 import type { Client } from "@/lib/types";
 import {
@@ -368,12 +369,17 @@ export default function PendingClientsPage() {
   };
 
   // ─── Reject ───────────────────────────────────
+  // 24/10/2026 (auditoria 3.14): a confirmação diz QUAL cadastro vai ser apagado.
   const handleReject = async () => {
-    if (!selected || !confirm("Rejeitar este cadastro? Os dados serão removidos permanentemente.")) return;
+    if (!selected) return;
+    const sub = submissions[selected.id];
+    const nome = getDisplayName(selected, sub);
+    if (!confirm(textoRejeitarCadastro(nome, getContactDisplay(selected, sub)))) return;
     const r = await chamar("/api/onboarding", { action: "reject", clientId: selected.id });
-    if (!r.ok) { toast.error(`Não consegui rejeitar: ${r.erro}`); return; }
+    if (!r.ok) { toast.error(`Não consegui rejeitar ${nome}: ${r.erro}`); return; }
     setDrafts((prev) => prev.filter((d) => d.id !== selected.id));
     setSelected(null);
+    toast.success(`Cadastro de ${nome} rejeitado e apagado.`);
   };
 
   if (!isAdmin) return <div className="p-6 text-muted-foreground">Acesso restrito a administradores.</div>;

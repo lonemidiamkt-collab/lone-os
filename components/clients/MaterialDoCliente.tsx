@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
 import { toast } from "sonner";
 
@@ -27,14 +26,15 @@ const quando = (d: string) =>
 export default function MaterialDoCliente({ clientId }: { clientId: string }) {
   const [itens, setItens] = useState<Item[] | null>(null);
   const [marcando, setMarcando] = useState<string | null>(null);
+  // 24/10/2026 (auditoria 3.11): falha de leitura virava lista vazia, e a seção sumia — igual a
+  // "o cliente não mandou nada". Agora diz que não carregou e oferece tentar de novo.
+  const [erro, setErro] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
-    try {
-      const res = await authedFetch(`/api/clients/${clientId}/uploads`);
-      if (!res.ok) { setItens([]); return; }
-      const d = await res.json();
-      setItens(d?.itens ?? []);
-    } catch { setItens([]); }
+    const r = await chamar<{ itens?: Item[] }>(`/api/clients/${clientId}/uploads`);
+    if (!r.ok) { setErro(r.erro ?? "Não consegui carregar o material."); return; }
+    setErro(null);
+    setItens(r.data?.itens ?? []);
   }, [clientId]);
 
   useEffect(() => { carregar(); }, [carregar]);
@@ -48,6 +48,16 @@ export default function MaterialDoCliente({ clientId }: { clientId: string }) {
     } finally { setMarcando(null); }
   }, [clientId, carregar]);
 
+  if (erro && !itens?.length) {
+    return (
+      <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2">
+        <p className="text-xs text-lone-danger">Não consegui carregar o material enviado pelo cliente: {erro}</p>
+        <button onClick={() => { void carregar(); }} className="text-xs font-medium text-lone-danger underline hover:opacity-80">
+          Tentar de novo
+        </button>
+      </div>
+    );
+  }
   if (itens === null || !itens.length) return null;  // sem material, não ocupa espaço na tela
 
   const pendentes = itens.filter((i) => !i.visto_em).length;

@@ -85,6 +85,10 @@ export default function EncerrarParceria({ clientId, clientName, aoFechar, aoCon
         return j;
       }
       await carregar();
+      // 24/10/2026 (auditoria 3.10): a ação aconteceu, mas algum registro não — dizer o que faltou
+      // em vez de fechar como se estivesse tudo certo.
+      const pend = Array.isArray(j.pendencias) ? (j.pendencias as string[]) : [];
+      if (pend.length) setAviso(`Feito, mas não consegui: ${pend.join("; ")}. Tente de novo para completar.`);
       return j;
     } catch (e) {
       // Sem catch, a falha vira silêncio e a pessoa acha que deu certo.
@@ -325,6 +329,10 @@ export default function EncerrarParceria({ clientId, clientName, aoFechar, aoCon
               </button>
               <button
                 onClick={async () => {
+                  // Só fecha quando TUDO gravou; com pendência, o painel fica aberto dizendo o que faltou
+                  // (o cliente já saiu da carteira, e "Concluir" de novo completa o resto).
+                  const concluiuTudo = (j: Record<string, unknown> | null) =>
+                    !!j?.ok && !(Array.isArray(j.pendencias) && j.pendencias.length);
                   const j = await chamar({ acao: "concluir", id: off.id }, "concluir");
                   if (j?.error === "faltam_itens") {
                     // Aviso forte, não bloqueio: cliente que some não deixa termo assinado, e travar
@@ -332,9 +340,9 @@ export default function EncerrarParceria({ clientId, clientName, aoFechar, aoCon
                     const falta = (j.faltando as string[])?.join(", ") ?? "";
                     if (confirm(`Faltam: ${falta}.\n\nConcluir assim deixa o registro incompleto. Confirma?`)) {
                       const ok = await chamar({ acao: "concluir", id: off.id, mesmoAssim: true }, "concluir");
-                      if (ok?.ok) { aoConcluir?.(); aoFechar(); }
+                      if (concluiuTudo(ok)) { aoConcluir?.(); aoFechar(); }
                     }
-                  } else if (j?.ok) { aoConcluir?.(); aoFechar(); }
+                  } else if (concluiuTudo(j)) { aoConcluir?.(); aoFechar(); }
                 }}
                 disabled={ocupado === "concluir"}
                 className={`text-[12px] px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 ${

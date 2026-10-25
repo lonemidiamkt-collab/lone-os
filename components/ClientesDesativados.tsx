@@ -35,13 +35,14 @@ export default function ClientesDesativados({ aba }: { aba: "encerrando" | "desa
   const [erro, setErro] = useState<string | null>(null);
   const [reativando, setReativando] = useState<string | null>(null);
 
-  const carregar = () => {
+  // `aviso`: o que mostrar depois de recarregar (a recarga limpava o aviso de pendência).
+  const carregar = (aviso: string | null = null) => {
     authedFetch("/api/clients/offboarding/lista")
       .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j?.error); return j; })
-      .then((j) => { setDados(j); setErro(null); })
+      .then((j) => { setDados(j); setErro(aviso); })
       .catch((e: Error) => setErro(e.message));
   };
-  useEffect(carregar, []);
+  useEffect(() => { carregar(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reativar = async (l: Linha) => {
     if (!l.offboardingId) {
@@ -55,9 +56,11 @@ export default function ClientesDesativados({ aba }: { aba: "encerrando" | "desa
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ acao: "reativar", id: l.offboardingId }),
       });
-      const j = await r.json();
+      const j = await r.json().catch(() => ({}));
       if (!r.ok) { setErro(j?.error ?? "não consegui reativar"); return; }
-      carregar();
+      // Voltou para a carteira, mas algum registro não gravou (24/10/2026, auditoria 3.10).
+      const pend = Array.isArray(j?.pendencias) ? (j.pendencias as string[]) : [];
+      carregar(pend.length ? `${l.nome} voltou para a carteira, mas não consegui: ${pend.join("; ")}.` : null);
     } catch (e) { setErro((e as Error).message); }
     finally { setReativando(null); }
   };
