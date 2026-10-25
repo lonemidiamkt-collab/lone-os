@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import {
   UserPlus, Building2, Users, Check, Loader2,
   ExternalLink, Phone, Mail, Upload, Camera,
-  CreditCard, Eye, EyeOff, Shield, Briefcase, MapPin,
+  CreditCard, Shield, Briefcase, MapPin,
   Rocket, TrendingUp, Smartphone, Palette,
+  FileText, X, RefreshCw, AlertTriangle,
 } from "lucide-react";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
@@ -23,6 +24,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
+import { enviarComNovaTentativa, motivoDoArquivoQueNaoSubiu } from "@/lib/onboarding/upload";
+import {
+  ACEITA_DOC, DOCS_NOVO_CLIENTE, dicaDoDoc, problemaDoArquivo, resumoDoEnvio, rotuloDoDoc, tamanhoLegivel,
+  type DocNovoCliente, type EnvioDoc,
+} from "@/lib/clients/documentos-novo-cliente";
 
 const INDUSTRIES = [
   "Tecnologia", "Saude", "Imobiliario", "Fitness", "Gastronomia",
@@ -37,54 +43,73 @@ interface Props {
   onSuccess: (clientId: string) => void;
 }
 
-// ─── File Upload (inline) ──────────────────────────────────
-function DocUpload({ label, onUploaded, uploaded }: { label: string; onUploaded: (url: string) => void; uploaded?: string }) {
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
-  const ref = useRef<HTMLInputElement>(null);
+// ─── Documentos: escolhidos aqui, enviados DEPOIS de cadastrar ──────────────
+// 25/10/2026 (onda 5 da auditoria de erro recuperável): o arquivo subia na hora de escolher, com um
+// clientId inventado (o cliente ainda não existe) — a rota respondia "clientId inválido." e o RG/CNH
+// ia com um docType que ela nem conhece ("rg_ou_cnh"). Os dois falhavam sempre. Agora a tela só GUARDA
+// o arquivo (com Remover), confere formato e tamanho na hora, e o envio acontece com o id que o cadastro
+// devolve. Regras em lib/clients/documentos-novo-cliente.ts.
+interface ArquivoGuardado { id: string; docType: DocNovoCliente; file: File }
 
-  const handleFile = async (file: File) => {
-    if (file.size > 10 * 1024 * 1024) { setError("Máximo 10MB."); return; }
-    setError(""); setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("clientId", `manual-${Date.now()}`);
-      fd.append("docType", label.toLowerCase().replace(/\s/g, "_"));
-      const res = await authedFetch("/api/onboarding/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
-      onUploaded(data.url);
-    } catch { setError("Falha no envio."); }
-    finally { setUploading(false); }
+function DocEscolha({ docType, arquivos, onAdicionar, onRemover }: {
+  docType: DocNovoCliente;
+  arquivos: ArquivoGuardado[];
+  onAdicionar: (files: File[]) => void;
+  onRemover: (id: string) => void;
+}) {
+  const [erro, setErro] = useState<string | null>(null);
+  const ref = useRef<HTMLInputElement>(null);
+  const rotulo = rotuloDoDoc(docType);
+
+  const escolher = (lista: FileList | File[] | null | undefined) => {
+    const files = lista ? Array.from(lista) : [];
+    if (!files.length) return;
+    let ja = arquivos.length;
+    const bons: File[] = [];
+    const problemas: string[] = [];
+    for (const f of files) {
+      const p = problemaDoArquivo(f, docType, ja);
+      if (p) problemas.push(p);
+      else { bons.push(f); ja++; }
+    }
+    if (bons.length) onAdicionar(bons);
+    setErro(problemas.length ? problemas.join(" ") : null);
   };
 
-  if (uploaded) {
-    return (
-      <div className="flex items-center gap-2 p-2.5 rounded-lg border border-lone-success-border bg-lone-success-bg">
-        <Check size={12} className="text-lone-success shrink-0" />
-        <span className="text-xs text-lone-success truncate">{label} enviado</span>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5 rounded-lg border border-border p-2.5">
+      <p className="text-[11px] font-medium text-foreground">{rotulo}</p>
+      {arquivos.length > 0 && (
+        <ul className="space-y-1" aria-label={`Arquivos de ${rotulo}`}>
+          {arquivos.map((a) => (
+            <li key={a.id} className="flex items-center gap-1.5 rounded-md bg-muted px-2 py-1">
+              <FileText size={11} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate text-[11px] text-foreground" title={a.file.name}>{a.file.name}</span>
+              <span className="shrink-0 text-[10px] text-muted-foreground">{tamanhoLegivel(a.file.size)}</span>
+              <button type="button" onClick={() => { onRemover(a.id); setErro(null); }} aria-label={`Remover ${a.file.name}`} title="Remover"
+                className="shrink-0 text-muted-foreground hover:text-destructive">
+                <X size={12} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="flex gap-1.5">
-        <button type="button" onClick={() => ref.current?.click()} disabled={uploading}
+        <button type="button" onClick={() => ref.current?.click()}
           className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-border bg-card hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all text-[11px]">
-          {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-          {uploading ? "Enviando..." : label}
+          <Upload size={12} aria-hidden="true" /> {arquivos.length ? "Adicionar outro arquivo" : `Escolher ${rotulo}`}
         </button>
-        <button type="button" disabled={uploading} onClick={() => {
+        <button type="button" aria-label={`Fotografar ${rotulo}`} title="Fotografar" onClick={() => {
           const input = document.createElement("input"); input.type = "file"; input.accept = "image/*"; input.capture = "environment";
-          input.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleFile(f); }; input.click();
+          input.onchange = (e) => escolher((e.target as HTMLInputElement).files); input.click();
         }} className="px-3 py-2 rounded-lg border border-dashed border-border bg-card hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all text-[11px]">
-          <Camera size={12} />
+          <Camera size={12} aria-hidden="true" />
         </button>
       </div>
-      <input ref={ref} type="file" accept="image/*,.pdf,.heic,.heif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-      {error && <p className="text-[10px] text-destructive">{error}</p>}
+      <input ref={ref} type="file" multiple accept={ACEITA_DOC} className="hidden" aria-label={`Arquivo de ${rotulo}`}
+        onChange={(e) => { escolher(e.target.files); e.target.value = ""; }} />
+      <p className="text-[10px] text-muted-foreground">{dicaDoDoc(docType)}</p>
+      {erro && <p role="alert" className="text-[10px] text-destructive">{erro}</p>}
     </div>
   );
 }
@@ -145,9 +170,6 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
     industry: "Tecnologia",
     leadSource: "indicacao" as LeadSource,
     notes: "",
-    // Docs
-    docContratoSocial: "",
-    docIdentidade: "",
     // Conexões (conta de anúncio e grupo do WhatsApp) — ver o bloco "Conexões" no formulário
     metaAdAccountId: "",
     whatsappGroupJid: "",
@@ -218,6 +240,46 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
   const [avisoPosCadastro, setAvisoPosCadastro] = useState<string[]>([]);
   const [novoId, setNovoId] = useState<string | null>(null);
 
+  // Documentos guardados na tela até o cliente existir (25/10/2026, onda 5).
+  const [arquivos, setArquivos] = useState<ArquivoGuardado[]>([]);
+  const proximoArquivo = useRef(0);
+  const adicionarArquivos = (docType: DocNovoCliente, files: File[]) =>
+    setArquivos((p) => [...p, ...files.map((file) => ({ id: `arq-${++proximoArquivo.current}`, docType, file }))]);
+  const removerArquivo = (id: string) => setArquivos((p) => p.filter((a) => a.id !== id));
+  const [envios, setEnvios] = useState<EnvioDoc[]>([]);
+  const [esperaClique, setEsperaClique] = useState(false);
+
+  /**
+   * Envia os documentos para o cliente recém-criado, UM POR VEZ (a rota acrescenta cada arquivo à lista
+   * da ficha lendo e gravando — dois juntos podiam se atropelar). 429, queda de rede e deploy tentam de
+   * novo sozinhos (lib/onboarding/upload.ts). Devolve quantos falharam.
+   */
+  const enviarDocumentos = async (clientId: string, itens: ArquivoGuardado[]): Promise<number> => {
+    let falhas = 0;
+    for (const a of itens) {
+      setEnvios((p) => p.map((e): EnvioDoc => (e.id === a.id ? { ...e, estado: "enviando", erro: null } : e)));
+      const r = await enviarComNovaTentativa(() => {
+        const fd = new FormData();
+        fd.append("file", a.file);
+        fd.append("clientId", clientId);
+        fd.append("docType", a.docType);
+        return chamar<{ url?: string }>("/api/onboarding/upload", fd);
+      });
+      const ok = r.ok && !!r.data?.url;
+      if (!ok) falhas++;
+      setEnvios((p) => p.map((e): EnvioDoc => (e.id === a.id
+        ? { ...e, estado: ok ? "enviado" : "falhou", erro: ok ? null : motivoDoArquivoQueNaoSubiu(r.status, r.erro) }
+        : e)));
+    }
+    return falhas;
+  };
+
+  const tentarDeNovo = async (id: string) => {
+    const a = arquivos.find((x) => x.id === id);
+    if (!a || !novoId) return;
+    await enviarDocumentos(novoId, [a]);
+  };
+
   const handleSubmit = async () => {
     if (salvandoRef.current) return;
     const name = form.nomeFantasia.trim() || form.razaoSocial.trim();
@@ -250,8 +312,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
         assignedSocial: needsSocial ? form.assignedSocial : "",
         assignedDesigner: needsDesigner ? form.assignedDesigner : "",
         notes: form.notes || undefined,
-        docContratoSocial: form.docContratoSocial || undefined,
-        docIdentidade: form.docIdentidade || undefined,
+        // Documentos NÃO vão aqui: sobem logo abaixo, com o id que esta criação devolve.
         metaAdAccountId: form.metaAdAccountId || undefined,
       });
     } catch (e) {
@@ -295,9 +356,15 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
     pushNotification("system", "Novo cliente", falhasTarefa ? `${name} cadastrado, mas faltaram tarefas de setup.` : `${name} cadastrado. Tasks de setup criadas.`);
     setNovoId(newClient.id);
     setAvisoPosCadastro(avisos);
+    // Os documentos aparecem na tela de sucesso, arquivo a arquivo, enquanto sobem.
+    const fila = arquivos;
+    setEnvios(fila.map((a) => ({ id: a.id, docType: a.docType, nome: a.file.name, estado: "na_fila" as const })));
     setSuccessState(true);
-    // Com aviso, a pessoa precisa ler antes de ir para a ficha; sem aviso, segue sozinho.
-    if (!avisos.length) setTimeout(() => onSuccess(newClient.id), 2000);
+    const falhasDocs = fila.length ? await enviarDocumentos(newClient.id, fila) : 0;
+    // Com aviso ou documento que não subiu, a pessoa precisa ler antes de ir para a ficha (e o botão fica,
+    // mesmo que o "Tentar de novo" resolva tudo depois); sem nada, segue sozinha.
+    if (avisos.length || falhasDocs) setEsperaClique(true);
+    else setTimeout(() => onSuccess(newClient.id), 2000);
   };
 
   // ─── Phases ───────────────────────────────────
@@ -337,21 +404,60 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
 
   // ─── Success State ───────────────────────────
   if (successState) {
+    const docs = resumoDoEnvio(envios);
+    const docsFalharam = docs.falhas.length > 0 && !docs.emAndamento;
+    const precisaLer = esperaClique || avisoPosCadastro.length > 0 || docs.falhas.length > 0;
     return (
       <Dialog open onOpenChange={() => {}}>
         <DialogContent className="max-w-md">
           <div className="flex flex-col items-center justify-center py-12 gap-4 animate-fade-in">
             <div className="w-16 h-16 rounded-full bg-lone-success-bg flex items-center justify-center"><Check size={32} className="text-lone-success" /></div>
             <h2 className="text-lg font-semibold text-foreground">Cliente cadastrado!</h2>
-            {avisoPosCadastro.length > 0 ? (
+            {avisoPosCadastro.length > 0 && (
               // O que não deu certo DEPOIS de criar (grupo, tarefas) — antes ia para um aviso que a
               // tela de sucesso escondia (24/10/2026, auditoria 3.8).
-              <>
-                <div role="alert" className="w-full space-y-1.5 rounded-lg border border-lone-warning-border bg-lone-warning-bg px-4 py-3">
-                  {avisoPosCadastro.map((a) => <p key={a} className="text-xs text-lone-warning">{a}</p>)}
-                </div>
-                {novoId && <Button onClick={() => onSuccess(novoId)}>Abrir a ficha do cliente</Button>}
-              </>
+              <div role="alert" className="w-full space-y-1.5 rounded-lg border border-lone-warning-border bg-lone-warning-bg px-4 py-3">
+                {avisoPosCadastro.map((a) => <p key={a} className="text-xs text-lone-warning">{a}</p>)}
+              </div>
+            )}
+            {envios.length > 0 && (
+              // Resultado de cada documento (25/10/2026, onda 5): "2 de 2 enviados" ou qual não subiu, com
+              // "Tentar de novo" ali mesmo — o cliente já existe, então o reenvio vai para a ficha dele.
+              <div role={docsFalharam ? "alert" : "status"} aria-label="Documentos"
+                className={`w-full space-y-2 rounded-lg border px-4 py-3 ${docsFalharam ? "border-lone-danger-border bg-lone-danger-bg" : "border-border bg-card"}`}>
+                <p className={`text-xs font-medium ${docsFalharam ? "text-lone-danger" : "text-foreground"}`}>{docs.frase}</p>
+                <ul className="space-y-1.5">
+                  {envios.map((e) => (
+                    <li key={e.id} className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-[11px]">
+                        {e.estado === "enviado" ? <Check size={12} className="shrink-0 text-lone-success" aria-hidden="true" />
+                          : e.estado === "falhou" ? <AlertTriangle size={12} className="shrink-0 text-lone-danger" aria-hidden="true" />
+                          : e.estado === "enviando" ? <Loader2 size={12} className="shrink-0 animate-spin text-primary" aria-hidden="true" />
+                          : <FileText size={12} className="shrink-0 text-muted-foreground" aria-hidden="true" />}
+                        <span className="shrink-0 text-muted-foreground">{rotuloDoDoc(e.docType)}:</span>
+                        <span className="min-w-0 flex-1 truncate text-foreground" title={e.nome}>{e.nome}</span>
+                        {e.estado === "falhou" && (
+                          <button type="button" onClick={() => void tentarDeNovo(e.id)} disabled={docs.emAndamento}
+                            className="inline-flex shrink-0 items-center gap-1 font-medium text-lone-danger underline hover:opacity-80 disabled:opacity-40">
+                            <RefreshCw size={11} aria-hidden="true" /> Tentar de novo
+                          </button>
+                        )}
+                      </div>
+                      {e.estado === "falhou" && e.erro && <p className="pl-[18px] text-[11px] text-lone-danger">Não subiu: {e.erro}</p>}
+                    </li>
+                  ))}
+                </ul>
+                {docsFalharam && (
+                  <p className="text-[11px] text-muted-foreground">Também dá para enviar depois na ficha: Admin › Documentos Legais.</p>
+                )}
+              </div>
+            )}
+            {precisaLer || docs.emAndamento ? (
+              novoId && (
+                <Button onClick={() => onSuccess(novoId)} disabled={docs.emAndamento}>
+                  {docs.emAndamento ? "Aguarde o envio dos documentos…" : "Abrir a ficha do cliente"}
+                </Button>
+              )
             ) : (
               <>
                 <p className="text-sm text-muted-foreground text-center">Preparando workspace e checklist de onboarding...</p>
@@ -492,12 +598,17 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
                 </div>
               </div>
 
-              {/* Document upload */}
+              {/* Documentos: guardados aqui e enviados logo depois de cadastrar (25/10/2026, onda 5). */}
               <div className="pt-2 border-t border-border space-y-2">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Documentos (opcional)</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <DocUpload label="Contrato Social" onUploaded={(url) => set("docContratoSocial", url)} uploaded={form.docContratoSocial} />
-                  <DocUpload label="RG ou CNH" onUploaded={(url) => set("docIdentidade", url)} uploaded={form.docIdentidade} />
+                <p className="text-[10px] text-muted-foreground">Os arquivos escolhidos sobem logo depois de “Cadastrar Cliente”, já na ficha dele.</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {DOCS_NOVO_CLIENTE.map((d) => (
+                    <DocEscolha key={d.docType} docType={d.docType}
+                      arquivos={arquivos.filter((a) => a.docType === d.docType)}
+                      onAdicionar={(files) => adicionarArquivos(d.docType, files)}
+                      onRemover={removerArquivo} />
+                  ))}
                 </div>
               </div>
 

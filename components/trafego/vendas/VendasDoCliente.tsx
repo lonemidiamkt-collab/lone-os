@@ -15,7 +15,8 @@ import { Loader2, Plus, RefreshCw, ShoppingBag, Trash2 } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 import { cn } from "@/lib/utils";
 import {
-  CANAIS_VENDA, INVESTIMENTO_NAO_APURADO, ROTULO_CANAL, mascararReais, previaDoValor, type CanalVenda, type RespostaVendasCliente,
+  CANAIS_VENDA, INVESTIMENTO_NAO_APURADO, ROTULO_CANAL, fraseCobertura, investimentoParcial, mascararReais, previaDoValor,
+  type CanalVenda, type RespostaVendasCliente,
 } from "@/lib/trafego/vendas";
 
 export interface VendasDoClienteProps {
@@ -70,10 +71,13 @@ async function pedir<T>(url: string, init?: { method?: string; corpo?: unknown }
   }
 }
 
-function Kpi({ rotulo, valor, apoio }: { rotulo: string; valor: string; apoio?: string }) {
+function Kpi({ rotulo, valor, apoio, selo }: { rotulo: string; valor: string; apoio?: string; selo?: string }) {
   return (
     <div className="min-w-0 rounded-xl border border-border bg-card p-3">
-      <p className="text-lone-eyebrow uppercase text-muted-foreground">{rotulo}</p>
+      <p className="text-lone-eyebrow uppercase text-muted-foreground">
+        {rotulo}
+        {selo && <span className="ml-1.5 rounded border border-lone-info-border bg-lone-info-bg px-1 py-px normal-case text-lone-info">{selo}</span>}
+      </p>
       <p className="mt-1 truncate text-lg font-semibold tabular-nums text-foreground">{valor}</p>
       {apoio && <p className="truncate text-[11px] text-muted-foreground">{apoio}</p>}
     </div>
@@ -144,6 +148,11 @@ export default function VendasDoCliente({ token, clientId, permitirLancar = true
 
   const meses = useMemo(() => [hoje.slice(0, 7), mesAnterior(hoje.slice(0, 7)), mesAnterior(mesAnterior(hoje.slice(0, 7)))], [hoje]);
   const res = dados?.resumo;
+  // Mês pela metade (25/10/2026): o investimento só tem parte dos dias, então o custo por venda e o
+  // retorno não são os finais — a tela diz até quando apurou e quantos dias entraram.
+  const parcial = investimentoParcial(res);
+  const cobertura = fraseCobertura(res?.cobertura);
+  const ateDdmm = res?.cobertura ? ddmm(res.cobertura.apuradoAte) : null;
   const campo = "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm text-foreground focus:border-primary focus:outline-none";
 
   return (
@@ -228,12 +237,20 @@ export default function VendasDoCliente({ token, clientId, permitirLancar = true
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Kpi rotulo="Vendas" valor={res.vendas.toLocaleString("pt-BR")} apoio={nomeDoMes(mes)} />
             {/* Investimento null = nenhum gasto lido ainda (todo dia 1º, ou mês sem métrica): "—", nunca R$ 0,00 (21/10/2026). */}
-            <Kpi rotulo="Custo por venda" valor={brl(res.custoPorVenda)}
-              apoio={res.investimento != null ? `${brl(res.investimento, 0)} investidos em anúncio` : INVESTIMENTO_NAO_APURADO} />
+            <Kpi rotulo="Custo por venda" valor={brl(res.custoPorVenda)} selo={parcial && res.custoPorVenda != null ? "parcial" : undefined}
+              apoio={res.investimento == null ? INVESTIMENTO_NAO_APURADO
+                : parcial ? `${brl(res.investimento, 0)} investidos até ${ateDdmm}`
+                : `${brl(res.investimento, 0)} investidos em anúncio`} />
             <Kpi rotulo="Faturamento" valor={brl(res.faturamento, 0)} apoio={res.ticketMedio != null ? `ticket médio ${brl(res.ticketMedio, 0)}` : "informe o valor para ver"} />
             <Kpi rotulo="Retorno" valor={res.retorno != null ? `${res.retorno.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}x` : "—"}
+              selo={parcial && res.retorno != null ? "parcial" : undefined}
               apoio={res.investimento == null && res.faturamento != null ? INVESTIMENTO_NAO_APURADO : "faturamento ÷ investimento"} />
           </div>
+          {parcial && cobertura && (
+            <p role="note" className="rounded-lg border border-lone-info-border bg-lone-info-bg px-3 py-2 text-xs text-lone-info">
+              {cobertura.charAt(0).toUpperCase() + cobertura.slice(1)}. O custo por venda e o retorno ainda não são os finais: os dias que faltam não entraram na soma.
+            </p>
+          )}
           {dados.vendas.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
               Nenhuma venda registrada em {nomeDoMes(mes)}.{permitirLancar ? " Registre as vendas que vieram dos anúncios para ver o custo por venda." : ""}

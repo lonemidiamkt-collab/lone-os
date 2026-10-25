@@ -120,10 +120,69 @@ export interface ResumoVendas {
   /** Faturamento ÷ investimento (só com valor informado). */
   retorno: number | null;
   ticketMedio: number | null;
+  /**
+   * Quantos dias do período estão dentro do investimento (25/10/2026). Só vem quando o servidor sabe
+   * o período e os dias lidos; `null` = investimento não apurado. Ver `coberturaDoInvestimento`.
+   */
+  cobertura?: CoberturaInvestimento | null;
 }
 
 /** O que a tela diz quando `investimento` é null (portal e aba Vendas do tráfego). */
 export const INVESTIMENTO_NAO_APURADO = "investimento ainda não apurado";
+
+// ─── Mês parcial ────────────────────────────────────────────────────────────
+// POR QUE (25/10/2026, onda 5 da auditoria de erro recuperável). Com só alguns dias de métrica no mês
+// (metric_snapshots incompleto, ou o mês ainda correndo), o investimento somava menos que o real e o
+// custo por venda saía bom demais — e a tela o mostrava como se fosse o número do mês. Agora o resumo
+// diz quantos dias do período entraram na soma, e a tela mostra "investimento apurado até dd/mm
+// (X de Y dias)" e chama o custo de parcial enquanto faltar dia.
+// Atenção: a Meta não devolve linha de dia sem entrega (conta pausada), então dia parado também conta
+// como "fora da soma" — a frase diz o que foi lido, não acusa erro.
+
+export interface CoberturaInvestimento {
+  /** Dias do período com linha de métrica (X). */
+  diasApurados: number;
+  /** Dias do período (Y) — no mês corrente, do dia 1º até hoje. */
+  diasNoPeriodo: number;
+  /** Último dia que entrou na soma (AAAA-MM-DD). */
+  apuradoAte: string;
+  /** Todos os dias do período estão na soma: o custo por venda é o final. */
+  completa: boolean;
+}
+
+function diasEntre(desde: string, ate: string): number {
+  const ms = Date.parse(`${ate}T12:00:00Z`) - Date.parse(`${desde}T12:00:00Z`);
+  return Number.isFinite(ms) && ms >= 0 ? Math.round(ms / 86_400_000) + 1 : 0;
+}
+
+/**
+ * Quanto do período o investimento cobre. `diasComMetrica` = dias (AAAA-MM-DD) com linha de métrica do
+ * cliente. null = nenhum dia lido (investimento "não apurado" — a tela já trata).
+ */
+export function coberturaDoInvestimento(diasComMetrica: string[] | null | undefined, desde: string, ate: string): CoberturaInvestimento | null {
+  const dias = [...new Set((diasComMetrica ?? []).map((d) => String(d).slice(0, 10)))]
+    .filter((d) => d >= desde && d <= ate).sort();
+  if (!dias.length) return null;
+  const diasNoPeriodo = diasEntre(desde, ate);
+  return {
+    diasApurados: dias.length,
+    diasNoPeriodo,
+    apuradoAte: dias[dias.length - 1],
+    completa: dias.length >= diasNoPeriodo,
+  };
+}
+
+/** "investimento apurado até 24/10 (24 de 25 dias)". null = cobertura completa (ou não apurado). */
+export function fraseCobertura(c: CoberturaInvestimento | null | undefined): string | null {
+  if (!c || c.completa) return null;
+  const ddmm = `${c.apuradoAte.slice(8, 10)}/${c.apuradoAte.slice(5, 7)}`;
+  return `investimento apurado até ${ddmm} (${c.diasApurados} de ${c.diasNoPeriodo} ${c.diasNoPeriodo === 1 ? "dia" : "dias"})`;
+}
+
+/** Custo por venda e retorno só são finais com o período inteiro na soma. */
+export function investimentoParcial(r: Pick<ResumoVendas, "cobertura"> | null | undefined): boolean {
+  return !!r?.cobertura && !r.cobertura.completa;
+}
 
 /**
  * Janela em que o investimento é lido: só dias FECHADOS (até ontem). `null` quando o período ainda
@@ -162,12 +221,32 @@ export function gastoPorDiaDosClientes(
   return out;
 }
 
+/** Dias (AAAA-MM-DD) com linha de métrica de cada cliente — para a cobertura do investimento (25/10/2026). */
+export function diasComMetricaDosClientes(
+  linhas: { client_id: string; metric_date: string }[],
+  clientId?: string,
+): Map<string, string[]> {
+  const porCliente = new Map<string, Set<string>>();
+  for (const l of linhas) {
+    if (clientId && l.client_id !== clientId) continue;
+    const dias = porCliente.get(l.client_id) ?? new Set<string>();
+    dias.add(String(l.metric_date).slice(0, 10));
+    porCliente.set(l.client_id, dias);
+  }
+  return new Map([...porCliente].map(([id, dias]) => [id, [...dias].sort()]));
+}
+
 /**
  * `gastoPorDia`: investimento do cliente por dia (uma entrada por dia fechado do período).
  * `null` ou lista vazia = nenhuma linha de métrica lida → investimento `null` ("ainda não apurado").
  * Antes a lista vazia somava 0 e o portal mostrava "Custo por venda R$ 0,00" todo dia 1º (21/10/2026).
+ * `periodo` (25/10/2026): com ele, o resumo diz quantos dias do período entraram na soma (`cobertura`).
  */
-export function resumoVendas(vendas: Pick<VendaRegistro, "quantity" | "amount">[], gastoPorDia: number[] | null): ResumoVendas {
+export function resumoVendas(
+  vendas: Pick<VendaRegistro, "quantity" | "amount">[],
+  gastoPorDia: number[] | null,
+  periodo?: { desde: string; ate: string; diasComMetrica: string[] | null },
+): ResumoVendas {
   const total = vendas.reduce((s, v) => s + (v.quantity || 0), 0);
   const comValor = vendas.filter((v) => v.amount != null);
   const faturamento = comValor.length ? comValor.reduce((s, v) => s + Number(v.amount), 0) : null;
@@ -181,6 +260,9 @@ export function resumoVendas(vendas: Pick<VendaRegistro, "quantity" | "amount">[
     custoPorVenda: investimento != null && total > 0 ? investimento / total : null,
     retorno: investimento && investimento > 0 && faturamento != null ? faturamento / investimento : null,
     ticketMedio: faturamento != null && vendasComValor > 0 ? faturamento / vendasComValor : null,
+    ...(periodo
+      ? { cobertura: investimento == null ? null : coberturaDoInvestimento(periodo.diasComMetrica, periodo.desde, periodo.ate) }
+      : {}),
   };
 }
 

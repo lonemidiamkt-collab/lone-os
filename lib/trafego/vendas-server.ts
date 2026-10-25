@@ -6,7 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { faltaNoBanco } from "@/lib/trafego/anuncios-server";
 import { lerMetricasJanela } from "@/lib/traffic/referencia-nicho-server";
 import {
-  gastoPorDiaDosClientes, janelaDoInvestimento, resumoVendas,
+  diasComMetricaDosClientes, gastoPorDiaDosClientes, janelaDoInvestimento, resumoVendas,
   type LinhaVendasCarteira, type NovaVenda, type RespostaVendasCarteira, type RespostaVendasCliente, type VendaRegistro,
 } from "@/lib/trafego/vendas";
 
@@ -15,11 +15,14 @@ const COLS = "id, client_id, sold_on, quantity, amount, channel, note, source, c
 /**
  * Investimento por cliente por dia (dias fechados; uma entrada por dia). Cliente sem linha de métrica
  * não entra no mapa — quem lê usa `?? null` (não apurado), nunca `?? []` (que somava R$ 0) (21/10/2026).
+ * `dias` (25/10/2026): quais dias entraram na soma — o resumo diz "apurado até dd/mm (X de Y dias)"
+ * quando o mês está pela metade, em vez de mostrar um custo por venda bom demais como se fosse o final.
  */
-async function gastoPorCliente(desde: string, ate: string, hoje: string, clientId?: string): Promise<Map<string, number[]>> {
+async function gastoPorCliente(desde: string, ate: string, hoje: string, clientId?: string): Promise<{ gasto: Map<string, number[]>; dias: Map<string, string[]> }> {
   const janela = janelaDoInvestimento(desde, ate, hoje);
-  if (!janela) return new Map();
-  return gastoPorDiaDosClientes(await lerMetricasJanela(janela.desde, janela.ate), clientId);
+  if (!janela) return { gasto: new Map(), dias: new Map() };
+  const linhas = await lerMetricasJanela(janela.desde, janela.ate);
+  return { gasto: gastoPorDiaDosClientes(linhas, clientId), dias: diasComMetricaDosClientes(linhas, clientId) };
 }
 
 export async function vendasDoCliente(clientId: string, desde: string, ate: string, hoje: string): Promise<RespostaVendasCliente> {
@@ -30,9 +33,12 @@ export async function vendasDoCliente(clientId: string, desde: string, ate: stri
     if (faltaNoBanco(error)) return { disponivel: false, desde, ate, vendas: [], resumo: resumoVendas([], null) };
     throw new Error(error.message);
   }
-  const gasto = await gastoPorCliente(desde, ate, hoje, clientId);
+  const { gasto, dias } = await gastoPorCliente(desde, ate, hoje, clientId);
   const vendas = (data ?? []) as unknown as VendaRegistro[];
-  return { disponivel: true, desde, ate, vendas, resumo: resumoVendas(vendas, gasto.get(clientId) ?? null) };
+  return {
+    disponivel: true, desde, ate, vendas,
+    resumo: resumoVendas(vendas, gasto.get(clientId) ?? null, { desde, ate, diasComMetrica: dias.get(clientId) ?? null }),
+  };
 }
 
 export async function vendasDaCarteira(desde: string, ate: string, hoje: string): Promise<RespostaVendasCarteira> {
@@ -49,7 +55,7 @@ export async function vendasDaCarteira(desde: string, ate: string, hoje: string)
   }
   const ids = [...new Set(vendas.map((v) => v.client_id))];
   if (!ids.length) return { disponivel: true, desde, ate, linhas: [] };
-  const [{ data: clientes }, gasto] = await Promise.all([
+  const [{ data: clientes }, { gasto, dias }] = await Promise.all([
     supabaseAdmin.from("clients").select("id, name, nome_fantasia, assigned_traffic").in("id", ids),
     gastoPorCliente(desde, ate, hoje),
   ]);
@@ -61,7 +67,7 @@ export async function vendasDaCarteira(desde: string, ate: string, hoje: string)
       clientId: id,
       nome: ((c?.nome_fantasia as string) || (c?.name as string) || "(sem nome)"),
       gestor: (c?.assigned_traffic as string) ?? null,
-      resumo: resumoVendas(doCliente, gasto.get(id) ?? null),
+      resumo: resumoVendas(doCliente, gasto.get(id) ?? null, { desde, ate, diasComMetrica: dias.get(id) ?? null }),
       ultimaVenda: doCliente.map((v) => v.sold_on).sort().pop() ?? null,
     };
   });
