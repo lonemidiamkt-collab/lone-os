@@ -55,7 +55,7 @@ export async function DELETE(req: NextRequest) {
   const desfazer = lerDesfazer(body?.desfazer);
   if (!desfazer) return NextResponse.json({ error: "Não recebi o que desfazer. Recarregue a página." }, { status: 400 });
   try {
-    const r = await desfazerRegistro(desfazer);
+    const r = await desfazerRegistro(desfazer, new Date(), gate.user.email); // quem desfez assina a volta da etapa no histórico
     if (!r.ok) return NextResponse.json({ error: r.erro }, { status: r.status });
     const extras = r.lead ? (await carregarExtras([r.lead.id])).get(r.lead.id) ?? EXTRAS_VAZIOS : null;
     return NextResponse.json({ ok: true, lead: r.lead ? { ...r.lead, ...extras } : null, aviso: textoMantidos(r.mantidos) });

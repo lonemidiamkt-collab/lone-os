@@ -5,6 +5,7 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 import * as db from "@/lib/supabase/queries";
 import type { LinhaPlano } from "@/lib/crm/importar";
+import { registrarEtapa } from "@/lib/crm/etapas-historico";
 
 export interface ResultadoGravacao {
   criados: number;
@@ -13,10 +14,17 @@ export interface ResultadoGravacao {
   criadas: { linha: LinhaPlano; leadId: string }[];
 }
 
-export async function gravarPlano(linhas: LinhaPlano[]): Promise<ResultadoGravacao> {
+/** Etapa atual do lead para o "de" do histórico. Ler falhou → null: o histórico perde o "de", a importação segue. */
+async function etapaNoBanco(leadId: string): Promise<string | null> {
+  try { return (await db.fetchCrmLeadById(leadId))?.estagio ?? null; } catch { return null; }
+}
+
+export async function gravarPlano(linhas: LinhaPlano[], autor: string | null = null): Promise<ResultadoGravacao> {
   const resultado: ResultadoGravacao = { criados: 0, atualizados: 0, erros: [], criadas: [] };
   for (const linha of linhas) {
     if (linha.acao === "ignorar") continue;
+    // Quem assina a etapa no histórico: quem importou; na Rota Lagos, quem visitou.
+    const quem = autor ?? (typeof linha.campos.responsavel === "string" ? linha.campos.responsavel : null);
     try {
       let leadId = linha.leadId;
       if (linha.acao === "criar") {
@@ -24,6 +32,8 @@ export async function gravarPlano(linhas: LinhaPlano[]): Promise<ResultadoGravac
         leadId = lead.id;
         resultado.criados++;
         resultado.criadas.push({ linha, leadId: lead.id });
+        // A entrada no funil vai para o histórico de etapa, como na criação pela tela (25/10/2026, onda 5).
+        await registrarEtapa({ leadId: lead.id, de: null, para: lead.estagio, autor: quem, origem: "importacao" });
       } else if (leadId) {
         // Grava SÓ o que a prévia mostrou como "de → para" (21/10/2026). Antes ia a negociação inteira
         // do arquivo por cima — lead Ganho voltava para Negociação. A regra está em compararNegociacao.
@@ -31,8 +41,13 @@ export async function gravarPlano(linhas: LinhaPlano[]): Promise<ResultadoGravac
         if (!Object.keys(patch).length) continue;
         // Etapa avançou: a régua da etapa nova conta de hoje. Sem mudar de etapa, o "desde" fica.
         if ("estagio" in patch) patch.etapaDesde = typeof linha.campos.etapaDesde === "string" ? linha.campos.etapaDesde : new Date().toISOString();
+        // O "de" do histórico é a etapa que está no banco agora (a prévia mostra o rótulo, e pode ter mudado desde então).
+        const de = "estagio" in patch ? await etapaNoBanco(leadId) : null;
         await db.updateCrmLead(leadId, patch);
         resultado.atualizados++;
+        if (typeof patch.estagio === "string") {
+          await registrarEtapa({ leadId, de, para: patch.estagio, autor: quem, origem: "importacao" });
+        }
       }
       if (leadId && linha.atividades.length) {
         await supabaseAdmin.from("crm_lead_activities").insert(linha.atividades.map((a) => ({

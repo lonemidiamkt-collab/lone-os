@@ -16,6 +16,7 @@ import { nomeProprio, cnpjFormatado } from "./normalizar";
 import { transicionar } from "./maquina";
 import { atualizarProspect } from "./db";
 import * as db from "@/lib/supabase/queries";
+import { registrarEtapa } from "@/lib/crm/etapas-historico";
 
 export const RESPONSAVEL_LONE = "Roberto";
 
@@ -158,8 +159,12 @@ export async function marcarReuniao(p: ProspectRow, cfg: ProspectConfig, r: { in
       });
       crm_lead_id = lead.id;
       await supabaseAdmin.from("crm_leads").update({ prospect_id: p.id }).eq("id", lead.id);
+      // Entrada no funil vai para o histórico de etapa (25/10/2026, onda 5 — o piloto SDR está desligado desde 17/10).
+      await registrarEtapa({ leadId: lead.id, de: null, para: lead.estagio, autor: r.por ?? "SDR_AI", origem: "reuniao" });
     } else {
+      const antes = await db.fetchCrmLeadById(crm_lead_id).catch(() => null);
       await db.updateCrmLead(crm_lead_id, { estagio: "diagnostico", reuniaoData: ini.toISOString() });
+      await registrarEtapa({ leadId: crm_lead_id, de: antes?.estagio ?? null, para: "diagnostico", autor: r.por ?? "SDR_AI", origem: "reuniao" });
     }
   } catch (err) {
     console.error("[prospeccao/agenda] crm_leads falhou (segue sem):", err instanceof Error ? err.message : err);

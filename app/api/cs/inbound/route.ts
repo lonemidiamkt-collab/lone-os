@@ -14,6 +14,7 @@ import { deveOuvir, deveFalar, abreJanela, type SinaisDoPapo } from "@/lib/cs/po
 import { ehPalpiteSobreSistema, ehFillerComNome, RESPOSTA_SEM_VISAO_DO_PAINEL } from "@/lib/cs/palpite";
 import { proporRegra, decidirRegra } from "@/lib/cs/regras-propostas";
 import { podeAgir, numerosDaEquipe } from "@/lib/cs/autoridade";
+import { textoSemAutoridade, type AcaoDoTime } from "@/lib/cs/autoridade-comandos";
 import { comExecucao, definirAtor } from "@/lib/obs/correlacao";
 import { ehDm, tratarDmProspeccao } from "@/lib/prospeccao/inbound";
 import { ehGrupoVendas, tratarGrupoVendas } from "@/lib/crm/assistente-server";
@@ -86,7 +87,7 @@ import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
 import { loadBriefingForClient, loadRoteiroPrefs, loadBriefingCombinado } from "@/lib/cs/load-briefing";
-import { ehComandoAusencia, parseAusencia } from "@/lib/cs/ausencia";
+import { ehComandoAusencia, parseAusencia, escolherMembroAusente, type MembroEquipe } from "@/lib/cs/ausencia";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 import { confirmarDemanda } from "@/lib/cs/confirmar-demanda-server";
 import { textoFalhaConfirmacao, textoPautaParcial } from "@/lib/cs/confirmar-demanda";
@@ -1087,6 +1088,15 @@ async function processarInbound(req: NextRequest) {
   if (grupoNosso && !autoridade.ok && msg.text) {
     console.log(`[CS/inbound] remetente sem autoridade para ação (${msg.authorName || msg.authorJid}) — só leitura`);
   }
+  // 25/10/2026 (onda 5): comando de AÇÃO pedido por quem não tem autoridade recebe uma frase com o porquê
+  // (lib/cs/autoridade-comandos.ts) e nada é feito. Antes férias, onboarding, mover card, ajustar pedido,
+  // link da reunião e contrato rodavam para qualquer número que estivesse no grupo.
+  const recusarSemAutoridade = async (acao: AcaoDoTime, resposta: Record<string, unknown>) => {
+    await csSendGroupText(msg.groupJid, textoSemAutoridade(acao, { naoConferi: autoridade.naoConferi }), msg.messageId,
+      { origem: "sem-autoridade", destino: "interno" });
+    console.log(`[CS/inbound] ${acao} recusado: ${msg.authorName || msg.authorJid} sem autoridade${autoridade.naoConferi ? " (lista da equipe não carregou)" : ""}`);
+    return NextResponse.json({ ok: true, ...resposta, autoridade: autoridade.naoConferi ? "nao_conferida" : "sem_autoridade" });
+  };
 
   // ─── Nota de voz: baixa o áudio (Evolution) e TRANSCREVE (Whisper) → segue o fluxo com o texto.
   // Sem isso o agente é cego pra demanda mandada por áudio (muito comum no WhatsApp do cliente). ───
@@ -1315,6 +1325,8 @@ async function processarInbound(req: NextRequest) {
       if (citada.tipo === "uma") {
         const r = citada.item.r;
         const nome = citada.item.cliente;
+        // AUTORIDADE (25/10/2026): o link vai para o grupo do cliente — quem não é da equipe não manda nada a ele.
+        if (!podeAgirC) return recusarSemAutoridade("link_reuniao", { reuniao_link: "sem_autoridade", cliente: nome });
         const { error: errLink } = await supabaseAdmin.from("meetings").update({ link_reuniao: link }).eq("id", r.id as string);
         if (errLink) {
           await csSendGroupText(msg.groupJid, `Não consegui guardar o link da *${nome}* (${errLink.message}) — não mandei pro cliente. Cola de novo daqui a pouco?`,
@@ -1511,6 +1523,8 @@ async function processarInbound(req: NextRequest) {
     const pedido = { ...pedidoCru, ...juntos, faltando: faltandoAgora };
 
     if (pedido.querContrato || respondendoOferta || completandoContrato) {
+      // AUTORIDADE (25/10/2026): o contrato leva CPF/CNPJ e endereço do cliente — só quem é da equipe gera.
+      if (!podeAgirC) return recusarSemAutoridade("contrato", { acao: "contrato_sem_autoridade" });
       const { acharClientePorNome } = await import("@/lib/cs/achar-cliente");
       // Nome citado manda. Sem nome, herda o cliente da oferta que o agente acabou de fazer ali —
       // quem responde uma pergunta não repete o assunto.
@@ -2270,6 +2284,8 @@ async function processarInbound(req: NextRequest) {
   // convida a corrigir (reduz risco de mover o errado). Casa o tema da msg; senão, o card mais recente. ───
   const cmdMover = (!demandaDaSugestao && isInternalCmdGroup(msg.groupJid)) ? ehComandoMoverCard(msg.text) : null;
   if (cmdMover) {
+    // AUTORIDADE (25/10/2026): mover card é ação no quadro (nível C) — a mesma porta do "ok" que cria o card.
+    if (!podeAgirC) return recusarSemAutoridade("mover_card", { mover_card: "sem_autoridade" });
     const alvoM = await resolveClientePorNome(msg.text);
     if (!alvoM) {
       await csSendGroupText(msg.groupJid, "De qual cliente é o card? Me diz o nome que eu movo. 😉");
@@ -2321,6 +2337,8 @@ async function processarInbound(req: NextRequest) {
 
   // ─── Onboarding: equipe avisa "Lone, entrou um novo cliente X no grupo Y" → o Lone CONDUZ lá. ───
   if (isInternalCmdGroup(msg.groupJid) && ehOnboardingTrigger(msg.text)) {
+    // AUTORIDADE (25/10/2026): o onboarding cria o cliente, liga o grupo e fala com ele — a mesma porta do "ok".
+    if (!podeAgirC) return recusarSemAutoridade("onboarding", { onboarding: "sem_autoridade" });
     if (!isOpenAIConfigured()) {
       await csSendGroupText(msg.groupJid, "Tô sem IA agora pra conduzir o onboarding 😕");
       return NextResponse.json({ ok: true, onboarding: "sem_ia" });
@@ -2344,10 +2362,15 @@ async function processarInbound(req: NextRequest) {
     }
     const cli = await ensureClienteOnboarding(cliente || found.subject || "", grupoJid);
     const nomeCli = cli?.nome || cliente || "cliente";
-    await supabaseAdmin.from("cs_onboarding_sessions").insert({
+    const { error: errSess } = await supabaseAdmin.from("cs_onboarding_sessions").insert({
       client_id: cli?.id ?? null, cliente_nome: nomeCli, group_jid: grupoJid, status: "coletando",
-      step: 0, answers: [], iniciado_por: msg.authorName || msg.authorJid,
+      step: 0, answers: [], iniciado_por: autoridade.autor?.nome || msg.authorName || msg.authorJid,
     });
+    // 25/10/2026: sem a sessão gravada as respostas do cliente não seriam guardadas — não dá as boas-vindas.
+    if (errSess) {
+      await csSendGroupText(msg.groupJid, `Não consegui abrir o onboarding da *${nomeCli}* (${errSess.message}) — não mandei nada no grupo dele. Tenta de novo em um minuto.`);
+      return NextResponse.json({ ok: false, onboarding: "erro_sessao", erro: errSess.message });
+    }
     await csSendGroupText(grupoJid, onboardingWelcome(nomeCli));
     await csSendGroupText(msg.groupJid, `🚪 Beleza! Comecei o onboarding da *${nomeCli}* no grupo "${found.subject}". Conduzo por lá e te aviso quando terminar. 🙌`);
     console.log(`[CS/inbound] onboarding iniciado → ${nomeCli} no grupo ${found.subject}`);
@@ -2356,24 +2379,46 @@ async function processarInbound(req: NextRequest) {
 
   // ─── Férias/ausência: "Lone, o Rodrigo está de férias até dia 15" / "Lone, o Carlos voltou" ───
   if (isInternalCmdGroup(msg.groupJid) && ehComandoAusencia(msg.text)) {
+    // AUTORIDADE (25/10/2026): marcar alguém fora muda para quem as demandas vão — a mesma porta do "ok".
+    if (!podeAgirC) return recusarSemAutoridade("ausencia", { ausencia: "sem_autoridade" });
     if (!isOpenAIConfigured()) {
       await csSendGroupText(msg.groupJid, "Tô sem IA agora pra anotar isso 😕");
       return NextResponse.json({ ok: true, ausencia: "sem_ia" });
     }
     const hoje = spNow().toISOString().slice(0, 10);
-    const { nome, disponivel, ate } = await parseAusencia(msg.text, hoje);
+    const { nome, disponivel, ate, falhou } = await parseAusencia(msg.text, hoje);
+    if (falhou) {
+      await csSendGroupText(msg.groupJid, "Não consegui ler o pedido agora (a IA não respondeu) — não anotei nada. Manda de novo daqui a pouco?");
+      return NextResponse.json({ ok: false, ausencia: "ia_falhou" });
+    }
     if (!nome) {
       await csSendGroupText(msg.groupJid, "De quem? Me diz o nome — ex.: _\"Lone, o Rodrigo está de férias até dia 20\"_.");
       return NextResponse.json({ ok: true, ausencia: "sem_nome" });
     }
-    const { data: membro } = await supabaseAdmin
-      .from("team_members").select("id, name").ilike("name", `%${nome}%`).limit(1).maybeSingle();
-    if (!membro) {
+    // 25/10/2026 (onda 5): quem é a pessoa sai de lib/cs/ausencia (escolherMembroAusente) — antes o 1º `ilike`
+    // vencia e podia marcar outra pessoa; erro de leitura ou de gravação virava "não achei" / "✅ Anotado".
+    const { data: membros, error: errMembros } = await supabaseAdmin
+      .from("team_members").select("id, name").eq("is_active", true).ilike("name", `%${nome}%`).limit(10);
+    if (errMembros) {
+      await csSendGroupText(msg.groupJid, `Não consegui ler a equipe agora (${errMembros.message}) — não anotei nada. Tenta de novo em um minuto.`);
+      return NextResponse.json({ ok: false, ausencia: "erro_leitura", erro: errMembros.message });
+    }
+    const escolha = escolherMembroAusente(nome, (membros ?? []) as MembroEquipe[]);
+    if (escolha.tipo === "varios") {
+      await csSendGroupText(msg.groupJid, `Tem mais de uma pessoa com esse nome: ${escolha.nomes.map((n) => `*${n}*`).join(", ")}. Qual delas? Manda com o sobrenome. Não anotei nada.`);
+      return NextResponse.json({ ok: true, ausencia: "ambiguo", nomes: escolha.nomes });
+    }
+    if (escolha.tipo === "nenhum") {
       await csSendGroupText(msg.groupJid, `Não achei "${nome}" na equipe 🤔 confere o nome?`);
       return NextResponse.json({ ok: true, ausencia: "membro_nao_encontrado" });
     }
+    const membro = escolha.membro;
     const novoAte = disponivel ? null : (ate ? new Date(`${ate}T23:59:59-03:00`).toISOString() : new Date(Date.now() + 30 * 864e5).toISOString());
-    await supabaseAdmin.from("team_members").update({ unavailable_until: novoAte }).eq("id", membro.id);
+    const { error: errAus } = await supabaseAdmin.from("team_members").update({ unavailable_until: novoAte }).eq("id", membro.id);
+    if (errAus) {
+      await csSendGroupText(msg.groupJid, `Não consegui anotar ${disponivel ? "a volta" : "a ausência"} de *${membro.name}* (${errAus.message}). Nada mudou — tenta de novo em um minuto.`);
+      return NextResponse.json({ ok: false, ausencia: "erro_gravacao", erro: errAus.message });
+    }
     await csSendGroupText(msg.groupJid, disponivel
       ? `✅ Anotado: *${membro.name}* tá de volta! Volto a rotear demanda pra ele. 🙌`
       : `✅ Anotado: *${membro.name}* tá fora${ate ? ` até ${new Date(`${ate}T12:00:00`).toLocaleDateString("pt-BR")}` : ""}. Nas demandas dele eu aviso pra alguém cobrir. 👍`);
@@ -2534,6 +2579,8 @@ async function processarInbound(req: NextRequest) {
       }
       return NextResponse.json({ ok: true, ajuste: "not_found" });
     }
+    // AUTORIDADE (25/10/2026): ajustar muda o briefing do pedido que vira card — mesma porta do "ok" e do "não".
+    if (!podeAgirC) return recusarSemAutoridade("ajustar_pedido", { ajuste: "sem_autoridade" });
     const quem = msg.authorName || msg.authorJid;
     const sugAj = (d.msg_id_sugestao as string) || undefined; // threading
     const novoBriefing = `${(d.briefing as string) || (d.message_text as string)}\n\n---\n✏️ Ajuste (${quem}): ${ajuste.instrucao}`;

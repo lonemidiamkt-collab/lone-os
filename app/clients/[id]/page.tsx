@@ -17,6 +17,7 @@ import Header from "@/components/Header";
 import EditClientModal from "@/components/EditClientModal";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
+import ErroCargaCards from "@/components/conteudo/ErroCargaCards";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { chamar } from "@/lib/api/chamar";
@@ -325,6 +326,8 @@ export default function ClientDetailPage() {
       </nav>
 
       <main id="painel-ficha" role="tabpanel" aria-labelledby={`aba-${aba}`} className="px-4 py-6 sm:px-6 animate-fade-in">
+        {/* Resumo e Entregas contam os cards do cliente: se não carregaram, avisa em vez de "nenhuma entrega" (25/10/2026). */}
+        {(aba === "resumo" || aba === "entregas") && <ErroCargaCards variante="faixa" className="mb-4" />}
         {aba === "resumo" && (
           <AbaResumo ctx={ctx} cards={cards} pedidos={pedidos} tarefas={tarefas} onboarding={obItens}
             faltaNoCadastro={isAdmin && dadosCompletos ? faltaNoCadastro(client) : null} />

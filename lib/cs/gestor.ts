@@ -45,6 +45,29 @@ export function retrabalhoPorSocial(events: ReworkEvent[]): { social: string; co
   return [...map.entries()].map(([social, count]) => ({ social, count })).sort((a, b) => b.count - a.count);
 }
 
+/** Reprovações por social, ou "nao_lido" quando a leitura falhou (25/10/2026: falha não vira "0 — ninguém refez"). */
+export type RetrabalhoDoRaioX = { social: string; count: number }[] | "nao_lido";
+
+function linhasRetrabalho(retrabalho?: RetrabalhoDoRaioX): string[] {
+  if (!retrabalho) return [];
+  if (retrabalho === "nao_lido") return [``, `🔁 *Retrabalho (7 dias)*: não consegui ler as reprovações agora — não quer dizer zero.`];
+  const total = retrabalho.reduce((a, b) => a + b.count, 0);
+  if (total === 0) return [``, `🔁 *Retrabalho (7 dias)*: 0 — ninguém precisou refazer 👏`];
+  return [``, `🔁 *Retrabalho (7 dias)*: ${total} reprovaç${total === 1 ? "ão" : "ões"} do social`, retrabalho.map((r) => `${r.social}: ${r.count}`).join(" · ")];
+}
+
+/**
+ * O raio-x quando os cards NÃO foram lidos (25/10/2026, onda 5). Antes a leitura que falhava virava lista vazia e
+ * a mensagem dizia "🎯 Nada travado — Fluxo em dia!". Agora diz que não leu, e o resto (retrabalho) segue.
+ */
+export function formatRaioXSemCards(dataLabel: string, retrabalho?: RetrabalhoDoRaioX): string {
+  return [
+    `🧭 *Raio-X do Gestor* — ${dataLabel}`, ``,
+    `⚠️ *Não consegui ler os cards do quadro agora.* O fluxo e os travados ficam de fora desta vez — não quer dizer "nada travado". Dá para rodar de novo em Automações.`,
+    ...linhasRetrabalho(retrabalho),
+  ].join("\n");
+}
+
 /**
  * Mensagem WhatsApp enxuta: fluxo (global) + travados por social (só o pior de cada) + retrabalho.
  * `retrabalho` opcional: se passado (mesmo vazio) renderiza a seção; se undefined, omite.
@@ -53,7 +76,7 @@ export function formatRaioXGestor(
   kpis: OperationalKpis,
   parados: CardParado[],
   dataLabel: string,
-  retrabalho?: { social: string; count: number }[],
+  retrabalho?: RetrabalhoDoRaioX,
 ): string {
   const linhas = [`🧭 *Raio-X do Gestor* — ${dataLabel}`, ``, `⏱️ *Fluxo*`];
 
@@ -85,16 +108,7 @@ export function formatRaioXGestor(
     }
   }
 
-  if (retrabalho) {
-    const total = retrabalho.reduce((a, b) => a + b.count, 0);
-    linhas.push(``);
-    if (total === 0) {
-      linhas.push(`🔁 *Retrabalho (7 dias)*: 0 — ninguém precisou refazer 👏`);
-    } else {
-      linhas.push(`🔁 *Retrabalho (7 dias)*: ${total} reprovaç${total === 1 ? "ão" : "ões"} do social`);
-      linhas.push(retrabalho.map((r) => `${r.social}: ${r.count}`).join(" · "));
-    }
-  }
+  linhas.push(...linhasRetrabalho(retrabalho));
 
   linhas.push(``, `_Tempo real de cada card no fluxo. Cobra quem tá travando 😉_`);
   return linhas.join("\n");

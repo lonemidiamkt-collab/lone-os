@@ -57,8 +57,11 @@ const TTL = 10 * 60 * 1000;
 
 async function tabela(): Promise<Map<string, Autor>> {
   if (cache && Date.now() - cache.at < TTL) return cache.porChave;
-  const { data } = await supabaseAdmin.from("team_members")
+  const { data, error } = await supabaseAdmin.from("team_members")
     .select("name, role, whatsapp_phone").eq("is_active", true).not("whatsapp_phone", "is", null);
+  // 25/10/2026: leitura que falha LANÇA e não entra no cache. Antes virava tabela vazia guardada por 10 min — a
+  // equipe inteira ficava "sem autoridade" (e muda para o agente) por causa de um erro de rede.
+  if (error) throw new Error(`team_members: ${error.message}`);
   const m = new Map<string, Autor>();
   for (const t of data ?? []) {
     const k = chave(t.whatsapp_phone as string);
@@ -83,10 +86,18 @@ export async function numerosDaEquipe(): Promise<string[]> {
   return [...t.keys()];
 }
 
-/** Atalho para o inbound: o remetente pode executar uma ação de nível C (ou acima)? */
-export async function podeAgir(authorJid: string | null | undefined, nivel: Nivel = "C"): Promise<{ ok: boolean; autor: Autor | null }> {
-  const autor = await quemEh(authorJid);
-  return { ok: podeNoNivel(autor?.papel, nivel), autor };
+/**
+ * Atalho para o inbound: o remetente pode executar uma ação de nível C (ou acima)?
+ * `naoConferi` (25/10/2026): a lista da equipe não carregou — "sem autoridade" aqui é falha, não veredito, e a
+ * resposta ao time diz isso (lib/cs/autoridade-comandos.ts) em vez de "você não é da equipe".
+ */
+export async function podeAgir(authorJid: string | null | undefined, nivel: Nivel = "C"): Promise<{ ok: boolean; autor: Autor | null; naoConferi: boolean }> {
+  const naoConferi = !!authorJid && chave(authorJid).length >= 12 && await tabela().then(() => false, (e: unknown) => {
+    console.error("[autoridade] lista da equipe não carregou:", e instanceof Error ? e.message : e);
+    return true;
+  });
+  const autor = naoConferi ? null : await quemEh(authorJid);
+  return { ok: podeNoNivel(autor?.papel, nivel), autor, naoConferi };
 }
 
 /** Só para testes. */

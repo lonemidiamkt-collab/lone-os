@@ -19,6 +19,7 @@ import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { exportReportAsPdf } from "@/lib/exportPdf";
 import { useCollaboratorScores } from "@/lib/hooks/useCollaboratorScores";
+import { useAppState } from "@/lib/context/AppStateContext";
 import FechamentoMensal from "@/components/FechamentoMensal";
 import CartaoMeta from "@/components/goals/CartaoMeta";
 import Skeleton from "@/components/ui/Skeleton";
@@ -36,6 +37,7 @@ export default function GoalsPage() {
   const isAdmin = role === "admin" || role === "manager";
   const { members: teamMembers } = useTeamMembers();
   const collaborators = useCollaboratorScores(teamMembers);
+  const { dbErro, recarregarDb } = useAppState();
   // Cockpit do servidor: compara com o mês anterior REALMENTE fechado (ver lib/hooks/useCockpit).
   const cockpit = useCockpit();
   const pageRef = useRef<HTMLDivElement>(null);
@@ -308,6 +310,16 @@ export default function GoalsPage() {
               </h3>
               <span className="text-[10px] text-muted-foreground">Score = desempenho real</span>
             </div>
+            {/* Cards/clientes que não carregaram não viram "0 entregas no mês" (25/10/2026, onda 5). */}
+            {dbErro && (
+              <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-lone-danger-border bg-lone-danger-bg px-4 py-3">
+                <p className="text-sm text-lone-danger">Não consegui carregar os cards e clientes — os números abaixo podem estar incompletos. ({dbErro})</p>
+                <button type="button" onClick={recarregarDb}
+                  className="rounded-lg border border-lone-danger-border bg-card px-3 py-1.5 text-xs font-medium text-lone-danger hover:opacity-90">
+                  Tentar de novo
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {collaborators.map((p) => {
                 const ring = p.tone === "success" ? "text-lone-success" : p.tone === "warning" ? "text-lone-warning" : p.tone === "danger" ? "text-destructive" : "text-muted-foreground";

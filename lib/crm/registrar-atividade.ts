@@ -13,6 +13,7 @@ import { hojeSP } from "@/lib/crm/meta";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import * as db from "@/lib/supabase/queries";
 import { planoDesfazer, type CampoDesfazivel, type DesfazerRegistro } from "@/lib/crm/desfazer-registro";
+import { registrarEtapa } from "@/lib/crm/etapas-historico";
 import type { CrmAtividadeTipo, CrmLead, CrmLeadActivity } from "@/lib/types";
 
 export const TIPOS_ATIVIDADE: CrmAtividadeTipo[] = ["nota", "ligacao", "whatsapp", "email", "reuniao", "visita", "pulado"];
@@ -42,6 +43,8 @@ export async function registrarAtividade(p: { leadId: string; tipo: CrmAtividade
           desfazer.depois[c] = patch[c] ?? null;
         }
         if (patch.estagio) {
+          // 25/10/2026 (onda 5): a saída de Novo também entra no histórico de etapa (antes só a nota de texto).
+          await registrarEtapa({ leadId: p.leadId, de: atual.estagio, para: patch.estagio, autor: p.autor, origem: "contato" });
           const nota = await db.insertLeadActivity({ leadId: p.leadId, tipo: "etapa", texto: "Movido para Contato feito (primeiro contato)", autor: p.autor }).catch(() => null);
           if (nota) desfazer.atividadeIds.push(nota.id);
         }
@@ -55,7 +58,7 @@ export async function registrarAtividade(p: { leadId: string; tipo: CrmAtividade
  * Desfaz um registro (o "Desfazer" do aviso). Volta primeiro o lead e depois apaga as atividades: se a segunda
  * parte falhar, repetir o Desfazer é seguro (o lead já voltou e não é tocado de novo).
  */
-export async function desfazerRegistro(d: DesfazerRegistro, agora: Date = new Date()): Promise<
+export async function desfazerRegistro(d: DesfazerRegistro, agora: Date = new Date(), autor: string | null = null): Promise<
   { ok: true; lead: CrmLead | null; mantidos: CampoDesfazivel[] } | { ok: false; erro: string; status: number }
 > {
   const lead = await db.fetchCrmLeadById(d.leadId);
@@ -72,6 +75,10 @@ export async function desfazerRegistro(d: DesfazerRegistro, agora: Date = new Da
   if (Object.keys(plano.restaurar).length) {
     try { novo = await db.updateCrmLead(d.leadId, plano.restaurar); }
     catch (e) { return { ok: false, erro: `Não consegui voltar o lead (${e instanceof Error ? e.message : "erro"}). Nada foi desfeito — tente de novo.`, status: 500 }; }
+    // A volta da etapa também é mudança de etapa: entra no histórico (25/10/2026, onda 5).
+    if (typeof plano.restaurar.estagio === "string" && lead?.estagio && lead.estagio !== plano.restaurar.estagio) {
+      await registrarEtapa({ leadId: d.leadId, de: lead.estagio, para: plano.restaurar.estagio, autor, origem: "desfazer" });
+    }
   }
   if (plano.apagar.length) {
     const { error: errDel } = await supabaseAdmin.from("crm_lead_activities").delete().in("id", plano.apagar).eq("lead_id", d.leadId);

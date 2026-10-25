@@ -14,7 +14,8 @@
 // designer" pede a arte, voltar pra lá pede alteração, e sair dela exige a entrega.
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, FileWarning, Loader, Plus, Search, Target, X } from "lucide-react";
+import { FileWarning, Loader, Plus, Search, Target, X } from "lucide-react";
+import ErroCargaCards from "@/components/conteudo/ErroCargaCards";
 import { toast } from "sonner";
 import DriveButton from "@/components/DriveButton";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -132,15 +133,8 @@ export default function QuadroProducao({ pessoa, modo, vista, onVista, onAbrirCa
       contatoCliente={contatoDe.get(it.card.clientId) ?? null} {...extra} />
   );
 
-  if (erroDeCarga && !carregado) {
-    return (
-      <div className="text-center py-12 px-4 rounded-xl border border-destructive/30 bg-destructive/10" role="alert">
-        <AlertTriangle size={22} className="mx-auto mb-3 text-destructive" />
-        <p className="text-sm font-medium text-destructive">Não consegui carregar os cards — tentando de novo</p>
-        <p className="text-xs text-muted-foreground mt-1">O quadro recarrega sozinho assim que a conexão voltar.</p>
-      </div>
-    );
-  }
+  // 25/10/2026 (onda 5): o aviso agora tem "Tentar de novo" (components/conteudo/ErroCargaCards).
+  if (erroDeCarga && !carregado) return <ErroCargaCards />;
 
   return (
     <div className="space-y-4">

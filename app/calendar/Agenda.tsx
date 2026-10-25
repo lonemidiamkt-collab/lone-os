@@ -33,6 +33,7 @@ import FichaReuniao, { type ReuniaoResumida } from "@/components/FichaReuniao";
 import { useAppState } from "@/lib/context/AppStateContext"; // kept for reminders (localStorage-only, no DB equivalent)
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
+import ErroCargaCards from "@/components/conteudo/ErroCargaCards";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
 import { useRole } from "@/lib/context/RoleContext";
@@ -681,6 +682,8 @@ export default function Agenda({ embutido = false }: { embutido?: boolean }) {
 
   return (
     <div className={embutido ? "space-y-6" : "p-6 space-y-6 animate-fade-in"}>
+      {/* Posts que não carregaram não viram agenda vazia (25/10/2026, onda 5). */}
+      <ErroCargaCards variante="faixa" />
       {/* Header */}
       <div className={`flex items-center gap-3 ${embutido ? "justify-end" : "justify-between"}`}>
         {!embutido && (

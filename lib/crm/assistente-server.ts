@@ -22,6 +22,7 @@ import { carregarExtras, EXTRAS_VAZIOS, type ExtrasLead } from "@/lib/crm/extras
 import { montarFilaHoje, inicioDaCadencia } from "@/lib/crm/hoje";
 import { proximoToque, rotuloToque, TIPOS_TOQUE } from "@/lib/crm/cadencia";
 import { registrarAtividade } from "@/lib/crm/registrar-atividade";
+import { registrarEtapa } from "@/lib/crm/etapas-historico";
 import { textoFollowupsGrupo } from "@/lib/crm/grupo-vendas";
 import {
   chamaOLoninho, chamadaDireta, AJUDA, leadsDoPedido, montarPedido, planejarPassos, SCHEMA_ASSISTENTE, diaPorExtenso,
@@ -192,10 +193,12 @@ async function executar(p: Passo<CrmLead>, autor: string, hoje: string, todos: C
       // Reunião não é criada aqui: vira pergunta (tratarGrupoVendas → perguntarReuniao). Nunca chega neste ponto.
       return perguntarReuniao(p);
     case "cadastrar": {
-      await db.insertCrmLead({
+      const novo = await db.insertCrmLead({
         contatoNome: p.contato, empresa: p.empresa, telefone: p.telefone, estagio: "novo",
         origem: "Grupo de vendas", responsavel: autor, etapaDesde: new Date().toISOString(),
       });
+      // Entrada no funil vai para o histórico de etapa, como na criação pela tela (25/10/2026, onda 5).
+      await registrarEtapa({ leadId: novo.id, de: null, para: novo.estagio, autor, origem: "criacao" });
       return textoCadastrado(p.empresa, p.contato, p.telefone);
     }
   }

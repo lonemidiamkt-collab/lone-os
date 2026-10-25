@@ -13,6 +13,7 @@ import { buscarProspect } from "@/lib/prospeccao/db";
 import { podeIr, registrarEvento, transicionar } from "@/lib/prospeccao/maquina";
 import { nomeProprio } from "@/lib/prospeccao/normalizar";
 import { faltandoNaProposta, pacoteProposta, propostaPdfHtml, type DadosProposta } from "@/lib/crm/proposta";
+import { registrarEtapa } from "@/lib/crm/etapas-historico";
 import type { ProspectRow } from "@/lib/prospeccao/tipos";
 
 // /api/crm/proposta — GERADOR DE PROPOSTA (Leva 7C, N29). Comercial + gestão.
@@ -89,7 +90,11 @@ export async function POST(req: NextRequest) {
       if (!lead.propostaEnviadaEm) patch.propostaEnviadaEm = hojeSP;
       if (["novo", "contato", "diagnostico"].includes(lead.estagio)) { patch.estagio = "proposta"; patch.etapaDesde = new Date().toISOString(); }
       if (Object.keys(patch).length) {
-        try { await db.updateCrmLead(leadId, patch); } catch (e) { avisos.push(`lead: ${e instanceof Error ? e.message : "erro"}`); }
+        try {
+          await db.updateCrmLead(leadId, patch);
+          // Entrar em Proposta é o dia da oportunidade (lib/crm/taxas.ts): grava no histórico de etapa (25/10/2026).
+          if (patch.estagio) await registrarEtapa({ leadId, de: lead.estagio, para: "proposta", autor: quem, origem: "proposta" });
+        } catch (e) { avisos.push(`lead: ${e instanceof Error ? e.message : "erro"}`); }
       }
       await db.insertLeadActivity({ leadId, tipo: "etapa", texto: "Proposta enviada (PDF gerado pelo painel)", autor: quem }).catch(() => {});
     }

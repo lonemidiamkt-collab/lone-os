@@ -10,6 +10,7 @@ import { DESTINO_AVISOS_COMERCIAL } from "@/lib/crm/acesso";
 import { mesmoWhatsapp, formatarWhatsapp } from "@/lib/team/whatsapp";
 import { cadastroDoPacote, textoCadastroGrupo, textoClienteGrupo, textoVoltouGrupo } from "@/lib/crm/grupo-vendas";
 import { mandarNoGrupoVendas } from "@/lib/crm/grupo-vendas-envio";
+import { registrarEtapa } from "@/lib/crm/etapas-historico";
 
 // POST /api/integracoes/site/lead — o cadastro do formulário do site (lonemidia.com, direto ou vindo
 // de anúncio) entra no comercial como lead NOVO, com o WhatsApp pronto para um clique.
@@ -112,6 +113,8 @@ export async function POST(req: NextRequest) {
 
     const agora = new Date().toISOString();
     const lead = await db.insertCrmLead(leadDoPacote(p, veredito, agora));
+    // Entrada no funil vai para o histórico de etapa, como na criação pela tela (25/10/2026, onda 5).
+    await registrarEtapa({ leadId: lead.id, de: null, para: lead.estagio, autor: "Site", origem: "criacao" });
     await db.insertLeadActivity({ leadId: lead.id, tipo: "nota", texto: atividadeDoCadastro(p, agora), autor: "Site" }).catch(() => {});
     await avisar(
       `Lead novo do site: ${nomeEmpresa}${p.lead.segmento ? ` (${p.lead.segmento})` : ""}`,

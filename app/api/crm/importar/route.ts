@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     }, { status: 409 });
   }
 
-  const { criados, atualizados, erros } = await gravarPlano(plano.linhas);
+  const { criados, atualizados, erros } = await gravarPlano(plano.linhas, gate.user.email);
   const resultado = { criados, atualizados, erros };
   return NextResponse.json({ plano, resultado });
 }
