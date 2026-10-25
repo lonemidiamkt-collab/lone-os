@@ -7,13 +7,14 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import * as db from "@/lib/supabase/queries";
-import { atualizarEvento, cancelarEvento, cancelarEventoComMotivo, criarEvento, estadoGoogle } from "@/lib/prospeccao/google";
+import { atualizarEvento, cancelarEvento, cancelarEventoComMotivo, criarEvento, estadoGoogle, ocupadosNoCalendario } from "@/lib/prospeccao/google";
 import { mandarNoGrupoVendas } from "@/lib/crm/grupo-vendas-envio";
-import { registrarAtividade } from "@/lib/crm/registrar-atividade";
+import { desfazerRegistro, registrarAtividade } from "@/lib/crm/registrar-atividade";
+import { JANELA_DESFAZER_MIN, type DesfazerRegistro } from "@/lib/crm/desfazer-registro";
 import { registrarEtapa } from "@/lib/crm/etapas-historico";
 import { waComTexto } from "@/lib/crm/modelos";
 import {
-  descricaoDoEvento, diaCurto, erroCancelarNoGoogle, fimDe, horaCurta, mensagemConfirmacaoLead, textoCanceladaGrupo, textoMarcadaGrupo,
+  convidadosDoConvite, descricaoDoEvento, diaCurto, emailValido, erroCancelarNoGoogle, fimDe, horaCurta, mensagemConfirmacaoLead, textoCanceladaGrupo, textoMarcadaGrupo,
   textoRemarcadaGrupo, tituloDoEvento, validarMarcacao, type EstadoReuniao, type Formato, type ReuniaoBase,
 } from "@/lib/crm/reunioes";
 import type { CrmLead } from "@/lib/types";
@@ -38,7 +39,6 @@ export function deLinha(r: Record<string, unknown>): Reuniao {
   };
 }
 
-const emailValido = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e.trim());
 
 /** Próxima reunião agendada do lead → reuniao_data do lead (o Hoje e o funil leem por ali). */
 async function sincronizarReuniaoDoLead(leadId: string) {
@@ -59,8 +59,18 @@ export async function marcarReuniao(p: {
   if (!lead) return { ok: false, erro: "Lead não encontrado." };
   const inicioIso = new Date(p.inicio).toISOString();
   const fimIso = fimDe(inicioIso, p.duracao);
-  const convidados = [...new Set([...(p.convidados ?? []), ...(lead.email ? [lead.email] : [])].map((e) => e.trim().toLowerCase()).filter(emailValido))];
+  // SÓ QUEM ESTÁ NO CAMPO (24/10/2026, auditoria 4.7). Antes o e-mail do cadastro do lead entrava sempre: quem
+  // apagava o campo para não convidar o lead (ou trocava pelo e-mail certo) via o convite ir para o cadastro mesmo
+  // assim. A tela mostra a lista antes de confirmar; o Loninho pergunta com a lista e manda a mesma.
+  const convidados = convidadosDoConvite(p.convidados);
+  const recusados = (p.convidados ?? []).filter((e) => e.trim() && !emailValido(e));
+  if (recusados.length) return { ok: false, erro: `E-mail inválido no convite: ${recusados.join(", ")}. Corrija ou apague antes de marcar.` };
   const local = p.formato === "presencial" ? (p.local?.trim() || lead.endereco || lead.cidade || null) : (p.local?.trim() || null);
+
+  // Mesmo lead e mesmo horário já marcados (duplo "ok" no grupo, clique repetido): para ANTES do Google — senão o
+  // lead recebia um convite e, logo depois, o cancelamento do evento órfão (24/10/2026).
+  const { data: jaMarcada } = await supabaseAdmin.from("crm_reunioes").select("id").eq("lead_id", lead.id).eq("estado", "agendada").eq("inicio", inicioIso).limit(1);
+  if (jaMarcada?.length) return { ok: false, erro: "Essa reunião já está marcada (mesmo lead, mesmo horário)." };
 
   let googleEventId: string | null = null, meetUrl: string | null = null, htmlLink: string | null = null, aviso: string | null = null;
   const g = await estadoGoogle();
@@ -101,8 +111,31 @@ export async function marcarReuniao(p: {
   }).catch(() => {});
 
   await mandarNoGrupoVendas(textoMarcadaGrupo(reuniao, lead, p.autor), "crm-reuniao:marcada");
-  const mensagemLead = mensagemConfirmacaoLead(reuniao, lead, convidados.length > 0 && !!googleEventId);
+  // "Mandei o convite no seu e-mail" só quando o e-mail do lead está entre os convidados.
+  const leadConvidado = !!lead.email && convidados.includes(lead.email.trim().toLowerCase());
+  const mensagemLead = mensagemConfirmacaoLead(reuniao, lead, leadConvidado && !!googleEventId);
   return { ok: true, reuniao, aviso, whatsappLead: waComTexto(lead.telefone, mensagemLead), mensagemLead };
+}
+
+/**
+ * O horário está livre? Para o Loninho avisar na pergunta antes de marcar (24/10/2026). Confere as reuniões do
+ * Comercial e, com o Google conectado, o Google Agenda da Lone. Leitura que falha = "nao_conferi", nunca "livre".
+ */
+export async function conferirHorario(inicioIso: string, fimIso: string): Promise<"livre" | "ocupado" | "nao_conferi"> {
+  try {
+    const { data, error } = await supabaseAdmin.from("crm_reunioes").select("id")
+      .eq("estado", "agendada").lt("inicio", fimIso).gt("fim", inicioIso).limit(1);
+    if (error) return "nao_conferi";
+    if (data?.length) return "ocupado";
+    const g = await estadoGoogle();
+    if (!g.conectado) return "livre"; // sem Google, a reunião fica só no Lone OS — marcarReuniao avisa isso
+    const fb = await ocupadosNoCalendario(inicioIso, fimIso);
+    if (!fb.ok) return "nao_conferi";
+    const ini = Date.parse(inicioIso), fim = Date.parse(fimIso);
+    return fb.faixas.some((f) => Date.parse(f.inicio) < fim && Date.parse(f.fim) > ini) ? "ocupado" : "livre";
+  } catch {
+    return "nao_conferi";
+  }
 }
 
 async function carregar(id: string): Promise<{ r: Reuniao; lead: CrmLead } | null> {
@@ -164,16 +197,40 @@ export async function cancelarReuniao(id: string, autor: string | null): Promise
   return { ok: true };
 }
 
-/** "Como foi?": aconteceu (vira contato na régua) ou não veio. */
-export async function registrarResultado(id: string, estado: "realizada" | "nao_veio", resultado: string | null, autor: string | null): Promise<{ ok: boolean; erro?: string }> {
+/** "Como foi?": aconteceu (vira contato na régua) ou não veio. Devolve o `desfazer` do aviso (24/10/2026, auditoria 4.6). */
+export async function registrarResultado(id: string, estado: "realizada" | "nao_veio", resultado: string | null, autor: string | null): Promise<{ ok: boolean; erro?: string; desfazer?: DesfazerRegistro }> {
   const atual = await carregar(id);
   if (!atual || atual.r.estado !== "agendada") return { ok: false, erro: "Reunião não encontrada ou já registrada." };
-  await supabaseAdmin.from("crm_reunioes").update({ estado, resultado: resultado?.trim() || null, atualizado_em: new Date().toISOString() }).eq("id", id);
+  // Falha ao gravar não vira "Registrado" (24/10/2026): antes o erro do banco era ignorado.
+  const { error } = await supabaseAdmin.from("crm_reunioes").update({ estado, resultado: resultado?.trim() || null, atualizado_em: new Date().toISOString() }).eq("id", id);
+  if (error) return { ok: false, erro: `Não consegui registrar (${error.message}). Tente de novo.` };
   await sincronizarReuniaoDoLead(atual.lead.id);
   if (estado === "realizada") {
-    await registrarAtividade({ leadId: atual.lead.id, tipo: "reuniao", autor, texto: `Reunião realizada${resultado?.trim() ? `: ${resultado.trim()}` : "."}` });
-  } else {
-    await db.insertLeadActivity({ leadId: atual.lead.id, tipo: "nota", autor, texto: `Não compareceu à reunião de ${diaCurto(atual.r.inicio)}. Remarcar.` }).catch(() => {});
+    const { desfazer } = await registrarAtividade({ leadId: atual.lead.id, tipo: "reuniao", autor, texto: `Reunião realizada${resultado?.trim() ? `: ${resultado.trim()}` : "."}` });
+    return { ok: true, desfazer };
+  }
+  const nota = await db.insertLeadActivity({ leadId: atual.lead.id, tipo: "nota", autor, texto: `Não compareceu à reunião de ${diaCurto(atual.r.inicio)}. Remarcar.` }).catch(() => null);
+  return { ok: true, desfazer: { leadId: atual.lead.id, atividadeIds: nota ? [nota.id] : [], antes: {}, depois: {} } };
+}
+
+/**
+ * O "Desfazer" do "Aconteceu" / "Não veio" (24/10/2026): a reunião volta a agendada e o registro sai do lead.
+ * Só logo depois de registrar — passado o prazo, o aviso já sumiu e o caminho é editar a ficha.
+ */
+export async function desfazerResultado(id: string, desfazer: DesfazerRegistro | null, agora: Date = new Date()): Promise<{ ok: boolean; erro?: string }> {
+  const { data, error } = await supabaseAdmin.from("crm_reunioes").select("id, lead_id, estado, atualizado_em").eq("id", id).maybeSingle();
+  if (error) return { ok: false, erro: `Não consegui conferir a reunião (${error.message}). Nada foi desfeito.` };
+  if (!data || (data.estado !== "realizada" && data.estado !== "nao_veio")) return { ok: false, erro: "Essa reunião não está mais registrada como aconteceu/não veio." };
+  if (agora.getTime() - Date.parse(data.atualizado_em as string) > JANELA_DESFAZER_MIN * 60_000) {
+    return { ok: false, erro: `Só dá para desfazer nos primeiros ${JANELA_DESFAZER_MIN} minutos.` };
+  }
+  if (desfazer && desfazer.leadId !== data.lead_id) return { ok: false, erro: "Esse registro não é desta reunião." };
+  const { error: errUp } = await supabaseAdmin.from("crm_reunioes").update({ estado: "agendada", resultado: null, atualizado_em: agora.toISOString() }).eq("id", id);
+  if (errUp) return { ok: false, erro: `Não consegui voltar a reunião (${errUp.message}). Nada foi desfeito.` };
+  await sincronizarReuniaoDoLead(data.lead_id as string);
+  if (desfazer) {
+    const r = await desfazerRegistro(desfazer, agora);
+    if (!r.ok) return { ok: false, erro: `A reunião voltou para agendada, mas o registro no lead ficou: ${r.erro}` };
   }
   return { ok: true };
 }

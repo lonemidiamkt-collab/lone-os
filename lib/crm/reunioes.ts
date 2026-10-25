@@ -91,6 +91,49 @@ export function horariosLivres(p: {
   return livres;
 }
 
+/**
+ * A resposta de "horários livres" (24/10/2026, auditoria 4.9). Falha de leitura NÃO é agenda livre: antes, com o
+ * Google fora, a tela oferecia horários sem conferir conflito (ou "Nenhum horário livre" quando a chamada caía).
+ * Agora: leu tudo → horários; Google desconectado → horários só com as reuniões do Comercial, dito na tela;
+ * qualquer leitura que falhou → nenhum horário oferecido e o motivo, para a tela mostrar "Tentar de novo".
+ */
+export function respostaHorarios(p: {
+  dia: string; duracao: number; agora: Date;
+  nossas: { ok: true; faixas: { inicio: string; fim: string }[] } | { ok: false; erro: string };
+  google: "desconectado" | { ok: true; faixas: { inicio: string; fim: string }[] } | { ok: false; erro: string };
+  max?: number;
+}): { livres: string[]; google: "conectado" | "desconectado" | "erro"; erro: string | null } {
+  const google = p.google === "desconectado" ? "desconectado" : p.google.ok ? "conectado" : "erro";
+  if (!p.nossas.ok) return { livres: [], google, erro: `Não consegui ler as reuniões já marcadas no Comercial (${p.nossas.erro}). Não ofereço horário sem conferir conflito.` };
+  if (p.google !== "desconectado" && !p.google.ok) {
+    return { livres: [], google, erro: `Não consegui ler o Google Agenda da Lone (${p.google.erro}). Não ofereço horário sem conferir conflito.` };
+  }
+  const ocupados = [...p.nossas.faixas, ...(p.google !== "desconectado" && p.google.ok ? p.google.faixas : [])];
+  return { livres: horariosLivres({ dia: p.dia, duracao: p.duracao, ocupados, agora: p.agora, max: p.max ?? 6 }), google, erro: null };
+}
+
+// ─── Quem recebe o convite (24/10/2026, auditoria 4.7) ───────────────────────────────────────────────
+
+export const emailValido = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e.trim());
+
+/** O campo "Convite por e-mail para" aceita mais de um, separado por vírgula, ponto e vírgula ou espaço. */
+export function separarEmails(texto: string | null | undefined): string[] {
+  return (texto ?? "").split(/[\s,;]+/).map((e) => e.trim()).filter(Boolean);
+}
+
+/**
+ * Quem recebe o convite: EXATAMENTE o que está no campo — sem o e-mail do cadastro entrar por conta própria (antes
+ * ele entrava mesmo apagado no campo). Minúsculo, sem repetir, só e-mail válido.
+ */
+export function convidadosDoConvite(campo: string[] | null | undefined): string[] {
+  return [...new Set((campo ?? []).map((e) => e.trim().toLowerCase()).filter(emailValido))];
+}
+
+/** A lista como aparece antes de confirmar (tela e Loninho). */
+export function textoConvidados(convidados: string[]): string {
+  return convidados.length ? convidados.join(", ") : "ninguém (sem convite por e-mail)";
+}
+
 // ─── Textos (fixos, sem valor) ───────────────────────────────────────────────────────────────────────
 
 const nome = (l: LeadDaReuniao) => l.empresa || l.contatoNome;

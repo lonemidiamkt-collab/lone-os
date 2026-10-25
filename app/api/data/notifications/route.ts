@@ -24,8 +24,10 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const nome = EMAIL_TO_NAME[user.email];
-  const notifications = await db.fetchNotifications(nome);
-  return NextResponse.json({ notifications });
+  // Falha ≠ "Tudo em dia" (24/10/2026, auditoria 4.11): sem ler o banco, o sino diz que não carregou.
+  const r = await db.lerNotificacoes(nome);
+  if (!r.ok) return NextResponse.json({ error: "Não consegui carregar os avisos agora." }, { status: 503 });
+  return NextResponse.json({ notifications: r.notifications });
 }
 
 export async function POST(req: NextRequest) {

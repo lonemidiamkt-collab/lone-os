@@ -10,6 +10,7 @@ import { spNow, ymd, addDays } from "@/lib/cs/vigilancia";
 import { temSocial } from "@/lib/clients/servico";
 import { estaPausado } from "@/lib/clients/pausa";
 import { classificarVespera, diasDePostAnteriores } from "@/lib/cs/vespera-classificar";
+import { resultadoDosEnvios, SEM_GRUPO_INTERNO, type FalhaEnvio } from "@/lib/automacoes/envios";
 
 // POST /api/system/cs-vespera — VÉSPERA de postagem. Roda na tarde do dia ANTERIOR a um dia de
 // post (seg/qua/sex) — ou seja dom/ter/qui — e cobra o time a ADIANTAR: a arte de amanhã já está
@@ -56,11 +57,13 @@ export async function POST(req: NextRequest) {
 
   // O que está pedido pra amanhã: cards com a data E demandas de arte com o prazo. "Entregue" só
   // quando TODOS os de amanhã estão — 1 entregue não pode esconder um 2º post sem arte.
-  const [{ data: cardsData }, { data: demandasData }] = await Promise.all([
+  const [{ data: cardsData, error: errCards }, { data: demandasData, error: errDemandas }] = await Promise.all([
     supabaseAdmin.from("content_cards").select("client_id, designer_delivered_at, status")
       .eq("due_date", amanhaKey).is("archived_at", null),
     supabaseAdmin.from("design_requests").select("client_id, status").eq("deadline", amanhaKey),
   ]);
+  // Leitura que falha não vira "ninguém tem card amanhã" (24/10/2026): a cobrança sairia acusando o time à toa.
+  if (errCards || errDemandas) return NextResponse.json({ ok: false, error: `não li os pedidos de amanhã: ${(errCards ?? errDemandas)!.message}` }, { status: 500 });
   const pedidoPorCliente = new Map<string, { entregue: boolean }>();
   const marcar = (cid: string, entregue: boolean) => {
     const prev = pedidoPorCliente.get(cid);
@@ -72,9 +75,10 @@ export async function POST(req: NextRequest) {
   // O QUE ACONTECEU DE VERDADE: posts do Instagram dos últimos ~5 semanas, por dia (SP).
   const desde = ymd(addDays(now, -35));
   const ids = clientes.map((c) => c.id as string);
-  const { data: postsData } = ids.length
+  const { data: postsData, error: errPosts } = ids.length
     ? await supabaseAdmin.from("client_ig_posts").select("client_id, posted_at").in("client_id", ids).gte("posted_at", `${desde}T00:00:00-03:00`).limit(5000)
-    : { data: [] as { client_id: string; posted_at: string }[] };
+    : { data: [] as { client_id: string; posted_at: string }[], error: null };
+  if (errPosts) return NextResponse.json({ ok: false, error: `não li os posts do Instagram: ${errPosts.message}` }, { status: 500 });
   const diasComPost = new Map<string, Set<string>>();
   for (const p of postsData ?? []) {
     const dia = ymd(spNow(new Date(p.posted_at as string)));
@@ -143,6 +147,9 @@ export async function POST(req: NextRequest) {
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let postada = false;
   let formatoUsado: "texto" | "pdf" = "texto";
+  // `ok` só quando a cobrança que devia sair saiu (24/10/2026, auditoria 5.12).
+  const falhas: FalhaEnvio[] = [];
+  if (msg && VESPERA_LIVE && !previewOnly && !internalJid) falhas.push({ alvo: "grupo interno", erro: SEM_GRUPO_INTERNO });
   if (msg && VESPERA_LIVE && internalJid && !previewOnly) {
     // TEXTO OU PDF SEGUE O VOLUME (lib/cs/formato-aviso.ts). Em 11/09 esta mensagem saiu com 11
     // clientes e o WhatsApp cortou com "Ler mais" — o fim da lista, onde estão os casos mais
@@ -175,17 +182,18 @@ export async function POST(req: NextRequest) {
         formatoUsado = "texto";
         const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-vespera", destino: "interno" });
         postada = r.ok;
+        if (!r.ok) falhas.push({ alvo: "grupo interno", erro: r.error ?? "o WhatsApp recusou" });
       }
     } else {
       const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-vespera", destino: "interno" });
       postada = r.ok;
-      if (!r.ok) console.error("[cs-vespera] post falhou:", r.error);
+      if (!r.ok) { console.error("[cs-vespera] post falhou:", r.error); falhas.push({ alvo: "grupo interno", erro: r.error ?? "o WhatsApp recusou" }); }
     }
   }
 
   console.log(`[cs-vespera] formato=${formatoUsado} amanhã=${amanhaKey} wd=${wdAmanha} esperados=${esperados.length} prontos=${prontos} emDia=${emDia.length} artePendente=${artePendente.length} emRisco=${emRisco.length} semIg=${semInstagram.length} postada=${postada}`);
   return NextResponse.json({
-    ok: true, live: VESPERA_LIVE, amanha: diaLabel, firme, video_day: videoDay,
+    ...resultadoDosEnvios(falhas), live: VESPERA_LIVE, amanha: diaLabel, firme, video_day: videoDay,
     esperados: esperados.length, prontos, em_dia: emDia.length, arte_pendente: artePendente.length,
     em_risco: emRisco.length, sem_instagram: semInstagram.length,
     lista_risco: emRisco.map((x) => `${x.nome} (${x.postou}/${x.de})`), lista_arte: artePendente.map((x) => x.nome),

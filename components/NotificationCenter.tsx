@@ -238,6 +238,11 @@ export default function NotificationCenter({ filtro: filtroDeAvisos }: {
   const todas = useNotificationsStore((s) => s.notifications);
   const notifications = useMemo(() => (filtroDeAvisos ? todas.filter(filtroDeAvisos) : todas), [todas, filtroDeAvisos]);
   const markRead = useNotificationsStore((s) => s.markRead);
+  // A carga falhou (24/10/2026, auditoria 4.11): o sino diz que não carregou — nunca "Tudo em dia" sem ter lido.
+  const erroCarga = useNotificationsStore((s) => s.erroCarga);
+  const recarregar = useNotificationsStore((s) => s.refresh);
+  const [recarregando, setRecarregando] = useState(false);
+  const tentarDeNovo = async () => { setRecarregando(true); await recarregar(); setRecarregando(false); };
   const markAllRead = useNotificationsStore((s) => s.markAllRead);
   const desmarcarLidas = useNotificationsStore((s) => s.desmarcarLidas);
   const [marcandoTodas, setMarcandoTodas] = useState(false);
@@ -640,7 +645,19 @@ export default function NotificationCenter({ filtro: filtroDeAvisos }: {
               </div>
 
               <div className="flex-1 overflow-y-auto border-t border-border px-2 pb-3">
-                {grupos.length === 0 ? (
+                {erroCarga && (
+                  <div className="mx-2 mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-lone-danger-border bg-lone-danger-bg px-3 py-2.5" role="alert">
+                    <p className="min-w-0 flex-1 text-xs text-foreground">
+                      {grupos.length === 0 ? "Não consegui carregar os avisos." : "Não consegui atualizar os avisos — esta lista pode estar desatualizada."}
+                      <span className="block text-muted-foreground">{erroCarga}</span>
+                    </p>
+                    <button type="button" onClick={tentarDeNovo} disabled={recarregando}
+                      className="h-7 shrink-0 rounded-md border border-border bg-card px-2.5 text-[12px] text-foreground hover:bg-accent disabled:opacity-50">
+                      {recarregando ? "Carregando…" : "Tentar de novo"}
+                    </button>
+                  </div>
+                )}
+                {grupos.length === 0 && erroCarga ? null : grupos.length === 0 ? (
                   <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
                     <span className="flex h-11 w-11 items-center justify-center rounded-full bg-lone-success-bg text-lone-success"><Bell size={18} /></span>
                     <p className="text-sm font-medium text-foreground">Tudo em dia</p>

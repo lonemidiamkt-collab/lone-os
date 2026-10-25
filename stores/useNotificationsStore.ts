@@ -9,6 +9,8 @@ import { ehTemporario, idsNaoLidos, marcarNaLista } from "@/lib/notificacoes/lid
 interface NotificationsState {
   notifications: AppNotification[];
   initialized: boolean;
+  /** A última leitura falhou (24/10/2026, auditoria 4.11): o sino diz "não carregou" em vez de "Tudo em dia". */
+  erroCarga: string | null;
 
   init: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -41,6 +43,7 @@ export const useNotificationsStore = create<NotificationsState>()(
     subscribeWithSelector((set, get) => ({
       notifications: [],
       initialized: false,
+      erroCarga: null,
 
       // ORDEM É PELO HORÁRIO DO SERVIDOR, SEMPRE. Concatenar listas sem reordenar deixava o item
       // otimista preso no topo (relógio do navegador) acima de avisos mais novos — foi o "ordem
@@ -48,33 +51,29 @@ export const useNotificationsStore = create<NotificationsState>()(
       // dançar entre renders.
       init: async () => {
         if (get().initialized) return;
-        try {
-          const res = await authedFetch("/api/data/notifications");
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const { notifications } = await res.json();
-          set({ notifications: ordenar(notifications), initialized: true }, false, "notifs/init/done");
-        } catch {}
+        // FALHA ≠ VAZIO (24/10/2026): antes o erro era engolido e o sino vazio dizia "Tudo em dia".
+        const r = await chamar<{ notifications: AppNotification[] }>("/api/data/notifications");
+        if (!r.ok || !r.data) { set({ erroCarga: r.erro ?? "Não consegui carregar os avisos." }, false, "notifs/init/erro"); return; }
+        set({ notifications: ordenar(r.data.notifications ?? []), initialized: true, erroCarga: null }, false, "notifs/init/done");
       },
 
       // Recarrega do banco (o init tem guard e só roda 1x). Usado no poll do AppShell pra que
       // notificações de OUTROS usuários (ex: "Conteúdo reprovado" pelo social) cheguem sem F5.
       refresh: async () => {
-        try {
-          const res = await authedFetch("/api/data/notifications");
-          if (!res.ok) return;
-          const { notifications } = await res.json();
-          set((s) => {
-            // Banco é a verdade; preserva locais recém-empurrados que ainda não voltaram dele.
-            const dbIds = new Set((notifications as AppNotification[]).map((n) => n.id));
-            // Só sobrevive o local que AINDA está subindo. O temporário que já virou linha no banco
-            // não é reconhecido pelo id (o banco gera outro), então some por idade — senão ele
-            // duplicaria o aviso real e ficaria colado no topo pra sempre.
-            const localOnly = s.notifications.filter(
-              (n) => !dbIds.has(n.id) && (!n.id.startsWith("temp-") || Date.now() - Date.parse(n.createdAt) < 30_000),
-            );
-            return { notifications: ordenar([...localOnly, ...notifications]), initialized: true };
-          }, false, "notifs/refresh");
-        } catch {}
+        const r = await chamar<{ notifications: AppNotification[] }>("/api/data/notifications");
+        if (!r.ok || !r.data) { set({ erroCarga: r.erro ?? "Não consegui carregar os avisos." }, false, "notifs/refresh/erro"); return; }
+        const notifications = r.data.notifications ?? [];
+        set((s) => {
+          // Banco é a verdade; preserva locais recém-empurrados que ainda não voltaram dele.
+          const dbIds = new Set(notifications.map((n) => n.id));
+          // Só sobrevive o local que AINDA está subindo. O temporário que já virou linha no banco
+          // não é reconhecido pelo id (o banco gera outro), então some por idade — senão ele
+          // duplicaria o aviso real e ficaria colado no topo pra sempre.
+          const localOnly = s.notifications.filter(
+            (n) => !dbIds.has(n.id) && (!n.id.startsWith("temp-") || Date.now() - Date.parse(n.createdAt) < 30_000),
+          );
+          return { notifications: ordenar([...localOnly, ...notifications]), initialized: true, erroCarga: null };
+        }, false, "notifs/refresh");
       },
 
       subscribeRealtime: () => {

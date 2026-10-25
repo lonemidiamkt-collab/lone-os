@@ -77,8 +77,12 @@ export async function selectActiveMetaClients(
   let q = supabaseAdmin
     .from("clients")
     .select("id, name, nome_fantasia, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, status, draft_status, whatsapp_group_jid, whatsapp_group_name, paused_at, paused_until")
-    .in("status", ["good", "average", "onboarding"])
+    // `at_risk` ENTRA (24/10/2026, auditoria 5.11): o cliente que mais precisa de atenção ficava sem relatório. Com
+    // ele entra também o filtro de ex-cliente — o encerramento grava active=false e mantém o status (muitas vezes
+    // at_risk); sem isso, quem saiu voltaria a receber relatório. Mesma regra de selectActiveClientsWithGroup.
+    .in("status", ["good", "average", "onboarding", "at_risk"])
     .is("draft_status", null)
+    .neq("active", false)
     .order("nome_fantasia");
   // `apenasTrafego` filtrava por "tem conta de anúncio" — o mesmo proxy errado que mandou mensagem
   // de campanha pro Dumar. Agora exige o CONTRATO e a conta: o contrato autoriza, a conta viabiliza.

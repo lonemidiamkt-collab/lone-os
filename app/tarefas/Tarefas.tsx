@@ -14,8 +14,11 @@ import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { useColaboradores } from "./NovaTarefa";
 import { getPriorityColor, getPriorityLabel, todaySP } from "@/lib/utils";
+import { ordenarConcluidas } from "@/lib/tarefas/concluidas";
 import type { Task } from "@/lib/types";
 import { toast } from "sonner";
+
+>>>>
 
 // Dia de São Paulo, não o do navegador: quem abre de fora do fuso via "atrasada" um dia antes.
 const hoje = () => todaySP();
@@ -43,6 +46,9 @@ export default function Tarefas({ area, onLimparArea }: { area?: string | null; 
   const [filtroPessoa, setFiltroPessoa] = useState<string>("todos");
   const filtroArea = area ? AREAS[area] ?? null : null;
   const [verConcluidas, setVerConcluidas] = useState(false);
+  // Concluídas AGORA, nesta tela: aparecem primeiro em "Concluídas" (24/10/2026, auditoria 4.14). A lista vem do
+  // banco pela data de criação e só mostra 40 — a tarefa antiga concluída por engano podia nem aparecer lá.
+  const [recemConcluidas, setRecemConcluidas] = useState<string[]>([]);
 
   // Quem vê o quê: gestão vê tudo; staff vê o que é DELE (recebeu) ou o que ELE criou.
   const visiveis = useMemo(() => {
@@ -57,18 +63,32 @@ export default function Tarefas({ area, onLimparArea }: { area?: string | null; 
   const atrasadas = abertas.filter((t) => t.dueDate && t.dueDate < h);
   const venceHoje = abertas.filter((t) => t.dueDate === h);
   const proximas = abertas.filter((t) => !t.dueDate || t.dueDate > h);
-  const concluidas = visiveis.filter((t) => t.status === "done").slice(0, 40);
+  const concluidas = ordenarConcluidas(visiveis.filter((t) => t.status === "done"), recemConcluidas).slice(0, 40);
+  const motivo = (e: unknown) => (e instanceof Error && e.message ? e.message : "sem resposta do servidor");
 
+  // Concluir por engano tem volta (24/10/2026, auditoria 4.14): o aviso traz "Desfazer", que devolve o status de antes.
   async function marcarFeita(t: Task) {
-    try { await updateTask(t.id, { status: "done" }); toast.success("Tarefa concluída."); }
-    catch { toast.error("Não deu pra concluir. Tente de novo."); }
+    const antes = t.status;
+    try { await updateTask(t.id, { status: "done" }); }
+    catch (e) { toast.error(`Não concluí a tarefa: ${motivo(e)}`); return; }
+    setRecemConcluidas((ids) => [t.id, ...ids.filter((x) => x !== t.id)]);
+    toast.success(`Concluída: ${t.title}`, {
+      duration: 8000,
+      action: {
+        label: "Desfazer",
+        onClick: async () => {
+          try { await updateTask(t.id, { status: antes }); toast.success("Tarefa reaberta."); }
+          catch (e) { toast.error(`Não consegui reabrir: ${motivo(e)}`); }
+        },
+      },
+    });
   }
   async function reabrir(t: Task) {
-    try { await updateTask(t.id, { status: "pending" }); } catch { toast.error("Falha ao reabrir."); }
+    try { await updateTask(t.id, { status: "pending" }); } catch (e) { toast.error(`Não reabri a tarefa: ${motivo(e)}`); }
   }
   async function remover(t: Task) {
     if (!window.confirm(`Excluir a tarefa "${t.title}"?`)) return;
-    try { await deleteTask(t.id); toast.success("Tarefa excluída."); } catch { toast.error("Falha ao excluir."); }
+    try { await deleteTask(t.id); toast.success("Tarefa excluída."); } catch (e) { toast.error(`Não excluí a tarefa: ${motivo(e)}`); }
   }
 
   const podeMexer = (t: Task) => isGestao || t.assignedTo === currentUser || t.createdBy === currentUser;

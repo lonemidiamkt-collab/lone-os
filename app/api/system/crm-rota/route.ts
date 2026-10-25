@@ -45,9 +45,13 @@ export async function POST(req: NextRequest) {
 
   const { lojas, semCadastro } = lojasVisitadas(catalogo, visitas);
   const [existentes, clientesQ] = await Promise.all([
-    db.fetchCrmLeads(),
+    db.fetchCrmLeads().catch((e: unknown) => (e instanceof Error ? e : new Error(String(e)))),
     supabaseAdmin.from("clients").select("name, phone, contact_phone, company_phone, whatsapp_team_phone").limit(3000),
   ]);
+  // 24/10/2026 (auditoria 4.10): sem o funil ou sem os clientes, toda loja visitada pareceria nova — a rodada
+  // criaria de novo quem já está no funil (ou quem já é cliente). Para aqui e a Central mostra a falha.
+  if (existentes instanceof Error) return NextResponse.json({ ok: false, error: existentes.message }, { status: 503 });
+  if (clientesQ.error) return NextResponse.json({ ok: false, error: `não consegui ler os clientes: ${clientesQ.error.message}` }, { status: 503 });
   const plano = planejarImportacao({
     dados: { lojas_rota: lojas },
     existentes: existentes.map((l) => ({ id: l.id, empresa: l.empresa, contatoNome: l.contatoNome, telefone: l.telefone, rotaLojaId: l.rotaLojaId, externoId: l.externoId })),

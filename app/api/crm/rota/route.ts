@@ -17,10 +17,12 @@ export async function GET(req: NextRequest) {
   if (gate instanceof NextResponse) return gate;
   const [visitasQ, leads, catalogo] = await Promise.all([
     supabaseAdmin.from("rota_visitas").select("rota, loja, visitada, por, visitada_em").limit(2000),
-    db.fetchCrmLeads(),
+    db.fetchCrmLeads().catch((e: unknown) => (e instanceof Error ? e : new Error(String(e)))),
     buscarCatalogo().catch((e: unknown) => e instanceof Error ? e : new Error(String(e))),
   ]);
   if (visitasQ.error) return NextResponse.json({ error: `rota_visitas: ${visitasQ.error.message}` }, { status: 500 });
+  // Funil que não carregou não é "nenhuma loja no funil" (24/10/2026).
+  if (leads instanceof Error) return NextResponse.json({ error: leads.message }, { status: 503 });
   if (catalogo instanceof Error) {
     console.error("[crm/rota] lista de lojas:", catalogo.message);
     return NextResponse.json({ error: "Não consegui ler a lista de lojas na página da rota. Tente de novo em instantes." }, { status: 502 });

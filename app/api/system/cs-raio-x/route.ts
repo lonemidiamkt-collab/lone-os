@@ -9,6 +9,7 @@ import { spNow, businessHoursSince } from "@/lib/cs/vigilancia";
 import { fetchContentCards } from "@/lib/supabase/queries";
 import { computeOperationalKpis } from "@/lib/kpis/operational";
 import { cardsParados, formatRaioXGestor, retrabalhoPorSocial, type ReworkEvent } from "@/lib/cs/gestor";
+import { resultadoDosEnvios, SEM_GRUPO_INTERNO, type FalhaEnvio } from "@/lib/automacoes/envios";
 
 // POST /api/system/cs-raio-x — "Raio-X do Gestor": gargalo do fluxo (lead time, prazo) + cards
 // travados por social (tempo real parado na coluna). Posta no grupo interno.
@@ -36,10 +37,14 @@ export async function POST(req: NextRequest) {
 
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let enviado = false;
+  // `ok` só quando o raio-x chegou no grupo (24/10/2026, auditoria 5.12) — antes respondia ok com o envio recusado.
+  const falhas: FalhaEnvio[] = [];
+  if (!dry && !internalJid) falhas.push({ alvo: "grupo interno", erro: SEM_GRUPO_INTERNO });
   if (!dry && internalJid) {
     const r = await csSendGroupText(internalJid, texto, undefined, { origem: "cs-raio-x", destino: "interno" });
     enviado = r.ok;
+    if (!r.ok) falhas.push({ alvo: "grupo interno", erro: r.error ?? "o WhatsApp recusou" });
   }
-  console.log(`[cs-raio-x] travados=${parados.length} gargalo=${kpis.bottleneck?.stage ?? "-"} dry=${dry}`);
-  return NextResponse.json({ ok: true, dry, enviado, texto, kpis, parados });
+  console.log(`[cs-raio-x] travados=${parados.length} gargalo=${kpis.bottleneck?.stage ?? "-"} dry=${dry} enviado=${enviado}`);
+  return NextResponse.json({ ...resultadoDosEnvios(falhas), dry, enviado, texto, kpis, parados });
 }

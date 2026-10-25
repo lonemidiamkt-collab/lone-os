@@ -13,7 +13,10 @@ import Link from "next/link";
 import { Plus, X, Search, Trophy, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3, Sun, FileText, Download, MapPin, Upload, Target, SkipForward } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ExtrasLead } from "@/lib/crm/extras";
-import { proximoToque, rotuloToque, TIPOS_TOQUE, type ProximoToque } from "@/lib/crm/cadencia";
+import { proximoToque, rotuloToque, TIPOS_AVANCO, TIPOS_TOQUE, type ProximoToque } from "@/lib/crm/cadencia";
+import type { DesfazerRegistro } from "@/lib/crm/desfazer-registro";
+import { anotarEnvio, textoWhatsappDoHoje, tirarEnvio, TEXTO_WHATSAPP_PAINEL, type EnvioPendente } from "@/lib/crm/enviou";
+import PerguntaEnvio from "@/components/crm/PerguntaEnvio";
 import { montarFilaHoje, inicioDaCadencia } from "@/lib/crm/hoje";
 import { waComTexto } from "@/lib/crm/modelos";
 import { PORTES, type QualificacaoLead } from "@/lib/crm/nota";
@@ -151,6 +154,12 @@ export default function CrmPage() {
   const [loadingAtiv, setLoadingAtiv] = useState(false);
   const [novaTipo, setNovaTipo] = useState<CrmAtividadeTipo>("nota");
   const [novoTexto, setNovoTexto] = useState("");
+  // Histórico que não carregou não é "sem histórico ainda" (24/10/2026); e o texto digitado só some depois de gravar.
+  const [atividadesErro, setAtividadesErro] = useState<string | null>(null);
+  const [recargaAtiv, setRecargaAtiv] = useState(0);
+  const [enviandoNota, setEnviandoNota] = useState(false);
+  // WhatsApp aberto esperando o "Enviou?" (24/10/2026, auditoria 4.5): abrir não conta mais como contato.
+  const [enviosPendentes, setEnviosPendentes] = useState<EnvioPendente<Lead>[]>([]);
   // Leva 7C: segmentos do ICP (qualificação → nota A/B/C), conversão com pacote e ramo, proposta.
   const [segmentosIcp, setSegmentosIcp] = useState<string[]>([]);
   const [conversao, setConversao] = useState<{ pacote: string; nicho: string } | null>(null);
@@ -161,11 +170,18 @@ export default function CrmPage() {
   // Meta do mês (MRR novo) e a janela de editar metas.
   // Metas por mês ("2026-10" → meta): o dashboard também olha o mês passado.
   const [metas, setMetas] = useState<Record<string, CrmMeta | null>>({});
+  // Meta que NÃO CARREGOU (24/10/2026, auditoria 4.11): antes virava "sem meta" e R$ 0 — e o "Definir meta" abria vazio
+  // e gravava por cima da meta que existia. Agora a tela diz que não leu e oferece tentar de novo.
+  const [metasErro, setMetasErro] = useState<Record<string, string>>({});
   const meta = metas[mesSP()] ?? null;
   const setMeta = (m: CrmMeta | null) => setMetas((prev) => ({ ...prev, [mesSP()]: m }));
   const carregarMeta = useCallback((mes: string) => {
     setMetas((prev) => (mes in prev ? prev : { ...prev, [mes]: null }));
-    chamar<{ meta: CrmMeta | null }>(`/api/crm/metas?mes=${mes}`).then((r) => { if (r.ok) setMetas((prev) => ({ ...prev, [mes]: r.data?.meta ?? null })); });
+    setMetasErro((prev) => { if (!(mes in prev)) return prev; const resto = { ...prev }; delete resto[mes]; return resto; });
+    chamar<{ meta: CrmMeta | null }>(`/api/crm/metas?mes=${mes}`).then((r) => {
+      if (r.ok) setMetas((prev) => ({ ...prev, [mes]: r.data?.meta ?? null }));
+      else setMetasErro((prev) => ({ ...prev, [mes]: r.erro ?? "Não consegui carregar a meta." }));
+    });
   }, []);
   // Relatórios: a linha da meta precisa da meta de cada um dos 6 meses.
   useEffect(() => {
@@ -342,53 +358,98 @@ export default function CrmPage() {
 
   // Carrega a timeline quando abre um lead EXISTENTE no modal (novo lead ainda não tem id).
   useEffect(() => {
+    setAtividadesErro(null);
     if (!draft?.id) { setAtividades([]); return; }
+    let vivo = true;
     setLoadingAtiv(true);
-    authedFetch(`/api/crm/activities?leadId=${draft.id}`)
-      .then((r) => (r.ok ? r.json() : { atividades: [] }))
-      .then((d) => setAtividades(d.atividades ?? []))
-      .finally(() => setLoadingAtiv(false));
-  }, [draft?.id]);
+    chamar<{ atividades: CrmLeadActivity[] }>(`/api/crm/activities?leadId=${draft.id}`).then((r) => {
+      if (!vivo) return;
+      if (r.ok) setAtividades(r.data?.atividades ?? []);
+      else { setAtividades([]); setAtividadesErro(r.erro ?? "Não consegui carregar o histórico."); }
+      setLoadingAtiv(false);
+    });
+    return () => { vivo = false; };
+  }, [draft?.id, recargaAtiv]);
 
   // ─── Ações ─────────────────────────────────────────────────────────
-  async function registrarAtividade(tipo: CrmAtividadeTipo, texto: string, leadId?: string) {
-    const id = leadId ?? draft?.id;
-    if (!id || !texto.trim()) return;
-    const r = await authedFetch("/api/crm/activities", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leadId: id, tipo, texto: texto.trim(), autor: currentUser ?? null }),
-    }).catch(() => null);
-    if (r?.ok) {
-      const { atividade } = await r.json();
-      if (id === draft?.id) setAtividades((prev) => [atividade, ...prev]);
-    }
+  // ─── Registros (histórico, toques do Hoje) — todos com Desfazer (24/10/2026, auditoria 4.6) ───────
+  /** Grava o registro e atualiza a tela; não mostra aviso (quem chama decide). */
+  async function gravarRegistro(l: Pick<Lead, "id">, tipo: CrmAtividadeTipo, texto: string): Promise<{ ok: true; desfazer: DesfazerRegistro; movido: Lead | null } | { ok: false; erro: string }> {
+    const r = await chamar<{ atividade: CrmLeadActivity; lead: Lead | null; desfazer: DesfazerRegistro }>("/api/crm/activities", { leadId: l.id, tipo, texto: texto.trim(), autor: currentUser ?? null });
+    if (!r.ok || !r.data) return { ok: false, erro: r.erro ?? "Não consegui registrar." };
+    const { atividade, lead: movido, desfazer } = r.data;
+    const quando = atividade?.createdAt || new Date().toISOString();
+    const contato = TIPOS_TOQUE.has(tipo);
+    setLeads((prev) => prev.map((x) => x.id !== l.id ? x : {
+      ...x, ...(movido ?? {}),
+      toques: contato ? [...(x.toques ?? []), quando] : x.toques,
+      avancos: TIPOS_AVANCO.has(tipo) ? [...(x.avancos ?? []), quando] : x.avancos,
+      primeiroContatoEm: x.primeiroContatoEm ?? (contato ? quando : null),
+    }));
+    if (atividade && l.id === draftAtual.current?.id) setAtividades((prev) => [atividade, ...prev]);
+    return { ok: true, desfazer, movido };
   }
 
+  /** O "Desfazer": apaga o registro e volta o lead (o servidor confere o que ainda dá para voltar). */
+  async function desfazerNaTela(d: DesfazerRegistro): Promise<boolean> {
+    const r = await chamar<{ lead: Lead | null; aviso: string | null }>("/api/crm/activities", { desfazer: d }, { method: "DELETE" });
+    if (!r.ok) { toast.error(r.erro ?? "Não consegui desfazer. Tente de novo.", { duration: 12000 }); return false; }
+    const lead = r.data?.lead;
+    if (lead) setLeads((prev) => prev.map((x) => (x.id === lead.id ? { ...x, ...lead } : x)));
+    setAtividades((prev) => prev.filter((a) => !d.atividadeIds.includes(a.id)));
+    if (r.data?.aviso) toast.warning(r.data.aviso);
+    return true;
+  }
+
+  /** Registro com aviso e Desfazer. Devolve se gravou. */
+  async function registrarToque(l: Lead, tipo: CrmAtividadeTipo, texto: string): Promise<boolean> {
+    setAcaoBusy(l.id);
+    const r = await gravarRegistro(l, tipo, texto);
+    setAcaoBusy(null);
+    if (!r.ok) { toast.error(r.erro); return false; }
+    const msg = tipo === "pulado" ? "Toque pulado — a régua seguiu." : r.movido?.estagio === "contato" && l.estagio === "novo" ? "Registrado. O lead foi para Contato feito." : "Registrado.";
+    const d = r.desfazer;
+    toast.success(msg, {
+      duration: 8000,
+      action: { label: "Desfazer", onClick: async () => { if (await desfazerNaTela(d)) toast.success("Desfeito: o registro saiu do histórico."); } },
+    });
+    return true;
+  }
+
+  // WhatsApp: abrir a conversa só ANOTA; o "Enviou?" na volta decide se conta (lib/crm/enviou.ts).
+  function anotarWhatsApp(l: Lead, texto: string) {
+    setEnviosPendentes((prev) => anotarEnvio(prev, { lead: l, tipo: "whatsapp", texto, abertoEm: new Date().toISOString() }));
+  }
   function abrirWhatsApp(telefone: string | null | undefined, leadId?: string) {
     const link = waLink(telefone);
     if (!link) return;
     window.open(link, "_blank");
-    if (leadId) registrarAtividade("whatsapp", "WhatsApp iniciado", leadId); // registra na timeline
+    const l = leadId ? leads.find((x) => x.id === leadId) : null;
+    if (l) anotarWhatsApp(l, TEXTO_WHATSAPP_PAINEL);
+  }
+  async function responderEnvio(p: EnvioPendente<Lead>, enviou: boolean) {
+    setEnviosPendentes((prev) => tirarEnvio(prev, p.lead.id));
+    if (!enviou) { toast("Nada registrado — o contato não contou."); return; }
+    const atual = leads.find((x) => x.id === p.lead.id) ?? p.lead;
+    // Não gravou: volta a pergunta para tentar de novo (nada some em silêncio).
+    if (!(await registrarToque(atual, p.tipo, p.texto))) setEnviosPendentes((prev) => anotarEnvio(prev, p));
   }
 
   async function moverEstagio(id: string, _from: string, to: string) {
     const snapshot = leads; // pra reverter se o banco recusar
     setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, estagio: to as CrmEstagio } : l)));
-    try {
-      const r = await authedFetch("/api/crm/leads", {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, estagio: to }),
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const { lead } = await r.json();
-      setLeads((prev) => prev.map((l) => (l.id === lead.id ? lead : l)));
-      // Caiu em "perdido" sem motivo → abre o modal pra registrar o porquê (alimenta o relatório).
-      if (to === "perdido" && !lead.motivoPerda) setDraft({ ...lead });
-      if (to === "ganho" && !lead.clienteId) avisarGanho(lead);
-    } catch {
+    // `chamar` traz o motivo do servidor (24/10/2026, auditoria 4.15) em vez de "Não foi possível".
+    const r = await chamar<{ lead: Lead }>("/api/crm/leads", { id, estagio: to }, { method: "PATCH" });
+    if (!r.ok || !r.data?.lead) {
       setLeads(snapshot); // reverte: o card não muda de coluna se o banco não confirmou
-      toast.error("Não foi possível mover o lead. Tente de novo.");
+      toast.error(`Não movi o lead: ${r.erro ?? "sem resposta do servidor"}`);
+      return;
     }
+    const lead = r.data.lead;
+    setLeads((prev) => prev.map((l) => (l.id === lead.id ? lead : l)));
+    // Caiu em "perdido" sem motivo → abre o modal pra registrar o porquê (alimenta o relatório).
+    if (to === "perdido" && !lead.motivoPerda) setDraft({ ...lead });
+    if (to === "ganho" && !lead.clienteId) avisarGanho(lead);
   }
 
   // LEAD COM REUNIÃO MARCADA (21/10/2026): a confirmação diz qual reunião vai ser cancelada, e o
@@ -443,24 +504,17 @@ export default function CrmPage() {
       retomarEm: draft.retomarEm ?? null, segmento: draft.segmento ?? null, cidade: draft.cidade ?? null,
       instagram: draft.instagram ?? null,
     };
-    try {
-      const r = await authedFetch("/api/crm/leads", {
-        method: editando ? "PATCH" : "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const { lead, aviso } = await r.json();
-      const virouGanho = lead.estagio === "ganho" && !lead.clienteId && leads.find((l) => l.id === lead.id)?.estagio !== "ganho";
-      setLeads((prev) => (editando ? prev.map((l) => (l.id === lead.id ? lead : l)) : [lead, ...prev]));
-      setDraft(null);
-      if (aviso) toast.warning(aviso);
-      else if (virouGanho) avisarGanho(lead);
-      else toast.success(editando ? "Lead atualizado." : "Lead criado.");
-    } catch {
-      toast.error("Não foi possível salvar o lead. Tente de novo.");
-    } finally {
-      setSaving(false); // sempre libera o botão — antes, um erro deixava preso em 'Salvando…'
-    }
+    // `chamar` nunca lança e traz o motivo do servidor (24/10/2026, auditoria 4.15). O que foi digitado fica na ficha.
+    const r = await chamar<{ lead: Lead; aviso?: string | null }>("/api/crm/leads", payload, { method: editando ? "PATCH" : "POST" });
+    setSaving(false); // sempre libera o botão — antes, um erro deixava preso em 'Salvando…'
+    if (!r.ok || !r.data?.lead) { toast.error(`Não salvei o lead: ${r.erro ?? "sem resposta do servidor"}. O que você digitou continua na ficha.`, { duration: 12000 }); return; }
+    const { lead, aviso } = r.data;
+    const virouGanho = lead.estagio === "ganho" && !lead.clienteId && leads.find((l) => l.id === lead.id)?.estagio !== "ganho";
+    setLeads((prev) => (editando ? prev.map((l) => (l.id === lead.id ? lead : l)) : [lead, ...prev]));
+    setDraft(null);
+    if (aviso) toast.warning(aviso);
+    else if (virouGanho) avisarGanho(lead);
+    else toast.success(editando ? "Lead atualizado." : "Lead criado.");
   }
 
   // Ganho → vira cliente: cria o cliente rascunho + link de onboarding a partir dos dados do lead,
@@ -503,7 +557,8 @@ export default function CrmPage() {
     }
     if (status < 200 || status >= 300 || !corpo.clientId) { toast.error(corpo.error ?? (status ? "Não foi possível converter em cliente." : "Sem conexão com o servidor.")); return; }
     const clienteId = corpo.clientId;
-    await registrarAtividade("nota", "Convertido em cliente — link de onboarding gerado, checklist e tarefas do grupo criados.", draft.id);
+    const nota = await gravarRegistro({ id: draft.id }, "nota", "Convertido em cliente — link de onboarding gerado, checklist e tarefas do grupo criados.");
+    if (!nota.ok) console.warn("[crm] nota de conversão não gravada:", nota.erro);
     setLeads((prev) => prev.map((l) => (l.id === draft.id ? { ...l, clienteId, cadastroPendente: true } : l)));
     const url = `${window.location.origin}${corpo.url ?? ""}`;
     navigator.clipboard?.writeText(url).catch(() => {});
@@ -557,43 +612,92 @@ export default function CrmPage() {
     const estagio: CrmEstagio = ["novo", "contato", "diagnostico"].includes(draft.estagio) ? "proposta" : draft.estagio;
     setLeads((prev) => prev.map((l) => (l.id === draft.id ? { ...l, propostaEnviadaEm: l.propostaEnviadaEm ?? em, estagio } : l)));
     setDraft({ ...draft, propostaEnviadaEm: draft.propostaEnviadaEm ?? em, estagio });
+    // O servidor já gravou a etapa: ela não conta como "alteração não salva" ao fechar a ficha.
+    if (fichaBase.current?.id === draft.id) fichaBase.current = { ...fichaBase.current, estagio, propostaEnviadaEm: draft.propostaEnviadaEm ?? em };
     if (r.data.avisos.length) toast.warning(r.data.avisos.join(" · "));
     else toast.success("Proposta registrada como enviada.");
   }
 
   // ─── Ações da lista do Hoje ─────────────────────────────────────────
-  async function registrarToque(l: Lead, tipo: CrmAtividadeTipo, texto: string): Promise<boolean> {
-    setAcaoBusy(l.id);
-    const r = await chamar<{ atividade: CrmLeadActivity; lead: Lead | null }>("/api/crm/activities", { leadId: l.id, tipo, texto, autor: currentUser ?? null });
-    setAcaoBusy(null);
-    if (!r.ok || !r.data) { toast.error(r.erro ?? "Não consegui registrar."); return false; }
-    const quando = r.data.atividade?.createdAt || new Date().toISOString();
-    const contato = TIPOS_TOQUE.has(tipo);
-    const movido = r.data.lead;
-    setLeads((prev) => prev.map((x) => x.id !== l.id ? x : {
-      ...x, ...(movido ?? {}),
-      toques: contato ? [...(x.toques ?? []), quando] : x.toques,
-      avancos: [...(x.avancos ?? []), quando],
-      primeiroContatoEm: x.primeiroContatoEm ?? (contato ? quando : null),
-    }));
-    toast.success(tipo === "pulado" ? "Toque pulado — a régua seguiu." : movido?.estagio === "contato" && l.estagio === "novo" ? "Registrado. O lead foi para Contato feito." : "Registrado.");
-    return true;
-  }
-
+  // Abrir a mensagem pronta no WhatsApp não registra mais nada: o "Enviou?" na volta decide (24/10/2026, 4.5).
   async function enviarWhatsApp(l: Lead, texto: string) {
     const link = waComTexto(l.telefone, texto);
     if (!link) { toast.error("Este lead não tem WhatsApp no cadastro."); return; }
     window.open(link, "_blank");
-    await registrarToque(l, "whatsapp", `WhatsApp enviado pelo Hoje: “${texto.length > 160 ? `${texto.slice(0, 157)}…` : texto}”`);
+    anotarWhatsApp(l, textoWhatsappDoHoje(texto));
   }
 
-  async function patchLead(l: Lead, patch: Record<string, unknown>, ok: string) {
-    setAcaoBusy(l.id);
+  /** Grava um PATCH do Hoje e devolve o que havia antes nos campos mexidos (é o que o Desfazer volta). */
+  async function gravarPatch(l: Lead, patch: Record<string, unknown>): Promise<{ ok: true; antes: Record<string, unknown>; aviso: string | null } | { ok: false; erro: string }> {
     const r = await chamar<{ lead: Lead; aviso?: string | null }>("/api/crm/leads", { id: l.id, ...patch }, { method: "PATCH" });
+    if (!r.ok || !r.data?.lead) return { ok: false, erro: r.erro ?? "Não consegui salvar." };
+    const lead = r.data.lead;
+    setLeads((prev) => prev.map((x) => (x.id === l.id ? { ...x, ...lead } : x)));
+    // Mudar a etapa mexe também no motivo, na chance e na retomada (o servidor carimba): volta os quatro juntos.
+    const campos = new Set(Object.keys(patch).filter((k) => k !== "origemEtapa"));
+    if (campos.has("estagio")) ["motivoPerdaCodigo", "motivoPerda", "probabilidade", "retomarEm"].forEach((k) => campos.add(k));
+    const antes = Object.fromEntries([...campos].map((k) => [k, (l as unknown as Record<string, unknown>)[k] ?? null]));
+    return { ok: true, antes, aviso: r.data.aviso ?? null };
+  }
+  async function voltarPatch(l: Lead, antes: Record<string, unknown>): Promise<boolean> {
+    const r = await chamar<{ lead: Lead }>("/api/crm/leads", { id: l.id, ...antes }, { method: "PATCH" });
+    if (!r.ok || !r.data?.lead) { toast.error(`Não consegui desfazer em ${l.empresa || l.contatoNome}: ${r.erro ?? "sem resposta"}`, { duration: 12000 }); return false; }
+    const lead = r.data.lead;
+    setLeads((prev) => prev.map((x) => (x.id === l.id ? { ...x, ...lead } : x)));
+    return true;
+  }
+
+  async function patchLead(l: Lead, patch: Record<string, unknown>, ok: string): Promise<boolean> {
+    setAcaoBusy(l.id);
+    const r = await gravarPatch(l, patch);
     setAcaoBusy(null);
-    if (!r.ok || !r.data?.lead) { toast.error(r.erro ?? "Não consegui salvar."); return; }
-    setLeads((prev) => prev.map((x) => (x.id === l.id ? { ...x, ...r.data!.lead } : x)));
-    if (r.data.aviso) toast.warning(r.data.aviso); else toast.success(ok);
+    if (!r.ok) { toast.error(r.erro); return false; }
+    if (r.aviso) toast.warning(r.aviso);
+    const antes = r.antes;
+    toast.success(ok, {
+      duration: 8000,
+      action: { label: "Desfazer", onClick: async () => { if (await voltarPatch(l, antes)) toast.success("Desfeito."); } },
+    });
+    return true;
+  }
+
+  /**
+   * Marcar vários de uma vez (24/10/2026, auditoria 4.6): conta SÓ os que gravaram, diz quais falharam e por quê,
+   * e o Desfazer volta todos os que gravaram. Antes o "adiar" contava todo mundo como adiado, mesmo com erro.
+   */
+  async function emLote(acao: "feito" | "adiar" | "perder", lista: Lead[]): Promise<void> {
+    const desfazeres: (() => Promise<boolean>)[] = [];
+    const falhas: string[] = [];
+    for (const l of lista) {
+      const nome = l.empresa || l.contatoNome;
+      if (acao === "feito") {
+        const r = await gravarRegistro(l, "whatsapp", "Contato feito por outro caminho (marcado em lote no Hoje)");
+        if (r.ok) { const d = r.desfazer; desfazeres.push(() => desfazerNaTela(d)); } else falhas.push(`${nome} (${r.erro})`);
+      } else {
+        const patch = acao === "adiar" ? { retomarEm: somaDias(hojeYmd(), 1) } : { estagio: "perdido", motivoPerdaCodigo: "sem_resposta", origemEtapa: "lote" };
+        const r = await gravarPatch(l, patch);
+        if (r.ok) { const antes = r.antes; desfazeres.push(() => voltarPatch(l, antes)); } else falhas.push(`${nome} (${r.erro})`);
+      }
+    }
+    const n = desfazeres.length;
+    const feito = acao === "feito" ? (n === 1 ? "marcado como feito" : "marcados como feito")
+      : acao === "adiar" ? (n === 1 ? "adiado para amanhã" : "adiados para amanhã")
+      : (n === 1 ? "marcado como perdido (sem resposta)" : "marcados como perdido (sem resposta)");
+    if (n) {
+      toast.success(`${n} ${feito}.`, {
+        duration: 10000,
+        action: {
+          label: "Desfazer",
+          onClick: async () => {
+            let voltou = 0;
+            for (const d of desfazeres) if (await d()) voltou++;
+            if (voltou === n) toast.success(n === 1 ? "Desfeito." : `Desfeito nos ${n}.`);
+            else toast.error(`Desfiz ${voltou} de ${n}. Confira os que ficaram.`, { duration: 12000 });
+          },
+        },
+      });
+    }
+    if (falhas.length) toast.error(`${falhas.length === 1 ? "Não gravou" : `${falhas.length} não gravaram`}: ${falhas.join("; ")}. Tente de novo.`, { duration: 15000 });
   }
 
   // Depois de marcar/remarcar/cancelar, o servidor mexe no lead (etapa, data da reunião): recarrega.
@@ -605,8 +709,25 @@ export default function CrmPage() {
     const r = await chamar("/api/crm/reunioes", { id, acao, autor: currentUser ?? null, ...extra }, { method: "PATCH" });
     // Cancelar que o Google não confirmou volta com o porquê e a reunião fica marcada: tempo de ler.
     if (!r.ok) { toast.error(r.erro ?? "Não consegui atualizar a reunião.", acao === "cancelar" ? { duration: 12000 } : undefined); return false; }
-    toast.success(acao === "remarcar" ? "Reunião remarcada e avisada no grupo." : acao === "cancelar" ? "Reunião cancelada." : acao === "realizada" ? "Registrado: a reunião aconteceu." : "Registrado: não compareceu.");
     carregarReunioes(); recarregarLeads();
+    if (acao === "realizada" || acao === "nao_veio") {
+      // "Aconteceu" / "Não veio" ganham Desfazer (24/10/2026, auditoria 4.6): a reunião volta a agendada e o registro sai.
+      const desfazer = (r.data as { desfazer?: DesfazerRegistro } | null)?.desfazer ?? null;
+      toast.success(acao === "realizada" ? "Registrado: a reunião aconteceu." : "Registrado: não compareceu.", {
+        duration: 8000,
+        action: {
+          label: "Desfazer",
+          onClick: async () => {
+            const d = await chamar("/api/crm/reunioes", { id, acao: "desfazer_resultado", desfazer }, { method: "PATCH" });
+            if (!d.ok) { toast.error(d.erro ?? "Não consegui desfazer.", { duration: 12000 }); return; }
+            toast.success("Desfeito: a reunião voltou para marcada.");
+            carregarReunioes(); recarregarLeads();
+          },
+        },
+      });
+    } else {
+      toast.success(acao === "remarcar" ? "Reunião remarcada e avisada no grupo." : "Reunião cancelada.");
+    }
     return true;
   }
 
@@ -622,11 +743,20 @@ export default function CrmPage() {
     setEditMeta(null);
     toast.success("Metas do mês salvas.");
   }
-  const abrirMetas = () => setEditMeta({
-    metaValor: meta?.metaValor != null ? String(meta.metaValor) : "",
-    metaContatosSemana: meta?.metaContatosSemana != null ? String(meta.metaContatosSemana) : "",
-    metaPropostasMes: meta?.metaPropostasMes != null ? String(meta.metaPropostasMes) : "",
-  });
+  // Meta que não carregou não abre a edição vazia: salvar por cima apagaria a meta que existe (24/10/2026).
+  const metaNaoCarregou = () => {
+    if (!metasErro[mesSP()]) return false;
+    toast.error("A meta do mês não carregou — tente de novo antes de editar, para não gravar por cima.", { action: { label: "Tentar de novo", onClick: () => carregarMeta(mesSP()) } });
+    return true;
+  };
+  const abrirMetas = () => {
+    if (metaNaoCarregou()) return;
+    setEditMeta({
+      metaValor: meta?.metaValor != null ? String(meta.metaValor) : "",
+      metaContatosSemana: meta?.metaContatosSemana != null ? String(meta.metaContatosSemana) : "",
+      metaPropostasMes: meta?.metaPropostasMes != null ? String(meta.metaPropostasMes) : "",
+    });
+  };
 
   // Trocar de lead fecha os painéis do anterior.
   // "Transformar em cliente" de fora da ficha (aba Fechados, aviso do ganho, Hoje): abre a ficha JÁ com a conversão.
@@ -689,11 +819,26 @@ export default function CrmPage() {
   // ficha fechava a ficha inteira e descartava a edição em silêncio). Esc num campo só tira o foco do campo; com
   // alteração não salva, pergunta antes de descartar.
   const fichaAberta = !!draft;
-  const fichaAoAbrir = useRef<string | null>(null);
+  // O lead como estava ao abrir (ou depois do que o servidor já gravou): é a base do "tem alteração não salva?".
+  const fichaBase = useRef<Draft | null>(null);
   const assinaturaFicha = (d: Draft | null) => (d ? JSON.stringify([d.empresa, d.contatoNome, d.telefone, d.email, d.cidade, d.endereco, d.segmento, d.origem, d.responsavel, d.estagio, d.valorOrcamento, d.valorImplantacao, d.probabilidade, d.previsaoFechamento, d.reuniaoData, d.retomarEm, d.observacoes, d.motivoPerda, d.motivoPerdaCodigo]) : null);
-  useEffect(() => { fichaAoAbrir.current = assinaturaFicha(draft); }, [fichaAberta, draft?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fichaBase.current = draft; }, [fichaAberta, draft?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const draftAtual = useRef<Draft | null>(null);
   draftAtual.current = draft;
+  const novoTextoAtual = useRef("");
+  novoTextoAtual.current = novoTexto;
+  /**
+   * Fechar a ficha por QUALQUER caminho — Esc, clique fora, X ou Cancelar — pergunta antes de descartar o que não
+   * foi salvo (24/10/2026, auditoria 4.13). A leva V1 de 23/10 tinha resolvido só o Esc; o clique fora, o X e o
+   * Cancelar ainda jogavam fora a edição (e o texto do histórico ainda não enviado) sem perguntar.
+   */
+  const pedirFecharFicha = () => {
+    const mudou = assinaturaFicha(draftAtual.current) !== assinaturaFicha(fichaBase.current);
+    const digitando = !!novoTextoAtual.current.trim();
+    if ((mudou || digitando) && !confirm(mudou ? "Descartar as alterações desta ficha?" : "Descartar o que você digitou no histórico (ainda não registrado)?")) return;
+    setNovoTexto("");
+    setDraft(null);
+  };
   useEffect(() => {
     if (!fichaAberta) return;
     const fechar = (e: KeyboardEvent) => {
@@ -702,12 +847,22 @@ export default function CrmPage() {
       // Menu, lista ou calendário aberto por cima da ficha: o Esc é deles.
       if (alvo?.closest("[data-radix-popper-content-wrapper], [role=menu], [role=listbox]")) return;
       if (alvo?.closest("input, textarea, select, [contenteditable=true]")) { alvo.blur(); return; }
-      if (assinaturaFicha(draftAtual.current) !== fichaAoAbrir.current && !confirm("Descartar as alterações desta ficha?")) return;
-      setDraft(null);
+      // A janela de marcar reunião (por cima da ficha) cuida do próprio Esc.
+      if (document.querySelector("[aria-label='Marcar reunião'][role=dialog]")) return;
+      pedirFecharFicha();
     };
     window.addEventListener("keydown", fechar);
     return () => window.removeEventListener("keydown", fechar);
   }, [fichaAberta]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Histórico do lead: o campo só limpa DEPOIS que gravou (24/10/2026, auditoria 4.12) — antes o texto sumia na falha. */
+  async function registrarNoHistorico() {
+    if (!draft?.id || !novoTexto.trim() || enviandoNota) return;
+    setEnviandoNota(true);
+    const ok = await registrarToque(draft as Lead, novaTipo, novoTexto.trim());
+    setEnviandoNota(false);
+    if (ok) setNovoTexto("");
+  }
 
   if (!podeVer) return <div className="p-8 text-sm text-destructive">Esta área é do time comercial.</div>;
   if (loading) return <div className="p-8 text-sm text-muted-foreground">Carregando o funil…</div>;
@@ -780,9 +935,13 @@ export default function CrmPage() {
           ocupado={acaoBusy}
           onAbrir={(l) => setDraft({ ...l })}
           onEnviarWhatsApp={enviarWhatsApp}
+          onAbriuWhatsApp={anotarWhatsApp}
           onRegistrar={registrarToque}
           onPatch={patchLead}
+          onLote={emLote}
           onDefinirMeta={abrirMetas}
+          erroMeta={metasErro[mesSP()] ?? null}
+          onTentarMeta={() => carregarMeta(mesSP())}
           onVerDashboard={() => setTab("dashboard")}
           reunioes={reunioes}
           onReuniao={reuniaoAcao}
@@ -796,16 +955,17 @@ export default function CrmPage() {
           historico={historico}
           historicoErro={historicoErro}
           metas={metas}
+          metasErro={metasErro}
           carregarMeta={carregarMeta}
           metaContatosSemana={meta?.metaContatosSemana ?? null}
           nome={currentUser ?? ""}
           proximoPasso={proximoPasso}
           onAbrirLead={(l) => setDraft({ ...l })}
-          onDefinirMeta={(sugestao) => setEditMeta({
+          onDefinirMeta={(sugestao) => { if (!metaNaoCarregou()) setEditMeta({
             metaValor: meta?.metaValor != null ? String(meta.metaValor) : String(sugestao),
             metaContatosSemana: meta?.metaContatosSemana != null ? String(meta.metaContatosSemana) : "",
             metaPropostasMes: meta?.metaPropostasMes != null ? String(meta.metaPropostasMes) : "",
-          })}
+          }); }}
           onIrPara={({ aba, filtro }) => { setFiltroFunil(filtro ?? null); setTab(aba); window.scrollTo({ top: 0 }); }}
           acao={(
             <Button size="sm" onClick={() => setDraft({ estagio: "novo", responsavel: currentUser ?? undefined })}>
@@ -1349,6 +1509,8 @@ export default function CrmPage() {
         </div>
       )}
 
+      <PerguntaEnvio pendentes={enviosPendentes} onSim={(p) => responderEnvio(p, true)} onNao={(p) => responderEnvio(p, false)} />
+
       {marcando && (
         <MarcarReuniao
           leads={leads}
@@ -1496,7 +1658,7 @@ export default function CrmPage() {
           </div>
         );
         return (
-          <div className="fixed inset-0 z-50 flex justify-end bg-overlay" onClick={() => setDraft(null)}>
+          <div className="fixed inset-0 z-50 flex justify-end bg-overlay" onClick={pedirFecharFicha}>
             <aside role="dialog" aria-modal="true" aria-label={existente ? `Ficha de ${nomeFicha}` : "Novo lead"}
               className="cc-gaveta flex h-full w-full max-w-xl flex-col border-l border-border bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
               <header className="border-b border-border px-5 pb-4 pt-5">
@@ -1514,7 +1676,7 @@ export default function CrmPage() {
                     <h2 className="mt-1.5 truncate text-lone-h1 tracking-tight text-foreground">{existente ? nomeFicha : "Novo lead"}</h2>
                     {existente && draft.empresa && draft.contatoNome && draft.contatoNome !== draft.empresa && <p className="truncate text-lone-body text-muted-foreground">{draft.contatoNome}</p>}
                   </div>
-                  <button onClick={() => setDraft(null)} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Fechar (Esc)"><X size={18} /></button>
+                  <button onClick={pedirFecharFicha} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Fechar (Esc)"><X size={18} /></button>
                 </div>
                 {existente && (
                   <>
@@ -1717,15 +1879,21 @@ export default function CrmPage() {
                       placeholder="Registrar (ex: liguei, caixa postal)"
                       value={novoTexto}
                       onChange={(e) => setNovoTexto(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" && novoTexto.trim()) { registrarAtividade(novaTipo, novoTexto); setNovoTexto(""); } }}
+                      onKeyDown={(e) => { if (e.key === "Enter" && novoTexto.trim()) registrarNoHistorico(); }}
+                      disabled={enviandoNota}
                     />
-                    <Button size="sm" disabled={!novoTexto.trim()} onClick={() => { registrarAtividade(novaTipo, novoTexto); setNovoTexto(""); }}>
+                    <Button size="sm" disabled={!novoTexto.trim() || enviandoNota} onClick={registrarNoHistorico} aria-label="Registrar">
                       <Send size={14} />
                     </Button>
                   </div>
                   <div className="mt-5 space-y-0">
                     {loadingAtiv ? (
                       <p className="text-xs text-muted-foreground">Carregando…</p>
+                    ) : atividadesErro ? (
+                      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2" role="alert">
+                        <p className="min-w-0 flex-1 text-lone-caption text-lone-danger">Não consegui carregar o histórico ({atividadesErro}). Nada foi apagado.</p>
+                        <Button size="sm" variant="outline" onClick={() => setRecargaAtiv((n) => n + 1)}>Tentar de novo</Button>
+                      </div>
                     ) : atividades.length === 0 ? (
                       <p className="text-xs text-muted-foreground">Sem histórico ainda — registre a primeira interação.</p>
                     ) : (
@@ -1770,7 +1938,7 @@ export default function CrmPage() {
                   <Trophy size={14} /> {convertendo ? "Criando…" : "Enviar link de cadastro"}
                 </Button>
               ))}
-              <Button variant="ghost" onClick={() => setDraft(null)}>Cancelar</Button>
+              <Button variant="ghost" onClick={pedirFecharFicha}>Cancelar</Button>
               <Button onClick={salvar} disabled={saving || !draft.contatoNome?.trim()}>{saving ? "Salvando…" : draft.id ? "Salvar" : "Criar lead"}</Button>
             </div>
               </footer>
