@@ -232,6 +232,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Verba numa fonte só (25/10/2026): o alerta de saldo, o ritmo da verba e os alarmes leem
+    // ad_accounts.monthly_budget; esta tela gravava só no cadastro e as duas divergiam (MAX Contabilidade:
+    // R$ 1.000 na ficha, nada na conta). Zero ou vazio = sem verba.
+    if ("monthly_budget" in row) {
+      const v = Number(row.monthly_budget);
+      const { error: verbaErr } = await supabaseAdmin.from("ad_accounts")
+        .update({ monthly_budget: Number.isFinite(v) && v > 0 ? v : null }).eq("client_id", id);
+      if (verbaErr) return NextResponse.json({ error: `Verba gravada na ficha, mas não no alerta de verba: ${verbaErr.message}. Salve de novo.` }, { status: 500 });
+    }
+
     // Desvincular: o gatilho trg_sincronizar_ad_account só espelha conta preenchida, então a linha
     // em ad_accounts (que o alerta de verba e o digest leem) sai aqui.
     if (row.meta_ad_account_id === null) {

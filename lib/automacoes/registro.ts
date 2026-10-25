@@ -294,6 +294,12 @@ export const AUTOMACOES: Automacao[] = [
     nome: "Vigia de entrega da conta", descricao: "Às 11h: conta ativa que vinha gastando e não gastou nada hoje — uma mensagem no grupo de tráfego marcando o gestor de cada conta.",
     familia: "Tráfego", destino: "grupo de tráfego", cron: "5 14 * * *", agendaBRT: "todo dia, 11h05", maxSilencioHoras: 26, ensaio: "dry=1",
   }),
+  // 25/10/2026 (etapa 1 do plano de tráfego): conversa zerada com gasto seguindo (Reformar, 22–25/10) e verba
+  // do mês acabando. Calibrado com 30 dias por hora: ~4 episódios em 17 dias. Regras em lib/traffic/alarmes.
+  ep("alarmes-trafego", {
+    nome: "Alarmes de conversa e verba", descricao: "De 2 em 2h: conta com campanha de mensagem gastando sem receber conversa (WhatsApp do anúncio caiu?) e verba do mês que acaba em até 3 dias ou já acabou. Uma mensagem no grupo de tráfego marcando o gestor, mais a voz. Ensaio mostra o que sairia.",
+    familia: "Tráfego", destino: "grupo de tráfego", cron: "5 11-23/2 * * *", agendaBRT: "todo dia, de 2 em 2h das 8h05 às 20h05", maxSilencioHoras: 14, ensaio: "dry=1",
+  }),
   // Leva 7A (N2): o retrato diário de status e orçamento de campanhas e conjuntos. Só grava.
   ep("estado-campanhas", {
     nome: "Retrato diário das campanhas", descricao: "Grava status e orçamento de cada campanha e conjunto logo depois da meia-noite — é o que a aba \"O que mudou\" compara.",

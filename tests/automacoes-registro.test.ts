@@ -15,7 +15,8 @@ const RAIZ = path.resolve(__dirname, "..");
 // Só estas diferenças são aceitas. Depois de regenerar o retrato do servidor, podem sair daqui.
 const EM_TRANSICAO: { saindo: string[]; entrando: string[] } = {
   saindo: [],
-  entrando: [],
+  // Alarmes de conversa e verba (25/10/2026): a linha entra no crontab no deploy.
+  entrando: ["alarmes-trafego"],
 };
 
 interface LinhaCron { cron: string; chave: string; metodo?: string; bruta: string }

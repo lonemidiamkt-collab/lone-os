@@ -127,9 +127,9 @@ export default function CelulaRitmo({
               <dt className="text-muted-foreground">Ritmo {leitura.fonteRitmo === "3d" ? "(3 dias)" : "(mês)"}</dt>
               <dd className="text-right">{brl0(leitura.ritmoDia)}/dia</dd>
             </>}
-            {ritmo.diaIdeal != null && <>
-              <dt className="text-muted-foreground">Ideal</dt>
-              <dd className="text-right">{brl0(ritmo.diaIdeal)}/dia</dd>
+            {ritmo.diariaNecessaria != null && <>
+              <dt className="text-muted-foreground">Para fechar na verba</dt>
+              <dd className="text-right">{brl0(ritmo.diariaNecessaria)}/dia</dd>
             </>}
             {leitura.projetadoFim != null && <>
               <dt className="text-muted-foreground">Fim do mês</dt>

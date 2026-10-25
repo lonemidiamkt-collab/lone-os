@@ -33,6 +33,18 @@ export interface NovoAviso {
   corpo: string;
   /** Quem cuida da conta (clients.assigned_traffic). Sem ele, busca no cadastro. */
   gestor?: string | null;
+  /** Números do momento do aviso (alarmes de lib/traffic/alarmes). Só vai ao banco quando vem — a coluna
+   *  nasceu na migração 20261025170000 e os avisos antigos não podem depender dela. */
+  detalhe?: Record<string, unknown> | null;
+}
+
+export interface ResultadoLote {
+  novos: number;
+  falou: string[];
+  /** Eventos gravados nesta rodada — quem chama manda o WhatsApp só para estes (o resto já foi avisado). */
+  inseridos: { id: string; metaAccountId: string; tipo: TipoAviso }[];
+  /** Falhas de gravação que NÃO são "já avisado hoje": o aviso não saiu e precisa aparecer como erro. */
+  erros: string[];
 }
 
 async function ligadoNaCentral(): Promise<boolean> {
@@ -72,7 +84,9 @@ async function faladosHoje(pessoa: string, desde: string): Promise<number> {
  * por pessoa: 6 saldos zerados viram "6 contas estão com o saldo zerado: …", não 6 falas seguidas.
  * Ocorrência já registrada hoje (mesma conta e tipo) não repete. Nunca lança.
  */
-export async function registrarLote(avisos: NovoAviso[], agora: Date = new Date()): Promise<{ novos: number; falou: string[] }> {
+export async function registrarLote(avisos: NovoAviso[], agora: Date = new Date()): Promise<ResultadoLote> {
+  const inseridos: ResultadoLote["inseridos"] = [];
+  const erros: string[] = [];
   try {
     const { dia } = relogioSP(agora);
     const lote = randomUUID();
@@ -84,11 +98,16 @@ export async function registrarLote(avisos: NovoAviso[], agora: Date = new Date(
       const { data: ev, error } = await supabaseAdmin.from("avisos_trafego").insert({
         tipo: a.tipo, client_id: a.clientId, meta_account_id: a.metaAccountId, dia, titulo: a.titulo,
         braco, detectado_em: agora.toISOString(), lote,
+        ...(a.detalhe ? { detalhe: a.detalhe } : {}),
       }).select("id").maybeSingle();
       if (error || !ev?.id) {
-        if (error && error.code !== "23505") console.error("[avisos/trafego] evento:", error.message); // 23505 = já avisado hoje
+        if (error && error.code !== "23505") { // 23505 = já avisado hoje
+          console.error("[avisos/trafego] evento:", error.message);
+          erros.push(`${a.nome}: ${error.message}`);
+        }
         continue;
       }
+      inseridos.push({ id: ev.id as string, metaAccountId: a.metaAccountId, tipo: a.tipo });
       // Conta que parou porque o SALDO ZEROU (05/10: as 3 contas paradas das 11h estavam com saldo 0
       // desde as 8h): a causa vai no texto e, se o saldo já foi FALADO hoje, a parada entra calada.
       let calado = false, porSaldo = false;
@@ -103,7 +122,7 @@ export async function registrarLote(avisos: NovoAviso[], agora: Date = new Date(
       }
       eventos.push({ id: ev.id as string, a, braco, calado, porSaldo, para: await ouvintes(a.gestor?.trim() || await gestorDoCliente(a.clientId)) });
     }
-    if (!eventos.length) return { novos: 0, falou: [] };
+    if (!eventos.length) return { novos: 0, falou: [], inseridos, erros };
 
     const ligado = await ligadoNaCentral();
     const noHorario = dentroDoHorario(agora);
@@ -133,10 +152,10 @@ export async function registrarLote(avisos: NovoAviso[], agora: Date = new Date(
     for (const e of eventos) {
       await supabaseAdmin.from("avisos_trafego").update({ destinatarios: e.para, falado_para: falouEm.get(e.id) ?? [] }).eq("id", e.id);
     }
-    return { novos: eventos.length, falou: [...new Set([...falouEm.values()].flat())] };
+    return { novos: eventos.length, falou: [...new Set([...falouEm.values()].flat())], inseridos, erros };
   } catch (e) {
     console.error("[avisos/trafego]", e instanceof Error ? e.message : e);
-    return { novos: 0, falou: [] };
+    return { novos: inseridos.length, falou: [], inseridos, erros: [...erros, e instanceof Error ? e.message : String(e)] };
   }
 }
 

@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { anotar, idCorrelacao } from "@/lib/obs/correlacao";
 import { coletarTudo } from "./fontes";
 import { ranquear, reconciliar } from "./motor";
+import { emSilencio, SILENCIO_HORAS, type Decidida } from "./silencio";
 import type { Recomendacao, EstadoRecomendacao } from "./tipos";
 
 const ABERTAS: EstadoRecomendacao[] = ["nova", "vista", "aceita"];
@@ -29,7 +30,22 @@ export async function recalcular(): Promise<ResultadoRecalculo> {
   const novas = ranquear(itens, ctx);
   const { data: abertas, error } = await supabaseAdmin.from("recommendations").select("id, fingerprint").in("estado", ABERTAS);
   if (error) throw new Error(`recommendations: ${error.message}`);
-  const { inserir, atualizar, resolver } = reconciliar((abertas ?? []) as { id: string; fingerprint: string }[], novas);
+  const r = reconciliar((abertas ?? []) as { id: string; fingerprint: string }[], novas);
+  const { atualizar, resolver } = r;
+  let { inserir } = r;
+
+  // Decidido há pouco não renasce como "nova" na rodada seguinte (lib/priority/silencio.ts).
+  if (inserir.length) {
+    const desde = new Date(Date.now() - 7 * 24 * 3_600_000).toISOString();
+    const { data: decididas, error: eDec } = await supabaseAdmin.from("recommendations")
+      .select("fingerprint, estado, decidido_em").in("fingerprint", inserir.map((i) => i.fingerprint))
+      .in("estado", Object.keys(SILENCIO_HORAS)).gte("decidido_em", desde);
+    if (eDec) erros.push(`silêncio: ${eDec.message}`); // sem ler, segue como antes (avisar a mais é melhor que calar)
+    else {
+      const calados = emSilencio((decididas ?? []) as Decidida[]);
+      inserir = inserir.filter((i) => !calados.has(i.fingerprint));
+    }
+  }
 
   let inseridas = 0, atualizadas = 0, resolvidas = 0;
   if (inserir.length) {
