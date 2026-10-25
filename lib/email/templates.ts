@@ -4,7 +4,9 @@
 
 // 24/10/2026: o banner morava no bucket onboarding-docs, que ficou PRIVADO no fechamento de junho — todo
 // e-mail de boas-vindas saía com a imagem quebrada. Agora vem da pasta pública do painel (como o logo).
-const WELCOME_BANNER_URL = "https://painel.lonemidia.com/brand/email-boas-vindas.jpg";
+// Arte "Seja muito bem-vindo!" (Roberto, 24/10). Trocou a arte? Use um NOME NOVO de arquivo: o Gmail
+// guarda a imagem em cache pelo endereço e continuaria mostrando a antiga.
+const WELCOME_BANNER_URL = "https://painel.lonemidia.com/brand/email-bem-vindo.jpg";
 const LOGO_URL = "https://painel.lonemidia.com/logo-email.png";
 const BRAND_COLOR = "#0d4af5";
 const BG_COLOR = "#18181b";
@@ -73,7 +75,7 @@ export function welcomeEmail(clientName: string, companyName: string, serviceLab
     html: baseLayout(`
       <!-- Welcome Banner -->
       <div style="border-radius:12px;overflow:hidden;margin-bottom:28px;">
-        <img src="${WELCOME_BANNER_URL}" alt="Muito obrigado! A Lone Mídia agradece pela confiança e preferência" style="width:100%;height:auto;display:block;border-radius:12px;" />
+        <img src="${WELCOME_BANNER_URL}" alt="Seja muito bem-vindo! A Lone Mídia agradece pela confiança e parceria" style="width:100%;height:auto;display:block;border-radius:12px;" />
       </div>
 
       <p style="color:${TEXT_PRIMARY};font-size:14px;line-height:1.8;margin:0 0 16px;">
