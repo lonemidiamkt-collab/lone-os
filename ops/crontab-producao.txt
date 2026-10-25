@@ -16,6 +16,7 @@
 */15 10-23 * * * /opt/loneos/scripts/cron-call.sh crm-reunioes POST >> /var/log/loneos-crm-reunioes.log 2>&1
 0 11 1-5 * * /opt/loneos/scripts/cron-call.sh crm-relatorio-mensal POST >> /var/log/loneos-crm-relatorio-mensal.log 2>&1
 0 12 * * * /opt/loneos/scripts/cron-call.sh crm-ligar-cadastros POST >> /var/log/loneos-crm-ligar-cadastros.log 2>&1
+0 13 2 * * /opt/loneos/scripts/cron-call.sh receita-vigia POST >> /var/log/loneos-receita-vigia.log 2>&1
 0 11 * * 1-5 /opt/loneos/scripts/cron-call.sh traffic-diagnostico POST >> /var/log/loneos-traffic-diag.log 2>&1
 0 11 * * 2,4 /opt/loneos/scripts/cron-call.sh urgent-alerts POST >> /var/log/loneos-urgent-alerts.log 2>&1
 0 11 * * 3 /opt/loneos/scripts/client-messages.sh wed >> /var/log/loneos-client-msgs.log 2>&1

@@ -133,6 +133,8 @@ export interface EmpresaReceita {
   nomeFantasia: string | null;
   situacao: string | null;       // "ATIVA", "BAIXADA", "INAPTA"...
   ativa: boolean;
+  situacaoDesde: string | null;  // "2026-09-21" — desde quando está assim
+  motivoSituacao: string | null; // "Extinção por encerramento liquidação voluntária"
   cnaePrincipal: string | null;  // "4744-0/99"
   cnaeDescricao: string | null;
   cnaesSecundarios: { codigo: string; descricao: string }[];
@@ -157,6 +159,13 @@ export function capitalizar(s: unknown): string | null {
   ).join(" ");
 }
 
+/** "EXTINCAO POR ENCERRAMENTO" → "Extincao por encerramento" (só a primeira maiúscula; "SEM MOTIVO" vira nulo). */
+function capitalizarFrase(v: unknown): string | null {
+  const t = String(v ?? "").trim().replace(/\s+/g, " ");
+  if (!t || /^sem motivo$/i.test(t)) return null;
+  return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+}
+
 function telefoneDe(v: unknown): string | null {
   const d = String(v ?? "").replace(/\D/g, "");
   if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
@@ -178,7 +187,7 @@ export function empresaDaBrasilApi(r: Record<string, unknown>): EmpresaReceita {
   const nicho = nichoPorCnae({ codigo: r.cnae_fiscal, descricao: r.cnae_fiscal_descricao }, sec);
   const tipo = capitalizar(r.descricao_tipo_de_logradouro);
   const logradouro = capitalizar(r.logradouro);
-  const numeroCru = String(r.numero ?? "").trim().toUpperCase();
+  const numeroCru = String(r.numero ?? "").trim().toUpperCase().replace(/^(\d{1,3})\.(\d{3})$/, "$1$2"); // "1.610" → "1610"
   const numero = !numeroCru ? null : /^S\/?N$/.test(numeroCru) ? "S/N" : numeroCru;
   const rua = logradouro ? `${tipo && !logradouro.toLowerCase().startsWith(tipo.toLowerCase()) ? `${tipo} ` : ""}${logradouro}` : null;
   const situacao = r.descricao_situacao_cadastral ? String(r.descricao_situacao_cadastral).toUpperCase() : null;
@@ -189,6 +198,8 @@ export function empresaDaBrasilApi(r: Record<string, unknown>): EmpresaReceita {
     nomeFantasia: String(r.nome_fantasia ?? "").trim() || null,
     situacao,
     ativa: situacao === "ATIVA",
+    situacaoDesde: typeof r.data_situacao_cadastral === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.data_situacao_cadastral) ? r.data_situacao_cadastral : null,
+    motivoSituacao: capitalizarFrase(r.descricao_motivo_situacao_cadastral),
     cnaePrincipal: formatarCnae(r.cnae_fiscal),
     cnaeDescricao: String(r.cnae_fiscal_descricao ?? "").trim() || null,
     cnaesSecundarios: secundarios,

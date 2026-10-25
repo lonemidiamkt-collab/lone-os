@@ -366,6 +366,11 @@ export const AUTOMACOES: Automacao[] = [
     nome: "Relatório mensal de vendas", descricao: "No 1º dia útil do mês, o PDF do mês que fechou (vendas, oportunidades → contrato, funil, origem, perdas, ritmo do time, Rota e o que vem) no grupo de vendas, sem valor; a versão com valores vai só para o WhatsApp do Roberto. Uma vez por mês.",
     familia: "Prospecção", destino: "grupo de vendas", cron: "0 11 1-5 * *", agendaBRT: "dias 1 a 5, 8h (envia só no 1º dia útil)", maxSilencioHoras: 28 * 24, ensaio: "dry=1",
   }),
+  ep("receita-vigia", {
+    nome: "Vigia de CNPJ na Receita",
+    descricao: "Consulta na Receita o CNPJ de cada cliente ativo, atualiza porte, atividade e situação, completa número e endereço vazios (só quando bate com o CNPJ) e avisa no sino quando um CNPJ passa a constar baixado ou inapto — a empresa pode ter fechado com a ficha ainda ativa.",
+    familia: "Dados e sync", destino: "admin", cron: "0 13 2 * *", agendaBRT: "dia 2 de cada mês, 10h", maxSilencioHoras: 31 * 24 + 48, ensaio: "dry=1",
+  }),
   ep("crm-ligar-cadastros", {
     nome: "Cadastro ligado ao funil", descricao: "Liga o cadastro do Lone OS (link de cadastro) ao lead de mesmo nome no Comercial quando o par é único, e avisa uma vez cada rascunho pendente que parece duplicado de um cadastro já preenchido. Não muda etapa nem apaga nada. A ligação também acontece na hora em que o cadastro é criado ou preenchido.",
     familia: "Prospecção", destino: "admin", cron: "0 12 * * *", agendaBRT: "todo dia, 9h", maxSilencioHoras: 72, ensaio: "dry=1",
