@@ -88,7 +88,7 @@ export async function calcularCockpit(periodo = periodoAtualBRT()): Promise<Cock
       .is("archived_at", null).order("id").range(de, ate))),
     ler("as tarefas", paginado((de, ate, contar) => supabaseAdmin.from("tasks")
       .select("id, status, due_date", contar ? { count: "exact" } : undefined).order("id").range(de, ate))),
-    ler("os posts do Instagram", comErro(supabaseAdmin.from("client_ig_posts").select("id", { count: "exact", head: true })
+    ler("os posts do Instagram", comErro(supabaseAdmin.from("client_ig_posts").select("media_id", { count: "exact", head: true })
       .gte("posted_at", `${inicio}T00:00:00-03:00`).lte("posted_at", `${fimIso}T23:59:59-03:00`)).then((r) => r.count ?? 0)),
   ]);
   const naoLi = (fonte: string) => semFonte(`não consegui ler ${fonte} agora`);
