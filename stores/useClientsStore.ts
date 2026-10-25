@@ -19,6 +19,8 @@ interface ClientsState {
   clientChats: Record<string, ChatMessage[]>;
   loading: boolean;
   initialized: boolean;
+  /** Por que a última carga falhou (null = não falhou). Erro de leitura não é carteira vazia. */
+  erro: string | null;
 
   // Actions
   init: () => Promise<void>;
@@ -55,22 +57,23 @@ export const useClientsStore = create<ClientsState>()(
       clientChats: {},
       loading: false,
       initialized: false,
+      erro: null,
 
       // ── Fetch all clients + chats from Supabase ──────────────────────────
       init: async () => {
         if (get().initialized || get().loading) return;
-        set({ loading: true }, false, "clients/init/start");
-        try {
-          const res = await authedFetch("/api/data/clients");
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const { clients, clientChats } = await res.json();
-          set({ clients, clientChats, loading: false, initialized: true }, false, "clients/init/done");
-        } catch (e) {
+        set({ loading: true, erro: null }, false, "clients/init/start");
+        const r = await chamar<{ clients?: Client[]; clientChats?: Record<string, ChatMessage[]> }>("/api/data/clients");
+        if (!r.ok || !Array.isArray(r.data?.clients)) {
           // Sem isto a lista ficava vazia em silêncio e a tela dizia "nenhum cliente na sua carteira"
-          // como se fosse verdade. Erro de carga não é lista vazia.
-          console.error("[clients/init] falhou:", e instanceof Error ? e.message : e);
-          set({ loading: false }, false, "clients/init/error");
+          // como se fosse verdade. Erro de carga não é lista vazia. 24/10/2026 (auditoria 3.11): o
+          // motivo fica no store para a tela mostrar com "Tentar de novo" (init() volta a tentar).
+          const erro = r.erro ?? "A lista de clientes veio vazia do servidor.";
+          console.error("[clients/init] falhou:", erro);
+          set({ loading: false, erro }, false, "clients/init/error");
+          return;
         }
+        set({ clients: r.data!.clients!, clientChats: r.data!.clientChats ?? {}, loading: false, initialized: true, erro: null }, false, "clients/init/done");
       },
 
       // ── Supabase Realtime subscription ───────────────────────────────────
@@ -126,23 +129,19 @@ export const useClientsStore = create<ClientsState>()(
           lastPostDate: undefined,
         };
         set((s) => ({ clients: [...s.clients, optimistic] }), false, "clients/add/optimistic");
-        try {
-          const res = await authedFetch("/api/data/clients", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const { id } = await res.json();
-          const confirmed: Client = { ...optimistic, id };
-          set((s) => ({
-            clients: s.clients.map((c) => c.id === tempId ? confirmed : c),
-          }), false, "clients/add/confirmed");
-          return confirmed;
-        } catch (err) {
+        // 24/10/2026 (auditoria 3.8): o motivo da rota chega a quem cadastrou — antes virava
+        // "HTTP 409" e o "esta conta Meta é do cliente X" se perdia no caminho.
+        const r = await chamar<{ id?: string }>("/api/data/clients", data);
+        const id = r.data?.id;
+        if (!r.ok || !id) {
           set((s) => ({ clients: s.clients.filter((c) => c.id !== tempId) }), false, "clients/add/rollback");
-          throw err;
+          throw new Error(r.erro ?? "O servidor não devolveu o cliente criado.");
         }
+        const confirmed: Client = { ...optimistic, id };
+        set((s) => ({
+          clients: s.clients.map((c) => c.id === tempId ? confirmed : c),
+        }), false, "clients/add/confirmed");
+        return confirmed;
       },
 
       // ── updateClient ──────────────────────────────────────────────────────

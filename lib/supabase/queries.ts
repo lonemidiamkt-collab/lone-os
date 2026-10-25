@@ -251,9 +251,11 @@ const CLIENT_LEAN_COLS = [
 // Clientes ATIVOS (carteira atual). Ex-clientes (active=false) ficam de fora de
 // toda a operação — listagens, /social, automação que lê o estado do app.
 // Arquivados são carregados sob demanda por fetchChurnedClients (view de arquivados / métricas).
+// 24/10/2026 (auditoria 3.11): erro de leitura LANÇA. Devolver [] fazia a carteira aparecer como
+// "Nenhum cliente" — falha com cara de verdade. Quem chama decide como mostrar a falha.
 export async function fetchClients(): Promise<Client[]> {
   const { data, error } = await db.from("clients").select(CLIENT_LEAN_COLS).is("draft_status", null).neq("active", false).order("name");
-  if (error) { console.error("[DB] fetchClients:", error); return []; }
+  if (error) { console.error("[DB] fetchClients:", error); throw error; }
   const clientes = (data ?? []).map((r) => snakeToClient(r as unknown as Record<string, unknown>));
   return completarDriveLink(clientes);
 }
@@ -271,10 +273,11 @@ async function completarDriveLink(clientes: Client[]): Promise<Client[]> {
   return clientes.map((c) => (!c.driveLink && link.has(c.id) ? { ...c, driveLink: link.get(c.id) } : c));
 }
 
-// Ex-clientes (churned). Para a aba "Arquivados" e métricas de carteira.
+// Ex-clientes (churned). Para a aba "Arquivados" e métricas de carteira. Erro lança (mesma razão
+// de fetchClients): "Nenhum cliente arquivado" só quando o banco respondeu que não há nenhum.
 export async function fetchChurnedClients(): Promise<Client[]> {
   const { data, error } = await db.from("clients").select(CLIENT_LEAN_COLS).is("draft_status", null).eq("active", false).order("churned_at", { ascending: false });
-  if (error) { console.error("[DB] fetchChurnedClients:", error); return []; }
+  if (error) { console.error("[DB] fetchChurnedClients:", error); throw error; }
   return (data ?? []).map((r) => snakeToClient(r as unknown as Record<string, unknown>));
 }
 
@@ -782,7 +785,9 @@ export async function updateOnboardingItemDb(itemId: string, completed: boolean,
     completed_by: completed ? actor : null,
     completed_at: completed ? new Date().toISOString() : null,
   }).eq("id", itemId);
-  if (error) console.error("[DB] updateOnboardingItem:", error);
+  // 24/10/2026 (auditoria 3.15): lança — antes só logava, a rota respondia ok e o checklist mostrava
+  // marcado um item que o banco não gravou.
+  if (error) { console.error("[DB] updateOnboardingItem:", error); throw error; }
 }
 
 // ═══════════════════════════════════════════════════════════

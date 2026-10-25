@@ -57,6 +57,11 @@ export default function CabecalhoCliente(p: {
   /** Quem a rota de pedido de arte aceita (gestão, social, designer, tráfego). */
   podePedirArte: boolean;
   onEditar: () => void;
+  /**
+   * Os dados completos do cliente (CPF, endereço, logins) já chegaram? 24/10/2026 (auditoria 3.1):
+   * enquanto não chegam, o "Editar" fica travado — editar gravaria vazio por cima deles.
+   */
+  dadosParaEditar?: "ok" | "carregando" | "erro";
   onPedirArte: () => void;
   onLinkOnboarding: () => void;
   gerandoLink: boolean;
@@ -147,9 +152,14 @@ export default function CabecalhoCliente(p: {
           {p.portal}
           {p.isAdmin && (
             <>
-              <button onClick={p.onEditar}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-sm text-foreground transition-colors hover:bg-accent">
-                <Pencil size={15} aria-hidden="true" /> Editar
+              <button onClick={p.onEditar} disabled={p.dadosParaEditar !== undefined && p.dadosParaEditar !== "ok"}
+                title={p.dadosParaEditar === "carregando" ? "Carregando os dados completos do cliente…"
+                  : p.dadosParaEditar === "erro" ? "Os dados completos do cliente não carregaram — editar agora apagaria CPF, endereço e logins. Recarregue a página."
+                  : undefined}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-sm text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50">
+                {p.dadosParaEditar === "carregando"
+                  ? <Loader2 size={15} className="animate-spin" aria-hidden="true" />
+                  : <Pencil size={15} aria-hidden="true" />} Editar
               </button>
               <button onClick={p.onLinkOnboarding} disabled={p.gerandoLink}
                 title="Gera o link de preenchimento do cadastro e copia"

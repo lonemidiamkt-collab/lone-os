@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 
 const INDUSTRIES = [
   "Tecnologia", "Saude", "Imobiliario", "Fitness", "Gastronomia",
@@ -207,67 +208,96 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
   };
 
   // ─── Manual Submit ────────────────────────────
-  const handleSubmit = async () => {
-    const name = form.nomeFantasia.trim() || form.razaoSocial.trim();
-    if (!name) { setError("Nome Fantasia ou Razão Social é obrigatório."); return; }
+  // 24/10/2026 (auditoria 3.8): clique duplo criava DOIS clientes e a falha não aparecia (o erro da
+  // rota — inclusive o 409 "esta conta de anúncio é do cliente X" — virava uma promessa rejeitada que
+  // ninguém tratava). Agora o botão trava enquanto grava (a ref segura o 2º clique antes de a tela
+  // redesenhar) e o motivo da rota aparece junto do botão, com o formulário intacto.
+  const salvandoRef = useRef(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erroCadastro, setErroCadastro] = useState<string | null>(null);
+  const [avisoPosCadastro, setAvisoPosCadastro] = useState<string[]>([]);
+  const [novoId, setNovoId] = useState<string | null>(null);
 
-    const newClient = await addClient({
-      name,
-      industry: form.industry,
-      serviceType: form.serviceType,
-      contactName: form.contactName.trim() || undefined,
-      contactRole: undefined,
-      idade: form.idade || undefined,
-      razaoSocial: form.razaoSocial.trim() || undefined,
-      nomeFantasia: form.nomeFantasia.trim() || undefined,
-      cnpj: form.cnpj.trim() || undefined,
-      endereco: form.endereco.trim() || undefined,
-      emailCorporativo: form.emailCorporativo.trim() || undefined,
-      cpfCnpj: form.cpfCnpj.trim() || undefined,
-      phone: form.phone.trim() || undefined,
-      email: form.emailCorporativo.trim() || undefined,
-      monthlyBudget: 0,
-      paymentMethod: form.paymentMethod,
-      leadSource: form.leadSource,
-      assignedTraffic: needsTraffic ? form.assignedTraffic : "",
-      assignedSocial: needsSocial ? form.assignedSocial : "",
-      assignedDesigner: needsDesigner ? form.assignedDesigner : "",
-      notes: form.notes || undefined,
-      docContratoSocial: form.docContratoSocial || undefined,
-      docIdentidade: form.docIdentidade || undefined,
-      metaAdAccountId: form.metaAdAccountId || undefined,
-    });
+  const handleSubmit = async () => {
+    if (salvandoRef.current) return;
+    const name = form.nomeFantasia.trim() || form.razaoSocial.trim();
+    if (!name) { setErroCadastro("Nome Fantasia ou Razão Social é obrigatório — preencha na fase Empresa."); return; }
+
+    salvandoRef.current = true;
+    setSalvando(true);
+    setErroCadastro(null);
+    let newClient: Client;
+    try {
+      newClient = await addClient({
+        name,
+        industry: form.industry,
+        serviceType: form.serviceType,
+        contactName: form.contactName.trim() || undefined,
+        contactRole: undefined,
+        idade: form.idade || undefined,
+        razaoSocial: form.razaoSocial.trim() || undefined,
+        nomeFantasia: form.nomeFantasia.trim() || undefined,
+        cnpj: form.cnpj.trim() || undefined,
+        endereco: form.endereco.trim() || undefined,
+        emailCorporativo: form.emailCorporativo.trim() || undefined,
+        cpfCnpj: form.cpfCnpj.trim() || undefined,
+        phone: form.phone.trim() || undefined,
+        email: form.emailCorporativo.trim() || undefined,
+        monthlyBudget: 0,
+        paymentMethod: form.paymentMethod,
+        leadSource: form.leadSource,
+        assignedTraffic: needsTraffic ? form.assignedTraffic : "",
+        assignedSocial: needsSocial ? form.assignedSocial : "",
+        assignedDesigner: needsDesigner ? form.assignedDesigner : "",
+        notes: form.notes || undefined,
+        docContratoSocial: form.docContratoSocial || undefined,
+        docIdentidade: form.docIdentidade || undefined,
+        metaAdAccountId: form.metaAdAccountId || undefined,
+      });
+    } catch (e) {
+      // Nada foi criado: o formulário fica como está para corrigir e tentar de novo.
+      setErroCadastro(e instanceof Error && e.message ? e.message : "Não consegui cadastrar o cliente. Tente de novo.");
+      salvandoRef.current = false;
+      setSalvando(false);
+      return;
+    }
+
+    // Daqui em diante o cliente JÁ existe: o que falhar vira aviso na tela de sucesso, e a trava
+    // continua — clicar de novo criaria um segundo cadastro.
+    const avisos: string[] = [];
 
     // O grupo entra pela rota que já existe (o tipo Client não carrega esses campos, e duplicar o
     // caminho de escrita é como se criam dois lugares que discordam). Falhar aqui NÃO derruba o
     // cadastro — o cliente já existe; o que fica faltando é a ligação, e ela aparece na tela.
-    if (form.whatsappGroupJid && newClient?.id) {
-      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
-      const r = await authedFetch("/api/clients/group-mapping", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mappings: [{
-          clientId: newClient.id, groupJid: form.whatsappGroupJid, groupName: form.whatsappGroupName,
-        }] }),
-      }).catch(() => null);
-      if (!r?.ok) setError("Cliente cadastrado, mas o grupo do WhatsApp NÃO foi vinculado. Ligue em Clientes → Grupos.");
+    if (form.whatsappGroupJid && newClient.id) {
+      const r = await chamar("/api/clients/group-mapping", { mappings: [{
+        clientId: newClient.id, groupJid: form.whatsappGroupJid, groupName: form.whatsappGroupName,
+      }] });
+      if (!r.ok) avisos.push(`O grupo do WhatsApp NÃO foi vinculado (${r.erro}). Ligue em Clientes → Grupos.`);
     }
 
     // Auto-generate tasks
     const today = new Date().toISOString().slice(0, 10);
     const weekFromNow = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    const tarefas: Promise<unknown>[] = [];
     if (needsDesigner && form.assignedDesigner) {
-      addTask({ title: `[Setup] Identidade Visual — ${name}`, clientId: newClient.id, clientName: name, assignedTo: form.assignedDesigner, role: "designer", status: "pending", priority: "high", startDate: today, dueDate: weekFromNow });
+      tarefas.push(addTask({ title: `[Setup] Identidade Visual — ${name}`, clientId: newClient.id, clientName: name, assignedTo: form.assignedDesigner, role: "designer", status: "pending", priority: "high", startDate: today, dueDate: weekFromNow }));
     }
     if (needsSocial && form.assignedSocial) {
-      addTask({ title: `[Setup] Grade Editorial — ${name}`, clientId: newClient.id, clientName: name, assignedTo: form.assignedSocial, role: "social", status: "pending", priority: "high", startDate: today, dueDate: weekFromNow });
+      tarefas.push(addTask({ title: `[Setup] Grade Editorial — ${name}`, clientId: newClient.id, clientName: name, assignedTo: form.assignedSocial, role: "social", status: "pending", priority: "high", startDate: today, dueDate: weekFromNow }));
     }
     if (needsTraffic && form.assignedTraffic) {
-      addTask({ title: `[Setup] Auditoria de Contas — ${name}`, clientId: newClient.id, clientName: name, assignedTo: form.assignedTraffic, role: "traffic", status: "pending", priority: "high", startDate: today, dueDate: weekFromNow });
+      tarefas.push(addTask({ title: `[Setup] Auditoria de Contas — ${name}`, clientId: newClient.id, clientName: name, assignedTo: form.assignedTraffic, role: "traffic", status: "pending", priority: "high", startDate: today, dueDate: weekFromNow }));
     }
+    const falhasTarefa = (await Promise.allSettled(tarefas)).filter((t) => t.status === "rejected").length;
+    if (falhasTarefa) avisos.push(`${falhasTarefa} de ${tarefas.length} tarefas de setup não foram criadas — crie em Tarefas.`);
 
-    pushNotification("system", "Novo cliente", `${name} cadastrado. Tasks de setup criadas.`);
+    pushNotification("system", "Novo cliente", falhasTarefa ? `${name} cadastrado, mas faltaram tarefas de setup.` : `${name} cadastrado. Tasks de setup criadas.`);
+    setNovoId(newClient.id);
+    setAvisoPosCadastro(avisos);
     setSuccessState(true);
-    setTimeout(() => onSuccess(newClient.id), 2000);
+    // Com aviso, a pessoa precisa ler antes de ir para a ficha; sem aviso, segue sozinho.
+    if (!avisos.length) setTimeout(() => onSuccess(newClient.id), 2000);
   };
 
   // ─── Phases ───────────────────────────────────
@@ -313,8 +343,21 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
           <div className="flex flex-col items-center justify-center py-12 gap-4 animate-fade-in">
             <div className="w-16 h-16 rounded-full bg-lone-success-bg flex items-center justify-center"><Check size={32} className="text-lone-success" /></div>
             <h2 className="text-lg font-semibold text-foreground">Cliente cadastrado!</h2>
-            <p className="text-sm text-muted-foreground text-center">Preparando workspace e checklist de onboarding...</p>
-            <div className="flex items-center gap-2 mt-2"><Loader2 size={14} className="text-primary animate-spin" /><span className="text-xs text-muted-foreground">Redirecionando...</span></div>
+            {avisoPosCadastro.length > 0 ? (
+              // O que não deu certo DEPOIS de criar (grupo, tarefas) — antes ia para um aviso que a
+              // tela de sucesso escondia (24/10/2026, auditoria 3.8).
+              <>
+                <div role="alert" className="w-full space-y-1.5 rounded-lg border border-lone-warning-border bg-lone-warning-bg px-4 py-3">
+                  {avisoPosCadastro.map((a) => <p key={a} className="text-xs text-lone-warning">{a}</p>)}
+                </div>
+                {novoId && <Button onClick={() => onSuccess(novoId)}>Abrir a ficha do cliente</Button>}
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground text-center">Preparando workspace e checklist de onboarding...</p>
+                <div className="flex items-center gap-2 mt-2"><Loader2 size={14} className="text-primary animate-spin" /><span className="text-xs text-muted-foreground">Redirecionando...</span></div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -323,7 +366,8 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
 
   // ─── Main Render ─────────────────────────────
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    // Fechar no meio da gravação esconderia o resultado (o cliente pode ter sido criado).
+    <Dialog open onOpenChange={(open) => !open && !salvandoRef.current && onClose()}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <div className="flex items-center gap-3">
@@ -566,14 +610,30 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
           )}
         </div>
 
+        {/* O erro do cadastro fica junto do botão, com o motivo da rota (24/10/2026, auditoria 3.8). */}
+        {erroCadastro && (
+          <div role="alert" className="rounded-lg border border-lone-danger-border bg-lone-danger-bg px-4 py-2.5 space-y-2">
+            <p className="text-sm text-lone-danger">{erroCadastro}</p>
+            {form.metaAdAccountId && /conta de anúncio/i.test(erroCadastro) && (
+              <button type="button" onClick={() => { set("metaAdAccountId", ""); setErroCadastro(null); }}
+                className="text-xs font-medium text-lone-danger underline hover:opacity-80">
+                Tirar a conta de anúncio e cadastrar sem ela
+              </button>
+            )}
+          </div>
+        )}
+
         <DialogFooter className="flex items-center justify-between gap-2">
-          <div>{currentIdx > 0 && <Button variant="ghost" onClick={goPrev} className="text-xs">Anterior</Button>}</div>
+          <div>{currentIdx > 0 && <Button variant="ghost" onClick={goPrev} disabled={salvando} className="text-xs">Anterior</Button>}</div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+            <Button variant="ghost" onClick={onClose} disabled={salvando}>Cancelar</Button>
             {currentIdx < PHASES.length - 1 ? (
               <Button onClick={goNext}>Próximo</Button>
             ) : (
-              <Button onClick={handleSubmit} className="flex items-center gap-2"><Check size={14} /> Cadastrar Cliente</Button>
+              <Button onClick={handleSubmit} disabled={salvando} className="flex items-center gap-2">
+                {salvando ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                {salvando ? "Cadastrando…" : "Cadastrar Cliente"}
+              </Button>
             )}
           </div>
         </DialogFooter>

@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
 import { somarMesesIso } from "@/lib/contracts/registro";
+import { lerAnteriores, type PdfAnterior } from "@/lib/contracts/pdf-assinado";
 import { toast } from "sonner";
 import {
   FileText, Plus, Download, Eye, Loader2, Check, X,
@@ -30,6 +31,8 @@ interface ContractFull extends ContractRecord {
   signedAt?: string | null;
   signedUploadedBy?: string | null;
   signatureMethod?: string | null;
+  /** PDFs assinados que já valeram (trocados pela tela) — 24/10/2026, auditoria 3.13. */
+  signedPdfAnteriores?: PdfAnterior[];
 }
 
 interface AuditEntry { id: string; action: string; actor: string; details: string; createdAt: string; }
@@ -129,6 +132,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
       signedAt: (r.signed_at as string) || null,
       signedUploadedBy: (r.signed_uploaded_by as string) || null,
       signatureMethod: (r.signature_method as string) || null,
+      signedPdfAnteriores: lerAnteriores(r.signed_pdf_anteriores),
     })));
     setLoading(false);
   };
@@ -303,7 +307,9 @@ export default function ContractGenerator({ client, currentUser }: Props) {
   // status vira 'active' + timestamp de assinatura + PDF armazenado no cofre do cliente.
   const uploadingSignedRef = useRef<string | null>(null);
   const [uploadingSignedId, setUploadingSignedId] = useState<string | null>(null);
-  const handleUploadSigned = (contractId: string) => {
+  // `substituir`: "Trocar PDF assinado" (24/10/2026, auditoria 3.13) — a rota guarda o anterior em
+  // contracts.signed_pdf_anteriores e não apaga o arquivo antigo do storage.
+  const handleUploadSigned = (contractId: string, substituir = false) => {
     if (uploadingSignedRef.current) return;
     const input = document.createElement("input");
     input.type = "file";
@@ -311,8 +317,12 @@ export default function ContractGenerator({ client, currentUser }: Props) {
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
+      if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") {
+        setDownloadError(`"${file.name}" não é PDF — envie o contrato assinado em PDF.`);
+        return;
+      }
       if (file.size > 20 * 1024 * 1024) {
-        setDownloadError("PDF muito grande. Máximo 20MB.");
+        setDownloadError(`"${file.name}" tem ${(file.size / 1024 / 1024).toFixed(1)} MB — o limite é 20 MB.`);
         return;
       }
       uploadingSignedRef.current = contractId;
@@ -323,22 +333,30 @@ export default function ContractGenerator({ client, currentUser }: Props) {
         fd.append("file", file);
         fd.append("contractId", contractId);
         fd.append("method", "d4sign_manual");
-        const res = await authedFetch("/api/contracts/upload-signed", { method: "POST", body: fd });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({ error: "Falha no upload" }));
-          setDownloadError(data.error || "Falha no upload");
-          return;
-        }
-        await logAudit(contractId, "signed_uploaded", "PDF assinado recebido e armazenado no cofre");
+        if (substituir) fd.append("substituir", "1");
+        const r = await chamar<{ avisos?: string[] }>("/api/contracts/upload-signed", fd);
+        if (!r.ok) { setDownloadError(r.erro ?? "Falha no upload"); return; }
+        // Na troca o histórico é gravado pela rota (com a referência do anterior).
+        if (!substituir) await logAudit(contractId, "signed_uploaded", "PDF assinado recebido e armazenado no cofre");
+        if (r.data?.avisos?.length) toast.warning(`PDF assinado salvo, mas ${r.data.avisos.join("; ")}.`);
+        else if (substituir) toast.success("PDF assinado trocado. O anterior ficou guardado em \"PDFs anteriores\".");
         await loadContracts();
-      } catch {
-        setDownloadError("Falha de conexão no upload");
       } finally {
         uploadingSignedRef.current = null;
         setUploadingSignedId(null);
       }
     };
     input.click();
+  };
+
+  const trocarAssinado = (c: ContractFull) => {
+    const quando = c.signedAt ? new Date(c.signedAt).toLocaleDateString("pt-BR") : null;
+    const ok = window.confirm(
+      `Trocar o PDF assinado do Contrato V${c.version}?\n\n` +
+      `O atual${quando ? ` (enviado em ${quando}${c.signedUploadedBy ? ` por ${c.signedUploadedBy}` : ""})` : ""} NÃO é apagado: ` +
+      "fica guardado em \"PDFs anteriores\" e dá para abrir quando quiser.",
+    );
+    if (ok) handleUploadSigned(c.id, true);
   };
 
   // Abre o PDF assinado via signed URL (5 min TTL). Cada acesso gera linha em vault_access_log.
@@ -537,11 +555,20 @@ export default function ContractGenerator({ client, currentUser }: Props) {
 
                   {/* Upload do PDF assinado (pós D4Sign) OU ver o assinado se já subiu */}
                   {c.signedPdfPath ? (
-                    <button onClick={() => handleViewSigned(c.signedPdfPath!)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 border border-primary/20"
-                      title={`Assinado em ${c.signedAt ? new Date(c.signedAt).toLocaleDateString("pt-BR") : ""}${c.signedUploadedBy ? ` por ${c.signedUploadedBy}` : ""}`}>
-                      <FileCheck2 size={11} /> Ver Assinado
-                    </button>
+                    <>
+                      <button onClick={() => handleViewSigned(c.signedPdfPath!)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 border border-primary/20"
+                        title={`Assinado em ${c.signedAt ? new Date(c.signedAt).toLocaleDateString("pt-BR") : ""}${c.signedUploadedBy ? ` por ${c.signedUploadedBy}` : ""}`}>
+                        <FileCheck2 size={11} /> Ver Assinado
+                      </button>
+                      {/* PDF errado tinha de ficar para sempre (24/10/2026, auditoria 3.13). */}
+                      <button onClick={() => trocarAssinado(c)} disabled={uploadingSignedId === c.id}
+                        className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-primary/30 hover:text-primary disabled:opacity-50"
+                        title="Substitui o PDF assinado; o atual fica guardado em PDFs anteriores">
+                        {uploadingSignedId === c.id ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+                        {uploadingSignedId === c.id ? "Enviando..." : "Trocar PDF assinado"}
+                      </button>
+                    </>
                   ) : (
                     <button onClick={() => handleUploadSigned(c.id)} disabled={uploadingSignedId === c.id}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 border border-primary/20 disabled:opacity-50"
@@ -557,6 +584,20 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                     </span>
                   )}
                 </div>
+
+                {/* PDFs assinados que já valeram: trocar não apaga, e dá para abrir o anterior. */}
+                {(c.signedPdfAnteriores?.length ?? 0) > 0 && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                    <span className="uppercase tracking-wider">PDFs anteriores:</span>
+                    {c.signedPdfAnteriores!.map((a) => (
+                      <button key={a.path} onClick={() => handleViewSigned(a.path)}
+                        className="underline hover:text-primary"
+                        title={`Trocado em ${new Date(a.substituidoEm).toLocaleString("pt-BR")} por ${a.substituidoPor}`}>
+                        enviado {a.assinadoEm ? new Date(a.assinadoEm).toLocaleDateString("pt-BR") : "—"}{a.enviadoPor ? ` por ${a.enviadoPor}` : ""}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Audit log */}
                 {showAudit === c.id && (

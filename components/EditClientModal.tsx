@@ -6,13 +6,13 @@ import {
   Check, Loader2, User, Shield, MapPin, Phone, Mail, CreditCard, Briefcase,
   Rocket, TrendingUp, Smartphone, Palette, Search,
 } from "lucide-react";
-import { useClientsStore } from "@/stores/useClientsStore";
+import { useClientsStore, type ClientPatch } from "@/stores/useClientsStore";
 import { chamar } from "@/lib/api/chamar";
 import { toast } from "sonner";
 import type { Client } from "@/lib/types";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useRole } from "@/lib/context/RoleContext";
-import { temSocial as contratouSocial } from "@/lib/clients/servico";
+import { camposDaEquipe, formDoCliente, senhasDigitadas, soOQueMudou } from "@/lib/clients/editar-cliente";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -35,13 +35,19 @@ type Tab = "pf" | "pj" | "servico" | "acessos" | "social";
 interface Props {
   client: Client;
   onClose: () => void;
+  /**
+   * Quem grava. A ficha passa o dela, que além do store atualiza os campos sensíveis que ela
+   * mostra (lib/clients/ficha-sensiveis.ts) — sem isso o CPF salvo continuava aparecendo o antigo.
+   */
+  salvar?: (id: string, patch: ClientPatch) => Promise<void>;
 }
 
 /** O Select do Radix não aceita item com value="" — "Nenhum" usa um valor sentinela e vira "" ao gravar. */
 const NENHUM = "__nenhum__";
 
-export default function EditClientModal({ client, onClose }: Props) {
-  const updateClientData = useClientsStore((s) => s.updateClient);
+export default function EditClientModal({ client, onClose, salvar }: Props) {
+  const updateClientStore = useClientsStore((s) => s.updateClient);
+  const updateClientData = salvar ?? updateClientStore;
   const team = useTeamMembers();
   const { role } = useRole();
   const isAdmin = role === "admin" || role === "manager";
@@ -49,45 +55,11 @@ export default function EditClientModal({ client, onClose }: Props) {
   const [tab, setTab] = useState<Tab>("pf");
   const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState({
-    // PF
-    contactName: client.contactName ?? "",
-    cpfCnpj: client.cpfCnpj ?? "",
-    idade: client.idade ?? "",
-    phone: client.phone ?? "",
-    email: client.email ?? "",
-    // PJ
-    nomeFantasia: client.nomeFantasia ?? client.name ?? "",
-    razaoSocial: client.razaoSocial ?? "",
-    cnpj: client.cnpj ?? "",
-    endereco: client.endereco ?? "",
-    emailCorporativo: client.emailCorporativo ?? "",
-    industry: client.industry ?? "Outro",
-    leadSource: client.leadSource ?? "indicacao",
-    notes: client.notes ?? "",
-    // Servico
-    serviceType: client.serviceType ?? "lone_growth",
-    paymentMethod: client.paymentMethod ?? "pix",
-    assignedTraffic: client.assignedTraffic ?? "",
-    assignedSocial: client.assignedSocial ?? "",
-    assignedDesigner: client.assignedDesigner ?? "",
-    // Acessos (cofre)
-    metaAdAccountId: client.metaAdAccountId ?? "",
-    facebookLogin: client.facebookLogin ?? "",
-    facebookPassword: client.facebookPassword ?? "",
-    googleAdsLogin: client.googleAdsLogin ?? "",
-    googleAdsPassword: client.googleAdsPassword ?? "",
-    instagramLogin: client.instagramLogin ?? "",
-    instagramPassword: client.instagramPassword ?? "",
-    // Social dossier
-    instagramUser: client.instagramUser ?? "",
-    toneOfVoice: client.toneOfVoice ?? "",
-    driveLink: client.driveLink ?? "",
-    postsGoal: String(client.postsGoal ?? 12),
-    contractEnd: client.contractEnd ?? "",
-    campaignBriefing: client.campaignBriefing ?? "",
-    fixedBriefing: client.fixedBriefing ?? "",
-  });
+  // 24/10/2026 (auditoria 3.1): o formulário como ABRIU fica guardado — o salvar manda só a
+  // diferença (lib/clients/editar-cliente.ts). Antes mandava tudo, e o vazio de um campo que não
+  // tinha carregado apagava CPF, endereço e logins no banco.
+  const [inicial, setInicial] = useState(() => formDoCliente(client));
+  const [form, setForm] = useState(inicial);
 
   const set = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -108,76 +80,40 @@ export default function EditClientModal({ client, onClose }: Props) {
   //
   // Agora o campo aparece quando o contrato pede OU quando já existe alguém ali. E o save nunca
   // apaga quem não estava na tela.
-  const temTraffic = !!client.assignedTraffic;
-  const temSocial = !!client.assignedSocial;
-  const temDesigner = !!client.assignedDesigner;
-  const needsTraffic = form.serviceType === "lone_growth" || form.serviceType === "assessoria_trafego" || temTraffic;
   // SOCIAL SEGUE O CONTRATO, não quem já estava gravado (30/09). Trocar Lone Growth → só Tráfego
   // deixava o social antigo na carteira pra sempre: o campo continuava aparecendo (porque tinha
   // alguém) e não havia opção vazia. Era o Carlos vendo o Dr. Júnior e a JP no quadro dele. O banco
   // também limpa (trg_social_so_com_servico) — aqui é pra tela dizer a verdade antes de salvar.
-  const needsSocial = contratouSocial({ service_type: form.serviceType });
+  // A regra (e o patch que sai dela) mora em lib/clients/editar-cliente.ts desde 24/10/2026.
+  const { temSocial, needsTraffic, needsSocial, needsDesigner } = camposDaEquipe(form.serviceType, client);
   const saiDoSocial = !needsSocial && temSocial ? client.assignedSocial : null;
-  const needsDesigner = form.serviceType === "lone_growth" || form.serviceType === "assessoria_design"
-    || form.serviceType === "assessoria_social"   // social sem designer não produz arte
-    || temDesigner;
 
   const handleSave = async () => {
+    if (saving) return;
+    const mudancas = soOQueMudou(inicial, form, client);
+    // Senha não passa pela rota de update (que descartava calada): vai cifrada pelo cofre.
+    const senhas = senhasDigitadas(form);
+    if (!Object.keys(mudancas).length && !senhas.length) {
+      toast("Nada mudou — nada foi gravado.");
+      onClose();
+      return;
+    }
     setSaving(true);
-    const name = form.nomeFantasia.trim() || form.razaoSocial.trim() || client.name;
-    // Vazio vira null (apaga). `|| undefined` impedia limpar um dado errado.
-    const v = (x: string) => (x.trim() ? x.trim() : null);
     try {
-      await updateClientData(client.id, {
-        name,
-        nomeFantasia: v(form.nomeFantasia),
-        razaoSocial: v(form.razaoSocial),
-        cnpj: v(form.cnpj),
-        endereco: v(form.endereco),
-        emailCorporativo: v(form.emailCorporativo),
-        contactName: v(form.contactName),
-        cpfCnpj: v(form.cpfCnpj),
-        idade: v(form.idade),
-        phone: v(form.phone),
-        email: v(form.email),
-        industry: form.industry,
-        serviceType: form.serviceType as Client["serviceType"],
-        paymentMethod: form.paymentMethod as Client["paymentMethod"],
-        leadSource: form.leadSource as Client["leadSource"],
-        // `undefined` = não mexe. Só grava o que ESTAVA na tela — campo escondido não pode virar
-        // instrução de apagar. Para tirar alguém da carteira, existe a opção vazia no próprio select.
-        assignedTraffic: needsTraffic ? form.assignedTraffic : undefined,
-        // Sem social no contrato, grava vazio: aqui não é "campo escondido", é o serviço decidindo.
-        assignedSocial: needsSocial ? form.assignedSocial : (temSocial ? "" : undefined),
-        assignedDesigner: needsDesigner ? form.assignedDesigner : undefined,
-        metaAdAccountId: form.metaAdAccountId
-          ? (form.metaAdAccountId.startsWith("act_") ? form.metaAdAccountId : `act_${form.metaAdAccountId}`)
-          : (client.metaAdAccountId ? null : undefined),
-        facebookLogin: v(form.facebookLogin),
-        googleAdsLogin: v(form.googleAdsLogin),
-        instagramLogin: v(form.instagramLogin),
-        instagramUser: v(form.instagramUser),
-        toneOfVoice: (form.toneOfVoice as Client["toneOfVoice"]) || null,
-        driveLink: v(form.driveLink),
-        postsGoal: parseInt(form.postsGoal) || 12,
-        contractEnd: v(form.contractEnd),
-        campaignBriefing: v(form.campaignBriefing),
-        fixedBriefing: v(form.fixedBriefing),
-        notes: v(form.notes),
-      });
-      // Senha não passa pela rota de update (que descartava calada): vai cifrada pelo cofre.
-      const senhas: [string, string][] = [
-        ["facebook_password", form.facebookPassword],
-        ["google_ads_password", form.googleAdsPassword],
-        ["instagram_password", form.instagramPassword],
-      ];
+      if (Object.keys(mudancas).length) {
+        await updateClientData(client.id, mudancas);
+        // Já gravado: se a senha falhar abaixo e a pessoa salvar de novo, não reenvia o que já foi.
+        setInicial({ ...form, facebookPassword: "", googleAdsPassword: "", instagramPassword: "" });
+      }
       const falhas: string[] = [];
       for (const [field, value] of senhas) {
-        if (!value) continue;
         const r = await chamar("/api/client-vault", { clientId: client.id, table: "clients", field, value });
         if (!r.ok) falhas.push(`${field.replace("_password", "")}: ${r.erro}`);
       }
-      if (falhas.length) { toast.error(`Dados salvos, mas a senha não: ${falhas.join(" · ")}`); return; }
+      if (falhas.length) {
+        toast.error(`${Object.keys(mudancas).length ? "Dados salvos, mas a senha não" : "A senha não foi salva"}: ${falhas.join(" · ")}`);
+        return;
+      }
       toast.success("Cliente salvo.");
       onClose();
     } catch (e) {

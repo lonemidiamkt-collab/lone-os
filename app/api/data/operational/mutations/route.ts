@@ -51,7 +51,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ timeline });
     }
     case "updateOnboarding": {
-      await db.updateOnboardingItemDb(body.itemId, body.completed, body.actor);
+      // Falha do banco volta como falha (24/10/2026, auditoria 3.15) — antes respondia ok sempre.
+      try {
+        await db.updateOnboardingItemDb(body.itemId, body.completed, body.actor);
+      } catch (e) {
+        const msg = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "erro no banco";
+        return NextResponse.json({ error: `o banco não gravou (${msg})` }, { status: 500 });
+      }
       return NextResponse.json({ ok: true });
     }
     case "insertMood": {

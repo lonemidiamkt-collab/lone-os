@@ -13,6 +13,8 @@ import type {
   ClientAccess,
 } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
+import { toast } from "sonner";
 import { supabase, REALTIME_ENABLED } from "@/lib/supabase/client";
 
 interface OperationalState {
@@ -142,20 +144,18 @@ export const useOperationalStore = create<OperationalState>()(
             ),
           },
         }), false, "ops/onboarding/toggle/optimistic");
-        try {
-          const res = await authedFetch("/api/data/operational/mutations", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "updateOnboarding", itemId, completed, actor }),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        } catch {
+        const r = await chamar("/api/data/operational/mutations", { action: "updateOnboarding", itemId, completed, actor });
+        if (!r.ok) {
           set((s) => ({
             onboarding: {
               ...s.onboarding,
               [clientId]: (s.onboarding[clientId] ?? []).map((i) => i.id === itemId ? item : i),
             },
           }), false, "ops/onboarding/toggle/rollback");
+          // 24/10/2026 (auditoria 3.15): o item voltava ao estado anterior sem dizer nada — parecia
+          // que o clique não tinha pegado, e a pessoa seguia achando que tinha marcado.
+          const motivo = (r.erro ?? "erro desconhecido").replace(/[.?!\s]+$/, "");
+          toast.error(`Não salvei "${item.label}" ${completed ? "como feito" : "como pendente"}: ${motivo}. O item voltou como estava.`);
         }
       },
 
