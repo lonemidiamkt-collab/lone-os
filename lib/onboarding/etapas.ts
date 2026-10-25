@@ -14,18 +14,23 @@ export type Etapa = "dados" | "documentos" | "acessos" | "review";
 export const OBRIGATORIOS_POR_ETAPA: Record<Etapa, string[]> = {
   dados: [
     "cnpj", "nomeFantasia", "faturamentoFaixa", "contactName", "contactEmail", "contactWhatsapp",
-    "enderecoCep", "enderecoRua", "enderecoBairro", "enderecoCidade",
+    "enderecoCep", "enderecoRua", "enderecoNumero", "enderecoBairro", "enderecoCidade",
   ],
   documentos: ["docLogo", "docContrato"],
-  acessos: [],
+  // Login e senha em par (24/10/2026, item 1.6): só vira falta quando o cliente começou o acesso e
+  // deixou metade (lib/onboarding/acessos.ts, faltaNoAcesso). Em branco ou "Não tenho" não trava.
+  acessos: ["senhaMeta", "loginMeta", "senhaInstagram", "loginInstagram", "senhaGoogle", "loginGoogle"],
   review: [],
 };
 
 export const ROTULO_CAMPO: Record<string, string> = {
   cnpj: "CNPJ", nomeFantasia: "Nome fantasia", faturamentoFaixa: "Faturamento médio por mês",
   contactName: "Nome do responsável", contactEmail: "E-mail", contactWhatsapp: "WhatsApp",
-  enderecoCep: "CEP", enderecoRua: "Rua", enderecoBairro: "Bairro", enderecoCidade: "Cidade",
+  enderecoCep: "CEP", enderecoRua: "Rua", enderecoNumero: "Número do endereço", enderecoBairro: "Bairro", enderecoCidade: "Cidade",
   docLogo: "Logo da empresa", docContrato: "Contrato social ou cartão CNPJ",
+  senhaMeta: "senha do Facebook / Meta", loginMeta: "login do Facebook / Meta",
+  senhaInstagram: "senha do Instagram", loginInstagram: "login do Instagram",
+  senhaGoogle: "senha do Google Ads / Gmail", loginGoogle: "login do Google Ads / Gmail",
 };
 
 export const ORDEM_ETAPAS: Etapa[] = ["dados", "documentos", "acessos", "review"];

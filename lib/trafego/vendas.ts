@@ -35,6 +35,57 @@ export interface NovaVenda {
   note: string | null;
 }
 
+// ─── Valor em reais como o cliente digita ───────────────────────────────────
+// POR QUE (24/10/2026, auditoria de erro recuperável, item 1.8). O valor só tratava o ponto como
+// milhar quando havia vírgula: "1.500" virava R$ 1,50 e "45.000" virava R$ 45 — e a venda entrava
+// assim no faturamento e no retorno do portal. Agora:
+//   · com vírgula: ponto é milhar, vírgula é centavo ("1.500,50", "45,5");
+//   · sem vírgula: "1.500" / "45.000" / "1.500.000" (grupos de 3) é milhar; "1500.50" (1 ou 2 casas
+//     depois de UM ponto) é centavo, como vem de planilha; o resto não é entendido;
+//   · não entendido = null — quem chama mostra o erro, nunca grava um número inventado.
+
+/** Valor em reais; null = vazio ou não entendido. Número passa como está (se for válido). */
+export function lerReais(entrada: unknown): number | null {
+  if (typeof entrada === "number") return Number.isFinite(entrada) && entrada >= 0 ? entrada : null;
+  if (typeof entrada !== "string") return null;
+  const t = entrada.replace(/^\s*R\$/i, "").replace(/[\s\u00a0]/g, "");
+  if (!t || !/^[\d.,]+$/.test(t)) return null;
+  let normal: string | null = null;
+  if (t.includes(",")) {
+    const m = /^(\d+|\d{1,3}(?:\.\d{3})+),(\d{0,2})$/.exec(t);
+    if (m) normal = `${m[1].replace(/\./g, "")}.${m[2] || "0"}`;
+  } else if (/^\d+$/.test(t)) {
+    normal = t;
+  } else if (/^\d{1,3}(?:\.\d{3})+$/.test(t)) {
+    normal = t.replace(/\./g, "");
+  } else if (/^\d+\.\d{1,2}$/.test(t)) {
+    normal = t;
+  }
+  if (normal == null) return null;
+  const v = Number(normal);
+  return Number.isFinite(v) ? v : null;
+}
+
+/** "R$ 1.500,00". */
+export function formatarReais(v: number): string {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** O que o campo de valor mostra embaixo, antes de salvar. null = campo vazio (valor é opcional). */
+export function previaDoValor(texto: string): { ok: true; valor: number; frase: string } | { ok: false; frase: string } | null {
+  if (!texto.trim()) return null;
+  const v = lerReais(texto);
+  if (v == null || v > 10_000_000) return { ok: false, frase: "Não entendi o valor. Escreva assim: 1.500,00" };
+  return { ok: true, valor: Math.round(v * 100) / 100, frase: `Vai salvar ${formatarReais(Math.round(v * 100) / 100)}` };
+}
+
+/** Máscara ao sair do campo: "1500" → "1.500,00". Não entendido fica como o cliente digitou. */
+export function mascararReais(texto: string): string {
+  const v = lerReais(texto);
+  if (v == null) return texto;
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 /** Valida o que veio da tela (ou do portal). Devolve a venda limpa ou a frase do erro. */
 export function validarVenda(bruto: unknown, hoje: string): { ok: true; venda: NovaVenda } | { ok: false; erro: string } {
   const b = (bruto ?? {}) as Record<string, unknown>;
@@ -47,10 +98,9 @@ export function validarVenda(bruto: unknown, hoje: string): { ok: true; venda: N
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) return { ok: false, erro: "Quantidade inválida (1 a 999)." };
   let amount: number | null = null;
   if (b.amount != null && b.amount !== "") {
-    // "1.500,50" (como se digita no Brasil) ou "1500.50".
-    const txt = String(b.amount).trim().replace(/^R\$\s*/, "");
-    const v = typeof b.amount === "number" ? b.amount : Number(txt.includes(",") ? txt.replace(/\./g, "").replace(",", ".") : txt);
-    if (!Number.isFinite(v) || v < 0 || v > 10_000_000) return { ok: false, erro: "Valor da venda inválido." };
+    // Ponto de milhar entendido (24/10/2026): antes "1.500" virava R$ 1,50 e "45.000" virava R$ 45.
+    const v = lerReais(b.amount);
+    if (v == null || v > 10_000_000) return { ok: false, erro: "Valor da venda inválido. Escreva assim: 1.500,00" };
     amount = Math.round(v * 100) / 100;
   }
   const channel = typeof b.channel === "string" && (CANAIS_VENDA as readonly string[]).includes(b.channel) ? (b.channel as CanalVenda) : null;

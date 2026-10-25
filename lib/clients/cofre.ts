@@ -106,3 +106,34 @@ export function validarCredencial(login: unknown, senha: unknown): { ok: true; l
 export function tokenValido(t: string | null | undefined): boolean {
   return typeof t === "string" && /^ac-[0-9a-f]{32}$/.test(t);
 }
+
+// ── Pedido por link: reenvio até o time testar (24/10/2026, item 1.12) ─────────────────────────
+// O link fechava no 1º envio. O cliente que errou a senha (ou trocou depois) não tinha como corrigir:
+// precisava pedir outro link à equipe, que só descobria o erro ao tentar entrar. Agora o MESMO link
+// aceita reenvio — o novo substitui o anterior — até alguém do time marcar o acesso como "ok" DEPOIS
+// do último envio. Marcado "inválido", o link continua aceitando (é justamente quando o cliente
+// precisa mandar de novo). Cancelado e vencido continuam fechados.
+
+export type SituacaoPedido = "aberto" | "recebido" | "testado" | "cancelado" | "vencido";
+
+export function situacaoDoPedido(
+  p: { status: string; expiraEm: string; recebidoEm: string | null },
+  conferencia: { status: StatusAcesso; atualizadoEm: string } | null,
+  agora: Date = new Date(),
+): SituacaoPedido {
+  if (p.status === "cancelado") return "cancelado";
+  if (p.status === "recebido" && p.recebidoEm && conferencia?.status === "ok"
+    && new Date(conferencia.atualizadoEm).getTime() >= new Date(p.recebidoEm).getTime()) return "testado";
+  if (new Date(p.expiraEm).getTime() <= agora.getTime()) return "vencido";
+  return p.status === "recebido" ? "recebido" : "aberto";
+}
+
+/** O link ainda aceita login e senha? */
+export const pedidoAceitaEnvio = (s: SituacaoPedido) => s === "aberto" || s === "recebido";
+
+/** Frase para o cliente quando o link não aceita mais. */
+export const FRASE_PEDIDO_FECHADO: Record<Exclude<SituacaoPedido, "aberto" | "recebido">, string> = {
+  testado: "A equipe já recebeu e testou este acesso. Se a senha mudou, peça um link novo à equipe da Lone Mídia.",
+  vencido: "Este link venceu. Peça um novo à equipe da Lone Mídia.",
+  cancelado: "Este link foi cancelado pela equipe da Lone Mídia.",
+};

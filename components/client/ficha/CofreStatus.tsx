@@ -98,7 +98,7 @@ export default function CofreStatus({ clientId, telefone }: { clientId: string; 
         {dados.plataformas.map((p) => {
           const linkUrl = p.pedido?.url ? `${typeof window !== "undefined" ? window.location.origin : ""}${p.pedido.url}` : null;
           const wa = linkUrl && telefone
-            ? `https://wa.me/55${telefone.replace(/\D/g, "").replace(/^55/, "")}?text=${encodeURIComponent(`Olá! Para a gente cuidar do ${p.rotulo}, mande o acesso por este link seguro (vale uma vez): ${linkUrl}`)}`
+            ? `https://wa.me/55${telefone.replace(/\D/g, "").replace(/^55/, "")}?text=${encodeURIComponent(`Olá! Para a gente cuidar do ${p.rotulo}, mande o acesso por este link seguro (se errar a senha, dá para mandar de novo pelo mesmo link): ${linkUrl}`)}`
             : null;
           return (
             <li key={p.plataforma} className="space-y-2 p-3">

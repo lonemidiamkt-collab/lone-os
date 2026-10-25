@@ -1,7 +1,9 @@
 // tests/trafego-vendas.test.ts — Leva 7A (N9): vendas do cliente × investimento (custo por venda).
 
 import { describe, it, expect } from "vitest";
-import { validarVenda, resumoVendas, periodoDoMes, janelaDoInvestimento, gastoPorDiaDosClientes } from "@/lib/trafego/vendas";
+import {
+  validarVenda, resumoVendas, periodoDoMes, janelaDoInvestimento, gastoPorDiaDosClientes, lerReais, previaDoValor, mascararReais,
+} from "@/lib/trafego/vendas";
 
 const HOJE = "2026-09-24";
 
@@ -15,7 +17,7 @@ describe("vendas do cliente", () => {
     expect(a).toEqual({ ok: true, venda: { soldOn: HOJE, quantity: 2, amount: 1500.5, channel: "loja", note: "sofá" } });
     const b = validarVenda({ soldOn: HOJE, amount: "R$ 1500.50", channel: "fax" }, HOJE);
     expect(b).toEqual({ ok: true, venda: { soldOn: HOJE, quantity: 1, amount: 1500.5, channel: null, note: null } });
-    expect(validarVenda({ soldOn: HOJE, amount: "abc" }, HOJE)).toMatchObject({ ok: false, erro: "Valor da venda inválido." });
+    expect(validarVenda({ soldOn: HOJE, amount: "abc" }, HOJE)).toMatchObject({ ok: false, erro: "Valor da venda inválido. Escreva assim: 1.500,00" });
   });
 
   it("resumo: custo por venda = investimento ÷ vendas; retorno só com valor informado", () => {
@@ -85,5 +87,43 @@ describe("vendas do cliente", () => {
       ];
       expect(resumoVendas(vendas, gastoPorDiaDosClientes(linhas, "c1").get("c1") ?? null).investimento).toBe(100);
     });
+  });
+});
+
+// 24/10/2026 — item 1.8 da auditoria de erro recuperável: o ponto só era milhar quando havia vírgula;
+// "1.500" virava R$ 1,50 e "45.000" virava R$ 45 no faturamento do portal.
+describe("valor da venda como o cliente digita", () => {
+  it("os cinco jeitos do relatório", () => {
+    expect(lerReais("1.500")).toBe(1500);
+    expect(lerReais("45.000")).toBe(45000);
+    expect(lerReais("1.500,50")).toBe(1500.5);
+    expect(lerReais("1500")).toBe(1500);
+    expect(lerReais("45,5")).toBe(45.5);
+  });
+  it("e o que mais aparece: R$, espaço, milhão, planilha com ponto decimal", () => {
+    expect(lerReais("R$ 1.500,00")).toBe(1500);
+    expect(lerReais("1.500.000")).toBe(1500000);
+    expect(lerReais("1500.50")).toBe(1500.5);
+    expect(lerReais("1 500,00")).toBe(1500);
+    expect(lerReais(1500)).toBe(1500);
+  });
+  it("o que não dá para entender não vira número", () => {
+    for (const x of ["abc", "1.50.0", "1,500,00", "-5", "1.5000", "", "R$"]) expect(lerReais(x), x).toBeNull();
+    expect(lerReais(-1)).toBeNull();
+  });
+  it("a venda grava o valor certo", () => {
+    expect(validarVenda({ soldOn: HOJE, amount: "1.500" }, HOJE)).toMatchObject({ ok: true, venda: { amount: 1500 } });
+    expect(validarVenda({ soldOn: HOJE, amount: "45.000" }, HOJE)).toMatchObject({ ok: true, venda: { amount: 45000 } });
+    expect(validarVenda({ soldOn: HOJE, amount: 1500.5 }, HOJE)).toMatchObject({ ok: true, venda: { amount: 1500.5 } });
+  });
+  it("antes de salvar o campo diz quanto vai gravar; sair do campo formata", () => {
+    expect(previaDoValor("1.500")).toMatchObject({ ok: true, valor: 1500 });
+    expect(previaDoValor("1.500")!.frase).toMatch(/^Vai salvar R\$\s1\.500,00$/);
+    expect(previaDoValor("45,5")!.frase).toMatch(/R\$\s45,50/);
+    expect(previaDoValor("1.50.0")).toMatchObject({ ok: false });
+    expect(previaDoValor("  ")).toBeNull();
+    expect(mascararReais("1500")).toBe("1.500,00");
+    expect(mascararReais("45.000")).toBe("45.000,00");
+    expect(mascararReais("abc")).toBe("abc");
   });
 });

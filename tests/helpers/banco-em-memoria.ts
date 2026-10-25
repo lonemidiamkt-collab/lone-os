@@ -22,6 +22,7 @@ export function bancoEmMemoria(opcoes: { unicas?: Record<string, string[]> } = {
     is(c: string, v: unknown) { this.filtros.push((r) => (r[c] ?? null) === v); return this; }
     in(c: string, vs: unknown[]) { this.filtros.push((r) => vs.includes(r[c])); return this; }
     gte(c: string, v: string) { this.filtros.push((r) => String(r[c] ?? "") >= v); return this; }
+    gt(c: string, v: string) { this.filtros.push((r) => String(r[c] ?? "") > v); return this; }
     or() { return this; }
     not() { return this; }
     order(c: string, o?: { ascending?: boolean }) { this.ordem = { col: c, asc: o?.ascending ?? true }; return this; }

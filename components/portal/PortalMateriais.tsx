@@ -3,10 +3,13 @@
 // Histórico do material enviado pelo cliente (N37): o que ele mandou por "Enviar material", se o time
 // já recebeu e onde foi usado (quando o time ligou o material a um post). Regras e campos em
 // lib/portal/materiais.ts — quem do time abriu e o caminho no storage não saem da rota.
+//
+// 24/10/2026 (item 1.11): o que o time ainda não abriu tem "Apagar" — o cliente que mandou o arquivo
+// errado tira sozinho, sem pedir no WhatsApp (DELETE /api/portal/[token]/upload).
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2, Clock, ExternalLink, File, FileSpreadsheet, FileText, Film, FolderOpen, Image as ImageIcon, type LucideIcon } from "lucide-react";
+import { CheckCircle2, Clock, ExternalLink, File, FileSpreadsheet, FileText, Film, FolderOpen, Image as ImageIcon, Loader2, Trash2, type LucideIcon } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 import { rotuloDia, rotuloDiaLongo, diaEmSP } from "@/lib/portal/formatos";
 import type { MaterialPortal, TipoMaterial } from "@/lib/portal/materiais";
@@ -32,6 +35,23 @@ export default function PortalMateriais({ token, versao = 0 }: {
   const [itens, setItens] = useState<MaterialPortal[] | null>(null);
   const [erro, setErro] = useState(false);
   const [todos, setTodos] = useState(false);
+  const [apagando, setApagando] = useState<string | null>(null);
+  const [erroApagar, setErroApagar] = useState<string | null>(null);
+
+  const apagar = async (m: MaterialPortal) => {
+    if (!window.confirm(`Apagar "${m.nome}"? O time ainda não abriu este arquivo, então ele sai daqui e do painel da equipe.`)) return;
+    setApagando(m.id); setErroApagar(null);
+    const r = await chamar(`/api/portal/${token}/upload?id=${encodeURIComponent(m.id)}`, undefined, { method: "DELETE" });
+    setApagando(null);
+    if (!r.ok) {
+      setErroApagar(r.erro ?? "Não consegui apagar agora. Tente de novo.");
+      // 409 = o time abriu no meio: mostra como recebido.
+      if (r.status === 409) setItens((l) => l?.map((x) => (x.id === m.id ? { ...x, recebido: true } : x)) ?? l);
+      if (r.status === 404) setItens((l) => l?.filter((x) => x.id !== m.id) ?? l);
+      return;
+    }
+    setItens((l) => l?.filter((x) => x.id !== m.id) ?? l);
+  };
 
   useEffect(() => {
     let vivo = true;
@@ -93,12 +113,20 @@ export default function PortalMateriais({ token, versao = 0 }: {
                     ) : (
                       <span className="text-muted-foreground">Ainda não usado em post</span>
                     )}
+                    {!m.recebido && (
+                      <button type="button" onClick={() => void apagar(m)} disabled={apagando !== null}
+                        aria-label={`Apagar ${m.nome}`}
+                        className="inline-flex items-center gap-1 text-muted-foreground hover:text-lone-danger disabled:opacity-50">
+                        {apagando === m.id ? <Loader2 size={12} className="animate-spin" aria-hidden /> : <Trash2 size={12} aria-hidden />} Apagar
+                      </button>
+                    )}
                   </p>
                 </div>
               </li>
             );
           })}
         </ul>
+        {erroApagar && <p role="alert" className="mt-2 text-lone-caption text-lone-danger">{erroApagar}</p>}
         {itens.length > INICIAL && (
           <button type="button" onClick={() => setTodos((v) => !v)}
             className="mt-3 min-h-[40px] w-full rounded-lg border border-border bg-card text-sm font-medium text-secondary-foreground hover:bg-accent">

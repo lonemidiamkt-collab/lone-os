@@ -31,3 +31,16 @@ export function removerDocDaLista(valorAtual: string | undefined | null, url: st
   const resto = listaDocs(valorAtual).filter((u) => u !== url);
   return resto.length ? resto.join(SEP_DOCS) : null;
 }
+
+/**
+ * O que a rota de upload grava na ficha (clients) depois de guardar o arquivo.
+ * POR QUE (24/10/2026, item 1.13). A rota gravava só a url nova: num campo de vários arquivos de um
+ * cliente JÁ ativo (a sincronia do rascunho só preenche o vazio da ficha), a ficha ficava com o
+ * último arquivo e as outras páginas do cartão CNPJ sumiam. Campo de vários acrescenta; o logo troca.
+ */
+export const COLUNAS_DE_VARIOS = new Set(["doc_contrato_social", "doc_identidade"]);
+
+export function valorAposUpload(coluna: string, atual: string | null | undefined, novaUrl: string): string {
+  if (!COLUNAS_DE_VARIOS.has(coluna)) return novaUrl;
+  return listaDocs(atual).includes(novaUrl) ? listaDocs(atual).join(SEP_DOCS) : adicionarDoc(atual, novaUrl);
+}
