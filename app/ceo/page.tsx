@@ -4,6 +4,7 @@ import Header from "@/components/Header";
 import { ETAPAS, ETAPAS_COMPROMETIDAS, ETAPAS_FINAIS, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
+import ErroCargaCards from "@/components/conteudo/ErroCargaCards";
 import { OperationalKpisPanel } from "@/components/ceo/OperationalKpisPanel";
 import CoberturaReunioes from "@/components/CoberturaReunioes";
 import CargaPorPessoa from "@/components/equipe/CargaPorPessoa";
@@ -393,6 +394,8 @@ export default function CEOPage() {
       <Header title="Área CEO" subtitle="Visão confidencial da operação" />
 
       <div className="p-6 space-y-6 animate-fade-in">
+        {/* Operação, desempenho e carga contam os cards: se não carregaram, avisa em vez de mostrar zero (25/10/2026). */}
+        <ErroCargaCards variante="faixa" />
         {/* KPIs */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="card">

@@ -17,6 +17,7 @@ import HojeDoDesigner from "@/components/design/HojeDoDesigner";
 import { useClientsStore } from "@/stores/useClientsStore";
 import EmptyState from "@/components/ui/EmptyState";
 import { useContentStore } from "@/stores/useContentStore";
+import ErroCargaCards from "@/components/conteudo/ErroCargaCards";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
@@ -167,6 +168,8 @@ export default function Hoje() {
 
   return (
     <div className="space-y-6">
+      {/* Cards que não carregaram não viram "nada para hoje" (25/10/2026, onda 5). */}
+      <ErroCargaCards variante="faixa" />
       {/* Filtros com contagem */}
       <div className={`grid grid-cols-2 gap-3 ${ehDesigner ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
         {FILTERS.map((f) => {

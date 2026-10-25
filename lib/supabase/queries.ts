@@ -455,11 +455,15 @@ export async function fetchContentCards(filter?: { socialMedia?: string; archive
   // Por padrão o board mostra só demandas ativas. archived=true traz só as arquivadas (tela "Arquivadas").
   query = filter?.archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
   const { data, error } = await query;
-  if (error) { console.error("[DB] fetchContentCards:", error); return []; }
+  // 25/10/2026 (onda 5 do erro recuperável): leitura que falha LANÇA — cards, comentários ou anexos. Devolver []
+  // fazia o raio-x dizer "nada travado" e o quadro abrir vazio (ou sem as artes, ou sem os comentários) como se
+  // fosse verdade. Quem chama decide como mostrar a falha (rota: 503; rotina: ok:false).
+  if (error) { console.error("[DB] fetchContentCards:", error); throw new Error(`Não consegui ler os cards (${error.message}).`); }
   // Also load comments for each card
   const cards = (data ?? []).map(snakeToContentCard);
   if (cards.length > 0) {
-    const { data: comments } = await db.from("card_comments").select("*").order("created_at");
+    const { data: comments, error: errComments } = await db.from("card_comments").select("*").order("created_at");
+    if (errComments) { console.error("[DB] fetchContentCards comments:", errComments.message); throw new Error(`Não consegui ler os comentários dos cards (${errComments.message}).`); }
     if (comments) {
       const commentMap = new Map<string, Array<{ id: string; author: string; role: Role; text: string; createdAt: string }>>();
       for (const c of comments) {
@@ -481,8 +485,8 @@ export async function fetchContentCards(filter?: { socialMedia?: string; archive
     }
 
     // Multi-arte: carrega os anexos de todos os cards em lote e define a capa.
-    // Resiliente: se a tabela ainda não existe (migration 044 não aplicada),
-    // o board continua funcionando com o image_url legado.
+    // Falha na leitura dos anexos LANÇA (25/10/2026): card sem as artes parecia "sem entrega" no quadro do
+    // designer e na fila. (A tolerância antiga era para a migration 044 ainda não aplicada; hoje o quadro depende dela.)
     // EM LOTES DE 60: com 100+ cards o `in.(…)` virava uma URL de 3,8 KB, o PostgREST devolvia
     // essa URL inteira no header Content-Location e o nginx respondia 502 ("upstream sent too big
     // header"). O erro caía neste console.error e o quadro abria SEM as artes — foi o "clico e a
@@ -501,6 +505,7 @@ export async function fetchContentCards(filter?: { socialMedia?: string; archive
     }
     if (attErr) {
       console.error("[DB] fetchContentCards attachments:", attErr.message);
+      throw new Error(`Não consegui ler as artes dos cards (${attErr.message}).`);
     } else if (atts) {
       const attMap = new Map<string, CardAttachment[]>();
       for (const a of atts) {
@@ -591,7 +596,9 @@ export async function fetchDesignRequests(filter?: { assignedSocialClients?: str
     query = query.or(`status.neq.done,updated_at.gte.${desde}`);
   }
   const { data, error } = await query;
-  if (error) { console.error("[DB] fetchDesignRequests:", error); return []; }
+  // 25/10/2026 (onda 5): lança como fetchContentCards — vem no mesmo pacote do quadro (/api/data/content), e []
+  // fazia o polling apagar a fila do designer enquanto ele trabalhava.
+  if (error) { console.error("[DB] fetchDesignRequests:", error); throw new Error(`Não consegui ler os pedidos de arte (${error.message}).`); }
   return (data ?? []).map(snakeToDesignRequest);
 }
 
@@ -1335,7 +1342,8 @@ export async function fetchClientGroupMessageLog(sinceDateKey: string): Promise<
 
 export async function fetchContentApprovals(): Promise<ContentApproval[]> {
   const { data, error } = await db.from("content_approvals").select("*").order("created_at", { ascending: false });
-  if (error) { console.error("[DB] fetchContentApprovals:", error); return []; }
+  // 25/10/2026 (onda 5): lança — a fila de aprovação vazia por falha parecia "nada para aprovar".
+  if (error) { console.error("[DB] fetchContentApprovals:", error); throw new Error(`Não consegui ler as aprovações dos cards (${error.message}).`); }
   return (data ?? []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
     cardId: row.card_id as string,

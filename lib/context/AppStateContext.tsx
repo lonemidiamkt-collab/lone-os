@@ -220,6 +220,9 @@ interface AppStateContextValue {
 
   // DB loading state
   dbReady: boolean;
+  /** A carga do banco falhou (25/10/2026): a tela diz que não carregou em vez de mostrar zero. */
+  dbErro: string | null;
+  recarregarDb: () => void;
 
   // Reset state — clears localStorage and reloads mock data
   resetState: () => void;
@@ -276,6 +279,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [dbReady, setDbReady] = useState(false);
+  // 25/10/2026 (onda 5): a carga do banco falhou (clientes e cards lançam desde as ondas 4 e 5). O /goals diz que não
+  // carregou e oferece "Tentar de novo" em vez de mostrar a produção do mês com zero.
+  const [dbErro, setDbErro] = useState<string | null>(null);
+  const [tentativaDb, setTentativaDb] = useState(0);
+  const recarregarDb = useCallback(() => setTentativaDb((n) => n + 1), []);
 
   // ─── Delivery Log (BI tracking) ──────────────────────────
   const logDelivery = useCallback((entry: Omit<import("@/lib/types").DeliveryLog, "id">) => {
@@ -330,6 +338,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     async function loadFromDb() {
+      setDbErro(null);
       try {
         // First load team members (needed for name/ID lookups)
         await db.fetchTeamMembers();
@@ -427,14 +436,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         setDbReady(true);
       } catch (err) {
         console.warn("[Lone OS] DB load failed, using localStorage/mock data:", err);
-        // Keep localStorage/mock data as fallback
+        // Keep localStorage/mock data as fallback — mas a tela fica sabendo que é falha (dbErro).
+        if (!cancelled) setDbErro(err instanceof Error ? err.message : "Não consegui carregar os dados.");
         setDbReady(true);
       }
     }
 
     loadFromDb();
     return () => { cancelled = true; };
-  }, [isAuthenticated, precisaDoLegado]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, precisaDoLegado, tentativaDb]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Realtime: content_cards ────────────────────────────────
   // Mantém o state sincronizado quando OUTRO user faz INSERT/UPDATE/DELETE.
@@ -1808,6 +1818,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         toggleReminder,
         updateReminder,
         dbReady,
+        dbErro,
+        recarregarDb,
         resetState,
       }}
     >

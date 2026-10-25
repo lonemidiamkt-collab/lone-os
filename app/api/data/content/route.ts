@@ -12,10 +12,21 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const socialMedia = url.searchParams.get("socialMedia") ?? undefined;
 
+  // 25/10/2026 (onda 5): fetchContentCards LANÇA quando não lê. Antes devolvia [] e esta rota respondia 200 com
+  // lista vazia: a tela abria "sem cards" e o polling de 20 s apagava o quadro de quem estava trabalhando. Agora
+  // 503 com o motivo — o store marca loadError (tela diz "não consegui carregar") e o polling mantém o que já tinha.
+  const falhou = (e: unknown) => {
+    const motivo = e instanceof Error ? e.message : "Não consegui ler os cards.";
+    console.error("[api/data/content]", motivo);
+    return NextResponse.json({ error: `${motivo} Tente de novo em instantes.` }, { status: 503 });
+  };
+
   // archived=1 → tela "Arquivadas": devolve só as demandas arquivadas (sem o resto do payload).
   if (url.searchParams.get("archived") === "1") {
-    const contentCards = await db.fetchContentCards({ ...(socialMedia ? { socialMedia } : {}), archived: true });
-    return NextResponse.json({ contentCards });
+    try {
+      const contentCards = await db.fetchContentCards({ ...(socialMedia ? { socialMedia } : {}), archived: true });
+      return NextResponse.json({ contentCards });
+    } catch (e) { return falhou(e); }
   }
 
   // VERSÃO BARATA (16/09): o Social e o Design fazem polling a cada 20 s por aba. Antes cada tick
@@ -26,13 +37,14 @@ export async function GET(req: NextRequest) {
 
   // `socialReports` saiu (Leva 5a): o relatório social manual nunca foi usado (0 na base); os
   // resultados de conteúdo são contados no Instagram (/api/conteudo/resultados).
-  const [contentCards, designRequests, contentApprovals] = await Promise.all([
-    db.fetchContentCards(socialMedia ? { socialMedia } : undefined),
-    db.fetchDesignRequests(),
-    db.fetchContentApprovals(),
-  ]);
-
-  return NextResponse.json({ contentCards, designRequests, contentApprovals, versao });
+  try {
+    const [contentCards, designRequests, contentApprovals] = await Promise.all([
+      db.fetchContentCards(socialMedia ? { socialMedia } : undefined),
+      db.fetchDesignRequests(),
+      db.fetchContentApprovals(),
+    ]);
+    return NextResponse.json({ contentCards, designRequests, contentApprovals, versao });
+  } catch (e) { return falhou(e); }
 }
 
 async function versaoDoConteudo(): Promise<string | null> {

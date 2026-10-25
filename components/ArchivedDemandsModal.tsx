@@ -41,24 +41,32 @@ export default function ArchivedDemandsModal({ workspace, onClose }: { workspace
   const [cards, setCards] = useState<ContentCard[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  // A LISTA não carregou (≠ erro ao desarquivar): mostra "Tentar de novo" (25/10/2026, onda 5).
+  const [falhouCarga, setFalhouCarga] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
   const clients = useClientsStore((s) => s.clients);
   const nameOf = (id: string) => clients.find((c) => c.id === id)?.name ?? "Cliente";
 
   useEffect(() => {
     let active = true;
+    setCards(null);
+    setFalhouCarga(false);
     const params = workspace && workspace !== "Todos" ? `&socialMedia=${encodeURIComponent(workspace)}` : "";
     chamar<{ contentCards?: ContentCard[] }>(`/api/data/content?archived=1${params}`).then((r) => {
       if (!active) return;
       if (!r.ok) {
         // Erro virava "Nenhuma demanda arquivada" — quem procurava um card achava que tinha sumido.
+        // Desde 25/10/2026 a rota responde 503 quando o banco não lê (antes vinha 200 com lista vazia).
         setErro(r.erro ?? "Não consegui carregar as demandas arquivadas.");
+        setFalhouCarga(true);
         setCards([]);
         return;
       }
+      setErro(null);
       setCards(r.data?.contentCards ?? []);
     });
     return () => { active = false; };
-  }, [workspace]);
+  }, [workspace, tentativa]);
 
   const unarchive = async (id: string) => {
     setBusyId(id);
@@ -97,7 +105,16 @@ export default function ArchivedDemandsModal({ workspace, onClose }: { workspace
           </DialogTitle>
         </DialogHeader>
         <div className="flex-1 overflow-auto p-4 space-y-2">
-          {erro && <p className="text-xs text-destructive px-1 pb-1" role="alert">{erro}</p>}
+          {erro && (
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-1" role="alert">
+              <p className="text-xs text-destructive">{erro}</p>
+              {falhouCarga && (
+                <Button size="sm" variant="outline" onClick={() => { setErro(null); setTentativa((n) => n + 1); }}>
+                  <RotateCcw size={12} aria-hidden="true" /> Tentar de novo
+                </Button>
+              )}
+            </div>
+          )}
           {cards === null ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 size={18} className="animate-spin" />

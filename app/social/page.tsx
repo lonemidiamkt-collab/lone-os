@@ -5,6 +5,7 @@ import { trilha } from "@/lib/obs/trilha";
 import Header from "@/components/Header";
 import EmptyState from "@/components/ui/EmptyState";
 import QuadroProducao from "@/components/conteudo/QuadroProducao";
+import ErroCargaCards from "@/components/conteudo/ErroCargaCards";
 import ContentCardModal from "@/components/ContentCardModal";
 import CsAgentInbox from "@/components/cs/CsAgentInbox";
 import DailyClosePanel from "@/components/social/DailyClosePanel";
@@ -23,7 +24,7 @@ import { slotsSegQuaSex, proximoSlot, chaveDaLinha } from "@/components/kanban/l
 import type { ContentCard, Client, Priority } from "@/lib/types";
 import { todaySP } from "@/lib/utils";
 import {
-  AlertTriangle, Calendar, Instagram, ImageIcon,
+  Calendar, Instagram, ImageIcon,
   UserPlus, X,
   Zap, BarChart2,
   Check, Plus, ChevronDown,
@@ -1072,16 +1073,6 @@ function AccessTab({ clients, clientAccess, onSave, isAdmin }: AccessTabProps) {
   );
 }
 
-function ErroDeCarga() {
-  return (
-    <div className="text-center py-12 px-4 rounded-xl border border-destructive/30 bg-destructive/10" role="alert">
-      <AlertTriangle size={24} className="mx-auto mb-3 text-destructive" />
-      <p className="text-sm font-medium text-destructive">Não consegui carregar os cards — tentando de novo</p>
-      <p className="text-xs text-muted-foreground mt-1">O quadro recarrega sozinho assim que a conexão voltar.</p>
-    </div>
-  );
-}
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function SocialPage() {
@@ -1809,7 +1800,7 @@ export default function SocialPage() {
 
         {/* ── INBOX DE APROVAÇÃO ─────────────────────────────────────────── */}
         {activeTab === "aprovacao" && (
-          contentLoadError ? <ErroDeCarga /> : (
+          contentLoadError ? <ErroCargaCards /> : (
             <ApprovalQueueTab
               contentCards={filteredCards}
               currentUser={currentUser}
