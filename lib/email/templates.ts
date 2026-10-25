@@ -67,27 +67,27 @@ export function welcomeEmail(clientName: string, companyName: string, serviceLab
   const service = serviceLabel || "marketing digital";
 
   return {
-    subject: `Bem-vindo a Lone Midia, ${companyName}!`,
+    subject: `Bem-vindo à Lone Mídia, ${companyName}!`,
     html: baseLayout(`
       <!-- Welcome Banner -->
       <div style="border-radius:12px;overflow:hidden;margin-bottom:28px;">
-        <img src="${WELCOME_BANNER_URL}" alt="Muito Obrigado - Lone Midia agradece pela confianca e preferencia" style="width:100%;height:auto;display:block;border-radius:12px;" />
+        <img src="${WELCOME_BANNER_URL}" alt="Muito Obrigado - Lone Mídia agradece pela confiança e preferencia" style="width:100%;height:auto;display:block;border-radius:12px;" />
       </div>
 
       <p style="color:${TEXT_PRIMARY};font-size:14px;line-height:1.8;margin:0 0 16px;">
-        Ola, ${clientName}! Tudo bem?
+        Olá, ${clientName}! Tudo bem?
       </p>
 
       <p style="color:${TEXT_SECONDARY};font-size:13px;line-height:1.8;margin:0 0 16px;">
-        Quero comecar te agradecendo pela confianca em escolher a <strong style="color:${TEXT_PRIMARY};">Lone Midia</strong> para cuidar do ${service} da <strong style="color:${TEXT_PRIMARY};">${companyName}</strong>. Ficamos muito felizes em iniciar essa parceria e em poder contribuir diretamente com o crescimento do seu negocio.
+        Quero começar te agradecendo pela confiança em escolher a <strong style="color:${TEXT_PRIMARY};">Lone Mídia</strong> para cuidar do ${service} da <strong style="color:${TEXT_PRIMARY};">${companyName}</strong>. Ficamos muito felizes em iniciar essa parceria e em poder contribuir diretamente com o crescimento do seu negócio.
       </p>
 
       <p style="color:${TEXT_SECONDARY};font-size:13px;line-height:1.8;margin:0 0 16px;">
-        Nosso objetivo a partir de agora e estruturar estrategias focadas em atrair clientes qualificados e fortalecer ainda mais a presenca da ${companyName} no digital, sempre alinhando as acoes com o momento atual do negocio.
+        Nosso objetivo a partir de agora é estruturar estratégias focadas em atrair clientes qualificados e fortalecer ainda mais a presença da ${companyName} no digital, sempre alinhando as ações com o momento atual do negócio.
       </p>
 
       <p style="color:${TEXT_SECONDARY};font-size:13px;line-height:1.8;margin:0 0 24px;">
-        Nos proximos dias vamos avancar com as configuracoes iniciais, analises estrategicas e organizacao das primeiras acoes. Qualquer novidade ou material que possa ajudar (promocoes, produtos de destaque, videos ou fotos), pode nos enviar por aqui tambem.
+        Nos próximos dias vamos avançar com as configurações iniciais, análises estratégicas e organização das primeiras ações. Qualquer novidade ou material que possa ajudar (promoções, produtos de destaque, vídeos ou fotos), pode nos enviar por aqui também.
       </p>
 
       <!-- Divider -->
@@ -98,13 +98,13 @@ export function welcomeEmail(clientName: string, companyName: string, serviceLab
       </p>
 
       <p style="color:${TEXT_PRIMARY};font-size:13px;margin:16px 0 2px;">
-        Abracos,
+        Abraços,
       </p>
       <p style="color:${TEXT_PRIMARY};font-size:14px;font-weight:600;margin:0;">
         Roberto Lino
       </p>
       <p style="color:${BRAND_COLOR};font-size:12px;margin:2px 0 0;">
-        Lone Midia
+        Lone Mídia
       </p>
     `),
   };

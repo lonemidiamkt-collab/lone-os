@@ -18,7 +18,7 @@ export { avisoDoEmail } from "./boas-vindas-resultado";
 
 const SERVICO: Record<string, string> = {
   lone_growth: "marketing digital",
-  assessoria_trafego: "trafego pago",
+  assessoria_trafego: "tráfego pago",
   assessoria_social: "social media",
   assessoria_design: "design",
 };
