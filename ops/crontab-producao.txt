@@ -76,6 +76,8 @@
 0 11 * * 1-5 /opt/loneos/scripts/cron-call.sh cs-manha POST >> /var/log/loneos-cs-manha.log 2>&1
 30 12 * * 1 /opt/loneos/scripts/cron-call.sh cs-risco-semanal POST >> /var/log/loneos-cs-risco-semanal.log 2>&1
 0 11-23/2 * * * /opt/loneos/scripts/cron-call.sh sync-saldos POST >> /var/log/loneos-sync-saldos.log 2>&1
+# Alarmes de conversa e verba (25/10/2026): 5 min depois da leitura de saldo
+5 11-23/2 * * * /opt/loneos/scripts/cron-call.sh alarmes-trafego POST >> /var/log/loneos-alarmes-trafego.log 2>&1
 5 * * * * /opt/loneos/scripts/cron-call.sh automacoes/vigia POST >> /var/log/loneos-vigia.log 2>&1
 15 12-20 * * 1-5 /opt/loneos/scripts/cron-call.sh cs-nps POST >> /var/log/loneos-cs-nps.log 2>&1
 # Leva 7D (26/09/2026): revisão semanal de operação (nasce desligada na Central) e fechamento do mês das metas
