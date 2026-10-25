@@ -4,11 +4,16 @@
 // Mostra o que o cliente escreveu, o que o agente entendeu e o briefing do card; aceita um ajuste
 // antes de criar. Um item do feed pode trazer vários pedidos do mesmo cliente (agregados): decide um
 // por um, e quando não sobra nenhum pendente o item sai do feed.
+//
+// 25/10/2026 (auditoria 11.4): "Descartar pedido" tem DESFAZER por alguns segundos (o pedido descartado
+// fica na lista com o botão; o item só sai do feed depois). A rota recusa designer e comercial e grava
+// quem descartou.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { chamar } from "@/lib/api/chamar";
 import { dataHoraCurta } from "@/components/client/ficha/rotulos";
+import { DESFAZER_DESCARTE_S } from "@/lib/cs/decidir-demanda";
 
 interface Demanda {
   codigo: string; cliente: string; tipo: string; resumo: string; mensagem: string; briefing: string;
@@ -32,6 +37,13 @@ export default function DecidirDemanda({ codigos, aoTerminar, aoFechar }: {
   const [erro, setErro] = useState<string | null>(null);
   const [ajuste, setAjuste] = useState<Record<string, string>>({});
   const [ocupado, setOcupado] = useState<string | null>(null);
+  // Descartados há pouco: ficam com "Desfazer" por alguns segundos (codigo → id do pedido).
+  const [descartados, setDescartados] = useState<Record<string, string>>({});
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  useEffect(() => {
+    const t = timers.current;
+    return () => { Object.values(t).forEach(clearTimeout); };
+  }, []);
 
   useEffect(() => {
     let vivo = true;
@@ -46,20 +58,59 @@ export default function DecidirDemanda({ codigos, aoTerminar, aoFechar }: {
 
   const decidir = async (d: Demanda, acao: "confirmar" | "descartar") => {
     setOcupado(d.codigo);
-    const r = await chamar<{ jaDecidida?: string; ok?: boolean }>("/api/cs/decide", { codigo: d.codigo, acao, ajuste: ajuste[d.codigo]?.trim() || undefined });
+    const r = await chamar<{ jaDecidida?: string; ok?: boolean; id?: string }>("/api/cs/decide", { codigo: d.codigo, acao, ajuste: ajuste[d.codigo]?.trim() || undefined });
     setOcupado(null);
     if (!r.ok) { toast.error(`Não consegui ${acao === "confirmar" ? "criar o card" : "descartar"}: ${r.erro}`); return; }
-    toast.success(r.data?.jaDecidida ? `Já estava decidida (${r.data.jaDecidida}).` : acao === "confirmar" ? "Card criado." : "Pedido descartado.");
-    const resto = (demandas ?? []).filter((x) => x.codigo !== d.codigo);
-    setDemandas(resto);
-    if (resto.length === 0) aoTerminar();
+    if (acao === "descartar" && !r.data?.jaDecidida && r.data?.id) {
+      // Fica na lista, riscado, com "Desfazer". Passado o tempo, sai de vez.
+      const id = r.data.id;
+      setDescartados((x) => ({ ...x, [d.codigo]: id }));
+      timers.current[d.codigo] = setTimeout(() => sair(d.codigo), DESFAZER_DESCARTE_S * 1000);
+      return;
+    }
+    toast.success(r.data?.jaDecidida ? `Já estava decidida (${r.data.jaDecidida}).` : "Card criado.");
+    sair(d.codigo);
+  };
+
+  // Tira da lista; quando não sobra nenhum (nem descartado esperando o Desfazer), o item sai do feed.
+  const sair = (codigo: string) => {
+    clearTimeout(timers.current[codigo]);
+    delete timers.current[codigo];
+    setDescartados((x) => { const { [codigo]: _, ...resto } = x; void _; return resto; });
+    setDemandas((lista) => {
+      const resto = (lista ?? []).filter((x) => x.codigo !== codigo);
+      if (resto.length === 0) setTimeout(aoTerminar, 0);
+      return resto;
+    });
+  };
+
+  const desfazer = async (codigo: string) => {
+    const id = descartados[codigo];
+    if (!id) return;
+    clearTimeout(timers.current[codigo]);
+    setOcupado(codigo);
+    const r = await chamar<{ ok?: boolean }>("/api/cs/decide", { id, acao: "reabrir" });
+    setOcupado(null);
+    if (!r.ok) {
+      toast.error(`Não consegui desfazer: ${r.erro}`);
+      timers.current[codigo] = setTimeout(() => sair(codigo), DESFAZER_DESCARTE_S * 1000);
+      return;
+    }
+    setDescartados((x) => { const { [codigo]: _, ...resto } = x; void _; return resto; });
+    toast.success("Pedido de volta para pendente.");
   };
 
   return (
     <div className="mt-3 space-y-3 rounded-lg border border-border bg-background p-3" role="region" aria-label="Decidir o pedido">
       {erro && <p className="text-xs text-destructive">{erro}</p>}
       {!demandas && !erro && <div className="h-16 animate-pulse rounded-md bg-muted" />}
-      {demandas?.map((d) => (
+      {demandas?.map((d) => descartados[d.codigo] ? (
+        <div key={d.codigo} className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3 last:border-0 last:pb-0" role="status">
+          <p className="text-xs text-muted-foreground"><span className="line-through">{d.resumo || d.tipo}</span> — pedido descartado.</p>
+          <button onClick={() => void desfazer(d.codigo)} disabled={ocupado === d.codigo}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted disabled:opacity-50">Desfazer</button>
+        </div>
+      ) : (
         <div key={d.codigo} className="space-y-2 border-b border-border pb-3 last:border-0 last:pb-0">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="text-sm font-medium text-foreground">{d.resumo || d.tipo}</p>

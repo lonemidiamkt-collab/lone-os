@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Secao, Vazio, Erro, ChipEstagio, ChipClasse, fmtDataHora, fmtExtenso, haQuanto } from "./ui";
 import type { Dash } from "./VisaoGeral";
 import type { Linha } from "./Prospects";
+import { resumoDaAbordagem, resumoDoRanking, textoConfirmarDisparo } from "@/lib/prospeccao/resumo-disparo";
 
 function useDash(versao: number) {
   const [d, setD] = useState<Dash | null>(null);
@@ -23,15 +24,25 @@ export function FilaDoDia({ abrir, versao, onChange }: { abrir: (id: string) => 
   const { d, erro, carregar } = useDash(versao);
   const [rodando, setRodando] = useState<string | null>(null);
   const [candidatos, setCandidatos] = useState<Linha[] | null>(null);
-  useEffect(() => { void (async () => { const r = await chamar<{ prospects: Linha[] }>("/api/prospeccao/prospects?estagio=icp_aprovado,enriquecido&limite=100"); if (r.ok) setCandidatos(r.data?.prospects ?? []); })(); }, [versao]);
+  const [erroCandidatos, setErroCandidatos] = useState<string | null>(null);
+  useEffect(() => { void (async () => {
+    const r = await chamar<{ prospects: Linha[] }>("/api/prospeccao/prospects?estagio=icp_aprovado,enriquecido&limite=100");
+    // Falha na leitura não é "Aguardando ranking (0)".
+    if (!r.ok) { setErroCandidatos(r.erro ?? "Não consegui carregar os candidatos."); setCandidatos(null); return; }
+    setErroCandidatos(null); setCandidatos(r.data?.prospects ?? []);
+  })(); }, [versao]);
 
+  // 25/10/2026 (auditoria 14.1): o aviso mostra o que a rota fez de verdade (a tela lia `pulado`, a rota
+  // devolve `pulados[]` e `abordagens[].ok` — piloto desligado aparecia como "Abordagem: ok"). E o disparo
+  // manual pergunta antes, dizendo a quem vai.
   const rodar = async (rota: string, rotulo: string) => {
+    if (rotulo === "Abordagem" && !window.confirm(textoConfirmarDisparo(d?.fila_lista[0] ?? null))) return;
     setRodando(rotulo);
     const r = await chamar<Record<string, unknown>>(`/api/system/${rota}`, {});
     setRodando(null);
-    if (!r.ok) { toast.error(r.erro ?? "Falhou"); return; }
-    const pulado = r.data?.pulado as string | undefined;
-    toast[pulado ? "warning" : "success"](pulado ? `${rotulo}: ${pulado}` : `${rotulo}: ok`);
+    if (!r.ok) { toast.error(`${rotulo}: ${r.erro ?? "falhou"}`); return; }
+    const resumo = rotulo === "Abordagem" ? resumoDaAbordagem(r.data as Parameters<typeof resumoDaAbordagem>[0]) : resumoDoRanking(r.data);
+    toast[resumo.tom === "sucesso" ? "success" : resumo.tom === "aviso" ? "warning" : "error"](`${rotulo}: ${resumo.texto}`);
     await carregar(); onChange();
   };
 
@@ -57,8 +68,8 @@ export function FilaDoDia({ abrir, versao, onChange }: { abrir: (id: string) => 
           </ol>
         )}
       </Secao>
-      <Secao titulo={`Aguardando ranking (${candidatos?.length ?? 0})`}>
-        {!candidatos ? <p className="text-lone-body text-muted-foreground">Carregando…</p> : candidatos.length === 0 ? <Vazio texto="Nenhum candidato enriquecido. Rode a descoberta em Configuração." /> : (
+      <Secao titulo={erroCandidatos ? "Aguardando ranking" : `Aguardando ranking (${candidatos?.length ?? 0})`}>
+        {erroCandidatos ? <Erro texto={erroCandidatos} /> : !candidatos ? <p className="text-lone-body text-muted-foreground">Carregando…</p> : candidatos.length === 0 ? <Vazio texto="Nenhum candidato enriquecido. Rode a descoberta em Configuração." /> : (
           <ul className="divide-y divide-border">
             {candidatos.map((p) => (
               <li key={p.id} className="flex cursor-pointer items-center gap-3 py-2 hover:bg-accent/50" onClick={() => abrir(p.id)}>

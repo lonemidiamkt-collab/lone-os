@@ -140,10 +140,11 @@ function Distribuicao({ linhas, filtro, aoFiltrar }: {
 
 // ── Fila ────────────────────────────────────────────────────────────────────
 
-function LinhaCarteira({ l, aoMudarAcao, aoMudarRel }: {
+function LinhaCarteira({ l, aoMudarAcao, aoMudarRel, aoRecarregar }: {
   l: LinhaSaude;
   aoMudarAcao: (id: string, pa: ProximaAcao) => void;
   aoMudarRel: (id: string, r: NonNullable<LinhaSaude["relacionamento"]>) => void;
+  aoRecarregar: () => void;
 }) {
   const [aberto, setAberto] = useState(false);
   const barra = l.severidade === "critical" ? "bg-lone-danger" : l.severidade === "warning" ? "bg-lone-warning" : null;
@@ -229,6 +230,18 @@ function LinhaCarteira({ l, aoMudarAcao, aoMudarRel }: {
               <p className="mb-3 text-lone-h2 tracking-tight text-foreground">Ficha de relacionamento</p>
               <FichaRelacionamento clientId={l.id} nome={l.nome} relacionamento={l.relacionamento}
                 onSalvo={(r) => aoMudarRel(l.id, r)} />
+            </div>
+          )}
+          {/* 25/10/2026 (11.3): sem ter lido a ficha, ela não abre — vazia e editável, o "Salvar" apagava as notas. */}
+          {l.relacionamentoNaoLido && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-lone-warning-border bg-lone-warning-bg p-4">
+              <AlertTriangle size={15} className="shrink-0 text-lone-warning" aria-hidden />
+              <p className="flex-1 text-lone-caption text-lone-warning">
+                Não consegui ler a ficha de relacionamento deste cliente. Ela fica travada até carregar, para nada ser apagado.
+              </p>
+              <button type="button" onClick={aoRecarregar} className="text-xs font-medium text-lone-warning underline-offset-4 hover:underline">
+                Tentar de novo
+              </button>
             </div>
           )}
         </div>
@@ -509,7 +522,7 @@ export default function SaudeDaCarteira() {
             />
           ) : (
             <ul className="space-y-2" aria-label="Clientes, do mais grave para o menos grave">
-              {fila.map((l) => <LinhaCarteira key={l.id} l={l} aoMudarAcao={aoMudarAcao} aoMudarRel={aoMudarRel} />)}
+              {fila.map((l) => <LinhaCarteira key={l.id} l={l} aoMudarAcao={aoMudarAcao} aoMudarRel={aoMudarRel} aoRecarregar={() => void carregar()} />)}
             </ul>
           )}
 

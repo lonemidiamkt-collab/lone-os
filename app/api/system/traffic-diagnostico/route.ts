@@ -32,11 +32,19 @@ export async function POST(req: NextRequest) {
   // piorar — lib/traffic/hoje/visto.ts). O texto de cada item não muda; só some o item visto.
   const agora = new Date();
   const { mapa: vistos } = await carregarVistos();
-  const d = filtrarDiagnosticoVisto(await montarDiagnostico(agora), vistos, agora);
+  // 25/10/2026 (11.6): sem os clientes não há diagnóstico — falha geral responde ok:false (antes saía
+  // "0 contas, nada fora do lugar hoje"). Fonte parcial: o PDF sai com as seções marcadas ⚠ e a rotina
+  // responde ok:false com as falhas, para a Central de Automações mostrar.
+  let bruto: Awaited<ReturnType<typeof montarDiagnostico>>;
+  try { bruto = await montarDiagnostico(agora); } catch (e) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+  }
+  const d = filtrarDiagnosticoVisto(bruto, vistos, agora);
+  const falhas = d.falhas ?? [];
 
   if (dry) {
     return NextResponse.json({
-      ok: true, data: d.data, contas: d.contasAtivas, gasto_ontem: Math.round(d.gastoOntem),
+      ok: falhas.length === 0, falhas, data: d.data, contas: d.contasAtivas, gasto_ontem: d.gastoOntem === null ? null : Math.round(d.gastoOntem),
       funcoes: d.funcoes.map((f) => ({
         nome: f.nome, itens: f.itens.length,
         topo: f.itens.slice(0, 3).map((i) => `${i.cliente}: ${i.achado.slice(0, 90)}`),
@@ -71,5 +79,8 @@ export async function POST(req: NextRequest) {
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: 500 });
 
   const total = d.funcoes.reduce((s, f) => s + f.itens.length, 0);
-  return NextResponse.json({ ok: true, enviado: true, data: d.data, pontos: total });
+  return NextResponse.json({
+    ok: falhas.length === 0, enviado: true, data: d.data, pontos: total,
+    ...(falhas.length ? { falhas, error: `diagnóstico parcial: não li ${falhas.join(", ")}` } : {}),
+  });
 }

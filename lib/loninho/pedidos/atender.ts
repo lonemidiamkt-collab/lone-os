@@ -91,18 +91,40 @@ export async function atenderPedido(p: PedidoLido, ctx: Contexto): Promise<void>
     : `${primeiro}, ${saudacao(agora)}! Montando o PDF de *${titulo.toLowerCase()}* — chega em instantes.`;
   await csSendGroupText(ctx.groupJid, ack, undefined, META).catch(() => null);
 
+  // 25/10/2026 (auditoria 11.9): cada envio é conferido. Antes o texto e a reserva saíam "no escuro": se o
+  // WhatsApp recusasse, quem pediu ficava esperando o "chega em instantes" para sempre. Agora o PDF que
+  // não saiu vira texto (dizendo por quê) e, se nem o texto sair, o aviso vai para o sino de quem pediu.
+  const avisarNoSino = async (oQue: string, erro: string | undefined) => {
+    console.error(`[loninho/pedido] ${p.id}: ${oQue} não chegou no grupo:`, erro);
+    try {
+      const { supabaseAdmin } = await import("@/lib/supabase/server");
+      await supabaseAdmin.from("notifications").insert({
+        type: "system", target_user: ctx.autor.nome, read: false,
+        title: `Não consegui te mandar ${oQue} no WhatsApp`,
+        body: `O pedido "${titulo}" ficou pronto, mas o envio falhou (${(erro ?? "erro").slice(0, 120)}). Peça de novo ao Loninho em alguns minutos.`,
+      });
+    } catch { /* o log acima já registrou */ }
+  };
+
   void (async () => {
     try {
       const r = await montar(p, ctx, agora);
-      if ("texto" in r) { await csSendGroupText(ctx.groupJid, r.texto, undefined, META); return; }
+      if ("texto" in r) {
+        const env = await csSendGroupText(ctx.groupJid, r.texto, undefined, META);
+        if (!env.ok && !env.incerto) await avisarNoSino("a resposta", env.error);
+        return;
+      }
       const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
       const pdf = await htmlToPdf(r.html);
+      let porque = "o PDF falhou agora";
       if (pdf.ok && pdf.buffer) {
         const env = await csSendGroupDocument(ctx.groupJid, pdf.buffer.toString("base64"), r.arquivo, r.legenda);
         if (env.ok) return;
+        porque = env.incerto ? "o WhatsApp não confirmou o envio do PDF; se ele chegou, ignore este" : "não consegui mandar o PDF";
       }
       // PDF falhou: o conteúdo ainda chega, em texto.
-      await csSendGroupText(ctx.groupJid, `${r.textoReserva}\n\n_(O PDF falhou agora; mandei em texto.)_`, undefined, META);
+      const reserva = await csSendGroupText(ctx.groupJid, `${r.textoReserva}\n\n_(${porque} — mandei em texto.)_`, undefined, META);
+      if (!reserva.ok && !reserva.incerto) await avisarNoSino(`o PDF de ${titulo.toLowerCase()}`, reserva.error);
     } catch (e) {
       console.error("[loninho/pedido]", p.id, e instanceof Error ? e.message : e);
       await csSendGroupText(ctx.groupJid, `${primeiro}, não consegui montar o relatório agora (${e instanceof Error ? e.message.slice(0, 80) : "erro"}). Tenta de novo em alguns minutos?`, undefined, META).catch(() => null);

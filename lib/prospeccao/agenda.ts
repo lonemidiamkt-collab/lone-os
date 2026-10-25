@@ -107,8 +107,13 @@ export interface ReuniaoMarcada {
 }
 
 /**
- * Marca a reunião: revalida → Google (se conectado) → meetings → crm_leads → prospect → estágio.
+ * Marca a reunião: revalida → meetings → Google (se conectado) → crm_leads → prospect → estágio.
  * Não manda mensagem nenhuma — quem chama confirma ao prospect com o que voltou daqui.
+ *
+ * 25/10/2026 (auditoria de erro recuperável, 14.3): a ordem era Google → meetings. O evento é criado com
+ * sendUpdates=all, então o CONVITE saía na hora; se a gravação em meetings falhasse depois, a tela
+ * mostrava erro e "tentar de novo" mandava o 2º convite. Agora grava primeiro; o Google só é chamado com
+ * a reunião já no banco, e se o Google falhar a linha é desfeita (nada saiu, pode tentar de novo).
  */
 export async function marcarReuniao(p: ProspectRow, cfg: ProspectConfig, r: { inicioIso: string; tipo: "visita" | "online"; resumo?: string | null; por?: string }): Promise<ReuniaoMarcada> {
   const livre = await horarioLivre(cfg, r.inicioIso);
@@ -119,6 +124,21 @@ export async function marcarReuniao(p: ProspectRow, cfg: ProspectConfig, r: { in
   const descricao = descricaoDoEvento(p, r.tipo, r.resumo ?? null);
 
   let google_event_id: string | null = null, meet_url: string | null = null, sem_link = false;
+
+  // 1º o banco: sem a reunião gravada, nenhum convite sai.
+  const { data: m, error: em } = await supabaseAdmin.from("meetings").insert({
+    client_id: null, prospect_id: p.id, title: titulo, description: descricao,
+    meeting_type: r.tipo === "visita" ? "comercial_visita" : "comercial_online",
+    start_at: ini.toISOString(), end_at: fim.toISOString(),
+    location: r.tipo === "visita" ? (p.endereco ?? p.cidade ?? "Presencial") : "Google Meet",
+    estado: "agendada", status: "scheduled", responsavel: RESPONSAVEL_LONE, created_by: r.por ?? "SDR_AI",
+    confirmado_em: new Date().toISOString(), confirmado_por: p.decisor_nome ? nomeProprio(p.decisor_nome) : "prospect",
+    google_event_id: null, meet_url: null, link_reuniao: null,
+  }).select("id").single();
+  if (em) return { ok: false, error: `Não gravei a reunião (nenhum convite saiu): ${em.message}` };
+  const meetingId = (m as { id: string }).id;
+
+  // Depois o Google (o convite sai aqui). Falhou → desfaz a linha: nada foi marcado, pode tentar de novo.
   const g = await estadoGoogle();
   if (g.conectado) {
     const ev = await criarEvento({
@@ -127,23 +147,18 @@ export async function marcarReuniao(p: ProspectRow, cfg: ProspectConfig, r: { in
       convidados: p.email ? [p.email] : [],
       meet: r.tipo === "online",
     });
-    if (!ev.ok) return { ok: false, error: ev.error };
+    if (!ev.ok) {
+      const { error: eDel } = await supabaseAdmin.from("meetings").delete().eq("id", meetingId);
+      if (eDel) console.error("[prospeccao/agenda] não desfiz a reunião depois do Google falhar:", eDel.message);
+      return { ok: false, error: `O Google recusou o evento (${ev.error}) — nada foi marcado.` };
+    }
     google_event_id = ev.evento!.event_id;
     meet_url = ev.evento!.meet_url;
+    const { error: eUp } = await supabaseAdmin.from("meetings").update({ google_event_id, meet_url, link_reuniao: meet_url }).eq("id", meetingId);
+    if (eUp) console.error("[prospeccao/agenda] evento criado, mas não liguei o Google à reunião:", eUp.message);
   } else if (r.tipo === "online") {
     sem_link = true;
   }
-
-  const { data: m, error: em } = await supabaseAdmin.from("meetings").insert({
-    client_id: null, prospect_id: p.id, title: titulo, description: descricao,
-    meeting_type: r.tipo === "visita" ? "comercial_visita" : "comercial_online",
-    start_at: ini.toISOString(), end_at: fim.toISOString(),
-    location: r.tipo === "visita" ? (p.endereco ?? p.cidade ?? "Presencial") : "Google Meet",
-    estado: "agendada", status: "scheduled", responsavel: RESPONSAVEL_LONE, created_by: r.por ?? "SDR_AI",
-    confirmado_em: new Date().toISOString(), confirmado_por: p.decisor_nome ? nomeProprio(p.decisor_nome) : "prospect",
-    google_event_id, meet_url, link_reuniao: meet_url,
-  }).select("id").single();
-  if (em) return { ok: false, error: `meetings: ${em.message}` };
 
   let crm_lead_id: string | null = p.crm_lead_id;
   try {
@@ -171,7 +186,7 @@ export async function marcarReuniao(p: ProspectRow, cfg: ProspectConfig, r: { in
   }
 
   const atual = await atualizarProspect(p.id, {
-    reuniao_em: ini.toISOString(), reuniao_tipo: r.tipo, meeting_id: (m as { id: string }).id,
+    reuniao_em: ini.toISOString(), reuniao_tipo: r.tipo, meeting_id: meetingId,
     google_event_id, meet_url, crm_lead_id,
     ...(sem_link ? { precisa_humano: true, motivo_humano: "Reunião online marcada sem Google conectado: enviar o link do Meet ao prospect" } : {}),
     contexto_comercial: { ...(p.contexto_comercial ?? {}), resumo: r.resumo ?? p.contexto_comercial?.resumo },

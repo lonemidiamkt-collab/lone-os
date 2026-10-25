@@ -47,6 +47,13 @@ export function diagnosticoPdfHtml(d: Diagnostico, logo: string): string {
     </div>`;
 
   const secao = (f: Diagnostico["funcoes"][0]) => {
+    // 25/10/2026 (11.6): fonte que não foi lida não é "nada encontrado".
+    if (f.semDado) {
+      return `<div style="margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;color:${ALERTA}">⚠ ${esc(f.nome)}</div>
+        <div style="font-size:11px;color:${SUAVE}">${esc(f.pergunta)} — ${esc(f.semDado)}</div>
+      </div>`;
+    }
     if (!f.itens.length) {
       // Seção vazia é boa notícia e merece uma linha — some-la faria parecer que não foi verificada.
       return `<div style="margin-bottom:14px">
@@ -83,13 +90,19 @@ export function diagnosticoPdfHtml(d: Diagnostico, logo: string): string {
 
     <h1 style="font-size:24px;letter-spacing:-.02em;margin-bottom:5px">O que precisa da sua atenção</h1>
     <p style="color:${SUAVE};font-size:12.5px;margin-bottom:18px">
-      ${d.contasAtivas} contas · ${esc(brl(d.gastoOntem))} investidos ontem · ${totalItens} pontos encontrados
+      ${d.contasAtivas} contas · ${d.gastoOntem === null ? "gasto de ontem não lido" : `${esc(brl(d.gastoOntem))} investidos ontem`} · ${totalItens} pontos encontrados
     </p>
-    ${d.comPolitica < d.contasAtivas ? `
+    ${d.falhas?.length ? `
+      <div style="background:${CARTAO};border:1px solid ${LINHA};border-left:3px solid ${ALERTA};
+                  border-radius:0 8px 8px 0;padding:9px 14px;margin-bottom:16px;font-size:11.5px;color:${ALERTA}">
+        Não consegui ler ${esc(d.falhas.join(", "))}. As seções marcadas com ⚠ não foram verificadas hoje —
+        não quer dizer que está tudo bem nelas.
+      </div>` : ""}
+    ${d.comPolitica !== null && d.comPolitica < d.contasAtivas ? `
       <div style="background:${CARTAO};border:1px solid ${LINHA};border-left:3px solid ${SUAVE};
                   border-radius:0 8px 8px 0;padding:9px 14px;margin-bottom:16px;font-size:11px;color:${SUAVE}">
         ${d.comPolitica} de ${d.contasAtivas} contas têm meta de custo definida. Para as outras
-        ${d.contasAtivas - d.comPolitica}, este relatório compara o cliente só com ele mesmo — sabe dizer
+        ${d.contasAtivas - (d.comPolitica ?? 0)}, este relatório compara o cliente só com ele mesmo — sabe dizer
         o que mudou, não se o resultado é bom.
       </div>` : ""}
 
@@ -118,12 +131,20 @@ export function diagnosticoPdfHtml(d: Diagnostico, logo: string): string {
 export function legendaDiagnostico(d: Diagnostico): string {
   const itens = d.funcoes.flatMap((f) => f.itens);
   const criticos = itens.filter((i) => i.prioridade >= 80);
-  if (!itens.length) return `📊 *Diagnóstico de tráfego* — ${d.contasAtivas} contas, nada fora do lugar hoje.`;
+  // 25/10/2026 (11.6): com fonte que não foi lida, "nada fora do lugar" seria mentira.
+  const aviso = d.falhas?.length ? `
+⚠️ Não consegui ler ${d.falhas.join(", ")} — parte do diagnóstico não foi verificada.` : "";
+  if (!itens.length) {
+    return d.falhas?.length
+      ? `📊 *Diagnóstico de tráfego* — ${d.contasAtivas} contas, nenhum ponto nas partes que consegui ler.${aviso}`
+      : `📊 *Diagnóstico de tráfego* — ${d.contasAtivas} contas, nada fora do lugar hoje.`;
+  }
 
   const topo = criticos.slice(0, 3).map((i) => `• ${i.cliente}`).join("\n");
   return [
     `📊 *Diagnóstico de tráfego* — ${itens.length} pontos, ${criticos.length} pedindo ação hoje.`,
     topo ? `\n${topo}` : "",
     "\nO PDF tem o que fazer em cada um.",
+    aviso,
   ].filter(Boolean).join("");
 }

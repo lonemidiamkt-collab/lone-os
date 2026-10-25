@@ -7,6 +7,13 @@
 
 import type { ProspectRow } from "./tipos";
 import { gravarMensagem } from "./db";
+import { falhaDeExcecao, falhaDeResposta } from "@/lib/whatsapp/desfecho-envio";
+
+// 25/10/2026 (auditoria de erro recuperável, 14.2): timeout e 5xx genérico não querem dizer "não saiu" —
+// querem dizer "a resposta não voltou". Antes contavam como falha: na mensagem manual o texto ficava no
+// campo e a pessoa reenviava (o prospect recebia 2x); na automática o tick seguinte reenviava. Agora o
+// envio devolve `incerto` (mesma regra de lib/whatsapp/desfecho-envio.ts, a do 5.2) e quem chama NÃO
+// repete sozinho: avisa "pode ter saído, confira".
 
 interface Inst { baseUrl: string; apiKey: string; instance: string }
 
@@ -20,7 +27,7 @@ export function instanciaOutbound(): Inst | null {
 
 export const instanciaOutboundNome = () => instanciaOutbound()?.instance ?? null;
 
-async function evo<T = unknown>(path: string, body: unknown, timeoutMs = 15_000): Promise<{ ok: boolean; data?: T; error?: string; status?: number }> {
+async function evo<T = unknown>(path: string, body: unknown, timeoutMs = 15_000): Promise<{ ok: boolean; data?: T; error?: string; status?: number; incerto?: boolean }> {
   const cfg = instanciaOutbound();
   if (!cfg) return { ok: false, error: "Evolution (outbound) não configurada" };
   try {
@@ -33,10 +40,14 @@ async function evo<T = unknown>(path: string, body: unknown, timeoutMs = 15_000)
     const txt = await res.text().catch(() => "");
     let json: unknown = null;
     try { json = txt ? JSON.parse(txt) : null; } catch { /* corpo não-JSON */ }
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${txt.slice(0, 160)}`, status: res.status };
+    if (!res.ok) {
+      const f = falhaDeResposta(res.status, txt);
+      return { ok: false, error: f.erro, status: res.status, incerto: f.incerto };
+    }
     return { ok: true, data: json as T, status: res.status };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "erro de conexão" };
+    const f = falhaDeExcecao(err, timeoutMs);
+    return { ok: false, error: f.erro, incerto: f.incerto };
   }
 }
 
@@ -62,7 +73,8 @@ export async function verificarWhatsapp(numeros: string[]): Promise<{ numero: st
   });
 }
 
-export interface ResultadoEnvio { ok: boolean; id?: string; error?: string }
+/** `incerto` = pode ter saído (timeout, conexão que caiu no meio, 5xx genérico). Nunca reenviar sozinho. */
+export interface ResultadoEnvio { ok: boolean; id?: string; error?: string; incerto?: boolean }
 
 /** Envio cru para um JID/número. `delayMs` = "digitando…" antes de sair. */
 export async function enviarTexto(destino: string, texto: string, delayMs?: number): Promise<ResultadoEnvio> {
@@ -71,7 +83,7 @@ export async function enviarTexto(destino: string, texto: string, delayMs?: numb
   const body: Record<string, unknown> = { number: destino, text: texto };
   if (delayMs && delayMs > 0) body.delay = Math.min(delayMs, 15_000);
   const r = await evo<{ key?: { id?: string } }>("/message/sendText/", body, 20_000);
-  if (!r.ok) return { ok: false, error: r.error };
+  if (!r.ok) return { ok: false, error: r.error, incerto: !!r.incerto };
   try { (await import("@/lib/obs/correlacao")).contarEnvio(); } catch { /* fora de execução */ }
   return { ok: true, id: r.data?.key?.id };
 }
@@ -120,7 +132,7 @@ export async function enviarAoProspect(p: ProspectRow, texto: string, meta: Meta
     prospect_id: p.id, direcao: "out", autor: meta.autor, texto,
     message_id: r.ok && r.id && !meta.dry ? r.id : null,
     estagio_antes: meta.estagio_antes ?? p.estagio, estagio_depois: meta.estagio_depois ?? null,
-    enviado: r.ok && !meta.dry, erro: r.ok ? null : (r.error ?? "falhou"),
+    enviado: r.ok && !meta.dry, erro: r.ok ? null : `${r.incerto ? "incerto (pode ter saído): " : ""}${r.error ?? "falhou"}`,
     correlation_id: correlation, eh_primeira_abordagem: !!meta.eh_primeira_abordagem,
   });
   if (!meta.dry) await registrarCsOutbound(destino, texto, r.ok, r.ok ? null : (r.error ?? null), p.id);

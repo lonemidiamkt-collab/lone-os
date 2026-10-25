@@ -28,10 +28,14 @@ export interface ItemDiagnostico {
 export interface Diagnostico {
   data: string;
   contasAtivas: number;
-  gastoOntem: number;
-  /** Quantas contas têm meta definida. Sem meta, o diagnóstico só compara o cliente com ele mesmo. */
-  comPolitica: number;
+  /** null = o gasto diário não foi lido (25/10/2026) — nunca "R$ 0 ontem" por engano. */
+  gastoOntem: number | null;
+  /** Quantas contas têm meta definida. Sem meta, o diagnóstico só compara o cliente com ele mesmo. null = não lido. */
+  comPolitica: number | null;
+  /** `semDado` = a fonte desta seção não foi lida: "não consegui ler", nunca "nada encontrado". */
   funcoes: { nome: string; pergunta: string; itens: ItemDiagnostico[]; semDado?: string }[];
+  /** Fontes que não foram lidas (25/10/2026, auditoria 11.6). Vazio = tudo lido. */
+  falhas?: string[];
 }
 
 const dinheiro = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -43,11 +47,17 @@ function ontemBRT(agora = new Date()): string {
   return sp.toISOString().slice(0, 10);
 }
 
+/**
+ * 25/10/2026 (auditoria de erro recuperável, 11.6): as cinco consultas ignoravam o erro. Falha nos
+ * clientes saía como "0 contas, nada fora do lugar hoje"; falha em metric_snapshots, como "nenhum gasto
+ * ontem" em TODAS as contas. Agora: sem clientes, LANÇA (quem chama diz "não consegui"); fonte que falha
+ * marca a seção como "não consegui ler" (`semDado`) e entra em `falhas`.
+ */
 export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico> {
   const ontem = ontemBRT(agora);
   const seteDias = new Date(new Date(`${ontem}T12:00:00Z`).getTime() - 7 * 864e5).toISOString().slice(0, 10);
 
-  const [{ data: clientes }, { data: entidades }, { data: anomalias }, { data: contaDia }, { data: politicas }] = await Promise.all([
+  const [rClientes, rEntidades, rAnomalias, rContaDia, rPoliticas] = await Promise.all([
     supabaseAdmin.from("clients").select("id, name, nome_fantasia, meta_ad_account_id, active, draft_status")
       .not("meta_ad_account_id", "is", null).neq("meta_ad_account_id", "")
       .or("active.is.null,active.eq.true").is("draft_status", null),
@@ -65,11 +75,28 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
       .select("client_id, cpl_meta, cpl_alerta, cpl_critico, orcamento_diario, conversas_minimas, gasto_minimo_decisao, origem"),
   ]);
 
+  if (rClientes.error) throw new Error(`não consegui ler os clientes de tráfego: ${rClientes.error.message}`);
+  const clientes = rClientes.data;
+  const falhas: string[] = [];
+  const lido = <T,>(r: { data: T[] | null; error: { message: string } | null }, rotulo: string): T[] | null => {
+    if (r.error) { falhas.push(rotulo); console.error(`[diagnostico] ${rotulo}:`, r.error.message); return null; }
+    return r.data ?? [];
+  };
+  const F_ANUNCIOS = "anúncios e conjuntos dos últimos 7 dias";
+  const F_ANOMALIAS = "alertas de anomalia";
+  const F_GASTO = "gasto diário das contas";
+  const F_METAS = "metas de custo dos clientes";
+  const entidades = lido(rEntidades, F_ANUNCIOS);
+  const anomalias = lido(rAnomalias, F_ANOMALIAS);
+  const contaDia = lido(rContaDia, F_GASTO);
+  const politicas = lido(rPoliticas, F_METAS);
+  const semDado = (fonte: string) => `Não consegui ler ${fonte} — esta seção não foi verificada hoje.`;
+
   const nome = new Map((clientes ?? []).map((c) => [c.id as string, (c.nome_fantasia as string) || (c.name as string)]));
   const ativos = new Set((clientes ?? []).map((c) => c.id as string));
   const politica = new Map((politicas ?? []).map((p) => [p.client_id as string, p]));
 
-  const gastoOntem = (contaDia ?? [])
+  const gastoOntem = contaDia === null ? null : contaDia
     .filter((m) => m.metric_date === ontem)
     .reduce((s, m) => s + (Number(m.spend) || 0), 0);
 
@@ -77,7 +104,8 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
   // Conta de cliente ativo que simplesmente não entregou nada ontem. É o problema mais grave e o
   // mais fácil de passar despercebido, porque não gera alerta: não há número anormal, há ausência.
   const gastouOntem = new Set((contaDia ?? []).filter((m) => m.metric_date === ontem && Number(m.spend) > 0).map((m) => m.client_id as string));
-  const semEntrega: ItemDiagnostico[] = [...ativos]
+  // Sem o gasto diário, TODA conta pareceria parada — a seção fica "não consegui ler", vazia.
+  const semEntrega: ItemDiagnostico[] = contaDia === null ? [] : [...ativos]
     .filter((id) => !gastouOntem.has(id))
     .map((id) => {
       // Quanto ela costumava gastar diz se é conta parada de propósito ou problema novo.
@@ -275,19 +303,25 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
       emJogoDia: c.gasto / 7,
     }));
 
+  // A seção que depende de uma fonte que não foi lida diz isso — e não "nada encontrado".
+  const secao = (nome: string, pergunta: string, itens: ItemDiagnostico[], fontes: (unknown[] | null)[], rotulos: string[]) => {
+    const faltou = rotulos.filter((_, i) => fontes[i] === null);
+    return faltou.length ? { nome, pergunta, itens: [], semDado: semDado(faltou.join(" e ")) } : { nome, pergunta, itens };
+  };
   return {
     data: ontem,
     contasAtivas: ativos.size,
     gastoOntem,
-    comPolitica: [...ativos].filter((id) => politica.has(id)).length,
+    comPolitica: politicas === null ? null : [...ativos].filter((id) => politica.has(id)).length,
     funcoes: [
-      { nome: "Contas sem entrega", pergunta: "Alguma conta parou de rodar?", itens: semEntrega },
-      { nome: "Desperdício", pergunta: "Que anúncio está gastando sem trazer nada?", itens: desperdicio },
-      { nome: "Anomalias", pergunta: "O que fugiu do padrão da própria conta?", itens: anomaliasItens },
-      { nome: "Verba mal distribuída", pergunta: "Dá pra mover verba dentro da mesma campanha?", itens: realocar },
-      { nome: "Acima da meta do cliente", pergunta: "O que passou do teto que combinamos?", itens: acimaDaMeta },
-      { nome: "Criativo cansado", pergunta: "Quem já viu demais o mesmo anúncio?", itens: fadiga },
-      { nome: "Merece mais verba", pergunta: "O que está barato e pode escalar?", itens: escalar },
+      secao("Contas sem entrega", "Alguma conta parou de rodar?", semEntrega, [contaDia], [F_GASTO]),
+      secao("Desperdício", "Que anúncio está gastando sem trazer nada?", desperdicio, [entidades], [F_ANUNCIOS]),
+      secao("Anomalias", "O que fugiu do padrão da própria conta?", anomaliasItens, [anomalias], [F_ANOMALIAS]),
+      secao("Verba mal distribuída", "Dá pra mover verba dentro da mesma campanha?", realocar, [entidades], [F_ANUNCIOS]),
+      secao("Acima da meta do cliente", "O que passou do teto que combinamos?", acimaDaMeta, [entidades, politicas], [F_ANUNCIOS, F_METAS]),
+      secao("Criativo cansado", "Quem já viu demais o mesmo anúncio?", fadiga, [entidades], [F_ANUNCIOS]),
+      secao("Merece mais verba", "O que está barato e pode escalar?", escalar, [entidades], [F_ANUNCIOS]),
     ],
+    falhas,
   };
 }

@@ -30,17 +30,19 @@ type Resultado<T> = { data: T[] | null; error: { message: string } | null };
 const DIAG_TTL_MS = 10 * 60_000;
 let cacheDiagnostico: { em: number; dia: string; itens: ItemDiagnosticoHoje[] } | null = null;
 
-async function diagnosticoDoDia(agora: Date): Promise<ItemDiagnosticoHoje[]> {
+async function diagnosticoDoDia(agora: Date): Promise<{ itens: ItemDiagnosticoHoje[]; falhas: string[] }> {
   const dia = hojeSP(agora);
   if (cacheDiagnostico && cacheDiagnostico.dia === dia && agora.getTime() - cacheDiagnostico.em < DIAG_TTL_MS) {
-    return cacheDiagnostico.itens;
+    return { itens: cacheDiagnostico.itens, falhas: [] };
   }
   const d = await montarDiagnostico(agora);
   const itens = d.funcoes.flatMap((f) => f.itens.map((i) => ({
     clientId: i.clientId, funcao: f.nome, achado: i.achado, acao: i.acao, prioridade: i.prioridade,
   })));
-  cacheDiagnostico = { em: agora.getTime(), dia, itens };
-  return itens;
+  // 25/10/2026 (11.6): diagnóstico parcial (alguma fonte não leu) não entra no cache — a próxima
+  // abertura tenta de novo — e a tela avisa o que faltou.
+  if (!d.falhas?.length) cacheDiagnostico = { em: agora.getTime(), dia, itens };
+  return { itens, falhas: d.falhas ?? [] };
 }
 
 /**
@@ -95,7 +97,10 @@ export async function carregarHoje(email: string, agora = new Date()): Promise<R
     ler<{ key: string; value: string | null }>("ajustes", db.from("agency_settings").select("key, value")
       .in("key", ["traffic_alert_warning_pct", "traffic_alert_critical_pct", "hidden_ad_accounts"]) as never),
     carregarVistos(),
-    diagnosticoDoDia(agora).catch((err) => {
+    diagnosticoDoDia(agora).then((r) => {
+      if (r.falhas.length) falhas.push(`diagnóstico diário (não li ${r.falhas.join(", ")})`);
+      return r.itens;
+    }).catch((err) => {
       console.error("[trafego/hoje] diagnóstico:", err instanceof Error ? err.message : err);
       falhas.push("diagnóstico diário");
       return [] as ItemDiagnosticoHoje[];

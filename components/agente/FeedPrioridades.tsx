@@ -16,6 +16,9 @@ import GavetaMensagens from "./GavetaMensagens";
 // as últimas mensagens do cliente abrem numa gaveta sem sair do feed, e o teclado anda pela lista
 // (j/k, e = feito, d = decidir, m = mensagens, o = abrir). O texto de abertura que repetia o
 // cabeçalho da página saiu — a página já diz o que é o feed.
+//
+// 25/10/2026 (auditoria 11.8): Feito, Ignorar, Incorreta e a tecla "e" mostram "Desfazer" por alguns
+// segundos — o item volta para o lugar e para o estado em que estava.
 
 interface Item {
   id: string; fonte: keyof typeof ROTULO_FONTE; client_id: string | null; cliente: string; titulo: string; fato: string[]; inferencia: string[] | null;
@@ -81,13 +84,41 @@ export default function FeedPrioridades() {
   }, []);
   useEffect(() => { void carregar(escopo, limite); }, [carregar, escopo, limite]);
 
-  const decidir = useCallback(async (id: string, decisao: "aceita" | "ignorada" | "incorreta" | "executada") => {
+  const decidir = useCallback(async (item: Item, decisao: "aceita" | "ignorada" | "incorreta" | "executada", o: { semDesfazer?: boolean } = {}) => {
+    const id = item.id;
     setOcupado(id);
     const r = await chamar("/api/priority/decidir", { id, decisao });
     setOcupado(null);
     if (!r.ok) { toast.error(`Não registrei a decisão: ${r.erro}`); return; }
     setDecidindo((d) => (d === id ? null : d));
-    setDados((prev) => prev ? { ...prev, itens: prev.itens.filter((i) => i.id !== id) } : prev);
+    let posicao = -1;
+    setDados((prev) => {
+      if (!prev) return prev;
+      posicao = prev.itens.findIndex((i) => i.id === id);
+      return { ...prev, itens: prev.itens.filter((i) => i.id !== id) };
+    });
+    // O pedido do cliente decidido no "Decidir" já tem o próprio Desfazer; aqui só o do feed.
+    if (o.semDesfazer) return;
+    const rotulo = decisao === "executada" ? "Marcado como feito" : decisao === "ignorada" ? "Ignorado" : decisao === "incorreta" ? "Marcado como incorreto" : "Aceito";
+    toast.success(`${rotulo}: ${item.titulo}`, {
+      duration: 8000,
+      action: {
+        label: "Desfazer",
+        onClick: () => {
+          void (async () => {
+            const v = await chamar("/api/priority/decidir", { id, decisao: "reabrir", estadoAnterior: item.estado });
+            if (!v.ok) { toast.error(`Não consegui desfazer: ${v.erro}`); return; }
+            setDados((prev) => {
+              if (!prev || prev.itens.some((i) => i.id === id)) return prev;
+              const itens = [...prev.itens];
+              itens.splice(posicao < 0 ? 0 : Math.min(posicao, itens.length), 0, item);
+              return { ...prev, itens };
+            });
+            toast.success("Voltou para o feed.");
+          })();
+        },
+      },
+    });
   }, []);
 
   const recalcular = async () => {
@@ -126,7 +157,7 @@ export default function FeedPrioridades() {
           e.preventDefault();
           // Pedido do cliente não se "marca feito" sem decidir: o "e" abre a decisão.
           if (atual.acao_proposta?.tipo === "decidir_demanda") setDecidindo(atual.id);
-          else if (ocupado !== atual.id) void decidir(atual.id, "executada");
+          else if (ocupado !== atual.id) void decidir(atual, "executada");
           break;
         case "d":
           if (atual.acao_proposta?.tipo === "decidir_demanda") { e.preventDefault(); setDecidindo((d) => (d === atual.id ? null : atual.id)); }
@@ -216,7 +247,7 @@ export default function FeedPrioridades() {
                   )}
                   {decidindo === i.id && codigos.length > 0 && (
                     <DecidirDemanda codigos={codigos} aoFechar={() => setDecidindo(null)}
-                      aoTerminar={() => void decidir(i.id, "executada")} />
+                      aoTerminar={() => void decidir(i, "executada", { semDesfazer: true })} />
                   )}
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-1.5 sm:flex-col sm:items-stretch">
@@ -234,10 +265,10 @@ export default function FeedPrioridades() {
                     </button>
                   )}
                   {!ehDemanda && (
-                    <button onClick={() => decidir(i.id, "executada")} disabled={ocupado === i.id} className="rounded-lg bg-lone-success px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90 disabled:opacity-50">Feito</button>
+                    <button onClick={() => decidir(i, "executada")} disabled={ocupado === i.id} className="rounded-lg bg-lone-success px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90 disabled:opacity-50">Feito</button>
                   )}
-                  <button onClick={() => decidir(i.id, "ignorada")} disabled={ocupado === i.id} className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-muted disabled:opacity-50">Ignorar</button>
-                  <button onClick={() => decidir(i.id, "incorreta")} disabled={ocupado === i.id} className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-50" title="O dado está errado ou a leitura não faz sentido — isso ensina o motor">Incorreta</button>
+                  <button onClick={() => decidir(i, "ignorada")} disabled={ocupado === i.id} className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-muted disabled:opacity-50">Ignorar</button>
+                  <button onClick={() => decidir(i, "incorreta")} disabled={ocupado === i.id} className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-50" title="O dado está errado ou a leitura não faz sentido — isso ensina o motor">Incorreta</button>
                 </div>
               </div>
             </li>

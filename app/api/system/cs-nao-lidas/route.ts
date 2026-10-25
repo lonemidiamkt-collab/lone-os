@@ -13,6 +13,9 @@ export const maxDuration = 300;
 //   2. avisa o time, no expediente, quando um grupo de cliente tem mensagem sem leitura há 30 min;
 //   3. depois de 48h sem conseguir, desiste e pede para o time ler à mão.
 // Nada aqui fala com o cliente: a releitura pula o que mandaria mensagem a ele fora de hora.
+// 25/10/2026 (11.1): o ÁUDIO que não foi transcrito também está na fila — a releitura manda o áudio
+// original e o inbound transcreve de novo. A exceção ao "não fala com o cliente" é o áudio que respondia
+// o onboarding: ouvido, a conversa segue (a próxima pergunta vai ao cliente), por isso só no expediente.
 // ?dry=1 mostra o plano sem reler nem avisar.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -86,6 +89,8 @@ export async function POST(req: NextRequest) {
     }
     await marcarFalhaDeNovo(m, r.motivo);
     falhas.push({ cliente: m.cliente_nome, motivo: r.motivo });
+    // Falha só desta mensagem (o áudio dela não baixa, 25/10/2026): segue para as outras.
+    if (r.soEsta) continue;
     ultimoErro = r.motivo;
     // Disjuntor: a IA continua fora → as próximas falhariam igual. Tenta de novo na próxima rodada.
     break;

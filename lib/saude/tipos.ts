@@ -50,6 +50,11 @@ export interface LinhaSaude {
   /** Quem abriu pode confirmar/editar a próxima ação deste cliente. */
   podeEditar: boolean;
   relacionamento: Relacionamento | null;
+  /**
+   * 25/10/2026 (auditoria 11.3): client_journey não foi lida. A ficha NÃO abre (vazia e editável, o
+   * "Salvar" apagava as notas e a nota de handoff do comercial) e a próxima ação fica só de leitura.
+   */
+  relacionamentoNaoLido?: boolean;
 }
 
 export interface RespostaSaude {

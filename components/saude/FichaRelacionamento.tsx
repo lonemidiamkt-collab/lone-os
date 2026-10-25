@@ -4,9 +4,11 @@
 // editava): etapa da jornada, reuniões, o que o CLIENTE deve, notas e check-ins. Só a gestão vê:
 // client_journey.notas traz a nota de handoff do comercial. A próxima ação mora no ProximaAcaoEditor.
 //
-// Grava em /api/cs/jornada (a mesma rota de antes; manda só os campos desta ficha).
+// Grava em /api/cs/jornada (a mesma rota de antes; manda só os campos que a pessoa mudou — 25/10/2026).
+// Quando a jornada não foi lida, esta ficha nem é montada (SaudeDaCarteira mostra "tentar de novo").
 
 import { useEffect, useState } from "react";
+import { alteracoesDaFicha, aplicarNaFicha, formDaFicha } from "@/lib/saude/ficha-relacionamento";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -27,11 +29,15 @@ export default function FichaRelacionamento({
   relacionamento: Relacionamento;
   onSalvo?: (r: Relacionamento) => void;
 }) {
-  const [estado, setEstado] = useState(rel.estadoManual ?? "");
-  const [ultima, setUltima] = useState(rel.ultimaReuniao ?? "");
-  const [proxima, setProxima] = useState(rel.proximaReuniao ?? "");
-  const [pendencias, setPendencias] = useState(rel.pendenciasCliente.map((p) => p.item).join("\n"));
-  const [notas, setNotas] = useState(rel.notas ?? "");
+  // A ficha como estava quando foi aberta (ou salva por último): o "o que mudou" é contra ELA, não contra
+  // uma recarga da tela no meio da edição — senão o que outra pessoa gravou viraria "mudança" desta.
+  const [base, setBase] = useState(rel);
+  const inicial = formDaFicha(base);
+  const [estado, setEstado] = useState(inicial.estado);
+  const [ultima, setUltima] = useState(inicial.ultima);
+  const [proxima, setProxima] = useState(inicial.proxima);
+  const [pendencias, setPendencias] = useState(inicial.pendencias);
+  const [notas, setNotas] = useState(inicial.notas);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -47,22 +53,21 @@ export default function FichaRelacionamento({
   };
   useEffect(() => { void carregarCheckins(); }, [clientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 25/10/2026 (auditoria 11.3): manda SÓ o que esta pessoa mudou. Antes ia tudo — e o que outra pessoa
+  // (ou o WhatsApp, ao dar baixa numa pendência) tinha gravado no meio-tempo era sobrescrito.
+  const { patch, depois } = alteracoesDaFicha(base, { estado, ultima, proxima, pendencias, notas });
+  const mudou = Object.keys(patch).length > 0;
+
   const salvar = async () => {
+    if (!mudou) return;
     setSalvando(true); setErro("");
-    const pendenciasCliente = pendencias.split("\n").map((s) => s.trim()).filter(Boolean).map((item) => {
-      // Mantém "desde" e "impacto" de quem já estava na lista.
-      const antes = rel.pendenciasCliente.find((p) => p.item.trim().toLowerCase() === item.toLowerCase());
-      return antes ?? { item };
-    });
-    const r = await chamar("/api/cs/jornada", {
-      clientId, estado: estado || null, ultimaReuniao: ultima || null, proximaReuniao: proxima || null,
-      pendenciasCliente, notas,
-    });
+    const r = await chamar("/api/cs/jornada", { clientId, ...patch });
     setSalvando(false);
     // Fechar sem ter salvado era o pior desfecho da Jornada antiga: a pessoa reescrevia tudo depois.
     if (!r.ok) { setErro(r.erro ?? "Não consegui salvar a ficha."); return; }
     toast.success("Ficha de relacionamento salva.");
-    onSalvo?.({ estadoManual: estado || null, ultimaReuniao: ultima || null, proximaReuniao: proxima || null, pendenciasCliente, notas: notas || null });
+    setBase(depois);
+    onSalvo?.(aplicarNaFicha(rel, patch));
   };
 
   const registrar = async () => {
@@ -105,7 +110,8 @@ export default function FichaRelacionamento({
       </div>
       <div className="flex items-center justify-end gap-3">
         {erro && <span className="text-lone-caption text-lone-danger">{erro}</span>}
-        <button type="button" onClick={() => void salvar()} disabled={salvando}
+        {!mudou && !erro && <span className="text-lone-caption text-muted-foreground">Nada alterado.</span>}
+        <button type="button" onClick={() => void salvar()} disabled={salvando || !mudou}
           className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
           {salvando && <Loader2 size={13} className="animate-spin" aria-hidden />} Salvar ficha
         </button>

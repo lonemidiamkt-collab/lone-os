@@ -69,6 +69,16 @@ export async function rodarOutbound(cfg: ProspectConfig, campanha: CampanhaRow |
             ctx: { agora, followups: 0 },
           });
         }
+      } else if (r.incerto) {
+        // 25/10/2026 (auditoria 14.2): o WhatsApp não confirmou — PODE ter saído. Sai da fila (o próximo tick
+        // não reenvia), o agente pausa neste prospect (nenhum follow-up automático) e um humano confere.
+        // O piloto está desligado desde 17/10: isto só impede o envio em dobro quando ele voltar.
+        out.abordagens.push({ id: p.id, nome: p.nome, ok: false, erro: `pode ter saído: ${r.error ?? "sem confirmação"}` });
+        await registrarEvento(p.id, { tipo: "envio_incerto", motivo: r.error ?? "sem confirmação", responsavel: "SDR_AI" });
+        if (!o.dry) {
+          await transicionar(p, { para: "abordado", motivo: "Primeira abordagem sem confirmação do WhatsApp (pode ter saído)", mensagem: texto, patch: { primeira_abordagem_em: agora.toISOString(), followups: 0, modo_agente: "pausado" }, ctx: { agora, followups: 0 } });
+        }
+        await marcarPrecisaHumano(p, `O WhatsApp não confirmou a 1ª abordagem — pode ter saído. Confira a conversa no celular do número; se não saiu, mande à mão. O agente ficou pausado neste prospect.`, o.dry);
       } else {
         out.abordagens.push({ id: p.id, nome: p.nome, ok: false, erro: r.error });
         await registrarEvento(p.id, { tipo: "envio_falhou", motivo: r.error ?? "falhou", responsavel: "SDR_AI" });
@@ -98,7 +108,11 @@ export async function rodarOutbound(cfg: ProspectConfig, campanha: CampanhaRow |
       const texto = await textoFollowup({ p, cfg, historico, agora, origem: `prospeccao:followup_${n}` }, n, p.estagio === "decisor_contatado");
       const r = await enviarAoProspect(p, texto, { autor: "agente", delayMs: 3000 + Math.round(Math.random() * 3000), estagio_antes: p.estagio, estagio_depois: "followup", dry: o.dry });
       out.followups.push({ id: p.id, nome: p.nome, n, ok: r.ok, erro: r.ok ? undefined : r.error });
-      if (!r.ok) await marcarPrecisaHumano(p, `WhatsApp falhou no follow-up ${n}: ${r.error ?? "erro"}`, o.dry);
+      if (!r.ok && r.incerto) {
+        // Pode ter saído (14.2): pausa o agente neste prospect para o próximo tick não mandar de novo.
+        if (!o.dry) await atualizarProspect(p.id, { modo_agente: "pausado" });
+        await marcarPrecisaHumano(p, `O WhatsApp não confirmou o follow-up ${n} — pode ter saído. Confira a conversa; o agente ficou pausado neste prospect.`, o.dry);
+      } else if (!r.ok) await marcarPrecisaHumano(p, `WhatsApp falhou no follow-up ${n}: ${r.error ?? "erro"}`, o.dry);
       if (r.ok && !o.dry) {
         await transicionar(p, { para: "followup", motivo: `Follow-up ${n} enviado`, mensagem: texto, patch: { followups: n }, ctx: { agora, followups: n } });
       }

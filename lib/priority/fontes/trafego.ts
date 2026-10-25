@@ -9,6 +9,9 @@ const slug = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").t
 
 export async function itensDoTrafego(clientes: { porId: Map<string, ClienteRef> }): Promise<ItemBruto[]> {
   const d = await montarDiagnostico();
+  // 25/10/2026 (11.6): diagnóstico parcial não vira "nada a recomendar" nas seções que não leram —
+  // a fonte inteira falha e o motor mostra o erro (as outras fontes seguem).
+  if (d.falhas?.length) throw new Error(`diagnóstico parcial: não li ${d.falhas.join(", ")}`);
   const out: ItemBruto[] = [];
   for (const f of d.funcoes) {
     for (const i of f.itens) {

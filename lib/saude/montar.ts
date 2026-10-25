@@ -37,6 +37,8 @@ export interface EntradaCarteira {
   recomendacoes: RecomendacaoRow[];
   /** client_journey (select "*"). */
   jornadas: Record<string, unknown>[];
+  /** A leitura de client_journey falhou: `jornadas` vazio NÃO quer dizer "ficha vazia" (11.3, 25/10/2026). */
+  jornadaNaoLida?: boolean;
   viewer: { nome: string | null; papel: Papel };
 }
 
@@ -136,8 +138,12 @@ export function montarCarteira(e: EntradaCarteira): Omit<RespostaSaude, "geradoE
       etapa: etapaDaJornada({ status: c.status, estadoManual: rel.estadoManual }, sit),
       proximaAcao,
       // Gestão confirma qualquer um; social/tráfego, os clientes de quem é dono do relacionamento.
-      podeEditar: gestao || ((e.viewer.papel === "social" || e.viewer.papel === "traffic") && ehDaPessoa({ social, trafego, dono }, eu)),
-      relacionamento: gestao ? rel : null,
+      // 25/10/2026 (11.3): sem ter lido client_journey, ninguém grava nela — a próxima ação confirmada
+      // e a ficha não foram carregadas, e gravar por cima apagaria o que está lá.
+      podeEditar: !e.jornadaNaoLida
+        && (gestao || ((e.viewer.papel === "social" || e.viewer.papel === "traffic") && ehDaPessoa({ social, trafego, dono }, eu))),
+      relacionamento: gestao && !e.jornadaNaoLida ? rel : null,
+      ...(gestao && e.jornadaNaoLida ? { relacionamentoNaoLido: true } : {}),
     };
   });
 
