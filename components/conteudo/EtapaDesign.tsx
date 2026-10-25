@@ -27,7 +27,7 @@ import { chamar } from "@/lib/api/chamar";
 import { cn, todaySP } from "@/lib/utils";
 import { donoDaDemanda } from "@/lib/design/dono";
 import { etapaDoStatus } from "@/lib/conteudo/etapas";
-import { ROTULO_ESTADO_DESIGN, designerDeve, estadoDoDesign, pedidoAberto } from "@/lib/conteudo/producao";
+import { ROTULO_ESTADO_DESIGN, designerDeve, estadoDoDesign, podeCancelarPedido } from "@/lib/conteudo/producao";
 import { faltasNoPedido, motivoDasFaltas } from "@/lib/conteudo/fila-designer";
 import { pedidoDoCard, paraPedidoDesign } from "@/lib/conteudo/quadro";
 import { diasEntre } from "@/lib/conteudo/no-ar";
@@ -355,9 +355,12 @@ export default function EtapaDesign({ card, briefingIa }: {
               <RotateCcw size={13} aria-hidden="true" /> Pedir alteração
             </button>
           )}
-          {gestao && pedidoAberto(paraPedidoDesign(pedido)) && estado !== "entregue" && (
+          {/* Cancelar: a gestão sempre; quem pediu (social, tráfego) enquanto ninguém começou —
+              pedir arte por engano tinha que esperar a gestão (24/10/2026, 2.6). */}
+          {!ehDesigner && estado !== "entregue" && podeCancelarPedido(papel, paraPedidoDesign(pedido)).ok && (
             <button type="button" disabled={ocupado}
-              onClick={() => { if (window.confirm("Cancelar o pedido de arte? O card volta pra Pauta.")) void executar(() => mover(card, "pauta")); }}
+              onClick={() => { if (window.confirm("Cancelar o pedido de arte? O card volta pra Pauta e sai da fila do designer.")) void executar(() => mover(card, "pauta")); }}
+              title={gestao ? undefined : "Ninguém começou esta arte ainda — dá pra desfazer o pedido"}
               className={cn(botao, "text-muted-foreground hover:text-foreground hover:bg-accent")}>
               <X size={13} aria-hidden="true" /> Cancelar pedido
             </button>

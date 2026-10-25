@@ -54,17 +54,30 @@ export interface ArteNaoVista { n: number; motivo: string }
  * "✅ arte conferida, nenhum erro aparente" sem ninguém ter olhado nada — Contele e CIIL foram ao
  * cliente com esse selo. "Não consegui conferir" tem que ser dito, nunca virar aprovação.
  */
-export function comentarioDaRevisao(problemas: string[], naoVistas: ArteNaoVista[], total: number): string | null {
+export function comentarioDaRevisao(problemas: string[], naoVistas: ArteNaoVista[], total: number, cobertura?: string | null): string | null {
   if (total > 0 && naoVistas.length >= total) return null;
   const parcial = naoVistas.length
     ? `\n\n⚠️ ${naoVistas.length} de ${total} artes NÃO foram conferidas (${naoVistas.map((a) => `arte ${a.n}`).join(", ")}: ${naoVistas[0].motivo}). Confira essas à mão.`
     : "";
+  // 24/10/2026 (2.9): "conferi X de N" — a revisão parava em 6 artes sem dizer, e o selo valia
+  // para o carrossel inteiro. `cobertura` vem de notaDeCobertura (lib/conteudo/artes-para-ia.ts).
+  const nota = cobertura?.trim() ? `\n\n${cobertura.trim()}` : "";
   if (problemas.length === 0) {
     return naoVistas.length
-      ? `✅ Revisão automática: as artes que consegui ver estão de acordo com o briefing.${parcial}`
-      : "✅ Revisão automática: arte conferida contra o briefing, nenhum erro aparente.";
+      ? `✅ Revisão automática: as artes que consegui ver estão de acordo com o briefing.${parcial}${nota}`
+      : `✅ Revisão automática: arte conferida contra o briefing, nenhum erro aparente.${nota}`;
   }
-  return `⚠️ Revisão automática encontrou pontos a conferir:\n${problemas.map((p) => `• ${p}`).join("\n")}${parcial}`;
+  return `⚠️ Revisão automática encontrou pontos a conferir:\n${problemas.map((p) => `• ${p}`).join("\n")}${parcial}${nota}`;
+}
+
+/**
+ * A revisão automática nem começou (IA desligada, leitura do banco falhou, só há referência, a
+ * arte é link do Drive, erro no meio). 24/10/2026 (2.9): antes ela voltava calada — o card ficava
+ * sem selo e sem aviso, e quem olhava achava que a revisão ainda ia chegar.
+ */
+export function avisoRevisaoNaoRodou(motivo: string): string {
+  const m = motivo.trim().replace(/[.\s]+$/, "") || "erro desconhecido";
+  return `⚠️ Revisão automática NÃO rodou nesta entrega (${m}). Ninguém conferiu a arte ainda: confira à mão ou use "Revisar arte" no card antes de enviar ao cliente.`;
 }
 
 /** Quando nenhuma arte pôde ser vista: o aviso que vai no card no lugar do selo. */

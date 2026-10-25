@@ -100,7 +100,7 @@ Responda APENAS no JSON do schema.`;
  * 1400px de largura é o suficiente pra ler preço, telefone e logo — que é tudo o que a revisão
  * precisa enxergar — e derruba 4 MB pra alguns poucos KB.
  */
-async function baixarComoDataUri(url: string): Promise<string | null> {
+export async function baixarComoDataUri(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
     if (!res.ok) return null;

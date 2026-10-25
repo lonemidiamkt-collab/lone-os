@@ -164,6 +164,22 @@ describe("cancelar pedido", () => {
     expect(db.design_requests).toHaveLength(0);
     expect(card()).toMatchObject({ status: "ideas", design_request_id: null });
   });
+
+  it("2.6: só o pedido que ESTE clique abriu é marcado como recém-criado (é o que o Desfazer apaga)", async () => {
+    const r1 = await executarTransicao("card-1", { tipo: "pedir_arte" }, { quem: "Carlos" });
+    expect(r1).toMatchObject({ ok: true, pedidoCriado: true });
+    const r2 = await executarTransicao("card-1", { tipo: "pedir_arte" }, { quem: "Carlos" });
+    expect(r2.ok && r2.semEfeito).toBe(true);
+    expect(r2).not.toHaveProperty("pedidoCriado", true);
+  });
+
+  it("2.6: o designer pegou no meio do cancelamento — o pedido dele NÃO some (trava no status lido)", async () => {
+    await executarTransicao("card-1", { tipo: "pedir_arte" }, { quem: "Carlos" });
+    antesDoUpdateDoCard = () => { db.design_requests[0].status = "in_progress"; };
+    await executarTransicao("card-1", { tipo: "cancelar_pedido" }, { quem: "Carlos" });
+    expect(db.design_requests).toHaveLength(1);
+    expect(db.design_requests[0].status).toBe("in_progress");
+  });
 });
 
 describe("pedido que chega sem card", () => {

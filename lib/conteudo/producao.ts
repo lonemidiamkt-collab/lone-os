@@ -16,7 +16,7 @@
 //   entregue         pedido concluído; card → "Revisão interna" com designer_delivered_at
 //   pedir_alteracao  volta pra "Com o designer": entrega anterior deixa de valer, motivo gravado
 //   bloquear / desbloquear   o designer devolve o card por falta de algo (marca dentro da etapa)
-//   cancelar_pedido  só a gestão: apaga o pedido aberto e o card volta pra Pauta
+//   cancelar_pedido  apaga o pedido aberto e o card volta pra Pauta (gestão sempre; quem pediu, só na fila)
 //
 // E `planejarMovimento` traduz o ARRASTE no quadro para uma dessas (ou para uma troca simples de
 // etapa, quando não há arte envolvida).
@@ -111,6 +111,9 @@ export type ResultadoPlano =
   | { ok: false; status: 400 | 409; erro: string };
 
 const LIMPA_BLOQUEIO = { blocked_reason: null, blocked_by: null, blocked_at: null } as const;
+/** As marcas que só valem enquanto o card está em Agendado / No ar (snake_case, para o banco). */
+const MARCAS_DE_AGENDADO = { scheduled_at: null } as const;
+const MARCAS_DE_NO_AR = { publish_verified_at: null, publish_verified_by: null } as const;
 
 /** Colunas que põem o card numa etapa (e registram quando entrou nela). */
 function entrarEm(card: CardDesign, status: StatusDoCard, agora: string): Record<string, unknown> {
@@ -194,6 +197,10 @@ export function planejarTransicao(acao: AcaoDesign, card: CardDesign, pedido: Pe
         social_confirmed_at: null,
         social_confirmed_by: null,
         client_approved_at: null,
+        // 24/10/2026 (2.8): voltar pro designer tira as marcas de Agendado/No ar — senão o PDF ao
+        // cliente e o portal contavam como publicado um card que voltou a ser refeito.
+        ...MARCAS_DE_AGENDADO,
+        ...MARCAS_DE_NO_AR,
       };
       const mudaPedido: MudancaNoPedido | null = !pedido ? { criar: true, status: "queued" }
         : pedido.status === "done" ? { status: "in_progress" } : null;
@@ -244,11 +251,34 @@ const QUEM_PODE: Record<TipoAcao, readonly PapelProducao[]> = {
   pedir_alteracao: ["admin", "manager", "social"],
   bloquear: ["admin", "manager", "designer"],
   desbloquear: ["admin", "manager", "social", "designer"],
-  cancelar_pedido: ["admin", "manager"],
+  // Social e tráfego cancelam só o pedido que ninguém começou (ver podeCancelarPedido).
+  cancelar_pedido: ["admin", "manager", "social", "traffic"],
 };
 
 export function papelPode(papel: string | null | undefined, acao: TipoAcao): boolean {
   return !!papel && (QUEM_PODE[acao] as readonly string[]).includes(papel);
+}
+
+const ehGestao = (papel: string | null | undefined) => papel === "admin" || papel === "manager";
+
+/**
+ * Quem cancela um pedido de arte, e quando.
+ *
+ * 24/10/2026 (auditoria de erro recuperável, 2.6): pedir arte por engano não tinha volta para o
+ * social — só a gestão cancelava, e o card ficava na fila do designer até alguém da gestão ver.
+ * Agora quem pediu (social, tráfego) desfaz sozinho enquanto o pedido está NA FILA: ninguém
+ * começou, não há trabalho a perder. Depois que o designer pegou, só a gestão — aí cancelar joga
+ * fora o trabalho de outra pessoa.
+ */
+export function podeCancelarPedido(papel: string | null | undefined, pedido: PedidoDesign | null | undefined): { ok: true } | { ok: false; motivo: string } {
+  if (!pedido) return { ok: false, motivo: "Este card não tem pedido de arte." };
+  if (pedido.status === "done") return { ok: false, motivo: "O pedido já foi entregue — não dá pra cancelar. Para mudar a arte, peça alteração." };
+  if (ehGestao(papel)) return { ok: true };
+  if (!papelPode(papel, "cancelar_pedido")) return { ok: false, motivo: "Seu perfil não cancela pedido de arte." };
+  if (pedido.status !== "queued") {
+    return { ok: false, motivo: "O designer já começou esta arte — agora só a gestão cancela o pedido. Se o pedido mudou, fale com o designer pelo card." };
+  }
+  return { ok: true };
 }
 
 /** Lê a ação que veio no corpo da requisição. null = inválida. */
@@ -326,9 +356,9 @@ export function planejarMovimento(
 
   if (origem === "com_designer" && pedidoAberto(pedido) && !entregue) {
     if (destino === "pauta") {
-      return papel === "admin" || papel === "manager"
-        ? { tipo: "design", acao: { tipo: "cancelar_pedido" } }
-        : { tipo: "recusar", motivo: "O pedido de arte está aberto com o designer. Só a gestão cancela o pedido." };
+      // Voltar pra Pauta = cancelar o pedido. Na fila, quem pediu desfaz; começado, só a gestão (2.6).
+      const pode = podeCancelarPedido(papel, pedido);
+      return pode.ok ? { tipo: "design", acao: { tipo: "cancelar_pedido" } } : { tipo: "recusar", motivo: pode.motivo };
     }
     if (depoisDoDesign) {
       return papel === "admin" || papel === "manager"
@@ -381,5 +411,47 @@ export function camposDaTroca(
   if (card.clientApprovedAt && trocaDesfazAprovacao(card.status, status)) campos.clientApprovedAt = null;
   if (para === "agendado" && !card.scheduledAt) campos.scheduledAt = agora;
   if (para === "no_ar" && !card.publishVerifiedAt) Object.assign(campos, { publishVerifiedAt: agora, publishVerifiedBy: quem });
+  // 24/10/2026 (auditoria de erro recuperável, 2.8): voltar de etapa deixava "No ar" e "Agendado"
+  // marcados — o PDF ao cliente e o portal contavam como publicado um card que tinha voltado para
+  // a Revisão. A marca só vale enquanto o card está naquela etapa (ou depois dela).
+  const ordemPara = infoEtapa(para).ordem;
+  if (card.scheduledAt && ordemPara < infoEtapa("agendado").ordem) campos.scheduledAt = null;
+  if (card.publishVerifiedAt && ordemPara < infoEtapa("no_ar").ordem) Object.assign(campos, { publishVerifiedAt: null, publishVerifiedBy: null });
   return campos;
+}
+
+// ─── O aviso depois de pedir a arte ──────────────────────────────────────────
+
+export interface AvisoDoPedido {
+  tom: "sucesso" | "aviso";
+  texto: string;
+}
+
+/**
+ * O que a tela diz depois do "Pedir arte".
+ *
+ * 24/10/2026 (auditoria de erro recuperável, 2.12): a tela dizia "foi pro designer" mesmo quando o
+ * pedido nascia SEM DONO (cliente sem designer na ficha e nenhum designer ativo para receber) — o
+ * pedido ficava no quadro "(sem designer)", que ninguém abre. Agora diz que ficou sem designer e o
+ * que fazer. Quando o sistema escolheu o dono por histórico ou carga, diz para quem foi.
+ */
+export function avisoDoPedidoDeArte(p: {
+  titulo: string;
+  cliente?: string | null;
+  semDesigner?: boolean | null;
+  designer?: string | null;
+  atribuicao?: "carteira" | "historico" | "carga" | null;
+}): AvisoDoPedido {
+  const t = `"${p.titulo}"`;
+  if (p.semDesigner) {
+    return {
+      tom: "aviso",
+      texto: `${t} entrou na etapa do designer, mas ficou SEM DESIGNER — ninguém vai ver na fila. Escolha quem faz: defina o designer na ficha${p.cliente ? ` de ${p.cliente}` : " do cliente"} ou peça para um designer assumir no card.`,
+    };
+  }
+  if (p.designer && (p.atribuicao === "historico" || p.atribuicao === "carga")) {
+    const porque = p.atribuicao === "historico" ? "é quem já faz as artes desse cliente" : "está com menos demanda aberta";
+    return { tom: "sucesso", texto: `${t} foi pro quadro do ${p.designer}, que ${porque} (o cliente não tem designer na ficha).` };
+  }
+  return { tom: "sucesso", texto: p.designer ? `${t} foi pro designer (${p.designer}).` : `${t} foi pro designer.` };
 }

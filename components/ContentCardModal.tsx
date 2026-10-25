@@ -29,7 +29,6 @@ import ComentariosDoCard from "@/components/conteudo/ComentariosDoCard";
 import CardDoDesigner from "@/components/design/CardDoDesigner";
 import { artesParaAgendar, legendaCompleta } from "@/lib/conteudo/previa";
 import { ETAPAS, ROTULO_BLOQUEADO, corDoStatus, estaBloqueado, etapaDoStatus, infoDoStatus, statusNaEtapa, type Etapa } from "@/lib/conteudo/etapas";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
 import { toast } from "sonner";
 import {
@@ -48,6 +47,36 @@ import { MarkdownEditor, MarkdownView, htmlToMarkdown } from "@/components/Markd
 
 // Campo apagado vai como null: `x || undefined` sumia com a chave e o valor antigo ficava no banco.
 const ouNulo = (v: string) => (v.trim() ? v : null);
+
+/** Uma arte que a revisão por IA tentou ver. */
+type ArteVista = { n: number; url: string; vista: boolean; motivo?: string | null };
+
+/**
+ * O QUE A IA VIU (24/10/2026, 2.10): a revisão dizia "sem erros" sem dizer sobre qual imagem — e
+ * era a referência do social. Agora mostra as miniaturas das artes conferidas e marca as que não
+ * conseguiu ver, com a nota do que ficou de fora.
+ */
+function ArtesVistas({ artes, nota }: { artes?: ArteVista[]; nota?: string | null }) {
+  if (!artes?.length && !nota) return null;
+  return (
+    <div className="mt-2 space-y-1.5">
+      {!!artes?.length && (
+        <ul className="flex flex-wrap gap-1.5" aria-label="Artes que a IA conferiu">
+          {artes.map((a) => (
+            <li key={`${a.n}-${a.url}`} className="relative w-12 h-12 rounded-md overflow-hidden border border-border bg-muted" title={a.vista ? `Arte ${a.n}: conferida` : `Arte ${a.n}: NÃO conferida (${a.motivo ?? "erro"})`}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- miniatura da arte conferida */}
+              <img src={a.url} alt={`Arte ${a.n}`} className={`w-full h-full object-cover ${a.vista ? "" : "opacity-40"}`} />
+              <span className={`absolute bottom-0 left-0 text-[9px] px-1 rounded-tr ${a.vista ? "bg-overlay text-overlay-foreground" : "bg-destructive text-destructive-foreground"}`}>
+                {a.vista ? a.n : `${a.n} ✕`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {nota && <p className="text-[10px] text-muted-foreground leading-snug">{nota}</p>}
+    </div>
+  );
+}
 
 interface Props {
   card: ContentCard;
@@ -110,8 +139,17 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
   const [editingBriefing, setEditingBriefing] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [genLegenda, setGenLegenda] = useState(false);       // gerando legenda por IA
+  // SUGESTÃO, NÃO SUBSTITUIÇÃO (24/10/2026, 2.11): "Gerar legenda" trocava a legenda digitada sem
+  // perguntar e sem volta. Agora a sugestão aparece ao lado; "Usar" troca e oferece "Desfazer".
+  const [sugestaoLegenda, setSugestaoLegenda] = useState<{ legenda: string; hashtags: string; nota: string | null } | null>(null);
+  const [legendaAnterior, setLegendaAnterior] = useState<{ caption: string; hashtags: string; origem: string } | null>(null);
+  const [erroLegenda, setErroLegenda] = useState<string | null>(null);
   const [revisando, setRevisando] = useState(false);         // revisando a arte por IA
-  const [revisao, setRevisao] = useState<{ ok: boolean; problemas: string[]; resumo: string } | null>(null);
+  const [revisao, setRevisao] = useState<{ ok: boolean; problemas: string[]; resumo: string; artes?: ArteVista[]; nota?: string | null } | null>(null);
+  // Aprovar / pedir alteração (24/10/2026, 2.5): o card só fecha depois do sim do servidor.
+  const [aprovando, setAprovando] = useState(false);
+  const [enviandoAlteracao, setEnviandoAlteracao] = useState(false);
+  const [erroAprovacao, setErroAprovacao] = useState<string | null>(null);
   const [genBrief, setGenBrief] = useState(false);           // gerando briefing da arte pro designer
   const [designBrief, setDesignBrief] = useState<string | null>(null); // briefing gerado (EDITÁVEL antes de enviar)
   const [revisandoPost, setRevisandoPost] = useState(false); // revisão FINAL do post por IA
@@ -120,6 +158,8 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
     problemas: { gravidade: string; area: string; detalhe: string; sugestao: string | null }[];
     resumo: string;
     legenda_corrigida: string | null;
+    artes?: ArteVista[];
+    nota?: string | null;
   } | null>(null);
   // 📤 Enviar as artes ENTREGUES pro grupo do cliente aprovar (pelo CS). Disparo humano, com PRÉVIA
   // (21/10/2026): era um window.confirm só com o nome do cliente — sem ver artes, texto nem grupo,
@@ -130,71 +170,57 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
     entregueEm: card.designerDeliveredAt, alteracaoPendenteEm: card.alteracaoPendenteEm, arquivadoEm: card.archivedAt,
   });
 
-  // ✍️ Legenda pronta por IA: usa o briefing do cliente pra escrever gancho+corpo+CTA+hashtags.
+  // ✍️ Legenda pronta por IA: usa o briefing do cliente e AS ARTES DA ENTREGA (todas, na ordem —
+  // antes só a capa) pra escrever gancho+corpo+CTA+hashtags. Vira SUGESTÃO ao lado do campo.
   async function gerarLegendaIA() {
-    setGenLegenda(true);
-    try {
-      const r = await authedFetch("/api/cs/legenda", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: card.id }),
-      });
-      if (r.ok) {
-        const d = await r.json();
-        if (d.legenda) setCaption(d.legenda);
-        if (d.hashtags) setHashtags(d.hashtags);
-      } else {
-        const e = await r.json().catch(() => ({}));
-        pushNotification("system", "Não deu pra gerar a legenda", e.error || "Tente de novo.", card.clientId);
-      }
-    } catch { pushNotification("system", "Falha ao gerar a legenda", "Verifique a conexão.", card.clientId); }
-    finally { setGenLegenda(false); }
+    setGenLegenda(true); setErroLegenda(null);
+    const r = await chamar<{ legenda?: string; hashtags?: string; nota?: string | null }>("/api/cs/legenda", { cardId: card.id });
+    setGenLegenda(false);
+    if (!r.ok || !r.data?.legenda) { setErroLegenda(`Não consegui gerar a legenda: ${r.erro ?? "a IA não devolveu texto"}. Tente de novo.`); return; }
+    setSugestaoLegenda({ legenda: r.data.legenda, hashtags: r.data.hashtags ?? "", nota: r.data.nota ?? null });
   }
 
-  // 🔍 Revisão de arte por IA: confere a arte entregue contra o briefing antes de ir ao cliente.
+  /** Troca a legenda guardando a anterior — "Desfazer" volta exatamente ao que estava digitado. */
+  function usarLegenda(nova: { legenda: string; hashtags?: string | null }, origem: string) {
+    setLegendaAnterior({ caption, hashtags, origem });
+    setCaption(nova.legenda);
+    if (nova.hashtags) setHashtags(nova.hashtags);
+  }
+  function desfazerLegenda() {
+    if (!legendaAnterior) return;
+    setCaption(legendaAnterior.caption);
+    setHashtags(legendaAnterior.hashtags);
+    setLegendaAnterior(null);
+  }
+
+  // 🔍 Revisão de arte por IA: confere TODAS as artes entregues contra o briefing antes de ir ao
+  // cliente (24/10/2026, 2.10: pegava a 1ª imagem — em geral a referência) e mostra quais viu.
   async function revisarArteIA() {
     setRevisando(true); setRevisao(null);
-    try {
-      const r = await authedFetch("/api/cs/revisar-arte", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: card.id }),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (r.ok) setRevisao(d);
-      else setRevisao({ ok: false, problemas: [d.error || "Não consegui revisar."], resumo: "Revisão indisponível" });
-    } catch { setRevisao({ ok: false, problemas: ["Falha de conexão."], resumo: "Revisão indisponível" }); }
-    finally { setRevisando(false); }
+    const r = await chamar<{ ok: boolean; problemas: string[]; resumo: string; artes?: ArteVista[]; nota?: string | null }>("/api/cs/revisar-arte", { cardId: card.id });
+    setRevisando(false);
+    if (r.ok && r.data) setRevisao(r.data);
+    else setRevisao({ ok: false, problemas: [r.erro ?? "Não consegui revisar."], resumo: "Revisão não rodou — confira à mão" });
   }
 
   // 🎨 Briefing da arte pro designer, por IA — gera e deixa EDITÁVEL; vai no pedido de design.
   async function gerarBriefingDesignIA() {
     setGenBrief(true);
-    try {
-      const r = await authedFetch("/api/cs/briefing-design", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: card.id }),
-      });
-      if (r.ok) {
-        const d = await r.json();
-        if (d.briefing) setDesignBrief(d.briefing);
-      } else {
-        const e = await r.json().catch(() => ({}));
-        pushNotification("system", "Não deu pra gerar o briefing da arte", e.error || "Tente de novo.", card.clientId);
-      }
-    } catch { pushNotification("system", "Falha ao gerar o briefing", "Verifique a conexão.", card.clientId); }
-    finally { setGenBrief(false); }
+    const r = await chamar<{ briefing?: string }>("/api/cs/briefing-design", { cardId: card.id });
+    setGenBrief(false);
+    if (r.ok && r.data?.briefing) setDesignBrief(r.data.briefing);
+    else pushNotification("system", "Não deu pra gerar o briefing da arte", r.erro ?? "A IA não devolveu texto. Tente de novo.", card.clientId);
   }
 
   // ✅ Revisão FINAL do post (arte + legenda + hashtags) por IA — o pre-flight antes de ir ao cliente.
   async function revisarPostIA() {
     setRevisandoPost(true); setRevisaoPost(null);
-    try {
-      const r = await authedFetch("/api/cs/revisar-post", {
-        // Manda a legenda/hashtags ATUAIS do editor (podem não estar salvas ainda) — senão a IA
-        // revisaria a versão velha do banco e a "legenda corrigida" sobrescreveria a nova.
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: card.id, caption, hashtags }),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (r.ok) setRevisaoPost(d);
-      else setRevisaoPost({ aprovado: false, problemas: [{ gravidade: "alta", area: "legenda", detalhe: d.error || "Não consegui revisar.", sugestao: null }], resumo: "Revisão indisponível", legenda_corrigida: null });
-    } catch { setRevisaoPost({ aprovado: false, problemas: [{ gravidade: "alta", area: "legenda", detalhe: "Falha de conexão.", sugestao: null }], resumo: "Revisão indisponível", legenda_corrigida: null }); }
-    finally { setRevisandoPost(false); }
+    // Manda a legenda/hashtags ATUAIS do editor (podem não estar salvas ainda) — senão a IA
+    // revisaria a versão velha do banco e a "legenda corrigida" sobrescreveria a nova.
+    const r = await chamar<NonNullable<typeof revisaoPost>>("/api/cs/revisar-post", { cardId: card.id, caption, hashtags });
+    setRevisandoPost(false);
+    if (r.ok && r.data) setRevisaoPost(r.data);
+    else setRevisaoPost({ aprovado: false, problemas: [{ gravidade: "alta", area: "legenda", detalhe: r.erro ?? "Não consegui revisar.", sugestao: null }], resumo: "Revisão não rodou — confira à mão", legenda_corrigida: null });
   }
 
   // Comentários REATIVOS: lê do store (não da prop estática) — só para a contagem do cabeçalho; a
@@ -280,15 +306,40 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
   };
 
   // Arquiva a DEMANDA (soft-delete): some do quadro ativo mas fica no banco, recuperável em "Arquivadas".
+  // 24/10/2026 (2.5): fechava direto, sem o aviso de não salvo — a legenda digitada sumia junto.
   const handleArchive = async () => {
     setArchiving(true);
     try {
       await updateContentCard(card.id, { archivedAt: new Date().toISOString() });
-      pushNotification("content", "Demanda arquivada", `"${card.title}" saiu do quadro. Recupere em Arquivadas.`, card.clientId);
-      onClose();
     } catch {
       setArchiving(false); // o store já avisou
+      return;
     }
+    setArchiving(false);
+    pushNotification("content", "Demanda arquivada", `"${card.title}" saiu do quadro. Recupere em Arquivadas.`, card.clientId);
+    requestClose("A demanda foi arquivada.");
+  };
+
+  // Aprovar / Solicitar alteração (24/10/2026, 2.5): fechavam o card no clique — sem o aviso de não
+  // salvo, e se a gravação falhasse o motivo digitado já tinha sumido. Agora esperam o servidor:
+  // deu certo → passa pelo aviso de não salvo; falhou → o card fica aberto com tudo preenchido.
+  const aprovarArte = async () => {
+    if (aprovando) return;
+    setAprovando(true); setErroAprovacao(null);
+    const ok = await approveContent(card.id, currentUser);
+    setAprovando(false);
+    if (!ok) { setErroAprovacao("Não consegui aprovar a arte — nada mudou. Confira a conexão e tente de novo."); return; }
+    requestClose("A arte foi aprovada.");
+  };
+  const enviarAlteracao = async () => {
+    const motivo = rejectReason.trim();
+    if (!motivo || enviandoAlteracao) return;
+    setEnviandoAlteracao(true); setErroAprovacao(null);
+    const ok = await rejectContent(card.id, currentUser, motivo);
+    setEnviandoAlteracao(false);
+    if (!ok) { setErroAprovacao("Não consegui enviar o pedido de alteração — o motivo continua aqui. Tente de novo."); return; }
+    setShowRejectInput(false); setRejectReason("");
+    requestClose("O pedido de alteração foi para o designer.");
   };
 
   const etapaAtual = infoDoStatus(status);
@@ -311,8 +362,22 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
     hashtags !== (card.hashtags ?? "") ||
     dueDate !== (card.dueDate ?? "");
 
-  const requestClose = () => {
-    if (isDirty && !window.confirm("Você tem alterações não salvas neste card. Descartar e fechar?")) return;
+  // O que não foi salvo, em palavras — o aviso diz o que vai se perder.
+  const naoSalvos = [
+    title !== (card.title ?? "") && "título",
+    dueDate !== (card.dueDate ?? "") && "data de postagem",
+    briefing !== htmlToMarkdown(card.briefing ?? "") && "briefing",
+    caption !== (card.caption ?? "") && "legenda",
+    hashtags !== (card.hashtags ?? "") && "hashtags",
+    observations !== (card.observations ?? "") && "observações",
+  ].filter(Boolean) as string[];
+
+  /** `feito` = o que acabou de acontecer (ex.: "A arte foi aprovada."), dito antes da pergunta. */
+  const requestClose = (feito?: string) => {
+    if (isDirty) {
+      const pergunta = `Você tem alterações não salvas neste card (${naoSalvos.join(", ") || "campos editados"}). Descartar e fechar?`;
+      if (!window.confirm(feito ? `${feito}\n\n${pergunta}\n\n(Cancelar = o card fica aberto para você salvar.)` : pergunta)) return;
+    }
     onClose();
   };
 
@@ -574,12 +639,48 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
                   </button>
                 )}
               </div>
-              <Textarea
-                value={caption}
-                onChange={(e) => setCaption(e.target.value)}
-                rows={4}
-                placeholder="Digite a legenda que será publicada… ou use o Gerar legenda (IA)"
-              />
+              {/* A coluna do meio do card é estreita (~370 px): a sugestão fica logo abaixo do campo, como
+                  painel à parte — a legenda digitada continua intacta até "Usar". */}
+              <div className="space-y-2">
+                <Textarea
+                  value={caption}
+                  onChange={(e) => { setCaption(e.target.value); setLegendaAnterior(null); }}
+                  rows={4}
+                  placeholder="Digite a legenda que será publicada… ou use o Gerar legenda (IA)"
+                  aria-label="Legenda"
+                />
+                {/* A sugestão da IA fica AO LADO — nada é trocado sem a pessoa clicar em "Usar". */}
+                {sugestaoLegenda && (
+                  <div className="rounded-lg border border-lone-info-border bg-lone-info-bg p-3 space-y-2" aria-label="Sugestão de legenda da IA">
+                    <p className="text-[11px] font-medium text-primary">Sugestão da IA</p>
+                    {sugestaoLegenda.nota && <p className="text-[10px] text-muted-foreground leading-snug">{sugestaoLegenda.nota}</p>}
+                    <p className="text-xs text-foreground whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">{sugestaoLegenda.legenda}</p>
+                    {sugestaoLegenda.hashtags && <p className="text-[11px] text-muted-foreground break-words">{sugestaoLegenda.hashtags}</p>}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button type="button"
+                        onClick={() => { usarLegenda(sugestaoLegenda, "sugestão da IA"); setSugestaoLegenda(null); }}
+                        className="text-[11px] px-2.5 py-1 rounded-md bg-primary text-primary-foreground font-medium hover:opacity-90">
+                        {caption.trim() ? "Usar no lugar da atual" : "Usar esta legenda"}
+                      </button>
+                      <button type="button" onClick={() => setSugestaoLegenda(null)}
+                        className="text-[11px] px-2.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted">
+                        Descartar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {legendaAnterior && (
+                <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground" role="status">
+                  Legenda trocada ({legendaAnterior.origem}) — ainda não salva.
+                  <button type="button" onClick={desfazerLegenda} className="px-2 py-0.5 rounded-md border border-border bg-card text-foreground hover:border-primary">
+                    Desfazer
+                  </button>
+                </p>
+              )}
+              {erroLegenda && (
+                <p className="mt-1.5 text-[11px] text-destructive" role="alert">{erroLegenda}</p>
+              )}
             </div>
 
             {/* Hashtags */}
@@ -590,7 +691,7 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
               </Label>
               <Textarea
                 value={hashtags}
-                onChange={(e) => setHashtags(e.target.value)}
+                onChange={(e) => { setHashtags(e.target.value); setLegendaAnterior(null); }}
                 rows={2}
                 placeholder="#marketing #socialmedia #agencia..."
               />
@@ -714,6 +815,7 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
                       {revisao.problemas.map((p, i) => <li key={i}>{p}</li>)}
                     </ul>
                   )}
+                  <ArtesVistas artes={revisao.artes} nota={revisao.nota} />
                   <p className="mt-1.5 text-[10px] text-muted-foreground">Sugestão da IA — a decisão é sua.</p>
                 </div>
               )}
@@ -735,10 +837,12 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
                       ))}
                     </ul>
                   )}
+                  <ArtesVistas artes={revisaoPost.artes} nota={revisaoPost.nota} />
                   {revisaoPost.legenda_corrigida && (
                     <button
                       type="button"
-                      onClick={() => { setCaption(revisaoPost.legenda_corrigida!); setRevisaoPost({ ...revisaoPost, legenda_corrigida: null }); }}
+                      // Com "Desfazer" (24/10/2026, 2.11): trocava a legenda sem volta.
+                      onClick={() => { usarLegenda({ legenda: revisaoPost.legenda_corrigida! }, "legenda corrigida da revisão final"); setRevisaoPost({ ...revisaoPost, legenda_corrigida: null }); }}
                       className="mt-2 w-full px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[11px] font-medium hover:bg-primary/80 transition-all"
                     >
                       Aplicar legenda corrigida (revise e salve)
@@ -752,14 +856,18 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
             {!showRejectInput ? (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { approveContent(card.id, currentUser); onClose(); }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all"
+                  type="button"
+                  onClick={() => void aprovarArte()}
+                  disabled={aprovando}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-all disabled:opacity-60"
                 >
-                  <CheckCircle size={14} /> Aprovar Arte
+                  <CheckCircle size={14} /> {aprovando ? "Aprovando…" : "Aprovar Arte"}
                 </button>
                 <button
-                  onClick={() => setShowRejectInput(true)}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-destructive/10 text-destructive text-xs font-medium border border-destructive/20 hover:bg-destructive/20 hover:border-destructive/40 transition-all"
+                  type="button"
+                  onClick={() => { setErroAprovacao(null); setShowRejectInput(true); }}
+                  disabled={aprovando}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-lone-danger-bg text-destructive text-xs font-medium border border-lone-danger-border hover:border-destructive transition-all disabled:opacity-60"
                 >
                   <XCircle size={14} /> Solicitar Alteração
                 </button>
@@ -769,32 +877,36 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
                 <input
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && rejectReason.trim()) {
-                      rejectContent(card.id, currentUser, rejectReason.trim());
-                      onClose();
-                    }
-                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void enviarAlteracao(); } }}
                   placeholder="Descreva o motivo da alteração..."
-                  className="w-full bg-destructive/5 border border-destructive/20 rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-destructive/40 outline-none"
+                  aria-label="Motivo da alteração"
+                  disabled={enviandoAlteracao}
+                  className="w-full bg-lone-danger-bg border border-lone-danger-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-destructive outline-none disabled:opacity-60"
                   autoFocus
                 />
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => { setShowRejectInput(false); setRejectReason(""); }}
+                    type="button"
+                    // Cancelar com motivo escrito pergunta antes de apagar (o texto é trabalho da pessoa).
+                    onClick={() => { if (rejectReason.trim() && !window.confirm("Descartar o motivo que você escreveu?")) return; setShowRejectInput(false); setRejectReason(""); setErroAprovacao(null); }}
+                    disabled={enviandoAlteracao}
                     className="px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground transition-all"
                   >
                     Cancelar
                   </button>
                   <button
-                    onClick={() => { if (rejectReason.trim()) { rejectContent(card.id, currentUser, rejectReason.trim()); onClose(); } }}
-                    disabled={!rejectReason.trim()}
-                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-destructive/10 text-destructive text-xs font-medium border border-destructive/20 hover:bg-destructive/20 transition-all disabled:opacity-30"
+                    type="button"
+                    onClick={() => void enviarAlteracao()}
+                    disabled={!rejectReason.trim() || enviandoAlteracao}
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-lone-danger-bg text-destructive text-xs font-medium border border-lone-danger-border hover:border-destructive transition-all disabled:opacity-30"
                   >
-                    <XCircle size={12} /> Enviar Rejeição
+                    <XCircle size={12} /> {enviandoAlteracao ? "Enviando…" : "Enviar Rejeição"}
                   </button>
                 </div>
               </div>
+            )}
+            {erroAprovacao && (
+              <p className="text-xs text-destructive" role="alert">{erroAprovacao}</p>
             )}
           </div>
         )}
@@ -893,7 +1005,7 @@ function CardCompleto({ card: cardProp, onClose, onModoArte }: Omit<Props, "modo
               <Archive size={14} /> {archiving ? "Arquivando..." : "Arquivar"}
             </Button>
           )}
-          <Button variant="ghost" onClick={requestClose}>
+          <Button variant="ghost" onClick={() => requestClose()}>
             Fechar
           </Button>
           <Button

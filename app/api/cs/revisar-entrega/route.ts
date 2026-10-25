@@ -10,34 +10,71 @@ import { fetchClientCsRules } from "@/lib/supabase/queries";
 import { loadBriefingCombinado } from "@/lib/cs/load-briefing";
 import { revisarArte } from "@/lib/cs/revisao-arte";
 import { csSendGroupText } from "@/lib/cs/notify";
-import { agruparProblemas, comentarioDaRevisao, avisoSemConferencia, type ArteNaoVista } from "@/lib/cs/revisao-agrupar";
+import { agruparProblemas, comentarioDaRevisao, avisoSemConferencia, avisoRevisaoNaoRodou, type ArteNaoVista } from "@/lib/cs/revisao-agrupar";
+import { carregarArtesParaIa } from "@/lib/conteudo/artes-para-ia-server";
+import { notaDeCobertura } from "@/lib/conteudo/artes-para-ia";
+import { comExecucao, anotar } from "@/lib/obs/correlacao";
 
 // POST /api/cs/revisar-entrega { cardId } — REVISÃO AUTOMÁTICA na ENTREGA do designer. Confere as
 // artes contra o briefing (preço/texto/localização/regras). Se achar problema, avisa no grupo de
 // Artes + comenta no card + notifica. Suggest-only: NÃO bloqueia a entrega, só alerta. Fire-and-forget.
-const isImageUrl = (u: string) => /^https?:\/\//.test(u) && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u);
+//
+// 24/10/2026 (auditoria de erro recuperável, 2.9):
+//  · só as artes da ENTREGA ATUAL (a mesma escolha do "Enviar pro cliente") — antes revisava todos
+//    os anexos, inclusive a referência do social, como se fosse a arte;
+//  · o teto de MAX_ARTES continua (custo), mas o comentário diz "conferi X de N" e quais ficaram de fora;
+//  · quando a revisão NÃO roda (IA desligada, leitura falhou, só referência, arte em link, erro no
+//    meio), o card ganha o aviso "não rodou" e a execução fica em agent_runs — antes voltava calada.
 const MAX_ARTES = 6; // teto de artes revisadas por card (bound de custo da visão)
+const AUTOR = "🤖 Revisão IA";
+
+async function comentar(cardId: string, texto: string): Promise<void> {
+  const { error } = await supabaseAdmin.from("card_comments").insert({ card_id: cardId, author: AUTOR, role: "system", text: texto });
+  if (error) console.error("[revisar-entrega] não gravei o comentário no card:", cardId, error.message);
+}
+
+/** A revisão não rodou: deixa o rastro no card (e na execução) e devolve o motivo. */
+async function naoRodou(cardId: string, motivo: string, status = 200) {
+  anotar(`não rodou: ${motivo}`);
+  console.error("[revisar-entrega] não rodou:", cardId, motivo);
+  await comentar(cardId, avisoRevisaoNaoRodou(motivo));
+  return NextResponse.json({ ok: false, naoRodou: true, motivo }, { status });
+}
 
 export async function POST(req: NextRequest) {
   // Usuário logado (a entrega no quadro) ou rotina do sistema (refazer revisões que falharam).
   const negado = await requireCronOrUser(req);
   if (negado) return negado;
-  if (!isOpenAIConfigured()) return NextResponse.json({ ok: false, skip: "IA não configurada" });
 
   const { cardId } = (await req.json().catch(() => ({}))) as { cardId?: string };
   if (!cardId) return NextResponse.json({ error: "cardId obrigatório" }, { status: 400 });
 
-  const { data: card } = await supabaseAdmin
+  return comExecucao({ origem: "cs:revisar-entrega", extra: { cardId } }, async () => {
+    try {
+      return await revisar(cardId);
+    } catch (e) {
+      // Erro no meio (banco, rede, PDF): o card diz que a revisão não terminou.
+      return naoRodou(cardId, `erro inesperado: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300), 500);
+    }
+  });
+}
+
+async function revisar(cardId: string) {
+  if (!isOpenAIConfigured()) return naoRodou(cardId, "a IA não está configurada no servidor");
+
+  const { data: card, error: eCard } = await supabaseAdmin
     .from("content_cards").select("id, title, briefing, image_url, client_id, client_name").eq("id", cardId).maybeSingle();
+  if (eCard) return naoRodou(cardId, `não consegui ler o card (${eCard.message})`, 500);
   if (!card) return NextResponse.json({ error: "card não encontrado" }, { status: 404 });
 
-  // Artes a revisar: anexos (carrossel) na ordem; fallback pra capa.
-  const { data: atts } = await supabaseAdmin
-    .from("card_attachments").select("url, position").eq("card_id", cardId).order("position", { ascending: true });
-  let urls = (atts ?? []).map((a) => a.url as string).filter(isImageUrl);
-  if (urls.length === 0 && isImageUrl((card.image_url as string) || "")) urls = [card.image_url as string];
-  urls = urls.slice(0, MAX_ARTES);
-  if (urls.length === 0) return NextResponse.json({ ok: true, skip: "sem imagem direta pra revisar (pode estar como link do Drive)" });
+  // Artes a revisar: as da ENTREGA ATUAL, na ordem — referência do social não é arte.
+  const lidas = await carregarArtesParaIa(cardId, card.image_url as string | null, MAX_ARTES);
+  if (!lidas.ok) return naoRodou(cardId, lidas.erro, 500);
+  const escolha = lidas.artes;
+  const urls = escolha.artes.map((a) => a.url);
+  if (urls.length === 0) {
+    return naoRodou(cardId, escolha.erro ?? "não há arte de entrega com imagem para conferir");
+  }
 
   const { data: cli } = await supabaseAdmin
     .from("clients").select("name, nome_fantasia, fixed_briefing, campaign_briefing, assigned_designer, assigned_social").eq("id", card.client_id as string).maybeSingle();
@@ -57,34 +94,30 @@ export async function POST(req: NextRequest) {
     porArte.push(r.data.ok ? [] : r.data.problemas);
   }
   const problemas = agruparProblemas(porArte);
-  const comentario = comentarioDaRevisao(problemas, naoVistas, urls.length);
+  const cobertura = notaDeCobertura(escolha, urls.length - naoVistas.length);
+  const comentario = comentarioDaRevisao(problemas, naoVistas, urls.length, cobertura);
 
   const designer = (cli?.assigned_designer as string) || "";
   const social = (cli?.assigned_social as string) || "";
 
   if (comentario === null) {
     // Nenhuma arte vista: o card diz isso, em vez do selo de aprovado.
-    await supabaseAdmin.from("card_comments").insert({
-      card_id: cardId, author: "🤖 Revisão IA", role: "system", text: avisoSemConferencia(naoVistas),
-    }).then(() => {}, () => {});
+    await comentar(cardId, avisoSemConferencia(naoVistas));
+    anotar(`nenhuma arte conferida: ${naoVistas[0]?.motivo ?? "?"}`);
     console.error("[revisar-entrega] nenhuma arte conferida:", cardId, naoVistas[0]?.motivo);
-    return NextResponse.json({ ok: false, problemas: [], artes: urls.length, nao_conferidas: naoVistas });
+    return NextResponse.json({ ok: false, problemas: [], artes: urls.length, total: escolha.total, nao_conferidas: naoVistas });
   }
 
   if (problemas.length === 0) {
     // Tudo certo (ou só parte vista, o que o comentário diz) — registro discreto no card, sem poluir o grupo.
-    await supabaseAdmin.from("card_comments").insert({
-      card_id: cardId, author: "🤖 Revisão IA", role: "system", text: comentario,
-    }).then(() => {}, () => {});
-    return NextResponse.json({ ok: true, problemas: [], artes: urls.length, nao_conferidas: naoVistas });
+    await comentar(cardId, comentario);
+    return NextResponse.json({ ok: true, problemas: [], artes: urls.length, total: escolha.total, nao_conferidas: naoVistas });
   }
 
   // Achou problema → comenta no card, notifica e avisa no grupo de Artes. O card leva a lista INTEIRA
   // (antes cortava em 8 e a mensagem dizia "achei 16").
   const lista = problemas.map((p) => `• ${p}`).join("\n");
-  await supabaseAdmin.from("card_comments").insert({
-    card_id: cardId, author: "🤖 Revisão IA", role: "system", text: comentario,
-  }).then(() => {}, () => {});
+  await comentar(cardId, comentario);
   await supabaseAdmin.from("notifications").insert({
     type: "content", title: "⚠️ Revisão da arte (IA)",
     body: `"${card.title as string}" (${clienteNome}) — a IA achou ${problemas.length} ponto(s) a conferir antes de ir ao cliente.`,
@@ -94,7 +127,7 @@ export async function POST(req: NextRequest) {
   const jid = process.env.CS_INTERNAL_GROUP_JID; // grupo de Artes
   if (jid) {
     const quem = [designer && `designer *${designer}*`, social && `social *${social}*`].filter(Boolean).join(" · ");
-    const msg = `🔍 *Revisão automática — ${clienteNome}*\nA arte de *${card.title as string}* foi entregue e eu conferi contra o briefing. Achei ${problemas.length} ponto(s) pra revisar${quem ? ` — ${quem}` : ""}:\n\n${lista}\n\n_Dá uma olhada antes de mandar pro cliente (posso estar enganada — confere na fonte)._`;
+    const msg = `🔍 *Revisão automática — ${clienteNome}*\nA arte de *${card.title as string}* foi entregue e eu conferi contra o briefing. Achei ${problemas.length} ponto(s) pra revisar${quem ? ` — ${quem}` : ""}:\n\n${lista}\n\n${escolha.foraDoLimite ? `_Conferi ${urls.length} de ${escolha.total} artes — as outras, confira à mão._\n` : ""}_Dá uma olhada antes de mandar pro cliente (posso estar enganada — confere na fonte)._`;
     const meta = { origem: "revisao-arte", destino: "interno" as const, clientId: card.client_id as string };
     // TEXTO OU PDF SEGUE O VOLUME (lib/cs/formato-aviso.ts), como os outros avisos.
     const { escolherFormato } = await import("@/lib/cs/formato-aviso");
@@ -120,5 +153,5 @@ export async function POST(req: NextRequest) {
     if (!enviado) await csSendGroupText(jid, msg, undefined, meta).catch(() => {});
   }
 
-  return NextResponse.json({ ok: true, problemas, artes: urls.length });
+  return NextResponse.json({ ok: true, problemas, artes: urls.length, total: escolha.total });
 }

@@ -14,20 +14,28 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ImagePlus, X } from "lucide-react";
+import { TEXTO_DO_LIMITE, TIPOS_DE_ARTE } from "@/lib/upload/limites-arte";
 
 interface Props {
   arquivos: File[];
   onChange: (f: File[]) => void;
+  /**
+   * Quem confere os arquivos novos (limite de tamanho e formato) antes de entrarem na lista. Sem
+   * isto, entram só as imagens, sem conferir o limite. 24/10/2026 (2.15): o limite não era dito e o
+   * arquivo grande só falhava depois de criar a demanda.
+   */
+  onAdicionar?: (novos: File[]) => void;
   erro?: string | null;
   /** Some com o campo enquanto o upload acontece — evita mexer no que já está subindo. */
   ocupado?: boolean;
 }
 
-export default function CampoReferencias({ arquivos, onChange, erro, ocupado }: Props) {
+export default function CampoReferencias({ arquivos, onChange, onAdicionar, erro, ocupado }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [sobre, setSobre] = useState(false);
 
   const adicionar = (novos: File[]) => {
+    if (onAdicionar) { if (novos.length) onAdicionar(novos); return; }
     const imagens = novos.filter((f) => f.type.startsWith("image/"));
     if (imagens.length) onChange([...arquivos, ...imagens]);
   };
@@ -97,7 +105,7 @@ export default function CampoReferencias({ arquivos, onChange, erro, ocupado }: 
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept={TIPOS_DE_ARTE.join(",")}
         multiple
         className="hidden"
         onChange={(e) => { adicionar(Array.from(e.target.files ?? [])); e.target.value = ""; }}
@@ -129,8 +137,10 @@ export default function CampoReferencias({ arquivos, onChange, erro, ocupado }: 
       <p className="text-[10px] text-muted-foreground leading-relaxed">
         É referência pro designer — não vai pro cliente nem é publicado.
       </p>
+      {/* O limite escrito ANTES de escolher (2.15) — antes o arquivo grande só falhava depois de criar. */}
+      <p className="text-[10px] text-muted-foreground">{TEXTO_DO_LIMITE}.</p>
 
-      {erro && <p className="text-[10px] text-destructive">{erro}</p>}
+      {erro && <p role="alert" className="text-[11px] leading-snug text-destructive">{erro}</p>}
     </div>
   );
 }

@@ -17,6 +17,7 @@ import { MarkdownEditor } from "@/components/Markdown";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 import { ETAPAS, ETAPAS_FINAIS, infoEtapa, statusDaEtapa, statusNaEtapa, type Etapa } from "@/lib/conteudo/etapas";
+import { avisoDoPedidoDeArte } from "@/lib/conteudo/producao";
 import { lerVista, type Vista } from "@/lib/conteudo/quadro";
 import { slotsSegQuaSex, proximoSlot, chaveDaLinha } from "@/components/kanban/lote";
 import type { ContentCard, Client, Priority } from "@/lib/types";
@@ -32,6 +33,8 @@ import {
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
+import { frasesDeRecusa, resumoDasReferencias, separarArquivos } from "@/lib/upload/limites-arte";
+import { chamar } from "@/lib/api/chamar";
 import CampoReferencias from "@/components/social/CampoReferencias";
 import { useRole } from "@/lib/context/RoleContext";
 // AppStateContext removed — all state from Zustand stores
@@ -181,9 +184,24 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
   // designer já podia ter puxado o card sem a referência.
   // Sobe DEPOIS de criar porque o upload precisa do id do card; se o upload falhar, a demanda
   // continua criada (perder o card por causa de um anexo seria pior) e a pessoa é avisada.
+  //
+  // 24/10/2026 (auditoria de erro recuperável, 2.15): o limite não era dito (o print de 14 MB só
+  // falhava DEPOIS de criar), e clicar em "Criar" de novo criava OUTRO card e subia todas as
+  // referências de novo. Agora o arquivo é conferido ao ser escolhido, com o limite escrito; o card
+  // criado fica guardado e a nova tentativa manda só as referências que falharam.
   const [refs, setRefs] = useState<File[]>([]);
   const [arrastando, setArrastando] = useState(false);
   const [subindoRef, setSubindoRef] = useState(false);
+  const [erroRef, setErroRef] = useState<string | null>(null);
+  /** O card que esta janela já criou — "Criar" de novo não cria outro. */
+  const [cardCriado, setCardCriado] = useState<{ id: string; titulo: string } | null>(null);
+
+  /** Confere cada arquivo na hora em que é escolhido/colado/arrastado: o que passa do limite fica de fora com o motivo. */
+  const adicionarRefs = (novos: File[]) => {
+    const { aceitos, recusados } = separarArquivos(novos, refs.length);
+    if (aceitos.length) setRefs((r) => [...r, ...aceitos]);
+    setErroRef(frasesDeRecusa(recusados));
+  };
 
   // Ctrl+V em qualquer ponto do modal. Só age quando veio imagem — colar texto no briefing segue
   // funcionando normal.
@@ -191,38 +209,68 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
     const imgs = imagensDoPaste(e);
     if (!imgs.length) return;
     e.preventDefault();
-    setRefs((r) => [...r, ...imgs]); setErroRef(null);
+    adicionarRefs(imgs);
   };
-  const [erroRef, setErroRef] = useState<string | null>(null);
-  // Ler `erroRef` logo após o await devolveria o valor ANTIGO (state não muda no meio da função).
-  const erroRefRef = useRef<string | null>(null);
 
-  const anexarReferencias = async (cardId: string) => {
-    if (!refs.length) return;
-    setSubindoRef(true); setErroRef(null); erroRefRef.current = null;
-    const { authedFetch } = await import("@/lib/supabase/authed-fetch");
-    for (const f of refs) {
+  /** Sobe as referências, uma por vez. Devolve as que NÃO subiram (com o motivo). */
+  const anexarReferencias = async (cardId: string, arquivos: File[]): Promise<{ arquivo: File; erro: string }[]> => {
+    setSubindoRef(true); setErroRef(null);
+    const falhas: { arquivo: File; erro: string }[] = [];
+    for (const f of arquivos) {
       const fd = new FormData();
       fd.append("file", f);
       fd.append("cardId", cardId);
       // O que o social anexa AQUI é referência pro designer, não arte pronta. Sem esta marca, a
       // publicação automática mandaria o print de referência pro Instagram do cliente.
       fd.append("tipo", "referencia");
-      try {
-        const r = await authedFetch("/api/upload-art", { method: "POST", body: fd });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      } catch {
-        const msg = `Demanda criada, mas a referência "${f.name}" não subiu. Abra o card e anexe de novo.`;
-        erroRefRef.current = msg; setErroRef(msg);
-      }
+      const r = await chamar("/api/upload-art", fd);
+      if (!r.ok) falhas.push({ arquivo: f, erro: r.erro ?? "erro no upload" });
     }
     setSubindoRef(false);
+    return falhas;
+  };
+
+  /** Depois do upload: o que falhou fica na lista (é o que o "Reenviar" manda) e a frase diz o que houve. */
+  const tratarFalhasDasRefs = (cardId: string, titulo: string, total: number, falhas: { arquivo: File; erro: string }[]): boolean => {
+    trilha("novo-conteudo:refs", { id: cardId, total, falhas: falhas.length });
+    if (!falhas.length) return true;
+    setRefs(falhas.map((f) => f.arquivo));
+    setErroRef(resumoDasReferencias({ titulo, total, falhas: falhas.map((f) => ({ nome: f.arquivo.name, erro: f.erro })) }));
+    return false;
+  };
+
+  const fecharLimpo = () => {
+    setTitle("");
+    setRefs([]);
+    setCardCriado(null);
+    setClientId(defaultClient?.id ?? "");
+    setFormat("Post");
+    setPriority("medium");
+    setDueDate(defaultDate ?? "");
+    setDueTime("");
+    setBriefing("");
+    onClose();
   };
 
   const [criando, setCriando] = useState(false);
   const handleSubmit = async () => {
-    trilha("novo-conteudo:submit", { canSubmit: !!canSubmit, subindoRef, criando, clientId: clientId || null, faltando });
-    if (!canSubmit || subindoRef || criando) return;
+    trilha("novo-conteudo:submit", { canSubmit: !!canSubmit, subindoRef, criando, clientId: clientId || null, faltando, jaCriado: !!cardCriado });
+    if (subindoRef || criando) return;
+    if (cardCriado) {
+      // O card já existe: reenvia só as referências que faltaram (ou conclui sem elas).
+      setCriando(true);
+      try {
+        if (!refs.length) { fecharLimpo(); return; }
+        const total = refs.length;
+        const falhas = await anexarReferencias(cardCriado.id, refs);
+        if (tratarFalhasDasRefs(cardCriado.id, cardCriado.titulo, total, falhas)) {
+          toast.success(`Referências anexadas em "${cardCriado.titulo}".`);
+          fecharLimpo();
+        }
+      } finally { setCriando(false); }
+      return;
+    }
+    if (!canSubmit) return;
     setCriando(true);
     try { await criarDeVerdade(); } finally { setCriando(false); }
   };
@@ -230,8 +278,9 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
     // COM REFERÊNCIA, O MODAL ESPERA. Fechando na hora, o upload virava órfão: se falhasse,
     // ninguém via o aviso e a demanda ia pro designer sem a imagem — que é justamente o problema
     // que este campo veio resolver. Sem referência, fecha na hora como antes.
+    const titulo = title.trim();
     const criado = await addContentCard({
-      title: title.trim(),
+      title: titulo,
       clientId,
       clientName: selectedClient?.name ?? "",
       socialMedia: role === "social" ? currentUser : (selectedClient?.assignedSocial ?? currentUser),
@@ -250,21 +299,14 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
     if (criado === null) return; // modal fica aberto com tudo preenchido
     trilha("novo-conteudo:criado", { id: criado?.id, refs: refs.length });
     if (criado?.id && refs.length) {
-      await anexarReferencias(criado.id);
-      trilha("novo-conteudo:refs", { id: criado.id, erro: erroRefRef.current });
+      setCardCriado({ id: criado.id, titulo });
+      const total = refs.length;
+      const falhas = await anexarReferencias(criado.id, refs);
       // Falhou algum anexo: mantém o modal aberto com o aviso — a demanda já existe, mas a pessoa
-      // precisa saber que a referência não foi junto.
-      if (erroRefRef.current) return;
+      // precisa saber que a referência não foi junto (e o próximo clique não cria outro card).
+      if (!tratarFalhasDasRefs(criado.id, titulo, total, falhas)) return;
     }
-    setTitle("");
-    setRefs([]);
-    setClientId(defaultClient?.id ?? "");
-    setFormat("Post");
-    setPriority("medium");
-    setDueDate(defaultDate ?? "");
-    setDueTime("");
-    setBriefing("");
-    onClose();
+    fecharLimpo();
   };
 
   return (
@@ -273,7 +315,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
         onPaste={aoColar}
         onDragOver={(e) => { e.preventDefault(); setArrastando(true); }}
         onDragLeave={() => setArrastando(false)}
-        onDrop={(e) => { e.preventDefault(); setArrastando(false); const i = imagensDoDrop(e); if (i.length) { setRefs((r) => [...r, ...i]); setErroRef(null); } }}
+        onDrop={(e) => { e.preventDefault(); setArrastando(false); const i = imagensDoDrop(e); if (i.length) adicionarRefs(i); }}
         className={`max-w-md max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden ${arrastando ? "ring-2 ring-primary" : ""}`}
       >
         <DialogHeader className="px-6 pt-6 pb-4 shrink-0">
@@ -290,6 +332,13 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
             decide a carteira e o briefing fixo) parecia tão secundário quanto o formato. Agora a
             pessoa lê "o quê / quando / como fazer" e sabe onde está. */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 space-y-5 py-2">
+          {/* Card já criado (2.15): os campos travam — mudar aqui não mudaria o card que já existe. */}
+          {cardCriado && (
+            <p role="status" className="rounded-lg border border-lone-info-border bg-lone-info-bg px-3 py-2 text-xs text-foreground">
+              A demanda <b>{cardCriado.titulo}</b> já está no quadro. Para mudar título, data ou briefing, abra o card. Aqui falta só a referência.
+            </p>
+          )}
+          <fieldset disabled={!!cardCriado} className="space-y-5 min-w-0 border-0 p-0 m-0 disabled:opacity-60">
           {/* Title */}
           <div>
             <Label className="mb-1.5 block">Título do Conteúdo *</Label>
@@ -398,11 +447,13 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
             />
             <p className="text-[10px] text-muted-foreground mt-1">Markdown puro. Designer vê formatado.</p>
           </div>
+          </fieldset>
 
           {/* Referência JÁ aqui — antes só dava pra anexar reabrindo a demanda depois de criada. */}
           <CampoReferencias
             arquivos={refs}
             onChange={(f) => { setRefs(f); setErroRef(null); }}
+            onAdicionar={adicionarRefs}
             erro={erroRef}
             ocupado={subindoRef}
           />
@@ -422,13 +473,17 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
 
         <DialogFooter className="px-6 py-4 shrink-0 border-t border-border sm:justify-between">
           <p className="text-[11px] self-center text-muted-foreground" aria-live="polite">
-            {faltando.length > 0 && <span className="text-destructive">Falta preencher: {faltando.join(", ")}.</span>}
-            {faltando.length === 0 && subindoRef && "Subindo a referência…"}
+            {!cardCriado && faltando.length > 0 && <span className="text-destructive">Falta preencher: {faltando.join(", ")}.</span>}
+            {(cardCriado || faltando.length === 0) && subindoRef && "Subindo a referência…"}
+            {cardCriado && !subindoRef && <span>Demanda criada — {refs.length ? `${refs.length === 1 ? "falta 1 referência" : `faltam ${refs.length} referências`}.` : "pode concluir."}</span>}
           </p>
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-            <Button onClick={handleSubmit} disabled={!canSubmit || subindoRef || criando}>
-              {criando ? "Criando…" : "Criar Conteúdo"}
+            {/* Com o card já criado, fechar não desfaz nada: ele fica no quadro, sem as referências que faltaram. */}
+            <Button variant="ghost" onClick={cardCriado ? fecharLimpo : onClose}>{cardCriado ? "Fechar sem elas" : "Cancelar"}</Button>
+            <Button onClick={handleSubmit} disabled={cardCriado ? subindoRef || criando : !canSubmit || subindoRef || criando}>
+              {cardCriado
+                ? (subindoRef || criando ? "Enviando…" : refs.length ? `Reenviar ${refs.length === 1 ? "a referência" : `${refs.length} referências`}` : "Concluir")
+                : criando ? "Criando…" : "Criar Conteúdo"}
             </Button>
           </div>
         </DialogFooter>
@@ -672,7 +727,10 @@ function QuickTaskBar({ clients }: QuickTaskBarProps) {
         dueTime,
       }, { criadoPor: currentUser });
       if (pedeArte && criado?.id) {
-        await transicaoDesign(criado.id, { tipo: "pedir_arte" }).catch((err: unknown) => {
+        await transicaoDesign(criado.id, { tipo: "pedir_arte" }).then((r) => {
+          // Pedido sem dono (24/10/2026, 2.12): avisa em vez de deixar o "Criado!" dizer que foi tudo bem.
+          if (r.semDesigner) toast.warning(avisoDoPedidoDeArte({ titulo: title.trim(), cliente: client?.name, semDesigner: true }).texto, { duration: 10_000 });
+        }).catch((err: unknown) => {
           toast.error(`O card foi criado, mas não foi pro designer${err instanceof Error ? `: ${err.message}` : ""}. Use "Pedir arte" no card.`);
         });
       }
@@ -1781,8 +1839,8 @@ function ApprovalQueueTab({
   contentCards: ContentCard[];
   currentUser: string;
   contentApprovals: import("@/lib/types").ContentApproval[];
-  approveContent: (cardId: string, reviewer: string) => void;
-  rejectContent: (cardId: string, reviewer: string, reason: string) => void;
+  approveContent: (cardId: string, reviewer: string) => Promise<boolean>;
+  rejectContent: (cardId: string, reviewer: string, reason: string) => Promise<boolean>;
 }) {
   const [rejectCardId, setRejectCardId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -1825,7 +1883,8 @@ function ApprovalQueueTab({
                         autoFocus
                       />
                       <button
-                        onClick={() => { if (rejectReason.trim()) { doReject(card.id, currentUser, rejectReason.trim()); setRejectCardId(null); setRejectReason(""); } }}
+                        // Só limpa o motivo depois do sim do servidor (24/10/2026, 2.5) — na falha ele continua aqui.
+                        onClick={async () => { const m = rejectReason.trim(); if (!m) return; if (await doReject(card.id, currentUser, m)) { setRejectCardId(null); setRejectReason(""); } }}
                         className="text-xs bg-destructive/20 text-destructive px-3 py-1.5 rounded-lg hover:bg-destructive/30 transition-colors"
                       >
                         Confirmar

@@ -2,8 +2,8 @@
 // muda no card e no pedido de arte; este teste cobre cada transição e o arraste no quadro.
 import { describe, it, expect } from "vitest";
 import {
-  camposDaTroca, designerDeve, estadoDoDesign, lerAcao, papelPode, planejarMovimento, planejarTransicao,
-  type AcaoDesign, type CardDesign, type PedidoDesign, type ResultadoPlano,
+  avisoDoPedidoDeArte, camposDaTroca, designerDeve, estadoDoDesign, lerAcao, papelPode, planejarMovimento, planejarTransicao,
+  podeCancelarPedido, type AcaoDesign, type CardDesign, type PedidoDesign, type ResultadoPlano,
 } from "@/lib/conteudo/producao";
 
 const AGORA = "2026-09-24T15:00:00.000Z";
@@ -138,6 +138,11 @@ describe("pedir alteração", () => {
     });
   });
 
+  it("2.8: voltar pro designer tira as marcas de Agendado e No ar (o PDF ao cliente contava como publicado)", () => {
+    const p = plano({ tipo: "pedir_alteracao", motivo: "trocar foto" }, card({ status: "published", designerDeliveredAt: "x" }), pedido("done"));
+    expect(p.card).toMatchObject({ scheduled_at: null, publish_verified_at: null, publish_verified_by: null });
+  });
+
   it("sem pedido nenhum (arte feita por fora): abre um", () => {
     expect(plano({ tipo: "pedir_alteracao", motivo: "x" }, card({ status: "approval" }), null).pedido).toEqual({ criar: true, status: "queued" });
   });
@@ -168,7 +173,7 @@ describe("devolver ao social (bloquear) e desbloquear", () => {
   });
 });
 
-describe("cancelar o pedido (gestão)", () => {
+describe("cancelar o pedido", () => {
   it("apaga o pedido aberto e o card volta pra Pauta sem vínculo", () => {
     const p = plano({ tipo: "cancelar_pedido" }, card({ status: "in_production", designRequestId: "p1" }), pedido("queued"));
     expect(p.pedido).toEqual({ apagar: true });
@@ -178,17 +183,31 @@ describe("cancelar o pedido (gestão)", () => {
   it("pedido entregue não se cancela", () => {
     expect(planejarTransicao({ tipo: "cancelar_pedido" }, card(), pedido("done"), AGORA)).toMatchObject({ ok: false, status: 409 });
   });
+
+  it("2.6: pediu arte por engano — quem pediu desfaz enquanto está NA FILA; começado, só a gestão", () => {
+    expect(podeCancelarPedido("social", pedido("queued"))).toEqual({ ok: true });
+    expect(podeCancelarPedido("traffic", pedido("queued"))).toEqual({ ok: true });
+    const comecado = podeCancelarPedido("social", pedido("in_progress"));
+    expect(comecado.ok).toBe(false);
+    expect(!comecado.ok && comecado.motivo).toMatch(/designer já começou/);
+    expect(podeCancelarPedido("manager", pedido("in_progress"))).toEqual({ ok: true });
+    expect(podeCancelarPedido("designer", pedido("queued")).ok).toBe(false);
+    expect(podeCancelarPedido("social", pedido("done")).ok).toBe(false);
+    expect(podeCancelarPedido("social", null).ok).toBe(false);
+  });
 });
 
 describe("quem pode", () => {
-  it("social pede arte e alteração; designer pega, entrega e devolve; só a gestão cancela", () => {
+  it("social pede arte e alteração; designer pega, entrega e devolve", () => {
     expect(papelPode("social", "pedir_arte")).toBe(true);
     expect(papelPode("social", "pedir_alteracao")).toBe(true);
     expect(papelPode("social", "iniciar")).toBe(false);
     expect(papelPode("designer", "iniciar")).toBe(true);
     expect(papelPode("designer", "bloquear")).toBe(true);
     expect(papelPode("designer", "pedir_alteracao")).toBe(false);
-    expect(papelPode("social", "cancelar_pedido")).toBe(false);
+    // Social cancela (só na fila — podeCancelarPedido); o designer não.
+    expect(papelPode("social", "cancelar_pedido")).toBe(true);
+    expect(papelPode("designer", "cancelar_pedido")).toBe(false);
     expect(papelPode("manager", "cancelar_pedido")).toBe(true);
     expect(papelPode("comercial", "pedir_arte")).toBe(false);
     expect(papelPode(null, "pedir_arte")).toBe(false);
@@ -233,10 +252,13 @@ describe("o arraste no quadro (planejarMovimento)", () => {
     expect(mov(card({ status: "in_production" }), null, "revisao")).toEqual({ tipo: "status", status: "approval" });
   });
 
-  it("tirar do designer um pedido aberto: só a gestão (cancela o pedido)", () => {
+  it("tirar do designer um pedido aberto: na fila, o social desfaz; começado, só a gestão (2.6)", () => {
     const c = card({ status: "in_production" });
-    expect(mov(c, pedido("queued"), "pauta").tipo).toBe("recusar");
-    expect(mov(c, pedido("queued"), "pauta", "manager")).toEqual({ tipo: "design", acao: { tipo: "cancelar_pedido" } });
+    expect(mov(c, pedido("queued"), "pauta")).toEqual({ tipo: "design", acao: { tipo: "cancelar_pedido" } });
+    const comecado = mov(c, pedido("in_progress"), "pauta");
+    expect(comecado.tipo).toBe("recusar");
+    expect(comecado.tipo === "recusar" && comecado.motivo).toMatch(/só a gestão/);
+    expect(mov(c, pedido("in_progress"), "pauta", "manager")).toEqual({ tipo: "design", acao: { tipo: "cancelar_pedido" } });
   });
 
   it("da revisão em diante: troca simples", () => {
@@ -271,5 +293,36 @@ describe("campos de uma troca simples de etapa", () => {
   it("não reconfirma arte já confirmada, e tirar do bloqueio limpa o motivo", () => {
     expect(camposDaTroca({ status: "approval", designerDeliveredAt: "x", socialConfirmedAt: "z" }, "client_approval", "C", AGORA)).not.toHaveProperty("socialConfirmedAt");
     expect(camposDaTroca({ status: "blocked" }, "ideas", "C", AGORA)).toMatchObject({ blockedReason: null, blockedBy: null, blockedAt: null });
+  });
+
+  it("2.8: voltar de No ar/Agendado limpa as marcas da etapa que o card deixou", () => {
+    const noAr = { status: "published" as const, scheduledAt: "s", publishVerifiedAt: "p" };
+    expect(camposDaTroca(noAr, "approval", "C", AGORA)).toMatchObject({ scheduledAt: null, publishVerifiedAt: null, publishVerifiedBy: null });
+    // De No ar para Agendado: continua agendado, só deixa de estar no ar.
+    const paraAgendado = camposDaTroca(noAr, "scheduled", "C", AGORA);
+    expect(paraAgendado).toMatchObject({ publishVerifiedAt: null, publishVerifiedBy: null });
+    expect(paraAgendado).not.toHaveProperty("scheduledAt");
+    expect(camposDaTroca({ status: "scheduled", scheduledAt: "s" }, "client_approval", "C", AGORA)).toMatchObject({ scheduledAt: null });
+    // Ir pra frente não apaga nada.
+    expect(camposDaTroca({ status: "scheduled", scheduledAt: "s" }, "published", "C", AGORA)).not.toHaveProperty("scheduledAt");
+    // Sem marca, não escreve null à toa.
+    expect(camposDaTroca({ status: "client_approval" }, "approval", "C", AGORA)).not.toHaveProperty("scheduledAt");
+  });
+});
+
+describe("o aviso depois de pedir a arte (2.12)", () => {
+  it("pedido sem dono: diz que ficou sem designer e o que fazer — não 'foi pro designer'", () => {
+    const a = avisoDoPedidoDeArte({ titulo: "SEX 26", cliente: "Padaria", semDesigner: true });
+    expect(a.tom).toBe("aviso");
+    expect(a.texto).toMatch(/ficou SEM DESIGNER/);
+    expect(a.texto).toMatch(/defina o designer na ficha de Padaria/);
+    expect(a.texto).not.toMatch(/foi pro designer/);
+  });
+  it("dono escolhido pelo sistema: diz para quem e por quê", () => {
+    expect(avisoDoPedidoDeArte({ titulo: "SEX 26", designer: "Rodrigo", atribuicao: "historico" }).texto)
+      .toBe('"SEX 26" foi pro quadro do Rodrigo, que é quem já faz as artes desse cliente (o cliente não tem designer na ficha).');
+  });
+  it("caminho normal", () => {
+    expect(avisoDoPedidoDeArte({ titulo: "SEX 26", designer: "Rodrigo", atribuicao: "carteira" })).toEqual({ tom: "sucesso", texto: '"SEX 26" foi pro designer (Rodrigo).' });
   });
 });

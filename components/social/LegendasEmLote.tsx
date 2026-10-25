@@ -14,7 +14,7 @@ import { chamar } from "@/lib/api/chamar";
 import { cn, todaySP } from "@/lib/utils";
 import { somarDias } from "@/lib/conteudo/no-ar";
 import { ddmm, segundaDaSemana } from "@/lib/conteudo/lacunas";
-import { cardsDaSemana, MAX_CARDS_POR_LOTE, type RascunhoLegenda } from "@/lib/conteudo/legendas-lote";
+import { cardsDaSemana, legendasNaoSalvas, MAX_CARDS_POR_LOTE, type RascunhoLegenda } from "@/lib/conteudo/legendas-lote";
 import { baixarArtesZip } from "@/components/conteudo/ParaAgendar";
 import type { Client } from "@/lib/types";
 
@@ -46,10 +46,18 @@ export default function LegendasEmLote({ clientes, onClose }: { clientes: Client
   );
   const gerando = progresso !== null;
   const marcadas = linhas.filter((l) => l.salvar && l.legenda.trim());
+  const naoSalvas = legendasNaoSalvas(linhas);
+
+  // O QUE FOI ESCRITO NÃO SE PERDE (24/10/2026, 2.14): fechar, ESC, clicar fora, trocar cliente ou
+  // semana e escrever de novo apagavam os rascunhos sem perguntar. Agora pergunta antes.
+  const podeDescartar = (acao: string): boolean => naoSalvas === 0
+    || window.confirm(`${naoSalvas === 1 ? "1 legenda escrita ainda não foi salva" : `${naoSalvas} legendas escritas ainda não foram salvas`} nos cards. ${acao} apaga o que foi escrito.\n\nDescartar mesmo assim? (Cancelar = continuar aqui e usar "Salvar nos cards".)`);
+  const fechar = () => { if (!gerando && !salvando && podeDescartar("Fechar")) onClose(); };
 
   const gerar = async () => {
     if (!clientId || !daSemana.length || gerando) return;
     if (daSemana.length > MAX_CARDS_POR_LOTE) { toast.error(`A semana tem ${daSemana.length} cards — o lote vai até ${MAX_CARDS_POR_LOTE}.`); return; }
+    if (!podeDescartar("Escrever de novo")) return;
     setLinhas([]);
     setProgresso({ feito: 0, total: daSemana.length });
     // Um card por requisição: cada legenda leva ~10 s, e a pessoa vê a semana chegando.
@@ -86,7 +94,7 @@ export default function LegendasEmLote({ clientes, onClose }: { clientes: Client
   const campo = "w-full bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50";
 
   return (
-    <Dialog open onOpenChange={(a) => { if (!a && !gerando && !salvando) onClose(); }}>
+    <Dialog open onOpenChange={(a) => { if (!a) fechar(); }}>
       <DialogContent className="max-w-3xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
         <div className="p-5 pr-12 border-b border-border space-y-3">
           <div>
@@ -98,7 +106,7 @@ export default function LegendasEmLote({ clientes, onClose }: { clientes: Client
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex-1 min-w-[200px] space-y-1">
               <span className="text-lone-eyebrow uppercase text-muted-foreground">Cliente</span>
-              <select value={clientId} onChange={(e) => { setClientId(e.target.value); setLinhas([]); }} disabled={gerando} className={cn(campo, "h-9 py-0")}>
+              <select value={clientId} onChange={(e) => { if (!podeDescartar("Trocar de cliente")) return; setClientId(e.target.value); setLinhas([]); }} disabled={gerando} className={cn(campo, "h-9 py-0")}>
                 <option value="">Escolha o cliente…</option>
                 {ordenados.map((c) => <option key={c.id} value={c.id}>{c.nomeFantasia || c.name}</option>)}
               </select>
@@ -107,7 +115,7 @@ export default function LegendasEmLote({ clientes, onClose }: { clientes: Client
               <span className="text-lone-eyebrow uppercase text-muted-foreground">Semana</span>
               <div role="radiogroup" aria-label="Semana" className="inline-flex items-center gap-1 rounded-lg bg-muted p-1">
                 {semanas.map((s, i) => (
-                  <button key={s} type="button" role="radio" aria-checked={semana === s} disabled={gerando} onClick={() => { setSemana(s); setLinhas([]); }}
+                  <button key={s} type="button" role="radio" aria-checked={semana === s} disabled={gerando} onClick={() => { if (s === semana || !podeDescartar("Trocar de semana")) return; setSemana(s); setLinhas([]); }}
                     className={cn("h-7 px-2.5 rounded-md text-xs font-medium transition-colors", semana === s ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                     {i === 0 ? "Esta" : i === 1 ? "Próxima" : `${ddmm(s)}`}
                   </button>
@@ -166,7 +174,12 @@ export default function LegendasEmLote({ clientes, onClose }: { clientes: Client
             {baixando ? <Loader size={13} className="animate-spin" aria-hidden="true" /> : <Download size={13} aria-hidden="true" />} Artes da semana (.zip)
           </button>
           <span className="flex-1" />
-          <button type="button" onClick={onClose} disabled={gerando || salvando} className="h-9 px-4 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40">Fechar</button>
+          {naoSalvas > 0 && !gerando && (
+            <span className="text-[11px] text-lone-warning" role="status">
+              {naoSalvas === 1 ? "1 legenda ainda não salva" : `${naoSalvas} legendas ainda não salvas`}
+            </span>
+          )}
+          <button type="button" onClick={fechar} disabled={gerando || salvando} className="h-9 px-4 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40">Fechar</button>
           <button type="button" onClick={() => void salvar()} disabled={!marcadas.length || salvando || gerando}
             className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40">
             {salvando ? "Salvando…" : marcadas.length ? `Salvar ${marcadas.length} nos cards` : "Salvar nos cards"}

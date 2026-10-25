@@ -1,7 +1,7 @@
 // Legendas em lote (lib/conteudo/legendas-lote.ts, Leva 7B N12): rascunho da semana com o bloco de
 // contato no fim.
 import { describe, it, expect } from "vitest";
-import { blocoDeContato, cardsDaSemana, contatoDaFicha, fecharComContato, limitesDaSemana, temContato } from "@/lib/conteudo/legendas-lote";
+import { blocoDeContato, cardsDaSemana, contatoDaFicha, fecharComContato, legendasNaoSalvas, limitesDaSemana, temContato } from "@/lib/conteudo/legendas-lote";
 
 const FICHA = [
   "FICHA DO CLIENTE — Loja X",
@@ -46,5 +46,18 @@ describe("a semana", () => {
       { id: "arq", clientId: "k1", dueDate: "2026-09-22", archivedAt: "2026-09-20" },
     ];
     expect(cardsDaSemana(cards, "k1", "2026-09-21").map((c) => c.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("rascunho não se perde (2.14)", () => {
+  it("conta o que foi escrito e ainda não está no card — erro e legenda já salva não contam", () => {
+    expect(legendasNaoSalvas([
+      { legenda: "Nova legenda", legendaAtual: null },
+      { legenda: "Igual à salva", legendaAtual: "Igual à salva " },
+      { legenda: "", legendaAtual: null },
+      { legenda: "x", legendaAtual: null, erro: "falhou" },
+      { legenda: "Editada", legendaAtual: "Antiga" },
+    ])).toBe(2);
+    expect(legendasNaoSalvas([])).toBe(0);
   });
 });

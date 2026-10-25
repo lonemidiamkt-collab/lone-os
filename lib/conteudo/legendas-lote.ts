@@ -86,3 +86,14 @@ export function cardsDaSemana<T extends { clientId: string; dueDate?: string | n
     .filter((c) => c.clientId === clientId && !c.archivedAt && c.dueDate && c.dueDate.slice(0, 10) >= segunda && c.dueDate.slice(0, 10) <= domingo)
     .sort((a, b) => a.dueDate!.localeCompare(b.dueDate!) || (a.dueTime ?? "99").localeCompare(b.dueTime ?? "99"));
 }
+
+/**
+ * Quantas legendas escritas ainda NÃO estão salvas no card (rascunho da IA ou editado à mão).
+ *
+ * 24/10/2026 (auditoria de erro recuperável, 2.14): fechar, ESC, clicar fora, trocar de cliente ou
+ * de semana e "Escrever legendas" de novo apagavam a semana inteira de rascunhos sem perguntar — dez
+ * minutos de IA e de revisão. A tela pergunta antes quando este número é maior que zero.
+ */
+export function legendasNaoSalvas(linhas: readonly Pick<RascunhoLegenda, "legenda" | "legendaAtual" | "erro">[]): number {
+  return linhas.filter((l) => !l.erro && l.legenda.trim() && l.legenda.trim() !== (l.legendaAtual ?? "").trim()).length;
+}

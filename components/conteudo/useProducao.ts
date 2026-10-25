@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { useContentStore } from "@/stores/useContentStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { infoEtapa, type Etapa } from "@/lib/conteudo/etapas";
-import { camposDaTroca, planejarMovimento, ROTULO_ESTADO_DESIGN, type AcaoDesign, type Movimento } from "@/lib/conteudo/producao";
+import { avisoDoPedidoDeArte, camposDaTroca, papelPode, planejarMovimento, ROTULO_ESTADO_DESIGN, type AcaoDesign, type Movimento } from "@/lib/conteudo/producao";
 import { pedidoDoCard, paraPedidoDesign } from "@/lib/conteudo/quadro";
 import type { ContentCard } from "@/lib/types";
 
@@ -17,13 +17,15 @@ import type { ContentCard } from "@/lib/types";
 export type Pendencia = null | { tipo: "entregar"; card: ContentCard } | { tipo: "alteracao"; card: ContentCard };
 
 const SUCESSO: Partial<Record<AcaoDesign["tipo"], (titulo: string) => string>> = {
-  pedir_arte: (t) => `"${t}" foi pro designer.`,
   iniciar: (t) => `Você pegou "${t}".`,
   pedir_alteracao: (t) => `"${t}" voltou pro designer com o pedido de alteração.`,
   bloquear: (t) => `"${t}" foi devolvido ao social.`,
   desbloquear: (t) => `"${t}" voltou pra fila do designer.`,
   cancelar_pedido: (t) => `Pedido de arte de "${t}" cancelado — o card voltou pra Pauta.`,
 };
+
+/** Quanto tempo o "Desfazer" do pedido de arte fica na tela. */
+const DESFAZER_MS = 10_000;
 
 export function useProducao() {
   const { role, currentUser } = useRole();
@@ -47,12 +49,38 @@ export function useProducao() {
   const acao = async (card: ContentCard, a: AcaoDesign, extras?: { briefing?: string | null }): Promise<boolean> => {
     try {
       const r = await transicaoDesign(card.id, a, extras);
+      if (r.card?.archivedAt) return true;
+      if (a.tipo === "pedir_arte") {
+        if (r.semEfeito) { toast.info(`"${card.title}" já estava com o designer.`); return true; }
+        const aviso = avisoDoPedidoDeArte({ titulo: card.title, cliente: card.clientName, semDesigner: r.semDesigner, designer: r.designer, atribuicao: r.atribuicao });
+        // DESFAZER (24/10/2026, 2.6): pedir arte por engano não tinha volta para o social. Por alguns
+        // segundos o aviso oferece desfazer; depois, "Cancelar pedido" no card enquanto ninguém começou.
+        // Só o pedido que ESTE clique abriu: desfazer um pedido reaberto apagaria o histórico dele.
+        const podeDesfazer = !!r.pedidoCriado && papelPode(role, "cancelar_pedido");
+        const opcoes = {
+          duration: podeDesfazer || aviso.tom === "aviso" ? DESFAZER_MS : undefined,
+          action: podeDesfazer ? { label: "Desfazer", onClick: () => { void desfazerPedido(card); } } : undefined,
+        };
+        if (aviso.tom === "aviso") toast.warning(aviso.texto, opcoes);
+        else toast.success(aviso.texto, opcoes);
+        return true;
+      }
       const msg = SUCESSO[a.tipo]?.(card.title);
-      if (msg && !r.card?.archivedAt) toast.success(msg);
+      if (msg) toast.success(msg);
       return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Não consegui mexer na arte.");
       return false;
+    }
+  };
+
+  /** O "Desfazer" do pedido de arte: cancela o pedido (o servidor recusa se o designer já pegou). */
+  const desfazerPedido = async (card: ContentCard) => {
+    try {
+      await transicaoDesign(card.id, { tipo: "cancelar_pedido" });
+      toast.success(`Pedido desfeito — "${card.title}" voltou pra Pauta.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Não consegui desfazer o pedido.");
     }
   };
 

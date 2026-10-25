@@ -6,11 +6,11 @@ import type { CardAttachment } from "@/lib/types";
 import { chamar } from "@/lib/api/chamar";
 import { trilha } from "@/lib/obs/trilha";
 import { useImagePaste } from "@/lib/hooks/useImagePaste";
+import { MAX_ARTES_POR_CARD, frasesDeRecusa, resumoDoUploadParcial, separarArquivos } from "@/lib/upload/limites-arte";
 
-const ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
-const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+// Limites e mensagens num lugar só (lib/upload/limites-arte.ts) — os mesmos do /api/upload-art.
 // Mesmo teto do /api/upload-art (carrossel do Instagram).
-export const MAX_ARTES = 20;
+export const MAX_ARTES = MAX_ARTES_POR_CARD;
 const LEGACY_ID = "legacy";
 
 interface CardArtAttachmentsProps {
@@ -238,68 +238,62 @@ export default function CardArtAttachments({
     [onAttachmentsChange],
   );
 
-  // ── client-side validation ─────────────────────────────────────────────────
-
-  function validateFiles(files: File[]): string | null {
-    // Conta só attachments reais (ignora a capa legada)
-    const realCount = attachments.filter((a) => a.id !== LEGACY_ID).length;
-    if (realCount + files.length > maxItems) {
-      return `Limite de ${maxItems} artes por card`;
-    }
-    for (const f of files) {
-      if (!ACCEPTED_TYPES.has(f.type)) {
-        return `Tipo não suportado: ${f.type || f.name}. Use PNG, JPEG, WebP ou GIF`;
-      }
-      if (f.size > MAX_SIZE_BYTES) {
-        return `"${f.name}" excede 10MB (${(f.size / 1024 / 1024).toFixed(1)}MB)`;
-      }
-    }
-    return null;
-  }
-
   // ── upload ─────────────────────────────────────────────────────────────────
+  //
+  // 24/10/2026 (auditoria de erro recuperável, 2.7): o erro piscava e sumia (o `finally` tirava o
+  // quadradinho de erro na mesma hora), e quando 2 de 5 artes subiam a lista não recarregava — a
+  // tela escondia as 2, a pessoa mandava as 5 de novo e o card ficava com arte repetida. Agora:
+  // arquivo fora do limite é recusado na hora com o motivo, a lista SEMPRE recarrega depois do
+  // envio (inclusive na falha) e o erro fica na tela até a pessoa fechar, dizendo o que subiu e o
+  // que falta mandar.
 
   const handleUpload = useCallback(
     async (files: File[]) => {
       setGlobalError(null);
 
-      const validErr = validateFiles(files);
-      if (validErr) {
-        setGlobalError(validErr);
+      // Conta só attachments reais (ignora a capa legada)
+      const realCount = attachments.filter((a) => a.id !== LEGACY_ID).length;
+      // Teto menor que o do servidor (prop maxItems) conta como se o card já tivesse a diferença.
+      const { aceitos, recusados } = separarArquivos(files, realCount + Math.max(0, MAX_ARTES_POR_CARD - maxItems));
+      const recusa = frasesDeRecusa(recusados);
+      if (!aceitos.length) {
+        setGlobalError(recusa ?? "Nenhum arquivo para enviar.");
         return;
       }
 
-      const tempIds = files.map((_, i) => `pending_${Date.now()}_${i}`);
+      const tempIds = aceitos.map((_, i) => `pending_${Date.now()}_${i}`);
       setPending((prev) => [
         ...prev,
-        ...files.map((f, i) => ({ tempId: tempIds[i], name: f.name })),
+        ...aceitos.map((f, i) => ({ tempId: tempIds[i], name: f.name })),
       ]);
 
       try {
         const formData = new FormData();
         formData.append("cardId", cardId);
         if (tipo) formData.append("tipo", tipo);
-        for (const f of files) formData.append("file", f);
+        for (const f of aceitos) formData.append("file", f);
 
         // `chamar` trata os dois modos de falha que faltavam: rede caída (authedFetch rejeitava e a
         // exceção subia sem ninguém tratar) e corpo em HTML num 502 de deploy.
         const res = await chamar("/api/upload-art", formData);
-        trilha("upload:resultado", { card: cardId, arquivos: files.length, ok: res.ok, status: res.status, erro: res.ok ? null : res.erro });
+        trilha("upload:resultado", { card: cardId, arquivos: aceitos.length, ok: res.ok, status: res.status, erro: res.ok ? null : res.erro });
 
-        if (!res.ok) {
-          const msg = res.erro ?? "Erro no upload";
-          setPending((prev) =>
-            prev.map((p) => (tempIds.includes(p.tempId) ? { ...p, error: msg } : p)),
-          );
-          // Limpa erros após 4s
-          setTimeout(() => setPending((prev) => prev.filter((p) => !tempIds.includes(p.tempId))), 4000);
-          return;
-        }
-
-        // Upload OK — busca lista atualizada (inclui migração silenciosa se rolou)
+        // Recarrega SEMPRE: na falha no meio, as que subiram já estão no card e precisam aparecer.
         const fresh = await reloadAttachments();
         if (fresh) updateAttachments(fresh);
-        else setGlobalError("A arte subiu, mas não consegui atualizar a lista. Feche e abra o card pra ver.");
+
+        if (!res.ok) {
+          // A capa legada vira anexo no 1º upload (migração do servidor) — não conta como arte nova.
+          const capaMigrada = attachments.some((a) => a.id === LEGACY_ID) ? 1 : 0;
+          const subiram = fresh ? Math.max(0, fresh.filter((a) => a.id !== LEGACY_ID).length - realCount - capaMigrada) : 0;
+          const resumo = fresh
+            ? resumoDoUploadParcial({ nomes: aceitos.map((f) => f.name), subiram, erro: res.erro ?? "erro no upload" })
+            : `O envio falhou (${res.erro ?? "erro no upload"}) e não consegui atualizar a lista — feche e abra o card para ver o que subiu antes de mandar de novo.`;
+          setGlobalError([resumo, recusa].filter(Boolean).join(" "));
+          return;
+        }
+        if (!fresh) setGlobalError(["A arte subiu, mas não consegui atualizar a lista. Feche e abra o card pra ver.", recusa].filter(Boolean).join(" "));
+        else if (recusa) setGlobalError(`${aceitos.length === 1 ? "1 arte subiu" : `${aceitos.length} artes subiram`}. ${recusa}`);
       } finally {
         setPending((prev) => prev.filter((p) => !tempIds.includes(p.tempId)));
       }
@@ -553,16 +547,18 @@ export default function CardArtAttachments({
           <p className="mt-1 text-[10px] text-muted-foreground">Clique na arte pra ver em <b>tamanho grande</b> · passe o mouse pra <b>baixar</b>.</p>
         )}
 
-        {/* Global error */}
+        {/* Erro: fica até a pessoa fechar (antes sumia em segundos, antes de dar tempo de ler). */}
         {globalError && (
-          <div className="mt-2 flex items-start gap-1.5 text-[10px] text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-2 py-1.5">
-            <AlertCircle size={11} className="shrink-0 mt-0.5" />
+          <div role="alert" className="mt-2 flex items-start gap-1.5 text-[11px] leading-snug text-destructive bg-lone-danger-bg border border-lone-danger-border rounded-md px-2 py-1.5">
+            <AlertCircle size={12} className="shrink-0 mt-0.5" aria-hidden="true" />
             <span>{globalError}</span>
             <button
-              className="ml-auto shrink-0 text-destructive hover:text-destructive/80"
+              type="button"
+              className="ml-auto shrink-0 p-0.5 text-destructive hover:text-foreground"
               onClick={() => setGlobalError(null)}
+              aria-label="Fechar o aviso"
             >
-              <X size={10} />
+              <X size={11} />
             </button>
           </div>
         )}

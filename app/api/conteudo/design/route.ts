@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { snakeToContentCard, snakeToDesignRequest } from "@/lib/supabase/queries";
-import { lerAcao, papelPode } from "@/lib/conteudo/producao";
+import { lerAcao, papelPode, podeCancelarPedido, type StatusDoPedido } from "@/lib/conteudo/producao";
 import { executarTransicao, lerCardEPedido, contextoDoPedido, nomeDoMembro } from "@/lib/conteudo/producao-server";
 import { podeAtualizarDemanda } from "@/app/api/design-requests/permissao";
 
@@ -34,6 +34,14 @@ export async function POST(req: NextRequest) {
   }
 
   const quem = (await nomeDoMembro(gate.user.email)) || gate.user.email || "equipe";
+
+  // Cancelar (24/10/2026, 2.6): quem pediu desfaz o pedido enquanto ele está NA FILA; depois que o
+  // designer começou, só a gestão. A regra é podeCancelarPedido (lib/conteudo/producao.ts).
+  if (acao.tipo === "cancelar_pedido" && !(gate.papel && GESTAO.includes(gate.papel))) {
+    const { pedido } = await lerCardEPedido(cardId);
+    const pode = podeCancelarPedido(gate.papel, pedido ? { id: pedido.id as string, status: pedido.status as StatusDoPedido } : null);
+    if (!pode.ok) return NextResponse.json({ error: pode.motivo }, { status: 409 });
+  }
 
   // Designer só inicia o pedido que é dele (ou que assumiu) — a mesma regra do /design-requests/update.
   if (acao.tipo === "iniciar" && gate.papel === "designer") {
@@ -57,12 +65,23 @@ export async function POST(req: NextRequest) {
     supabaseAdmin.from("content_cards").select("*").eq("id", cardId).maybeSingle(),
     r.pedido?.id ? supabaseAdmin.from("design_requests").select("*").eq("id", r.pedido.id as string).maybeSingle().then((x) => x.data) : Promise.resolve(null),
   ]);
+
+  // Pedido sem dono (24/10/2026, 2.12): nem o pedido nem a ficha do cliente têm designer. A tela
+  // dizia "foi pro designer" e o pedido ficava no quadro "(sem designer)", que ninguém abre.
+  let semDesigner = false;
+  if (acao.tipo === "pedir_arte" && pedido && pedido.status !== "done" && !String(pedido.assigned_designer ?? "").trim()) {
+    const { data: cli } = await supabaseAdmin.from("clients").select("assigned_designer").eq("id", pedido.client_id as string).maybeSingle();
+    semDesigner = !String(cli?.assigned_designer ?? "").trim();
+  }
+
   return NextResponse.json({
     card: card ? snakeToContentCard(card) : null,
     pedido: pedido ? snakeToDesignRequest(pedido) : null,
     pedidoRemovido: r.pedidoRemovido ?? null,
     semEfeito: r.semEfeito,
-    designer: r.designer?.designer ?? null,
+    designer: r.designer?.designer ?? ((pedido?.assigned_designer as string) || null),
     atribuicao: r.designer?.motivo ?? null,
+    semDesigner,
+    pedidoCriado: r.pedidoCriado ?? false,
   });
 }
