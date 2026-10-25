@@ -33,7 +33,7 @@ const PAINEL = "https://painel.lonemidia.com";
 
 function abaAtiva(pathname: string, currentTab: string): AbaComercial {
   if (pathname.startsWith("/crm/rota")) return "rota";
-  if (pathname.startsWith("/crm/importar")) return "importar";
+  if (pathname.startsWith("/crm/importar")) return "funil"; // importar é botão do Funil
   return (ABAS_DA_PAGINA_CRM.includes(currentTab) ? currentTab : "hoje") as AbaComercial;
 }
 
@@ -103,7 +103,8 @@ function Cabecalho() {
           </DropdownMenu>
         </div>
       </div>
-      <Abas className="flex items-center gap-1 overflow-x-auto px-4 pb-2 md:hidden" />
+      {/* Celular: a máscara à direita mostra que há mais abas para o lado (Agenda, Relatórios e Rota ficavam escondidas). */}
+      <Abas className="flex items-center gap-1 overflow-x-auto px-4 pb-2 [mask-image:linear-gradient(to_right,black_85%,transparent)] md:hidden" />
     </header>
   );
 }
@@ -121,7 +122,7 @@ function FundoMarca() {
       {/* Vetor (public/fundos/marca.svg): nítido em qualquer tela — a arte do site é um JPEG de 2000 px. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/fundos/marca.svg" alt="" decoding="async"
-        className="h-full w-full object-cover opacity-[0.07] dark:opacity-[0.22]" />
+        className="h-full w-full object-cover opacity-[0.07] dark:opacity-[0.12]" />
     </div>
   );
 }

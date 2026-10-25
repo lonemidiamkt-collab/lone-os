@@ -19,6 +19,7 @@ import {
   AlertTriangle, Target, FileSignature,
   Radar, ListOrdered, Building2, MessageSquare, Settings2, BarChart3,
   Lock, Zap, Info, CalendarCheck, ShoppingBag, DatabaseZap, MapPin,
+  Trophy,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/types";
@@ -234,6 +235,7 @@ export const MENU: readonly GrupoMenu[] = [
           ] },
           { titulo: "Operação", itens: [
             { id: "crm-funil", rotulo: "Funil", icone: Layers, href: "/crm", aba: "funil" },
+            { id: "crm-fechados", rotulo: "Fechados", icone: Trophy, href: "/crm", aba: "fechados" },
             { id: "crm-agenda", rotulo: "Agenda", icone: Calendar, href: "/crm", aba: "agenda" },
             { id: "crm-rota", rotulo: "Rota", icone: MapPin, href: "/crm/rota" },
           ] },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assinar, conferirAssinatura } from "@/lib/crm/site-lead";
 import { CAMINHO_CLIENTES, diaSP, mensagemAssinada, montarClientesParaFinance, type LinhaCliente, type LinhaSaida } from "@/lib/integracoes/finance-clientes";
+import { CAMINHO_VENDAS, montarVendasParaFinance, type LinhaLeadGanho } from "@/lib/integracoes/finance-vendas";
 
 const base: LinhaCliente = {
   id: "c1", name: "  Loja   Exemplo ", service_type: "lone_growth", lifecycle: "ativo", active: true, draft_status: null,
@@ -56,5 +57,27 @@ describe("assinatura da leitura", () => {
     expect(conferirAssinatura({ segredo, timestamp: ts, assinatura: assinar(segredo, ts, corpo), corpo, agora: agora + 6 * 60_000 }).ok).toBe(false);
     expect(conferirAssinatura({ segredo, timestamp: ts, assinatura: assinar("outro".repeat(10), ts, corpo), corpo, agora }).ok).toBe(false);
     expect(conferirAssinatura({ segredo, timestamp: ts, assinatura: assinar(segredo, ts, "GET /api/outra"), corpo, agora }).ok).toBe(false);
+  });
+});
+
+describe("vendas ganhas para o financeiro (fase 2: venda → contrato)", () => {
+  const lead = (id: string, p: Partial<LinhaLeadGanho> = {}): LinhaLeadGanho => ({
+    id, empresa: `Loja ${id}`, contato_nome: `Contato ${id}`, estagio: "ganho", valor_orcamento: "1499.90", valor_implantacao: null,
+    fechado_em: "2026-10-22T15:00:00Z", updated_at: "2026-10-22T15:00:00Z", ...p,
+  });
+  it("só ganhos, valor em centavos, cadastro ligado e o mais recente primeiro", () => {
+    const v = montarVendasParaFinance(
+      [lead("a", { fechado_em: "2026-10-01T02:00:00Z", valor_implantacao: 500 }), lead("b"), lead("c", { estagio: "negociacao" }), lead("d", { valor_orcamento: null, empresa: null })],
+      [{ id: "cli-a", source_lead_id: "a", draft_status: null }, { id: "cli-b", source_lead_id: "b", draft_status: "pending_invite" }],
+    );
+    expect(v.map((x) => x.leadId)).toEqual(["b", "d", "a"]);
+    expect(v[0]).toEqual({ leadId: "b", empresa: "Loja b", ganhoEm: "2026-10-22", mensalidadeCentavos: 149990, implantacaoCentavos: null, clienteId: "cli-b", cadastroPendente: true });
+    expect(v[1]).toMatchObject({ empresa: "Contato d", mensalidadeCentavos: null, clienteId: null, cadastroPendente: false });
+    expect(v[2]).toMatchObject({ ganhoEm: "2026-09-30", implantacaoCentavos: 50000, clienteId: "cli-a", cadastroPendente: false });
+  });
+  it("não leva contato do lead: nem telefone, nem e-mail", () => {
+    const [v] = montarVendasParaFinance([lead("a")], []);
+    expect(Object.keys(v).sort()).toEqual(["cadastroPendente", "clienteId", "empresa", "ganhoEm", "implantacaoCentavos", "leadId", "mensalidadeCentavos"]);
+    expect(CAMINHO_VENDAS).toBe("/api/integracoes/finance/vendas");
   });
 });

@@ -7,16 +7,17 @@
 // lib/crm/painel.ts e lib/crm/pipeline.ts (testadas); aqui é só desenho.
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowRight, CheckCircle2, Clock, MessageCircleOff, PhoneOff, Repeat, Target, UserPlus } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, MessageCircleOff, PhoneOff, Repeat, Target, Trophy, UserPlus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Anel, BarraMeta, Cartao, Rosca, SeloVariacao, TEXTO_TOM, TituloBloco } from "@/components/crm/graficos";
 import { montarFatias, tomDaTaxa, tomDoRitmo, type FatiaDesenhada } from "@/lib/crm/graficos";
 import {
   ROTULO_PERIODO, atividadeDaSemana, dataPorExtenso, duracaoCurta, fatiasDeOrigem, followUpEmDia, funilDeConversao,
-  heroiDaMeta, intervaloDoPeriodo, leadsNovos, nomeDoMes, precisaDeAtencao, saudacao, taxaDeGanho, tempoDePrimeiraResposta,
+  heroiDaMeta, intervaloDoPeriodo, leadsNovos, nomeDoMes, precisaDeAtencao, saudacao, tempoDePrimeiraResposta,
   variacao, type ChaveAtencao, type LeadPainel, type Periodo,
 } from "@/lib/crm/painel";
 import { resumirPipeline, type LeadPipeline } from "@/lib/crm/pipeline";
+import { oportunidadesParaContrato, taxaDeFechamento, textoFracao, type Conversao, type EtapaHist } from "@/lib/crm/taxas";
 import { ROTULO_ETAPA } from "@/lib/crm/etapas";
 import { brl, hojeSP } from "@/lib/crm/meta";
 import type { CrmMeta } from "@/lib/types";
@@ -35,6 +36,50 @@ const LIGACOES = new Set(["de", "da", "das", "do", "dos", "e", "a", "o"]);
 /** "Casa do Exemplo" → "CE"; "Pão e Mel" → "PM". */
 const iniciais = (s: string) => s.split(/\s+/).filter((p) => p && !LIGACOES.has(p.toLowerCase())).slice(0, 2).map((p) => p[0]!.toUpperCase()).join("") || s.slice(0, 2).toUpperCase();
 
+/**
+ * Oportunidades → contrato: das oportunidades (chegaram a Proposta) do período, quantas viraram contrato. Barra empilhada
+ * ganhas / perdidas / abertas com 2px entre as partes; anel e porcentagem só com 5+ oportunidades (amostra pequena engana).
+ */
+function OportunidadesContrato({ conv, anterior, rotuloAnterior, erro, fechamento }: { conv: Conversao | null; anterior: Conversao | null; rotuloAnterior: string; erro: string | null; fechamento: string }) {
+  if (!conv) return <p className="mt-2 text-lone-caption text-lone-warning">{erro ?? "Histórico de etapas indisponível agora."}</p>;
+  if (conv.oportunidades === 0) {
+    return (
+      <>
+        <p className="mt-2 text-[26px] font-semibold leading-none tracking-tight tabular-nums text-muted-foreground">—</p>
+        <p className="mt-1.5 text-lone-caption text-muted-foreground">nenhuma oportunidade (proposta) no período</p>
+      </>
+    );
+  }
+  const partes = [
+    { chave: "ganhas", rotulo: conv.ganhas === 1 ? "ganha" : "ganhas", n: conv.ganhas, cor: "bg-lone-success" },
+    { chave: "perdidas", rotulo: conv.perdidas === 1 ? "perdida" : "perdidas", n: conv.perdidas, cor: "bg-lone-danger" },
+    { chave: "abertas", rotulo: conv.abertas === 1 ? "aberta" : "abertas", n: conv.abertas, cor: "bg-muted-foreground/35" },
+  ];
+  // Período anterior sem nenhuma oportunidade: "+2 vs. setembro" compara com o nada — não mostra.
+  const dif = anterior && anterior.oportunidades > 0 ? conv.ganhas - anterior.ganhas : 0;
+  return (
+    <>
+      <div className="mt-2 flex items-center gap-3">
+        {conv.fracao.pct !== null && <Anel tamanho="sm" pct={conv.fracao.pct} tom="primary" rotuloAcessivel={`${conv.ganhas} de ${conv.oportunidades} oportunidades viraram contrato`} />}
+        <div className="min-w-0">
+          <p className="text-[26px] font-semibold leading-none tracking-tight tabular-nums text-foreground">{textoFracao(conv.fracao)}</p>
+          <p className="mt-1.5 text-lone-caption text-muted-foreground">
+            {conv.fracao.pct === null ? "oportunidades viraram contrato" : `${conv.ganhas} de ${conv.oportunidades} oportunidades`}
+            {anterior && dif !== 0 ? ` · ${dif > 0 ? `+${dif}` : dif} ${rotuloAnterior}` : ""}
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex h-2 w-full gap-[2px] overflow-hidden rounded-full" role="img" aria-label={partes.map((p) => `${p.n} ${p.rotulo}`).join(", ")}>
+        {partes.filter((p) => p.n > 0).map((p) => <div key={p.chave} className={`h-full ${p.cor}`} style={{ flexGrow: p.n }} />)}
+      </div>
+      <p className="mt-1.5 flex flex-wrap gap-x-3 text-lone-caption text-muted-foreground">
+        {partes.map((p) => <span key={p.chave} className="inline-flex items-center gap-1"><span className={`h-2 w-2 rounded-full ${p.cor}`} aria-hidden="true" />{p.n} {p.rotulo}</span>)}
+      </p>
+      <p className="mt-1 text-lone-caption text-muted-foreground">Fechamento {fechamento}</p>
+    </>
+  );
+}
+
 function Janela({ children }: { children: React.ReactNode }) {
   return <span className="ml-auto text-[10.5px] text-muted-foreground">{children}</span>;
 }
@@ -43,9 +88,12 @@ function Rotulo({ children }: { children: React.ReactNode }) {
 }
 
 export default function DashboardComercial<L extends LeadDash>({
-  leads, metas, carregarMeta, metaContatosSemana, nome, proximoPasso, onAbrirLead, onDefinirMeta, onIrPara, agora: agoraFixo, acao,
+  leads, historico, historicoErro, metas, carregarMeta, metaContatosSemana, nome, proximoPasso, onAbrirLead, onDefinirMeta, onIrPara, agora: agoraFixo, acao,
 }: {
   leads: L[];
+  /** Histórico de etapa (lib/crm/taxas.ts). null = não carregou: a taxa aparece como indisponível, nunca como zero. */
+  historico: EtapaHist[] | null;
+  historicoErro?: string | null;
   /** Metas por mês ("2026-10" → meta). Mês ausente = ainda não carregado. */
   metas: Record<string, CrmMeta | null>;
   carregarMeta?: (mes: string) => void;
@@ -82,7 +130,12 @@ export default function DashboardComercial<L extends LeadDash>({
 
   const heroi = useMemo(() => heroiDaMeta({ leads, metaValor: meta?.metaValor ?? null, hoje, intervalo: iv }), [leads, meta, hoje, iv]);
   const pipeline = useMemo(() => resumirPipeline(leads, iv.mes), [leads, iv.mes]);
-  const ganho = useMemo(() => taxaDeGanho(leads), [leads]);
+  // Oportunidades × fechamento (uma definição só, lib/crm/taxas.ts): respeita o período e compara com o anterior.
+  const conv = useMemo(() => (historico ? oportunidadesParaContrato(leads, historico, { ini: iv.ini, fim: iv.fim }) : null), [leads, historico, iv]);
+  const convAnterior = useMemo(() => (historico ? oportunidadesParaContrato(leads, historico, { ini: iv.antIni, fim: iv.antFim }) : null), [leads, historico, iv]);
+  const convTotal = useMemo(() => (historico ? oportunidadesParaContrato(leads, historico, null) : null), [leads, historico]);
+  const fechamento = useMemo(() => taxaDeFechamento(leads, { ini: iv.ini, fim: iv.fim }), [leads, iv]);
+  const vendasDoPeriodo = useMemo(() => leads.filter((l) => l.estagio === "ganho" && l.fechadoEm && l.fechadoEm.slice(0, 10) >= iv.ini && l.fechadoEm.slice(0, 10) <= iv.fim), [leads, iv]);
   const emDia = useMemo(() => followUpEmDia(leads, hoje), [leads, hoje]);
   const novos = useMemo(() => leadsNovos(leads, iv), [leads, iv]);
   const atencao = useMemo(() => precisaDeAtencao(leads, hoje, agora), [leads, hoje]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -134,6 +187,17 @@ export default function DashboardComercial<L extends LeadDash>({
         </div>
       </header>
 
+      {/* Vendas do período em destaque (23/10/2026: a primeira venda aparecia só como pendência âmbar). */}
+      {vendasDoPeriodo.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-lone-success-border bg-lone-success-bg px-5 py-3">
+          <Trophy size={16} className="shrink-0 text-lone-success" aria-hidden="true" />
+          <span className="text-lone-body font-semibold text-foreground">
+            {vendasDoPeriodo.length === 1 ? "1 venda fechada" : `${vendasDoPeriodo.length} vendas fechadas`} {periodo === "mes" ? "este mês" : periodo === "mes_passado" ? `em ${nomeDoMes(iv.mes)}` : "nos últimos 30 dias"}:
+          </span>
+          <span className="text-lone-body text-foreground">{vendasDoPeriodo.map((l) => l.empresa || l.contatoNome).join(" · ")}</span>
+        </div>
+      )}
+
       {/* ── Faixa 1: meta + 4 números ── */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Cartao destaque className="sm:col-span-2 xl:row-span-2">
@@ -181,14 +245,9 @@ export default function DashboardComercial<L extends LeadDash>({
         </Cartao>
 
         <Cartao>
-          <div className="flex items-center"><Rotulo>Taxa de ganho</Rotulo><Janela>desde o início</Janela></div>
-          <div className="mt-2 flex items-center gap-3">
-            <Anel tamanho="sm" pct={ganho.pct} tom="primary" rotuloAcessivel={`Taxa de ganho: ${ganho.feitos} de ${ganho.total}`} />
-            <div>
-              <p className="text-[26px] font-semibold leading-none tracking-tight tabular-nums text-foreground">{ganho.poucos ? `${ganho.feitos} de ${ganho.total}` : `${ganho.pct ?? 0}%`}</p>
-              <p className="mt-1.5 text-lone-caption text-muted-foreground">{ganho.poucos ? "poucos fechamentos para porcentagem" : `${ganho.feitos} de ${ganho.total} fechados`}{ganho.pctValor != null && !ganho.poucos ? ` · ${ganho.pctValor}% em valor` : ""}</p>
-            </div>
-          </div>
+          <div className="flex items-center"><Rotulo>Oportunidades → contrato</Rotulo><Janela>{ROTULO_PERIODO[periodo].toLowerCase()}</Janela></div>
+          <OportunidadesContrato conv={conv} anterior={convAnterior} rotuloAnterior={iv.rotuloAnterior} erro={historicoErro ?? null}
+            fechamento={fechamento.fracao.de ? `dos decididos no período: ${textoFracao(fechamento.fracao)} (${fechamento.ganhos} ${fechamento.ganhos === 1 ? "ganho" : "ganhos"}, ${fechamento.perdidos} ${fechamento.perdidos === 1 ? "perdido" : "perdidos"})` : "nenhum negócio ganho ou perdido no período"} />
         </Cartao>
 
         <Cartao>
@@ -233,7 +292,7 @@ export default function DashboardComercial<L extends LeadDash>({
                   </div>
                   <p className="mt-2 text-lone-body font-medium text-foreground">{a.rotulo}</p>
                   <p className="text-lone-caption text-muted-foreground">{a.dica}</p>
-                  <p className="mt-1.5 text-lone-caption font-medium text-primary opacity-70 transition-opacity group-hover:opacity-100">ver lista →</p>
+                  <p className="mt-1.5 text-lone-caption font-medium text-primary underline-offset-2 group-hover:underline">ver lista →</p>
                 </button>
               );
             })}
@@ -244,7 +303,7 @@ export default function DashboardComercial<L extends LeadDash>({
       {/* ── Faixa 2: funil (barras, nunca rosca) + pipeline por etapa (rosca) ── */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Cartao>
-          <TituloBloco titulo="Funil de conversão" apoio="Quantos chegaram a cada etapa e quanto passou da anterior" />
+          <TituloBloco titulo="Funil de conversão" apoio="Desde o início: quantos chegaram a cada etapa e quanto passou da anterior" />
           <div className="space-y-1">
             {funil.degraus.map((d) => (
               <div key={d.etapa} className="rounded-lg px-2 py-1.5">
@@ -260,8 +319,8 @@ export default function DashboardComercial<L extends LeadDash>({
             ))}
           </div>
           <div className="mt-3 flex items-baseline justify-between border-t border-border pt-3">
-            <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">Entrada → contrato</span>
-            <span className="text-lone-body"><span className="font-semibold text-foreground">{funil.pctTotal ?? 0}%</span> <span className="text-muted-foreground">· {funil.ganhos} de {funil.total}</span></span>
+            <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">Oportunidades → contrato</span>
+            <span className="text-lone-body">{convTotal ? <><span className="font-semibold text-foreground">{textoFracao(convTotal.fracao)}</span>{convTotal.fracao.pct !== null && <span className="text-muted-foreground"> · {convTotal.ganhas} de {convTotal.oportunidades}</span>}<span className="text-muted-foreground"> desde o início</span></> : <span className="text-muted-foreground">indisponível</span>}</span>
           </div>
         </Cartao>
 
@@ -279,6 +338,9 @@ export default function DashboardComercial<L extends LeadDash>({
       <div className="grid gap-4 lg:grid-cols-3">
         <Cartao>
           <TituloBloco titulo="Contatos da semana" apoio="WhatsApp, ligação, visita e reunião registrados" />
+          {semana.total === 0 ? (
+            <p className="rounded-xl border border-dashed border-border p-4 text-lone-body text-muted-foreground">Ainda sem contatos registrados esta semana{metaContatosSemana ? ` · meta ${metaContatosSemana}` : ""}.</p>
+          ) : (<>
           <div className="relative flex h-32 items-end gap-2 border-b border-border pb-px">
             {metaDia != null && (
               <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-lone-warning"
@@ -300,6 +362,7 @@ export default function DashboardComercial<L extends LeadDash>({
             <span className="font-semibold text-foreground">{semana.total}</span> {semana.total === 1 ? "contato" : "contatos"} esta semana
             {metaContatosSemana ? <> · meta {metaContatosSemana}{metaDia ? ` (${Math.round(metaDia)} por dia útil)` : ""}</> : " · sem meta de contatos"}
           </p>
+          </>)}
         </Cartao>
 
         <Cartao>

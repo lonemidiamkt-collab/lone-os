@@ -23,15 +23,16 @@ export function destinoNoComercial(pathname: string): DestinoComercial {
   return { tipo: "redirecionar", para: "/" };
 }
 
-/** Abas do casco do comercial. As do /crm trocam a aba da página; as outras são páginas próprias. */
+/** Abas do casco do comercial. As do /crm trocam a aba da página; as outras são páginas próprias.
+ *  "Importar" saiu do topo em 23/10/2026: virou botão no Funil (/crm/importar continua existindo). */
 export const ABAS_COMERCIAL = [
   { id: "hoje", rotulo: "Hoje", href: "/crm" },
   { id: "dashboard", rotulo: "Dashboard", href: "/crm" },
   { id: "funil", rotulo: "Funil", href: "/crm" },
+  { id: "fechados", rotulo: "Fechados", href: "/crm" },
   { id: "agenda", rotulo: "Agenda", href: "/crm" },
   { id: "relatorios", rotulo: "Relatórios", href: "/crm" },
   { id: "rota", rotulo: "Rota", href: "/crm/rota" },
-  { id: "importar", rotulo: "Importar", href: "/crm/importar" },
 ] as const;
 export type AbaComercial = (typeof ABAS_COMERCIAL)[number]["id"];
-export const ABAS_DA_PAGINA_CRM: readonly string[] = ["hoje", "dashboard", "funil", "agenda", "relatorios"];
+export const ABAS_DA_PAGINA_CRM: readonly string[] = ["hoje", "dashboard", "funil", "fechados", "agenda", "relatorios"];

@@ -1009,12 +1009,13 @@ function PerfilEmpresa({ client, editing, faixa, onFaixa }: {
 
   const atualizar = async () => {
     setBuscando(true);
-    const r = await chamar<{ empresa: EmpresaReceita; nichoPreenchido: boolean }>(`/api/clients/${client.id}/receita`, {});
+    const r = await chamar<{ empresa: EmpresaReceita; nichoPreenchido: boolean; numeroPreenchido?: boolean }>(`/api/clients/${client.id}/receita`, {});
     setBuscando(false);
     if (!r.ok || !r.data) { toast.error(r.erro ?? "Não deu para consultar a Receita agora."); return; }
     const e = r.data.empresa;
     setReceita({ porte: e.porte, cnae: e.cnaePrincipal, cnaeDescricao: e.cnaeDescricao, situacao: e.situacao, em: new Date().toISOString() });
-    toast.success(r.data.nichoPreenchido ? `Dados da Receita atualizados. Nicho sugerido: ${e.nichoRotulo}.` : "Dados da Receita atualizados.");
+    const extras = [r.data.nichoPreenchido ? `nicho sugerido: ${e.nichoRotulo}` : "", r.data.numeroPreenchido ? `número do endereço: ${e.endereco.numero}` : ""].filter(Boolean);
+    toast.success(`Dados da Receita atualizados${extras.length ? ` — ${extras.join("; ")}` : ""}.${r.data.numeroPreenchido ? " Recarregue para ver o número na ficha." : ""}`);
   };
 
   const porte = porteValido(receita.porte) ? PORTES[receita.porte] : null;
