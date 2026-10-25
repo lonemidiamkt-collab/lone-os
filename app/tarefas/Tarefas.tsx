@@ -18,8 +18,6 @@ import { ordenarConcluidas } from "@/lib/tarefas/concluidas";
 import type { Task } from "@/lib/types";
 import { toast } from "sonner";
 
->>>>
-
 // Dia de São Paulo, não o do navegador: quem abre de fora do fuso via "atrasada" um dia antes.
 const hoje = () => todaySP();
 const fmtData = (iso?: string) => {
