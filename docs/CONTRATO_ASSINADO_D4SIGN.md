@@ -124,10 +124,29 @@ URL; **10 chamadas por hora** por padrão; JSON; erro como `{ "message": "…" }
 | Lembrete ao signatário | `POST /documents/{uuid}/resend` `{email, key_signer}` (e-mail da D4Sign, sem texto nosso) | depois |
 | Cancelar | `POST /documents/{uuid}/cancel` | não |
 
+## Arquivo por mês (26/10/2026)
+
+Pedido do Roberto: "uma área de arquivos para vermos contratos de cada mês, e podermos baixar eles também".
+
+- `lib/contracts/arquivo-d4sign.ts`: a rotina `contratos-d4sign-arquivo` (`45 3-9 * * *`, 0h45 a 6h45 BRT — fora da
+  consulta de 3 em 3 horas) lista os finalizados da conta (`GET /documents/4/status`, no máximo uma vez a cada 20 h),
+  registra os dos cofres de contrato que o Lone OS não conhecia **com o aviso travado** (antigo não vira "assinou" no
+  grupo), relê em silêncio os que não têm data ou cliente e baixa o PDF (`POST /documents/{uuid}/download`). Cada
+  documento antigo custa até 2 chamadas; a rotina para na reserva do webhook, então o arquivo se completa em algumas
+  noites, do mais recente para o mais antigo. Teto de 5 tentativas por documento (`pdf_tentativas`, `pdf_erro`).
+- O PDF fica em `legal-docs/contracts-signed/{cliente}/d4sign-{uuid}-assinado-….pdf`. Contrato do Lone OS ligado e sem
+  PDF ganha `signed_pdf_path` + `signed_at` (`signature_method = d4sign_auto`); o status do contrato não muda.
+- Tela: Contratos › Arquivo por mês (`components/contratos/ArquivoPorMes.tsx`): meses com contagem, "Baixar PDF",
+  "Trazer agora" (1 chamada, origem manual) e "Baixar o mês (.zip)" com `faltam.txt` para o que não chegou.
+- Migration `20261026210100_d4sign_pdf_arquivo.sql` (colunas `pdf_*` em `d4sign_documentos`). Aplicar antes do deploy.
+
+Arquivar contrato não assinado: migration `20261026210000_contratos_arquivados.sql` (`archived_at`, `archived_by`),
+`POST /api/contracts/arquivar` (com `desfazer`), lista e contagens sem os arquivados; a D4Sign não liga assinatura
+nova a contrato arquivado.
+
 ## Ficou para depois (não entra nesta publicação)
 
-- **PDF assinado automático, botão de enviar, lembrete ao cliente**: o PDF automático está pronto e testado na branch
-  `d4sign-pdf-envio-depois` (commit 5c1ca99a); envio e lembrete ainda não começaram.
+- **Botão de enviar, lembrete ao cliente**: ainda não começaram. (O PDF automático virou o arquivo por mês, acima.)
 - **Lone Finance**: branch `contrato-assinado-d4sign` do `~/dev/lone-finance` (commit 177fce3) — lê uma porta do Lone OS
   que ainda não existe aqui. Não publicar o Finance antes dessa porta (e o compose de lá exige o arquivo do segredo novo).
 

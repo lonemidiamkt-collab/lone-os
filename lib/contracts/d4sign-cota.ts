@@ -12,11 +12,12 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 
-export type OrigemChamada = "webhook" | "consulta" | "manha" | "manual";
+/** "arquivo": a rotina da madrugada que baixa os PDFs assinados para o arquivo por mês (é rotina: respeita a reserva). */
+export type OrigemChamada = "webhook" | "consulta" | "manha" | "manual" | "arquivo";
 
 export const LIMITE_PADRAO_HORA = 10;
 export const RESERVA = 4;
-const ROTINAS: OrigemChamada[] = ["consulta", "manha"];
+const ROTINAS: OrigemChamada[] = ["consulta", "manha", "arquivo"];
 
 export function limiteDaHora(env: Record<string, string | undefined> = process.env): number {
   const n = Number(env.D4SIGN_LIMITE_HORA);

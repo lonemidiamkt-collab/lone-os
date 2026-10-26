@@ -40,6 +40,7 @@ import {
 import { chaveDoParcial, gravarSignatarios, lerSignatariosGravados, type SignatarioGravado } from "./d4sign-signatarios";
 import { juntar, quemAssina, resumoAssinaturas } from "./d4sign-resumo";
 import { carregarConfigD4Sign } from "./d4sign-config";
+import type { OrigemChamada } from "./d4sign-cota";
 
 export const JANELA_AVISO_DIAS = 4;
 export const DIAS_SEM_ASSINATURA = 3;
@@ -155,6 +156,8 @@ export interface ContratoCadastro {
   signed_at?: string | null;
   d4sign_document_uuid?: string | null;
   d4sign_assinado_em?: string | null;
+  /** Arquivado na tela de Contratos (migration 20261026210000): não recebe assinatura nova. */
+  archived_at?: string | null;
 }
 
 /**
@@ -167,7 +170,7 @@ export function escolherContrato(contratos: ContratoCadastro[], uuid: string, re
   if (ligado) return ligado.id;
   const limite = new Date(referencia).getTime();
   const livres = contratos
-    .filter((c) => !c.d4sign_document_uuid && !c.signed_at && !c.d4sign_assinado_em)
+    .filter((c) => !c.d4sign_document_uuid && !c.signed_at && !c.d4sign_assinado_em && !c.archived_at)
     .filter((c) => !c.created_at || new Date(c.created_at).getTime() <= limite)
     .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
   return livres[0]?.id ?? null;
@@ -266,6 +269,7 @@ export interface LinhaDocumento {
 }
 
 const COLS_CONTRATO = "id, client_id, created_at, signed_at, d4sign_document_uuid, d4sign_assinado_em";
+const COLS_CONTRATO_ESCOLHA: string = `${COLS_CONTRATO}, archived_at`;
 
 /** A tabela (ou a coluna) da migration 20261026150000 ainda não existe. */
 export function faltaMigracao(err: { code?: string; message?: string } | null | undefined): boolean {
@@ -323,6 +327,13 @@ export interface OpcoesDocumento {
   doc?: DocumentoD4Sign;
   /** Aviso parcial ("assinado por X · falta Y"). Padrão: sim; a releitura da manhã passa false. */
   avisarParcial?: boolean;
+  /**
+   * Arquivo de contratos (lib/contracts/arquivo-d4sign.ts): registra e liga ao cadastro, mas NUNCA avisa o
+   * grupo — e trava o aviso, para a consulta não mandar depois "assinou" de um documento antigo.
+   */
+  silencioso?: boolean;
+  /** Na conta de chamadas da D4Sign (padrão: a própria origem). */
+  origemChamada?: OrigemChamada;
 }
 
 const ehLimite = (motivo: string | null | undefined) => /limite de chamadas/.test(motivo ?? "");
@@ -346,7 +357,7 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
     // 1. A verdade é a D4Sign, não o evento.
     let doc = opts.doc;
     if (!doc) {
-      const lido = await buscarDocumento(cfg, uuid, opts.origem);
+      const lido = await buscarDocumento(cfg, uuid, opts.origemChamada ?? opts.origem);
       if (!lido.ok) {
         if (!opts.dry && !lido.limite) {
           await supabaseAdmin.from(TABELA).update({ leitura_erro: lido.erro.slice(0, 300), atualizado_em: agoraIso }).eq("document_uuid", uuid);
@@ -391,10 +402,10 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
       clientId = l.clientId; vinculo = l.vinculo; motivoVinculo = l.motivo;
     }
     if (clientId && !contractId && tipo === "contrato") {
-      const cs = await supabaseAdmin.from("contracts").select(COLS_CONTRATO).eq("client_id", clientId)
+      const cs = await supabaseAdmin.from("contracts").select(COLS_CONTRATO_ESCOLHA).eq("client_id", clientId)
         .order("created_at", { ascending: false }).limit(20);
       if (cs.error) return falha(`não consegui ler os contratos do cliente: ${cs.error.message}`);
-      contractId = escolherContrato((cs.data as ContratoCadastro[] | null) ?? [], uuid,
+      contractId = escolherContrato((cs.data as unknown as ContratoCadastro[] | null) ?? [], uuid,
         quandoEnviou(doc) ?? existente?.enviado_em ?? assinadoEm ?? agoraIso);
     }
     const cliente = clientId ? clientes.find((c) => c.id === clientId) : undefined;
@@ -440,7 +451,8 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
     };
 
     if (opts.dry) {
-      const acao = d.avisar ? "avisaria" : parcial.avisar ? "parcial_avisaria" : existente?.aviso_reservado_em ? "ja_avisado" : "registrado";
+      const acao = opts.silencioso ? "registrado"
+        : d.avisar ? "avisaria" : parcial.avisar ? "parcial_avisaria" : existente?.aviso_reservado_em ? "ja_avisado" : "registrado";
       return { ...base, acao, mensagem };
     }
 
@@ -470,7 +482,13 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
     }
     const comAvisos = (r: ResultadoDocumento): ResultadoDocumento => (avisos.length ? { ...r, avisos } : r);
 
-    if (!mensagem) return comAvisos({ ...base, acao: existente?.aviso_reservado_em ? "ja_avisado" : "registrado" });
+    // Silencioso: o antigo fica travado; o recente que ainda deve o "assinou" fica para a consulta mandar.
+    if (opts.silencioso && status === "assinado" && !existente?.aviso_reservado_em && !d.avisar) {
+      const r = await supabaseAdmin.from(TABELA).update({ aviso_reservado_em: agoraIso, aviso_motivo: "entrou pelo arquivo de contratos: sem aviso no grupo" })
+        .eq("document_uuid", uuid).is("aviso_reservado_em", null);
+      if (r.error) avisos.push(`travar o aviso: ${r.error.message}`);
+    }
+    if (!mensagem || opts.silencioso) return comAvisos({ ...base, acao: existente?.aviso_reservado_em ? "ja_avisado" : "registrado" });
 
     // 7. O aviso: grupo de cadastro, nunca de cliente; reserva antes de mandar.
     const grupo = await grupoDeCadastro();

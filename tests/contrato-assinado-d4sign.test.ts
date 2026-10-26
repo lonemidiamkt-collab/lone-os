@@ -19,13 +19,14 @@ const db: Record<string, Linha[]> = {};
 const falhaNaTabela: Record<string, Erro | undefined> = {};
 
 /** Os defaults das colunas, como o Postgres põe na linha nova (migration 20261026150000). */
-const PADROES: Record<string, Linha> = { d4sign_documentos: { signatarios: [] }, d4sign_config: { historico: [] } };
+const PADROES: Record<string, Linha> = { d4sign_documentos: { signatarios: [], pdf_tentativas: 0 }, d4sign_config: { historico: [] } };
 
 class Consulta {
   private filtros: ((r: Linha) => boolean)[] = [];
   private op: "select" | "insert" | "update" | "upsert" = "select";
   private dados: Linha | null = null;
   private chave = "id";
+  private ignorarRepetidos = false;
   private max: number | null = null;
   constructor(private tabela: string) { db[tabela] ??= []; }
   select() { return this; }
@@ -33,6 +34,7 @@ class Consulta {
   is(c: string, v: unknown) { this.filtros.push((r) => (r[c] ?? null) === v); return this; }
   gte(c: string, v: unknown) { this.filtros.push((r) => r[c] != null && String(r[c]) >= String(v)); return this; }
   in(c: string, vs: unknown[]) { this.filtros.push((r) => vs.includes(r[c])); return this; }
+  not(c: string, _op: "is", v: unknown) { this.filtros.push((r) => (r[c] ?? null) !== v); return this; }
   or(expr: string) {
     const partes = expr.split(",").map((p) => {
       const [col, op, ...resto] = p.split(".");
@@ -50,7 +52,11 @@ class Consulta {
   limit(n: number) { this.max = n; return this; }
   update(d: Linha) { this.op = "update"; this.dados = d; return this; }
   insert(d: Linha) { this.op = "insert"; this.dados = d; return this; }
-  upsert(d: Linha, o?: { onConflict?: string }) { this.op = "upsert"; this.dados = d; this.chave = o?.onConflict ?? "id"; return this; }
+  private lote: Linha[] | null = null;
+  upsert(d: Linha | Linha[], o?: { onConflict?: string; ignoreDuplicates?: boolean }) {
+    this.op = "upsert"; this.lote = Array.isArray(d) ? d : [d]; this.dados = this.lote[0];
+    this.chave = o?.onConflict ?? "id"; this.ignorarRepetidos = !!o?.ignoreDuplicates; return this;
+  }
   maybeSingle() { return this.exec().then((r) => ({ data: r.data?.[0] ?? null, error: r.error })); }
   then<T>(ok: (r: { data: Linha[] | null; error: Erro | null }) => T, erro?: (e: unknown) => T) {
     return this.exec().then(ok, erro);
@@ -65,8 +71,10 @@ class Consulta {
       t.push(linha); return { data: [{ ...linha }], error: null };
     }
     if (this.op === "upsert") {
-      const ja = t.find((r) => r[this.chave] === this.dados![this.chave]);
-      if (ja) Object.assign(ja, this.dados); else t.push({ ...(PADROES[this.tabela] ?? {}), ...this.dados });
+      for (const d of this.lote ?? []) {
+        const ja = t.find((r) => r[this.chave] === d[this.chave]);
+        if (ja) { if (!this.ignorarRepetidos) Object.assign(ja, d); } else t.push({ ...(PADROES[this.tabela] ?? {}), ...d });
+      }
       return { data: null, error: null };
     }
     let alvo = t.filter((r) => this.filtros.every((f) => f(r)));
@@ -79,7 +87,23 @@ class Consulta {
 const envio = vi.hoisted(() => ({ fn: vi.fn() }));
 const usuario = vi.hoisted(() => ({ atual: null as null | { id: string; email: string; isAdmin: boolean } }));
 const diaUtil = vi.hoisted(() => ({ valor: true }));
-vi.mock("@/lib/supabase/server", () => ({ supabaseAdmin: { from: (t: string) => new Consulta(t) } }));
+/** O storage de mentira (legal-docs): caminho → bytes. */
+const armazem = vi.hoisted(() => new Map<string, Buffer>());
+vi.mock("@/lib/supabase/server", () => ({ supabaseAdmin: {
+  from: (t: string) => new Consulta(t),
+  storage: { from: (b: string) => ({
+    upload: async (caminho: string, dados: Buffer) => {
+      const k = `${b}/${caminho}`;
+      if (armazem.has(k)) return { data: null, error: { message: "The resource already exists" } };
+      armazem.set(k, Buffer.from(dados)); return { data: { path: caminho }, error: null };
+    },
+    remove: async (caminhos: string[]) => { caminhos.forEach((c) => armazem.delete(`${b}/${c}`)); return { data: null, error: null }; },
+    download: async (caminho: string) => {
+      const v = armazem.get(`${b}/${caminho}`);
+      return v ? { data: new Blob([new Uint8Array(v)]), error: null } : { data: null, error: { message: "Object not found" } };
+    },
+  }) },
+} }));
 vi.mock("@/lib/cs/notify", () => ({ csSendGroupText: envio.fn }));
 vi.mock("@/lib/api/cron-guard", () => ({ requireCron: () => null, isCronRequest: () => true }));
 vi.mock("@/lib/supabase/auth-server", () => ({ getServerUser: async () => usuario.atual }));
@@ -107,8 +131,11 @@ const d4 = {
   chamadas: [] as string[],
 };
 const json = (corpo: unknown, status = 200) => new Response(JSON.stringify(corpo), { status, headers: { "content-type": "application/json" } });
+const PDF_FALSO = Buffer.from("%PDF-1.4\n% contrato assinado de mentira\n%%EOF");
 async function fetchFalso(entrada: RequestInfo | URL): Promise<Response> {
   const url = new URL(String(entrada));
+  // O link do PDF assinado é do armazenamento da D4Sign: não é a API e não conta no limite.
+  if (url.hostname === "arquivos.d4sign.exemplo") return new Response(new Uint8Array(PDF_FALSO), { status: 200 });
   d4.chamadas.push(url.pathname);
   if (d4.falhar === "rede") throw new TypeError("fetch failed");
   if (d4.falhar === "timeout") { const e = new Error("The operation was aborted due to timeout"); e.name = "TimeoutError"; throw e; }
@@ -122,6 +149,16 @@ async function fetchFalso(entrada: RequestInfo | URL): Promise<Response> {
   }
   if (url.pathname === "/api/v1/webhooks/v2/") return json({ message: "URL cadastrada/atualizada com sucesso!" });
   if (url.pathname === "/api/v1/safes") return json(COFRES_DA_CONTA);
+  if (url.pathname === "/api/v1/documents/4/status") {
+    // Os finalizados da CONTA inteira (todos os cofres), sem signatários.
+    const fin = [...d4.docs.values()].filter((d) => d.statusId === "4").map(({ list: _l, ...resto }) => resto);
+    return json([{ total_documents: String(fin.length), total_pages: "1", current_page: url.searchParams.get("pg") ?? "1" }, ...fin]);
+  }
+  const mDown = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)\/download$/);
+  if (mDown) {
+    const d = d4.docs.get(mDown[1]);
+    return d ? json({ url: `https://arquivos.d4sign.exemplo/${mDown[1]}.pdf`, name: d.nameDoc }) : json({ message: "Documento não encontrado" }, 404);
+  }
   if (url.pathname === "/api/v1/documents/3/status") {
     // Os pendentes da CONTA inteira (todos os cofres), sem signatários.
     const pend = [...d4.docs.values()].filter((d) => d.statusId === "3").map(({ list: _l, ...resto }) => resto);
@@ -221,6 +258,7 @@ beforeEach(() => {
   d4.docs.clear();
   d4.falhar = null;
   d4.chamadas.length = 0;
+  armazem.clear();
   usuario.atual = null;
   diaUtil.valor = true;
   CFG.esquecerConfigD4Sign();
@@ -987,5 +1025,127 @@ describe("sem cofre escolhido", () => {
     expect(await res.json()).toMatchObject({ ok: true, acao: "ignorado", motivo: expect.stringMatching(/nenhum cofre/) });
     expect(d4.chamadas).toEqual([]);
     expect(envio.fn).not.toHaveBeenCalled();
+  });
+});
+
+// ── Arquivo por mês (26/10/2026) ─────────────────────────────────────────────────────────────────
+
+const { POST: arquivoRota } = await import("@/app/api/system/contratos-d4sign-arquivo/route");
+const { POST: trazerRota } = await import("@/app/api/contracts/arquivo/baixar/route");
+const { GET: arquivoGet } = await import("@/app/api/contracts/arquivo/route");
+const { GET: zipGet } = await import("@/app/api/contracts/arquivo/zip/route");
+
+describe("arquivo por mês: o PDF assinado vem da D4Sign, em silêncio", () => {
+  const rodarArquivo = (q = "") => arquivoRota(new NextRequest(`https://painel.lonemidia.com/api/system/contratos-d4sign-arquivo${q}`, { method: "POST" }));
+  const admin = () => { usuario.atual = { id: "u-1", email: "roberto@lone.exemplo", isAdmin: true }; };
+
+  beforeEach(() => {
+    // Assinado em setembro, nunca visto pelo Lone OS: é histórico, não novidade.
+    d4.docs.set(DOC_ANTIGO, docD4(DOC_ANTIGO, { enviadoEm: "2026-09-08 10:00:00", assinadoEm: "2026-09-10 15:00:00" }));
+    d4.docs.set(DOC_SEM_CADASTRO, docD4(DOC_SEM_CADASTRO, { cofre: OUTRO_COFRE, nome: "Prestador - Contrato.pdf" }));
+    d4.docs.delete(DOC_ZE);
+  });
+
+  it("registra o finalizado do cofre de contrato, liga ao cliente, guarda o PDF e NÃO avisa o grupo", async () => {
+    const r = await (await rodarArquivo()).json();
+    expect(r).toMatchObject({ ok: true, listou: true, novos: 1, guardados: 1, faltam: 0 });
+    expect(envio.fn).not.toHaveBeenCalled();
+    const d = doc(DOC_ANTIGO)!;
+    expect(d.pdf_path).toMatch(/^legal:\/\/contracts-signed\/cli-ze\/d4sign-/);
+    expect(d.assinado_em).toBe("2026-09-10T18:00:00.000Z");
+    expect(d.client_id).toBe("cli-ze");
+    expect(d.aviso_reservado_em).toBeTruthy(); // a consulta não manda "assinou" depois
+    expect(doc(DOC_SEM_CADASTRO)).toBeUndefined(); // cofre que não é de contrato
+    expect([...armazem.values()][0].subarray(0, 5).toString()).toBe("%PDF-");
+    // Lista + lê quem assinou + baixa: 3 chamadas. O link do arquivo não conta.
+    expect(d4.chamadas).toEqual(["/api/v1/documents/4/status", `/api/v1/documents/${DOC_ANTIGO}/list`, `/api/v1/documents/${DOC_ANTIGO}/download`]);
+  });
+
+  it("a consulta seguinte não anuncia o que entrou pelo arquivo", async () => {
+    await rodarArquivo();
+    await rodarConsulta();
+    expect(envio.fn).not.toHaveBeenCalled();
+  });
+
+  it("lista os finalizados no máximo uma vez a cada 20 h; PDF guardado não baixa de novo", async () => {
+    await rodarArquivo();
+    d4.chamadas.length = 0;
+    const r = await (await rodarArquivo()).json();
+    expect(r).toMatchObject({ ok: true, listou: false, guardados: 0, faltam: 0 });
+    expect(d4.chamadas).toEqual([]);
+  });
+
+  it("pendente que o Lone OS já conhece e fechou: fica para a consulta, que é quem avisa", async () => {
+    d4.docs.set(DOC_BRUNO, docD4(DOC_BRUNO, { emailCliente: "contato@bruno.exemplo", nome: "Bruno Tintas - Contrato.pdf" }));
+    db.d4sign_documentos.push({ document_uuid: DOC_BRUNO, nome: "Bruno Tintas - Contrato.pdf", status: "pendente", signatarios: [], pdf_tentativas: 0 });
+    await rodarArquivo();
+    expect(doc(DOC_BRUNO)!.status).toBe("pendente");
+    expect(doc(DOC_BRUNO)!.aviso_reservado_em ?? null).toBeNull();
+    expect(envio.fn).not.toHaveBeenCalled();
+  });
+
+  it("para na reserva da hora: com 6 chamadas feitas, nem lista", async () => {
+    db.d4sign_chamadas = Array.from({ length: 6 }, () => ({ em: new Date().toISOString(), caminho: "/x", origem: "consulta" }));
+    const r = await (await rodarArquivo()).json();
+    expect(r).toMatchObject({ parouNaCota: true, listou: false, guardados: 0 });
+    expect(d4.chamadas).toEqual([]);
+  });
+
+  it("falha no download conta tentativa e guarda o motivo; limite da hora não gasta tentativa", async () => {
+    await rodarArquivo("?dry=1"); // ensaio não grava nada nem fala com a D4Sign
+    expect(db.d4sign_documentos).toEqual([]);
+    expect(d4.chamadas).toEqual([]);
+    d4.docs.set(DOC_ANTIGO, { ...docD4(DOC_ANTIGO, { enviadoEm: "2026-09-08 10:00:00", assinadoEm: "2026-09-10 15:00:00" }) });
+    const real = fetchFalso;
+    vi.stubGlobal("fetch", async (e: RequestInfo | URL) => (String(e).includes("/download") ? json({ message: "Erro interno" }, 500) : real(e)));
+    await rodarArquivo();
+    expect(doc(DOC_ANTIGO)).toMatchObject({ pdf_tentativas: 1, pdf_erro: expect.stringMatching(/500/) });
+    expect(doc(DOC_ANTIGO)!.pdf_path ?? null).toBeNull();
+    // Limite da hora: a vez volta, a tentativa não é gasta.
+    db.d4sign_chamadas = Array.from({ length: 10 }, () => ({ em: new Date().toISOString(), caminho: "/x", origem: "webhook" }));
+    const { guardarPdfAssinado } = await import("@/lib/contracts/arquivo-d4sign");
+    const cfg = await CFG.carregarConfigD4Sign();
+    expect(await guardarPdfAssinado(DOC_ANTIGO, cfg!, "manual")).toMatchObject({ ok: true, guardado: false, limite: true });
+    expect(doc(DOC_ANTIGO)!.pdf_tentativas).toBe(1);
+  });
+
+  it("contrato do Lone OS ligado e sem PDF ganha o assinado; o que já tem PDF não é trocado", async () => {
+    db.contracts.push({ id: "ct-ze-antigo", client_id: "cli-ze", created_at: "2026-09-01T12:00:00Z", signed_at: null, signed_pdf_path: null, status: "draft", d4sign_document_uuid: null, d4sign_assinado_em: null });
+    await rodarArquivo();
+    const c = db.contracts.find((x) => x.id === "ct-ze-antigo")!;
+    expect(c).toMatchObject({ signed_pdf_path: doc(DOC_ANTIGO)!.pdf_path, signed_at: "2026-09-10T18:00:00.000Z", signature_method: "d4sign_auto", status: "draft" });
+    const antes = db.contracts.find((x) => x.id === "ct-ze-v1")!;
+    expect(antes.signed_pdf_path).toBeUndefined();
+  });
+
+  it("'Trazer agora' busca o PDF na hora (só admin) e não baixa duas vezes", async () => {
+    db.d4sign_documentos.push({ document_uuid: DOC_ANTIGO, nome: "x.pdf", status: "assinado", client_id: "cli-ze", assinado_em: "2026-09-10T18:00:00.000Z", pdf_tentativas: 0, signatarios: [] });
+    const pedir = () => trazerRota(new NextRequest("https://painel.lonemidia.com/api/contracts/arquivo/baixar", { method: "POST", body: JSON.stringify({ uuid: DOC_ANTIGO }) }));
+    expect((await pedir()).status).toBe(401);
+    admin();
+    const r = await pedir();
+    expect(r.status).toBe(200);
+    expect((await r.json()).pdf).toMatch(/^legal:\/\//);
+    d4.chamadas.length = 0;
+    expect((await pedir()).status).toBe(200); // "já estava guardado"
+    expect(d4.chamadas).toEqual([]);
+  });
+
+  it("a tela lista por mês e o .zip traz os PDFs com nome legível", async () => {
+    await rodarArquivo();
+    db.contracts.push({ id: "ct-bruno", client_id: "cli-bruno", version: 2, signed_at: "2026-09-20T13:00:00Z", signed_pdf_path: "legal://contracts-signed/cli-bruno/ct-bruno.pdf", d4sign_document_uuid: null });
+    armazem.set("legal-docs/contracts-signed/cli-bruno/ct-bruno.pdf", PDF_FALSO);
+    admin();
+    const lista = await (await arquivoGet(new NextRequest("https://painel.lonemidia.com/api/contracts/arquivo"))).json();
+    expect(lista.meses).toEqual([{ mes: "2026-09", total: 2, comPdf: 2 }]);
+    expect(lista.itens.map((i: { cliente: string }) => i.cliente)).toEqual(["Bruno Tintas", "Padaria do Zé"]);
+    const zip = await zipGet(new NextRequest("https://painel.lonemidia.com/api/contracts/arquivo/zip?mes=2026-09"));
+    expect(zip.status).toBe(200);
+    const JSZip = (await import("jszip")).default;
+    const z = await JSZip.loadAsync(Buffer.from(await zip.arrayBuffer()));
+    expect(Object.keys(z.files).sort()).toEqual([
+      "2026-09-10 - Padaria do Ze - Padaria do Ze - Contrato - Social Media.pdf",
+      "2026-09-20 - Bruno Tintas - Contrato V2.pdf",
+    ]);
   });
 });

@@ -284,6 +284,49 @@ export async function listarPendentesDaConta(cfg: ConfigD4Sign, origem: OrigemCh
   return { ok: true, dados: { docs, completa: false } };
 }
 
+/**
+ * GET /documents/4/status — os documentos FINALIZADOS da conta (todas as assinaturas feitas), uma página
+ * (500 por página) por chamada. Base do arquivo de contratos por mês.
+ */
+export async function listarFinalizadosDaConta(cfg: ConfigD4Sign, pagina: number, origem: OrigemChamada = "arquivo"):
+  Promise<Leitura<{ docs: ResumoD4Sign[]; paginas: number | null }>> {
+  const r = await pedir(cfg, "/documents/4/status", { origem, extra: { pg: String(pagina) } });
+  if (!r.ok) return r;
+  const lida = lerPaginaDeDocumentos(Array.isArray(r.dados) ? r.dados : [r.dados]);
+  return lida ? { ok: true, dados: lida } : { ok: false, erro: "a lista de documentos finalizados veio num formato que não reconheço" };
+}
+
+// ── PDF assinado ─────────────────────────────────────────────────────────────────────────────────
+
+/** O mesmo teto do "Upload assinado". */
+export const PDF_MAXIMO = 20 * 1024 * 1024;
+
+/**
+ * POST /documents/{uuid}/download (type PDF) → { url, name }, e o arquivo nessa URL (o link não conta no
+ * limite: é o armazenamento da D4Sign, não a API). Só aceita PDF de verdade (começa com %PDF-), até 20 MB.
+ */
+export async function baixarPdfAssinado(cfg: ConfigD4Sign, uuid: string, origem: OrigemChamada):
+  Promise<Leitura<{ arquivo: Buffer; nome: string }>> {
+  const r = await pedir(cfg, `/documents/${encodeURIComponent(uuid)}/download`, {
+    origem, metodo: "POST", corpo: { type: "PDF", language: "pt" },
+  });
+  if (!r.ok) return r;
+  const d = (r.dados && typeof r.dados === "object" ? r.dados : {}) as Record<string, unknown>;
+  const link = texto(d.url);
+  const nome = texto(d.name) ?? `${uuid}.pdf`;
+  if (!link || !/^https:\/\//i.test(link)) return { ok: false, erro: "a D4Sign não devolveu o link do PDF assinado" };
+  try {
+    const f = await fetch(link, { signal: AbortSignal.timeout(PRAZO_MS * 2), cache: "no-store" });
+    if (!f.ok) return { ok: false, erro: `o link do PDF da D4Sign respondeu ${f.status}` };
+    const arquivo = Buffer.from(await f.arrayBuffer());
+    if (arquivo.length === 0 || arquivo.length > PDF_MAXIMO) return { ok: false, erro: `o PDF da D4Sign veio com ${arquivo.length} bytes` };
+    if (arquivo.subarray(0, 5).toString("latin1") !== "%PDF-") return { ok: false, erro: "o arquivo da D4Sign não é um PDF" };
+    return { ok: true, dados: { arquivo, nome } };
+  } catch (e) {
+    return { ok: false, erro: `não consegui baixar o PDF da D4Sign: ${e instanceof Error ? e.message : "erro de rede"}` };
+  }
+}
+
 // ── Webhook do cofre ─────────────────────────────────────────────────────────────────────────────
 
 /** GET /webhooks/v2/ — a URL de webhook cadastrada no cofre (só leitura). */

@@ -427,6 +427,10 @@ export const AUTOMACOES: Automacao[] = [
     nome: "Contratos sem assinatura (D4Sign)", descricao: "Dia útil de manhã, UMA mensagem no grupo de cadastro com cada contrato enviado há 3 dias ou mais sem todas as assinaturas: quem falta e há quantos dias. Sem pendência, nada sai. Relê na D4Sign os mais antigos antes de escrever.",
     familia: "Dados e sync", destino: "grupo de cadastro", cron: "30 11 * * 1-5", agendaBRT: "seg a sex, 8h30", maxSilencioHoras: 74, ensaio: "dry=1",
   }),
+  ep("contratos-d4sign-arquivo", {
+    nome: "Arquivo de contratos (D4Sign)", descricao: "De madrugada, traz da D4Sign o PDF assinado de cada contrato finalizado nos cofres de contrato e guarda no Lone OS: é o que aparece em Contratos › Arquivo por mês, para ver e baixar (um a um ou o mês num .zip). A D4Sign responde a 10 chamadas por hora, então chegam alguns por noite, os mais recentes primeiro. Documento antigo entra em silêncio: nada vai para o grupo.",
+    familia: "Dados e sync", destino: "sistema", cron: "45 3-9 * * *", agendaBRT: "todo dia, de hora em hora das 0h45 às 6h45 (fora do horário da consulta, por causa do limite da D4Sign)", maxSilencioHoras: 26, ensaio: "dry=1",
+  }),
   ep("contract-renewal", {
     nome: "Renovação de contratos", descricao: "Cria o rascunho de renovação dos contratos a 30 dias do fim e avisa os admins.",
     familia: "Dados e sync", destino: "admin", cron: "0 9 * * *", agendaBRT: "todo dia, 6h", maxSilencioHoras: 26,

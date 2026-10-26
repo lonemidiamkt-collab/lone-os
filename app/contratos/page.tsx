@@ -7,11 +7,13 @@ import Header from "@/components/Header";
 import { useRole } from "@/lib/context/RoleContext";
 import {
   FileText, Search, Filter, Upload, FileCheck2, Download, Loader2,
-  CheckCircle, Clock, AlertTriangle, ChevronRight, ExternalLink, X,
+  CheckCircle, Clock, AlertTriangle, ChevronRight, ExternalLink, X, Archive, ArchiveRestore,
 } from "lucide-react";
 import { SERVICE_LABELS } from "@/lib/contracts/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import DocumentosD4Sign from "@/components/contratos/DocumentosD4Sign";
+import ArquivoPorMes from "@/components/contratos/ArquivoPorMes";
 
 interface Row {
   id: string;
@@ -34,6 +36,8 @@ interface Row {
   renewal_value: number | null;
   payment_day: number | null;
   created_at: string;
+  /** Saiu da lista sem ser apagado (migration 20261026210000). */
+  archived_at?: string | null;
   clients: { name?: string; nome_fantasia?: string; cnpj?: string } | null;
 }
 
@@ -45,7 +49,7 @@ interface Summary {
   expired: number;
 }
 
-type StatusFilter = "all" | "pending" | "signed" | "active" | "expired";
+type StatusFilter = "all" | "pending" | "signed" | "active" | "expired" | "archived";
 type ServiceFilter = "all" | "assessoria_trafego" | "assessoria_social" | "lone_growth" | "trafego_social_site";
 
 function formatCurrency(v: number): string {
@@ -70,6 +74,9 @@ export default function ContratosGlobalPage() {
   const [search, setSearch] = useState("");
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [arquivandoId, setArquivandoId] = useState<string | null>(null);
+  // O último arquivado, para o "Desfazer" — arquivar não pede confirmação, volta com um clique.
+  const [arquivado, setArquivado] = useState<{ id: string; nome: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingUploadContractId = useRef<string | null>(null);
 
@@ -160,7 +167,29 @@ export default function ContratosGlobalPage() {
     } catch { setErr("Falha ao abrir PDF"); }
   };
 
+  const arquivar = async (c: Row, desfazer = false) => {
+    setArquivandoId(c.id);
+    setErr("");
+    const r = await chamar("/api/contracts/arquivar", { contractId: c.id, desfazer });
+    setArquivandoId(null);
+    if (!r.ok) { setErr(r.erro ?? "Não consegui arquivar."); return; }
+    const nome = c.clients?.nome_fantasia || c.clients?.name || "contrato";
+    setArquivado(desfazer ? null : { id: c.id, nome });
+    await loadList();
+  };
+
+  const desfazerArquivo = async () => {
+    if (!arquivado) return;
+    setArquivandoId(arquivado.id);
+    const r = await chamar("/api/contracts/arquivar", { contractId: arquivado.id, desfazer: true });
+    setArquivandoId(null);
+    if (!r.ok) { setErr(r.erro ?? "Não consegui desfazer."); return; }
+    setArquivado(null);
+    await loadList();
+  };
+
   const statusBadge = (c: Row): { label: string; cls: string; icon: typeof CheckCircle } => {
+    if (c.archived_at) return { label: "Arquivado", cls: "bg-muted text-muted-foreground border-border", icon: Archive };
     if (c.signed_at) return { label: "Assinado", cls: "bg-lone-success-bg text-lone-success border-lone-success-border", icon: FileCheck2 };
     if (c.d4sign_assinado_em) return { label: "Assinado na D4Sign", cls: "bg-lone-success-bg text-lone-success border-lone-success-border", icon: FileCheck2 };
     if (c.status === "expired") return { label: "Vencido", cls: "bg-lone-danger-bg text-lone-danger border-lone-danger-border", icon: AlertTriangle };
@@ -208,6 +237,9 @@ export default function ContratosGlobalPage() {
             contrato registrado aqui (a fonte do contrato é o Finance). */}
         <DocumentosD4Sign />
 
+        {/* Arquivo por mês (26/10/2026): os contratos assinados de cada mês, com o PDF para baixar. */}
+        <ArquivoPorMes />
+
         {/* Filters */}
         <div className="rounded-xl border border-border bg-card p-4 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px]">
@@ -222,10 +254,10 @@ export default function ContratosGlobalPage() {
           <div className="flex items-center gap-1.5 text-xs">
             <Filter size={12} className="text-muted-foreground" />
             <span className="text-muted-foreground">Status:</span>
-            {(["all", "pending", "signed", "active", "expired"] as StatusFilter[]).map((s) => (
+            {(["all", "pending", "signed", "active", "expired", "archived"] as StatusFilter[]).map((s) => (
               <button key={s} onClick={() => setStatusFilter(s)}
                 className={`px-2.5 py-1 rounded border text-xs transition-all ${statusFilter === s ? "border-primary/50 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
-                {s === "all" ? "Tudo" : s === "pending" ? "Pendentes" : s === "signed" ? "Assinados" : s === "active" ? "Ativos" : "Vencidos"}
+                {s === "all" ? "Tudo" : s === "pending" ? "Pendentes" : s === "signed" ? "Assinados" : s === "active" ? "Ativos" : s === "expired" ? "Vencidos" : "Arquivados"}
               </button>
             ))}
           </div>
@@ -239,6 +271,20 @@ export default function ContratosGlobalPage() {
             ))}
           </div>
         </div>
+
+        {arquivado && (
+          <div className="rounded-xl border border-border bg-card p-3 flex items-center gap-2">
+            <Archive size={14} className="text-muted-foreground shrink-0" />
+            <p className="text-xs text-foreground flex-1">
+              Contrato de <strong>{arquivado.nome}</strong> arquivado. Saiu da lista e das contagens; nada foi apagado (fica em &quot;Arquivados&quot;).
+            </p>
+            <button onClick={desfazerArquivo} disabled={arquivandoId === arquivado.id}
+              className="text-xs px-2.5 py-1 rounded border border-primary/30 text-primary hover:bg-primary/10 disabled:opacity-50">
+              {arquivandoId === arquivado.id ? "Desfazendo…" : "Desfazer"}
+            </button>
+            <button onClick={() => setArquivado(null)} className="text-muted-foreground opacity-50 hover:opacity-100" title="Fechar"><X size={12} /></button>
+          </div>
+        )}
 
         {err && (
           <div className="rounded-xl border border-lone-danger-border bg-lone-danger-bg p-3 flex items-start gap-2">
@@ -308,7 +354,13 @@ export default function ContratosGlobalPage() {
                                 <Download size={13} />
                               </button>
                             )}
-                            {c.signed_pdf_path ? (
+                            {c.archived_at ? (
+                              <button onClick={() => arquivar(c, true)} disabled={arquivandoId === c.id}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded border border-border text-muted-foreground text-[10px] hover:text-foreground disabled:opacity-50">
+                                {arquivandoId === c.id ? <Loader2 size={10} className="animate-spin" /> : <ArchiveRestore size={10} />}
+                                Voltar para a lista
+                              </button>
+                            ) : c.signed_pdf_path ? (
                               <button onClick={() => handleViewSigned(c.signed_pdf_path!)}
                                 className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary/10 text-primary text-[10px] hover:bg-primary/20 border border-primary/20">
                                 <FileCheck2 size={10} /> Ver Assinado
@@ -318,6 +370,13 @@ export default function ContratosGlobalPage() {
                                 className="flex items-center gap-1 px-2.5 py-1 rounded bg-lone-success-bg text-lone-success text-[10px] hover:opacity-80 border border-lone-success-border disabled:opacity-50">
                                 {uploadingId === c.id ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
                                 {uploadingId === c.id ? "Enviando" : "Upload"}
+                              </button>
+                            )}
+                            {!c.archived_at && !c.signed_at && !c.d4sign_assinado_em && (
+                              <button onClick={() => arquivar(c)} disabled={arquivandoId === c.id}
+                                className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-50"
+                                title="Arquivar: tira da lista sem apagar (dá para desfazer)" aria-label="Arquivar contrato">
+                                {arquivandoId === c.id ? <Loader2 size={12} className="animate-spin" /> : <Archive size={12} />}
                               </button>
                             )}
                             <Link href={`/clients/${c.client_id}?tab=contratos`} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Abrir aba de contratos do cliente">

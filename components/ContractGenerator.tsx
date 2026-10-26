@@ -32,6 +32,8 @@ interface ContractFull extends ContractRecord {
   signedAt?: string | null;
   /** A D4Sign fechou todas as assinaturas (26/10/2026) — o PDF assinado pode ainda não ter subido. */
   d4signAssinadoEm?: string | null;
+  /** Arquivado na tela de Contratos: fica aqui no histórico, marcado, mas não é pendência. */
+  archivedAt?: string | null;
   signedUploadedBy?: string | null;
   signatureMethod?: string | null;
   /** PDFs assinados que já valeram (trocados pela tela) — 24/10/2026, auditoria 3.13. */
@@ -134,6 +136,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
       signedPdfPath: (r.signed_pdf_path as string) || null,
       signedAt: (r.signed_at as string) || null,
       d4signAssinadoEm: (r.d4sign_assinado_em as string) || null,
+      archivedAt: (r.archived_at as string) || null,
       signedUploadedBy: (r.signed_uploaded_by as string) || null,
       signatureMethod: (r.signature_method as string) || null,
       signedPdfAnteriores: lerAnteriores(r.signed_pdf_anteriores),
@@ -498,7 +501,9 @@ export default function ContractGenerator({ client, currentUser }: Props) {
             const isSending = downloadingDocx === c.id;
             const days = daysUntil(c.endDate);
             const prevContract = c.previousContractId ? contracts.find((x) => x.id === c.previousContractId) : null;
-            const statusBadge = c.status === "active"
+            const statusBadge = c.archivedAt
+              ? { label: "Arquivado", cls: "bg-muted text-muted-foreground border-border" }
+              : c.status === "active"
               ? { label: "Ativo", cls: "bg-lone-success-bg text-lone-success border-lone-success-border" }
               : c.status === "expired"
                 ? { label: "Vencido", cls: "bg-destructive/10 text-destructive border-destructive/20" }

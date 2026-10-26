@@ -93,3 +93,5 @@
 # Contrato na D4Sign (26/10/2026): consulta do cofre a cada 3 h e "Ainda não assinaram" no grupo de cadastro, dia útil 8h30
 15 11-23/3 * * * /opt/loneos/scripts/cron-call.sh contratos-d4sign POST >> /var/log/loneos-contratos-d4sign.log 2>&1
 30 11 * * 1-5 /opt/loneos/scripts/cron-call.sh contratos-d4sign-pendentes POST >> /var/log/loneos-contratos-d4sign-pendentes.log 2>&1
+# Arquivo de contratos por mês (26/10/2026): PDFs assinados da D4Sign, de madrugada (0h45 a 6h45 BRT), fora da consulta
+45 3-9 * * * /opt/loneos/scripts/cron-call.sh contratos-d4sign-arquivo POST >> /var/log/loneos-contratos-d4sign-arquivo.log 2>&1

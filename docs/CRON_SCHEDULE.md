@@ -5,7 +5,7 @@
 > Não edite à mão: rode `npx tsx scripts/gerar-agenda-cron.ts`. O teste `tests/agenda-cron-doc.test.ts`
 > quebra quando este arquivo fica para trás do retrato.
 
-**Linhas no crontab:** 88 · **Rotinas:** 86 · **Rotinas que usam IA:** 16
+**Linhas no crontab:** 89 · **Rotinas:** 87 · **Rotinas que usam IA:** 16
 
 - O servidor roda em UTC puro. Horário de Brasília = UTC − 3h (sem horário de verão).
 - Ligar, desligar, pausar, rodar agora e ver o histórico: Central de Automações (`/automations`).
@@ -108,6 +108,7 @@
 | Quando (Brasília) | Crontab (UTC) | Rotina | O que o servidor chama | Agente de IA |
 |---|---|---|---|---|
 | de hora em hora | `0 * * * *` | Histórico operacional | `POST /api/system/historico-cliente` | — |
+| todo dia, de hora em hora das 0h45 às 6h45 (fora do horário da consulta, por causa do limite da D4Sign) | `45 3-9 * * *` | Arquivo de contratos (D4Sign) | `POST /api/system/contratos-d4sign-arquivo` | — |
 | todo dia, 3h | `0 6 * * *` | Relatórios de Instagram | `POST /api/system/ig-snapshots` | — |
 | domingo, 5h | `0 8 * * 0` | Ramo de cada cliente | `POST /api/system/cs-nichos` | Ramo do cliente |
 | todo dia, 6h | `0 9 * * *` | Renovação de contratos | `POST /api/system/contract-renewal` | — |
