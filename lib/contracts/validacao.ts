@@ -78,8 +78,28 @@ const RX_SOCIAL = /\b(social media|artes?\b|reels?|carrossel|feed|stories|legend
 const RX_TRAFEGO = /\b(meta ads|google ads|facebook ads|gerenciador de an[úu]ncios|campanhas? de an[úu]ncio|tr[áa]fego pago|verba de an[úu]ncios?)\b/i;
 const RX_CICLO_TRIMESTRAL = /\bciclos? (?:sucessivos? )?de (?:tr[êe]s|3) (?:meses|m[êe]s)\b/i;
 
+const RX_RENOVACAO_AUTOMATICA = /\b(?:renovad[oa] automaticamente|automaticamente renovad[oa])\b/i;
+
 const so = (s: string) => (s ?? "").replace(/\s+/g, " ").trim();
 const norm = (s: string) => so(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+// Parágrafo que EXCLUI do escopo ("1.5. Não estão incluídos no valor contratado: a) criação de artes…").
+const RX_EXCLUSAO = /\b(n[ãa]o (?:est[ãa]o |est[áa] )?inclu[íi]d[oa]s?|n[ãa]o inclui|n[ãa]o fazem? parte|fora do escopo)\b/i;
+
+/**
+ * O texto do escopo CONTRATADO — a cláusula do objeto, sem os parágrafos de exclusão. A auditoria de
+ * escopo olhava o contrato inteiro: o modelo de tráfego que diz "não estão incluídos: criação de artes,
+ * gestão de redes sociais" era reprovado justamente por dizer o que NÃO entra (26/10/2026), e "artes"
+ * na cláusula de ativos ("conteúdos finais, anúncios, artes") também derrubava. Sem cláusula de objeto
+ * identificável, devolve o contrato inteiro — o rigor antigo vale pra modelo fora do padrão.
+ */
+export function escopoContratado(clausulas: ClausulaTexto[]): string {
+  const objeto = clausulas.filter((c) => /\bobjeto\b|\bescopo\b/i.test(c.title));
+  if (!objeto.length) return clausulas.map((c) => `${c.title}\n${c.body}`).join("\n");
+  return objeto
+    .map((c) => c.body.split(/\n{2,}/).filter((p) => !RX_EXCLUSAO.test(p)).join("\n\n"))
+    .join("\n");
+}
 
 /** Valores em reais citados no corpo de uma cláusula. */
 export function valoresCitados(texto: string): number[] {
@@ -123,17 +143,27 @@ export function validarContrato(e: EntradaValidacao): Achado[] {
   if (!e.valorMensal || e.valorMensal <= 0) {
     bloqueio("ERRO_CRITICO_002", "Valor mensal ausente ou zerado.");
   }
-  if (!e.duracaoMeses || e.duracaoMeses <= 0) {
+  // Nos ciclos o prazo É o ciclo (3 meses): quem pede "2500, dia 10" não diz meses, e o contrato
+  // padrão era reprovado por "prazo ausente" (26/10/2026). Só o prazo determinado exige o número.
+  const meses = e.duracaoMeses || (e.modalidade === "ciclos" ? 3 : 0);
+  if (!meses || meses <= 0) {
     bloqueio("ERRO_CRITICO_003", "Prazo ausente.");
-  } else if (e.modalidade === "ciclos" && e.duracaoMeses && e.duracaoMeses % 3 !== 0) {
-    bloqueio("ERRO_CRITICO_003", `Prazo contraditório: modalidade em ciclos trimestrais com ${e.duracaoMeses} meses.`);
+  } else if (e.modalidade === "ciclos" && meses % 3 !== 0) {
+    bloqueio("ERRO_CRITICO_003", `Prazo contraditório: modalidade em ciclos trimestrais com ${meses} meses.`);
+  }
+  // Prazo determinado com a cláusula de ciclos e renovação automática: o quadro-resumo diz "sem
+  // renovação" e a Cláusula Segunda diz o contrário — contradição que o cliente usa contra a agência.
+  if (e.modalidade === "determinado" && (RX_CICLO_TRIMESTRAL.test(corpoTudo) || RX_RENOVACAO_AUTOMATICA.test(corpoTudo))) {
+    bloqueio("ERRO_CRITICO_010", "Contrato por prazo determinado com cláusula de ciclos e renovação automática.");
   }
 
-  // ── AUDITORIA 3 — ESCOPO. O contrato só pode conter o que foi vendido.
-  if (e.tipoServico === "assessoria_trafego" && RX_SOCIAL.test(corpoTudo)) {
+  // ── AUDITORIA 3 — ESCOPO. O contrato só pode conter o que foi vendido — no objeto, sem contar o
+  // que ele mesmo diz que fica de fora.
+  const escopo = escopoContratado(e.clausulas);
+  if (e.tipoServico === "assessoria_trafego" && RX_SOCIAL.test(escopo)) {
     bloqueio("ERRO_CRITICO_004", "Contrato só de tráfego contém cláusula de Social Media.");
   }
-  if (e.tipoServico === "assessoria_social" && RX_TRAFEGO.test(corpoTudo)) {
+  if (e.tipoServico === "assessoria_social" && RX_TRAFEGO.test(escopo)) {
     bloqueio("ERRO_CRITICO_005", "Contrato só de Social Media contém cláusula de tráfego pago.");
   }
   if (e.tipoServico === "site" && e.modalidade !== "ciclos" && RX_CICLO_TRIMESTRAL.test(corpoTudo)) {

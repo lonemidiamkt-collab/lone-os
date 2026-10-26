@@ -4,7 +4,7 @@
 // o contrato → o Roberto responde "gera: 2500, 12 meses, dia 10" → o arquivo chega ali, pronto
 // pra encaminhar pra assinatura.
 //
-// POST { clientId, valorMensal, duracaoMeses, diaPagamento, groupJid? }
+// POST { clientId, valorMensal, duracaoMeses, diaPagamento, modalidade?, dataInicio? ("aaaa-mm-dd"), groupJid? }
 //   sem groupJid → devolve o PDF na resposta (usado pra testar sem mandar pra ninguém)
 //   com groupJid → manda o arquivo no grupo
 //
@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
   const diaPagamento = Number(body?.diaPagamento);
   const modalidade = body?.modalidade === "determinado" ? "determinado" as const : "ciclos" as const;
   const groupJid = (body?.groupJid as string) || "";
+  const dataInicio = /^\d{4}-\d{2}-\d{2}$/.test(String(body?.dataInicio ?? "")) ? String(body.dataInicio) : undefined;
 
   if (!clientId) return NextResponse.json({ error: "clientId obrigatório" }, { status: 400 });
   if (!(valorMensal > 0) || !(diaPagamento >= 1 && diaPagamento <= 28)) {
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Prazo determinado exige a duração em meses." }, { status: 400 });
   }
 
-  const montado = await montarContratoHtml(clientId, { valorMensal, duracaoMeses, diaPagamento, modalidade });
+  const montado = await montarContratoHtml(clientId, { valorMensal, duracaoMeses, diaPagamento, modalidade, dataInicio });
   if (!montado.ok || !montado.html) {
     return NextResponse.json({
       ok: false,

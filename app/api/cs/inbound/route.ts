@@ -1672,6 +1672,7 @@ async function processarInbound(req: NextRequest) {
         // GUARDA o que já entendeu: sem isto a próxima resposta ("dia 24") recomeça do zero.
         await registrarParcial(msg.groupJid, alvo.id, alvo.nome, {
           valorMensal: pedido.valorMensal, duracaoMeses: pedido.duracaoMeses, diaPagamento: pedido.diaPagamento,
+          dataInicio: pedido.dataInicio,
         });
         await csSendGroupText(msg.groupJid,
           `Pra montar o contrato do *${alvo.nome}* ainda falta: *${pedido.faltando.join(", ")}*.`
@@ -1695,7 +1696,7 @@ async function processarInbound(req: NextRequest) {
 
       const montado = await montarContratoHtml(alvo.id, {
         valorMensal: pedido.valorMensal!, diaPagamento: pedido.diaPagamento!,
-        duracaoMeses: pedido.duracaoMeses, modalidade: pedido.modalidade,
+        duracaoMeses: pedido.duracaoMeses, modalidade: pedido.modalidade, dataInicio: pedido.dataInicio,
       });
       if (!montado.ok || !montado.html) {
         await csSendGroupText(msg.groupJid,

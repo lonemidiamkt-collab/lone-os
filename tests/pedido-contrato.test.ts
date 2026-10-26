@@ -133,3 +133,38 @@ describe("leitura completa", () => {
     expect(p.valorMensal).toBe(3000);
   });
 });
+
+describe("data de início", () => {
+  const hoje = new Date("2026-10-26T12:00:00-03:00");
+
+  it("lê a data de início e não confunde com o vencimento", () => {
+    const n = extrairNumeros("gera o contrato: 1500, dia 10, início dia 15/11", hoje);
+    expect(n.dataInicio).toBe("2026-11-15");
+    expect(n.diaPagamento).toBe(10);
+    expect(n.valorMensal).toBe(1500);
+  });
+
+  it("aceita os jeitos de escrever", () => {
+    expect(extrairNumeros("1500 dia 10 começa 05/11/2026", hoje).dataInicio).toBe("2026-11-05");
+    expect(extrairNumeros("1500 dia 10 a partir de 01/12", hoje).dataInicio).toBe("2026-12-01");
+    expect(extrairNumeros("1500 dia 10 inicio em 3/11/26", hoje).dataInicio).toBe("2026-11-03");
+  });
+
+  it("sem ano, data que já passou faz tempo é do ano que vem", () => {
+    expect(extrairNumeros("1500 dia 10 início 05/01", new Date("2026-12-20T12:00:00-03:00")).dataInicio).toBe("2027-01-05");
+  });
+
+  it("início sozinho na frase: o 'dia 15' dele não vira vencimento", () => {
+    const n = extrairNumeros("1500, início dia 15/11", hoje);
+    expect(n.diaPagamento).toBeUndefined();
+    expect(n.faltando).toContain("dia de vencimento");
+  });
+
+  it("data impossível não vira data", () => {
+    expect(extrairNumeros("1500 dia 10 início 31/02", hoje).dataInicio).toBeUndefined();
+  });
+
+  it("sem data na frase, não inventa", () => {
+    expect(extrairNumeros("gera o contrato: 3000, 12 meses, dia 10", hoje).dataInicio).toBeUndefined();
+  });
+});

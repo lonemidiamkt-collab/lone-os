@@ -35,6 +35,10 @@ export default function SettingsPage() {
     signatarioNome: "", signatarioCpf: "", signatarioEmail: "",
   });
   const [templates, setTemplates] = useState<{ id: string; name: string; serviceType: string; durationMonths: number; clauses: { id: string; title: string; body: string }[]; conditionalClauses: { id: string; title: string; body: string; enabled: boolean }[] }[]>([]);
+  // Como cada modelo estava quando a página leu o banco: o Salvar grava só o que mudou, e só se
+  // ninguém gravou outra versão depois. Antes regravava TODOS — uma aba aberta de manhã desfazia a
+  // revisão dos modelos feita à tarde (26/10/2026).
+  const [templatesLidos, setTemplatesLidos] = useState<Record<string, { updatedAt: string; foto: string }>>({});
   const [editingClauses, setEditingClauses] = useState<string | null>(null);
   const [agencySaving, setAgencySaving] = useState(false);
   const [agencySaved, setAgencySaved] = useState(false);
@@ -59,12 +63,15 @@ export default function SettingsPage() {
       });
     });
     supabase.from("contract_templates").select("*").order("name").then(({ data }) => {
-      if (data) setTemplates(data.map((r) => ({
+      if (!data) return;
+      const lidos = data.map((r) => ({
         id: r.id, name: r.name, serviceType: r.service_type,
         durationMonths: r.duration_months,
         clauses: (r.clauses as { id: string; title: string; body: string }[]) || [],
         conditionalClauses: (r.conditional_clauses as { id: string; title: string; body: string; enabled: boolean }[]) || [],
-      })));
+      }));
+      setTemplates(lidos);
+      setTemplatesLidos(Object.fromEntries(data.map((r, i) => [r.id, { updatedAt: r.updated_at as string, foto: fotoDoModelo(lidos[i]) }])));
     });
   }, [isAdmin]);
 
@@ -80,15 +87,23 @@ export default function SettingsPage() {
       updated_at: new Date().toISOString(),
     }).eq("key", "main");
     const falhas: string[] = agencyErr ? [`cadastro da agência: ${agencyErr.message}`] : [];
+    const novosLidos = { ...templatesLidos };
     for (const t of templates) {
-      const { error: tErr } = await supabase.from("contract_templates").update({
+      const lido = templatesLidos[t.id];
+      if (lido && lido.foto === fotoDoModelo(t)) continue; // não mexeu neste modelo
+      let q = supabase.from("contract_templates").update({
         duration_months: t.durationMonths,
         clauses: t.clauses,
         conditional_clauses: t.conditionalClauses,
         updated_at: new Date().toISOString(),
       }).eq("id", t.id);
+      if (lido?.updatedAt) q = q.eq("updated_at", lido.updatedAt);
+      const { data: gravado, error: tErr } = await q.select("updated_at");
       if (tErr) falhas.push(`modelo ${t.name}: ${tErr.message}`);
+      else if (!gravado?.length) falhas.push(`modelo ${t.name}: alguém salvou outra versão depois que você abriu esta página — recarregue e refaça a edição`);
+      else novosLidos[t.id] = { updatedAt: gravado[0].updated_at as string, foto: fotoDoModelo(t) };
     }
+    setTemplatesLidos(novosLidos);
     setAgencySaving(false);
     if (falhas.length) {
       setAgencyError(`Não salvou: ${falhas.join("; ")}.`);
@@ -422,4 +437,9 @@ export default function SettingsPage() {
       </div>
     </div>
   );
+}
+
+/** O que o Salvar compara para saber se o modelo foi editado nesta página. */
+function fotoDoModelo(t: { durationMonths: number; clauses: unknown; conditionalClauses: unknown }): string {
+  return JSON.stringify([t.durationMonths, t.clauses, t.conditionalClauses]);
 }

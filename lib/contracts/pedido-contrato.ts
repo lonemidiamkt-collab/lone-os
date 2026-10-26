@@ -18,6 +18,8 @@ export interface PedidoContrato {
    * mesmo documento cria contradição que o cliente usa contra a agência.
    */
   modalidade: "ciclos" | "determinado";
+  /** "2026-11-10" — só quando a frase diz ("início dia 10/11", "começa 10/11/2026", "a partir de 10/11"). */
+  dataInicio?: string;
   /** O que ainda falta pra poder gerar. Vazio = dá pra seguir. */
   faltando: string[];
 }
@@ -60,9 +62,14 @@ export function trouxeOsNumeros(texto: string): boolean {
  * Aceita o jeito que a pessoa escreve de verdade: "2500", "R$ 2.500,00", "2,5k", "12 meses",
  * "1 ano", "dia 10", "todo dia 5".
  */
-export function extrairNumeros(texto: string): Omit<PedidoContrato, "querContrato"> {
-  const t = (texto || "").toLowerCase().replace(/\s+/g, " ");
+export function extrairNumeros(texto: string, hoje: Date = new Date()): Omit<PedidoContrato, "querContrato"> {
+  const bruto = (texto || "").toLowerCase().replace(/\s+/g, " ");
   const faltando: string[] = [];
+
+  // ── data de início — antes de tudo: "início dia 10/11" tem um "dia 10" que não é o vencimento ──
+  const mInicio = RX_INICIO.exec(bruto);
+  const dataInicio = mInicio ? dataDoInicio(mInicio[1], mInicio[2], mInicio[3], hoje) : undefined;
+  const t = mInicio ? bruto.replace(mInicio[0], " ") : bruto;
 
   // ── dia de pagamento — lê PRIMEIRO e remove, senão "dia 10" vira valor 10 ──
   let diaPagamento: number | undefined;
@@ -111,8 +118,28 @@ export function extrairNumeros(texto: string): Omit<PedidoContrato, "querContrat
   return {
     valorMensal, duracaoMeses, diaPagamento,
     modalidade: determinado ? "determinado" : "ciclos",
+    ...(dataInicio ? { dataInicio } : {}),
     faltando,
   };
+}
+
+// "início dia 10/11", "inicio em 10/11/2026", "começa 10/11", "começando dia 10/11", "a partir de 10/11".
+const RX_INICIO = /\b(?:in[íi]cio|inicia(?:ndo|r)?|come[çc]a(?:ndo|r)?|a partir d[eo])\s*(?:(?:em|no|na|dia|de|do)\s+)*(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/;
+
+/**
+ * dd/mm[/aaaa] → "aaaa-mm-dd". Sem ano: o deste ano, ou o do ano que vem quando a data já passou há
+ * mais de 60 dias (em dezembro, "início 05/01" é janeiro que vem). Data impossível → undefined.
+ */
+function dataDoInicio(d: string, m: string, a: string | undefined, hoje: Date): string | undefined {
+  const dia = Number(d), mes = Number(m);
+  if (mes < 1 || mes > 12 || dia < 1) return undefined;
+  let ano = a ? Number(a.length === 2 ? `20${a}` : a) : hoje.getFullYear();
+  if (!a) {
+    const candidata = Date.UTC(ano, mes - 1, dia);
+    if (candidata < hoje.getTime() - 60 * 86_400_000) ano += 1;
+  }
+  if (dia > new Date(Date.UTC(ano, mes, 0)).getUTCDate()) return undefined;
+  return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
 }
 
 /** Interpreta a mensagem inteira. */

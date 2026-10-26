@@ -91,6 +91,7 @@ export interface ParcialContrato {
   valorMensal?: number;
   duracaoMeses?: number;
   diaPagamento?: number;
+  dataInicio?: string;
 }
 
 /** Guarda o que já se sabe do contrato depois de pedir o que falta. */
@@ -98,7 +99,7 @@ export async function registrarParcial(
   groupJid: string,
   clientId: string,
   cliente: string,
-  dados: { valorMensal?: number; duracaoMeses?: number; diaPagamento?: number },
+  dados: { valorMensal?: number; duracaoMeses?: number; diaPagamento?: number; dataInicio?: string },
 ) {
   const { ymd, spNow } = await import("@/lib/cs/vigilancia");
   const { error } = await supabaseAdmin.from("cs_outbound").insert({
@@ -133,6 +134,7 @@ export async function parcialPendente(groupJid: string): Promise<ParcialContrato
       clientId: linha.client_id as string,
       cliente: d.cliente || "cliente",
       valorMensal: d.valorMensal, duracaoMeses: d.duracaoMeses, diaPagamento: d.diaPagamento,
+      dataInicio: d.dataInicio,
     };
   } catch { return null; }
 }
@@ -146,11 +148,12 @@ export async function limparParcial(groupJid: string) {
 /** O que veio agora vence o que estava guardado — a pessoa pode estar corrigindo. */
 export function mesclarParcial(
   parcial: ParcialContrato | null,
-  agora: { valorMensal?: number; duracaoMeses?: number; diaPagamento?: number },
-): { valorMensal?: number; duracaoMeses?: number; diaPagamento?: number } {
+  agora: { valorMensal?: number; duracaoMeses?: number; diaPagamento?: number; dataInicio?: string },
+): { valorMensal?: number; duracaoMeses?: number; diaPagamento?: number; dataInicio?: string } {
   return {
     valorMensal: agora.valorMensal ?? parcial?.valorMensal,
     duracaoMeses: agora.duracaoMeses ?? parcial?.duracaoMeses,
     diaPagamento: agora.diaPagamento ?? parcial?.diaPagamento,
+    dataInicio: agora.dataInicio ?? parcial?.dataInicio,
   };
 }

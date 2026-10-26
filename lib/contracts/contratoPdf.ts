@@ -16,6 +16,7 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { validarContrato, bloqueios, type Achado } from "@/lib/contracts/validacao";
 import { CONTRATADA } from "@/lib/contracts/contratada";
+import { clausulasDaModalidade, dataPorExtenso, terminoPrevisto } from "@/lib/contracts/modelos-casa";
 
 /** Padrão da casa: ciclos de 3 meses com renovação automática. Teste/projeto = prazo determinado. */
 export type Modalidade = "ciclos" | "determinado";
@@ -26,6 +27,8 @@ export interface DadosComerciais {
   /** Só na modalidade "determinado" (ex.: teste de 30 dias). Nos ciclos, a vigência é a padrão. */
   duracaoMeses?: number;
   modalidade?: Modalidade;
+  /** "2026-11-10" — quando o time já combinou a data. Sem ela, o início é a confirmação do 1º pagamento. */
+  dataInicio?: string;
 }
 
 export interface ContratoMontado {
@@ -138,13 +141,19 @@ export async function montarContratoHtml(
     .from("contract_templates").select("clauses, conditional_clauses").eq("service_type", tipo).maybeSingle();
 
   type Clausula = { id: string; title: string; body: string; enabled?: boolean };
-  const fixas = (tpl?.clauses as Clausula[]) ?? [];
+  const doModelo = (tpl?.clauses as Clausula[]) ?? [];
   const condicionais = ((tpl?.conditional_clauses as Clausula[]) ?? []).filter((x) => x.enabled);
-  if (!fixas.length) {
+  if (!doModelo.length) {
     return { ok: false, cliente: fantasia, erro: `Não há modelo de contrato cadastrado para "${tipo}". Cadastre em Configurações.` };
   }
 
   const modalidade: Modalidade = com.modalidade ?? "ciclos";
+  // Prazo determinado troca a cláusula de ciclos pela de prazo (lib/contracts/modelos-casa.ts).
+  const fixas = clausulasDaModalidade(doModelo, modalidade);
+  const meses = modalidade === "determinado" ? (com.duracaoMeses ?? 1) : (com.duracaoMeses ?? 3);
+  const inicioExtenso = com.dataInicio ? dataPorExtenso(com.dataInicio) : null;
+  const terminoIso = modalidade === "determinado" && com.dataInicio ? terminoPrevisto(com.dataInicio, meses) : null;
+  const terminoExtenso = terminoIso ? dataPorExtenso(terminoIso) : null;
   const hoje = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const anoAtual = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", year: "numeric" });
 
@@ -177,7 +186,10 @@ export async function montarContratoHtml(
     .replace(/\{\{\s*valor_mensal\s*\}\}/g, brl(com.valorMensal))
     .replace(/\{\{\s*valor_mensal_extenso\s*\}\}/g, porExtenso(com.valorMensal))
     .replace(/\{\{\s*dia_pagamento\s*\}\}/g, `${String(com.diaPagamento).padStart(2, "0")} (${numExt(com.diaPagamento)})`)
-    .replace(/\{\{\s*duracao_meses\s*\}\}/g, String(com.duracaoMeses ?? 3));
+    .replace(/\{\{\s*duracao_meses\s*\}\}/g, String(meses))
+    .replace(/\{\{\s*duracao_meses_extenso\s*\}\}/g, numExt(meses))
+    .replace(/\{\{\s*meses_palavra\s*\}\}/g, meses === 1 ? "mês" : "meses")
+    .replace(/\{\{\s*termino_previsto\s*\}\}/g, terminoExtenso ? `, com término previsto para ${terminoExtenso}` : "");
 
   // ── AUDITORIA (§43 do treinamento). Roda com as cláusulas JÁ substituídas: é assim que se pega
   // valor chumbado de outro cliente sobrando no template. Bloqueio impede a geração — contrato
@@ -217,13 +229,17 @@ export async function montarContratoHtml(
       </section>`)
     .join("");
 
+  const linhaInicio = `<p><strong>Data de início:</strong> ${inicioExtenso ? `${inicioExtenso}` : "na confirmação do pagamento da primeira mensalidade"}.</p>`;
   const linhaVigencia = modalidade === "ciclos"
-    ? `<p><strong>Organização da vigência:</strong> ciclos sucessivos de 3 (três) meses.</p>
+    ? `${linhaInicio}
+       <p><strong>Organização da vigência:</strong> ciclos sucessivos de 3 (três) meses.</p>
        <p><strong>Renovação:</strong> automática por períodos sucessivos de 3 (três) meses, salvo alteração acordada entre as partes.</p>
        <p><strong>Encerramento:</strong> permitido a qualquer momento, mediante aviso prévio escrito de 30 (trinta) dias e indicação breve do motivo.</p>
        <p><strong>Valor mensal:</strong> ${brl(com.valorMensal)} (${porExtenso(com.valorMensal)}).</p>
        <p><strong>Vencimento:</strong> primeira mensalidade após a assinatura e antes do início dos serviços; mensalidades seguintes no dia ${String(com.diaPagamento).padStart(2, "0")} de cada mês.</p>`
-    : `<p><strong>Prazo:</strong> ${com.duracaoMeses ?? 1} ${(com.duracaoMeses ?? 1) === 1 ? "mês" : "meses"}, a contar do início dos serviços.</p>
+    : `${linhaInicio}
+       <p><strong>Vigência:</strong> prazo determinado de ${meses} (${numExt(meses)}) ${meses === 1 ? "mês" : "meses"}.</p>
+       ${terminoExtenso ? `<p><strong>Término:</strong> ${terminoExtenso}.</p>` : ""}
        <p><strong>Renovação automática:</strong> não haverá.</p>
        <p><strong>Valor mensal:</strong> ${brl(com.valorMensal)} (${porExtenso(com.valorMensal)}).</p>
        <p><strong>Vencimento:</strong> primeira mensalidade após a assinatura e antes do início dos serviços; mensalidades seguintes no dia ${String(com.diaPagamento).padStart(2, "0")} de cada mês.</p>`;
