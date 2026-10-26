@@ -24,6 +24,7 @@ export type Destino =
   | "grupo do time"
   | "grupo de tráfego"
   | "grupo de vendas"
+  | "grupo de cadastro"
   | "admin"
   | "sistema"
   | "prospects";
@@ -417,6 +418,10 @@ export const AUTOMACOES: Automacao[] = [
   ep("warmup-snapshots", {
     nome: "Aquecer relatórios públicos", descricao: "Gera o cache dos relatórios públicos (semana, 2 semanas, mês) de quem tem link ativo.",
     familia: "Dados e sync", destino: "sistema", cron: "40 9 * * *", agendaBRT: "todo dia, 6h40", maxSilencioHoras: 26,
+  }),
+  ep("contratos-d4sign", {
+    nome: "Contrato assinado (D4Sign)", descricao: "Confere o cofre dos contratos na D4Sign: o contrato que fechou todas as assinaturas e o webhook não trouxe vira UMA mensagem no grupo de cadastro (\"✅ Cliente X assinou o contrato em dd/mm\") e a data entra no contrato e na ficha. Guarda há quantos dias cada um espera assinatura — é daí que sai a linha do resumo da manhã. Sem a chave da D4Sign, só registra que está desligado.",
+    familia: "Dados e sync", destino: "grupo de cadastro", cron: "15 11-23 * * *", agendaBRT: "todo dia, de hora em hora das 8h15 às 20h15", maxSilencioHoras: 14, ensaio: "dry=1",
   }),
   ep("contract-renewal", {
     nome: "Renovação de contratos", descricao: "Cria o rascunho de renovação dos contratos a 30 dias do fim e avisa os admins.",

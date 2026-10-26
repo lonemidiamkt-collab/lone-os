@@ -29,6 +29,8 @@ interface ContractFull extends ContractRecord {
   renewalValue?: number | null;
   signedPdfPath?: string | null;
   signedAt?: string | null;
+  /** A D4Sign fechou todas as assinaturas (26/10/2026) — o PDF assinado pode ainda não ter subido. */
+  d4signAssinadoEm?: string | null;
   signedUploadedBy?: string | null;
   signatureMethod?: string | null;
   /** PDFs assinados que já valeram (trocados pela tela) — 24/10/2026, auditoria 3.13. */
@@ -130,6 +132,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
       hasRenewal: Boolean(r.has_renewal), renewalValue: r.renewal_value != null ? Number(r.renewal_value) : null,
       signedPdfPath: (r.signed_pdf_path as string) || null,
       signedAt: (r.signed_at as string) || null,
+      d4signAssinadoEm: (r.d4sign_assinado_em as string) || null,
       signedUploadedBy: (r.signed_uploaded_by as string) || null,
       signatureMethod: (r.signature_method as string) || null,
       signedPdfAnteriores: lerAnteriores(r.signed_pdf_anteriores),
@@ -578,9 +581,13 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                     </button>
                   )}
 
-                  {c.signedAt && (
+                  {c.signedAt ? (
                     <span className="flex items-center gap-1 text-[10px] text-lone-success" title={`Assinado em ${new Date(c.signedAt).toLocaleDateString("pt-BR")}`}>
                       <CheckCircle size={11} /> Assinado
+                    </span>
+                  ) : c.d4signAssinadoEm && (
+                    <span className="flex items-center gap-1 text-[10px] text-lone-success" title="A D4Sign fechou todas as assinaturas. O contrato fecha aqui quando o PDF assinado subir.">
+                      <CheckCircle size={11} /> Assinado na D4Sign em {new Date(c.d4signAssinadoEm).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} · falta subir o PDF
                     </span>
                   )}
                 </div>

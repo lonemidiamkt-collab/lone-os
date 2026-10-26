@@ -9,7 +9,7 @@
 import { textoPorDono, SEM_DONO, type BlocoDono } from "@/lib/cs/cobranca-nominal";
 import { manchetePanorama, filasPanorama, type PanoramaBomDia } from "@/lib/reports/bomDiaPdf";
 
-export type ChaveSecao = "bom-dia" | "postagem" | "pendencias" | "setup";
+export type ChaveSecao = "bom-dia" | "postagem" | "pendencias" | "setup" | "contratos";
 
 export interface SecaoManha {
   chave: ChaveSecao;
@@ -27,7 +27,7 @@ export interface Manha {
   fatos: string[];
 }
 
-const ORDEM: ChaveSecao[] = ["bom-dia", "postagem", "pendencias", "setup"];
+const ORDEM: ChaveSecao[] = ["bom-dia", "postagem", "pendencias", "setup", "contratos"];
 export const DIVISOR_MANHA = "———";
 
 /** Junta as seções com conteúdo, na ordem fixa. null = nada a dizer hoje. */
@@ -69,6 +69,7 @@ const NO_PDF: Record<Exclude<ChaveSecao, "bom-dia">, string> = {
   postagem: "pauta de hoje",
   pendencias: "sugestões esperando ok/não",
   setup: "setup de cliente novo",
+  contratos: "contrato sem assinatura",
 };
 
 /**

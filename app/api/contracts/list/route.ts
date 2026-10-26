@@ -28,38 +28,44 @@ export async function GET(req: NextRequest) {
   const search = url.searchParams.get("search")?.trim().toLowerCase();
   const limit = Math.min(200, parseInt(url.searchParams.get("limit") || "100", 10));
 
-  // Busca contratos + join leve com clients
-  let query = supabaseAdmin
-    .from("contracts")
-    .select(`
-      id, client_id, version, service_type, monthly_value,
-      start_date, end_date, duration_months, status,
-      signed_pdf_path, signed_at, signed_uploaded_by, signature_method,
-      pdf_url, generated_by, generated_at, has_renewal, renewal_value,
-      payment_day, created_at,
-      clients:client_id ( name, nome_fantasia, cnpj )
-    `)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  // Busca contratos + join leve com clients. d4sign_assinado_em vem da migration 20261026150000
+  // (contrato assinado na D4Sign): sem a coluna, a lista sai sem ela em vez de cair.
+  const montar = (extra: string) => {
+    const colunas: string = `
+        id, client_id, version, service_type, monthly_value,
+        start_date, end_date, duration_months, status,
+        signed_pdf_path, signed_at, signed_uploaded_by, signature_method,
+        pdf_url, generated_by, generated_at, has_renewal, renewal_value,
+        payment_day, created_at${extra},
+        clients:client_id ( name, nome_fantasia, cnpj )
+      `;
+    let query = supabaseAdmin
+      .from("contracts")
+      .select(colunas)
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
-  if (serviceFilter) query = query.eq("service_type", serviceFilter);
+    if (serviceFilter) query = query.eq("service_type", serviceFilter);
 
-  if (statusFilter === "pending") {
-    query = query.is("signed_at", null);
-  } else if (statusFilter === "signed") {
-    query = query.not("signed_at", "is", null);
-  } else if (statusFilter === "active" || statusFilter === "expired" || statusFilter === "draft") {
-    query = query.eq("status", statusFilter);
-  }
+    if (statusFilter === "pending") {
+      query = query.is("signed_at", null);
+    } else if (statusFilter === "signed") {
+      query = query.not("signed_at", "is", null);
+    } else if (statusFilter === "active" || statusFilter === "expired" || statusFilter === "draft") {
+      query = query.eq("status", statusFilter);
+    }
+    return query;
+  };
 
-  const { data, error } = await query;
+  let { data, error } = await montar(", d4sign_assinado_em");
+  if (error && error.message.includes("d4sign_assinado_em")) ({ data, error } = await montar(""));
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Filtra search em memória (busca por nome/CNPJ). O Supabase REST não faz
   // ILIKE em relação aninhada facilmente sem rpc.
   const contracts = (data ?? []).filter((c) => {
     if (!search) return true;
-    const client = (c as Record<string, unknown>).clients as { name?: string; nome_fantasia?: string; cnpj?: string } | null;
+    const client = (c as unknown as Record<string, unknown>).clients as { name?: string; nome_fantasia?: string; cnpj?: string } | null;
     const name = (client?.nome_fantasia ?? client?.name ?? "").toLowerCase();
     const cnpj = (client?.cnpj ?? "").replace(/\D/g, "");
     const s = search.replace(/\D/g, "");

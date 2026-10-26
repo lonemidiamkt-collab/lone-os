@@ -24,6 +24,8 @@ interface Row {
   status: "draft" | "active" | "expired";
   signed_pdf_path: string | null;
   signed_at: string | null;
+  /** A D4Sign fechou todas as assinaturas (lib/contracts/assinatura.ts) — o PDF pode ainda não ter subido. */
+  d4sign_assinado_em?: string | null;
   signed_uploaded_by: string | null;
   signature_method: string | null;
   pdf_url: string | null;
@@ -159,6 +161,7 @@ export default function ContratosGlobalPage() {
 
   const statusBadge = (c: Row): { label: string; cls: string; icon: typeof CheckCircle } => {
     if (c.signed_at) return { label: "Assinado", cls: "bg-lone-success-bg text-lone-success border-lone-success-border", icon: FileCheck2 };
+    if (c.d4sign_assinado_em) return { label: "Assinado na D4Sign", cls: "bg-lone-success-bg text-lone-success border-lone-success-border", icon: FileCheck2 };
     if (c.status === "expired") return { label: "Vencido", cls: "bg-lone-danger-bg text-lone-danger border-lone-danger-border", icon: AlertTriangle };
     if (c.status === "active") return { label: "Ativo", cls: "bg-primary/10 text-primary border-primary/20", icon: CheckCircle };
     return { label: "Pendente", cls: "bg-lone-warning-bg text-lone-warning border-lone-warning-border", icon: Clock };
@@ -286,8 +289,10 @@ export default function ContratosGlobalPage() {
                             <Icon size={10} />
                             {badge.label}
                           </span>
-                          {c.signed_at && (
+                          {c.signed_at ? (
                             <p className="text-[10px] text-lone-text-disabled mt-0.5">em {formatDate(c.signed_at)}</p>
+                          ) : c.d4sign_assinado_em && (
+                            <p className="text-[10px] text-lone-text-disabled mt-0.5">em {formatDate(c.d4sign_assinado_em)} · falta subir o PDF</p>
                           )}
                         </td>
                         <td className="px-4 py-3">

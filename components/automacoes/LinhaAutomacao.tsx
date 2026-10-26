@@ -27,6 +27,7 @@ const DESTINO_UI: Record<Destino, { rotulo: string; icone: typeof Users }> = {
   "grupo do time": { rotulo: "Grupo do time", icone: Users },
   "grupo de tráfego": { rotulo: "Grupo de tráfego", icone: TrendingUp },
   "grupo de vendas": { rotulo: "Grupo de vendas", icone: Users },
+  "grupo de cadastro": { rotulo: "Grupo de cadastro", icone: Users },
   admin: { rotulo: "Admin", icone: ShieldCheck },
   sistema: { rotulo: "Sistema", icone: Database },
 };

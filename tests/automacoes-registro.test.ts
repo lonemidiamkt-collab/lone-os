@@ -15,7 +15,8 @@ const RAIZ = path.resolve(__dirname, "..");
 // Só estas diferenças são aceitas. Depois de regenerar o retrato do servidor, podem sair daqui.
 const EM_TRANSICAO: { saindo: string[]; entrando: string[] } = {
   saindo: [],
-  entrando: [],
+  // Contrato assinado (D4Sign, 26/10/2026): a linha entra no crontab no deploy; depois, retrato + tirar daqui.
+  entrando: ["contratos-d4sign"],
 };
 
 interface LinhaCron { cron: string; chave: string; metodo?: string; bruta: string }
