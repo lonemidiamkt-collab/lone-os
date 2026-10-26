@@ -24,10 +24,13 @@ contrato ("Assinado na D4Sign em dd/mm · falta subir o PDF"); o contrato contin
 A linha que tinha ido para o resumo da manhã (`cs-manha`) **saiu**: o "ainda não assinou" é só o aviso do grupo de cadastro.
 
 Como funciona (`lib/contracts/assinatura.ts`):
-- **Webhook 2.0 do cofre** (`POST /api/integracoes/d4sign`): a D4Sign avisa a cada assinatura e quando fecha. O Lone OS
-  confere o `Content-Hmac` (sem o segredo a porta fica fechada) e **relê o documento** antes de afirmar qualquer coisa.
-- **Consulta a cada 3 horas** (`POST /api/system/contratos-d4sign`, cron `15 11-23/3 * * *`): pega o que o webhook não
-  trouxe. O que já estava assinado quando o Lone OS o viu pela primeira vez entra em silêncio (é histórico).
+- **Vários cofres**: na conta da Lone os contratos ficam em ~10 cofres (um por pacote, renovação, experiência…). Os de
+  contrato de cliente são escolhidos no painel; documento de outro cofre (ex.: "Prestadores de serviço") é ignorado.
+- **Webhook 2.0 de cada cofre escolhido** (`POST /api/integracoes/d4sign`): a D4Sign avisa a cada assinatura e quando fecha.
+  O Lone OS confere o `Content-Hmac` (sem o segredo a porta fica fechada) e **relê o documento** antes de afirmar qualquer coisa.
+- **Consulta a cada 3 horas** (`POST /api/system/contratos-d4sign`, cron `15 11-23/3 * * *`): lista os documentos da CONTA
+  esperando assinatura (`GET /documents/3/status`, 1 chamada, não uma por cofre), filtra pelos cofres escolhidos e relê só
+  o que mudou: pendente conhecido que saiu da lista, assinado cujo aviso não saiu, pendente novo.
 - **Aviso da manhã** (`POST /api/system/contratos-d4sign-pendentes`, cron `30 11 * * 1-5`): relê os mais antigos antes de
   escrever (quem assinou de madrugada não aparece como faltando); feriado não manda; uma por dia.
 - **Travas**: final = `aviso_reservado_em`; parcial = `aviso_parcial` (o retrato de quem já tinha assinado); manhã = registro
@@ -43,8 +46,10 @@ Como funciona (`lib/contracts/assinatura.ts`):
   (RLS sem policy): nem o texto cifrado chega ao navegador.
 - A tela **nunca mostra a chave de volta**: só "configurada", de onde vem (painel ou servidor), quando e por quem. Para
   trocar, cola de novo; "apagar" volta a valer o `.env`.
-- **Testar** abre o cofre na D4Sign e diz se funcionou. **Ligar o aviso da D4Sign** cadastra o webhook do cofre (quem clica
-  é o Roberto, com confirmação).
+- **Buscar meus cofres na D4Sign** lista os cofres da conta (`GET /safes`) com caixas de marcar; **Salvar cofres** guarda os
+  escolhidos. **Testar** conta o que espera assinatura nos cofres escolhidos. **Ligar o aviso da D4Sign** cadastra o webhook
+  2.0 em cada cofre escolhido (1 chamada por cofre): se a cota da hora acabar no meio, diz quantos faltam e o clique seguinte
+  só faz os que faltam (`d4sign_config.webhook_cofres`, migration 20261026170000). Quem clica é o Roberto, com confirmação.
 - **Histórico** de quem trocou, apagou, testou ou ligou (nunca o valor).
 - O `.env` da VPS (`D4SIGN_*`) continua valendo para o campo que o painel deixar vazio.
 
@@ -56,20 +61,27 @@ tomada pode TROCAR a chave (não lê-la); a verificação em duas etapas dos adm
 
 Tudo colado em **Lone OS › Configurações › Jurídico › D4Sign**. Ninguém mexe no servidor nem manda chave no chat.
 
-1. Entre em https://secure.d4sign.com.br com a conta da Lone.
-2. **Token da API (tokenAPI)**: menu da conta (canto superior direito) › **Dev (API)**. Se não houver token, gere um.
-   Copie o token e cole em "Token da API".
-3. **Chave de criptografia (cryptKey)**: na mesma tela, logo abaixo do token. Cole em "Chave de criptografia".
-4. **Segredo do webhook**: ainda em Dev (API), área **Webhook** › **Ativar Webhook 2.0**; depois **Gerar Secret Key MAC**.
-   Copie e cole em "Segredo do webhook".
-5. **Identificador do cofre**: menu **Cofres** › abra o cofre onde ficam os contratos (o guia antigo chama de
-   "Contratos Lone Midia"). O identificador é o código no endereço da página, no formato
-   `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`. Cole em "Identificador do cofre".
-6. **E-mails de quem assina pela Lone**: os e-mails com que o Roberto e o Lucas assinam na D4Sign, separados por vírgula.
-7. Clique **Salvar chaves**, depois **Testar** (tem que aparecer "Funcionou: a D4Sign abriu o cofre…") e por fim **Ligar o
-   aviso da D4Sign** (confirma). A partir daí cada assinatura chega no grupo de cadastro.
+1. Entre em https://secure.d4sign.com.br com a conta da Lone e abra **Minha conta › Gerenciar conta**.
+2. **Token da API (tokenAPI) e chave de criptografia (cryptKey)**: menu da esquerda **Dev (API)**. A conta já tem a
+   "API Key: 1" (limite "10 por hora"); no menu **⋮** da linha dela, copie o token e cole em "Token da API"; depois a
+   cryptKey e cole em "Chave de criptografia".
+3. **Ativar o webhook 2.0**: menu da esquerda **Webhooks** › aba **Webhook** › botão **Ativar webhook 2.0**.
+4. **Segredo do webhook**: ainda em **Webhooks**, aba **Configurações de webhooks** › **Gerar Secret Key HMAC**. Copie e
+   cole em "Segredo do webhook".
+5. **E-mails de quem assina pela Lone**: os e-mails com que o Roberto e o Lucas assinam na D4Sign, separados por vírgula.
+6. Clique **Salvar chaves**.
+7. **Cofres**: clique **Buscar meus cofres na D4Sign**, marque os cofres de contrato de CLIENTE (LM - Lone Growth,
+   LM - Assessoria Social, LM - Assessoria Trafego, LM - Assessoria Design, Renovação de contrato…; deixe de fora
+   "Prestadores de serviço") e clique **Salvar cofres**.
+8. **Testar** (tem que aparecer "Funcionou: N documento(s) esperando assinatura nos X cofre(s) escolhido(s)") e por fim
+   **Ligar o aviso da D4Sign** (confirma). Com ~10 cofres e o limite de 10 chamadas por hora, pode parar no meio: aí é só
+   clicar de novo uma hora depois (os já ligados não se repetem).
 
 ## Para ligar hoje (com o ok do Roberto)
+
+**Publicado em 26/10 ~16h25 (`a117a12`)**: migração 20261026150000 aplicada, deploy e crontab feitos. A mudança para
+**vários cofres** veio depois: precisa aplicar `supabase/migrations/20261026170000_d4sign_varios_cofres.sql` e publicar de
+novo antes de o Roberto escolher os cofres. Os passos abaixo são os da primeira publicação.
 
 1. Aplicar `supabase/migrations/20261026150000_contrato_assinado_d4sign.sql` (antes do deploy).
 2. Deploy, depois da publicação das 18h40 de 26/10 (juntar com `deploy/budget-only`; conflitos abaixo).
@@ -101,7 +113,9 @@ URL; **10 chamadas por hora** por padrão; JSON; erro como `{ "message": "…" }
 | Para | Endpoint | Usado agora? |
 |---|---|---|
 | Ler documento e signatários (quem assinou, quando, `key_signer`) | `GET /documents/{uuid}/list` | sim |
-| Listar o cofre | `GET /documents/{cofre}/safe` (500 por página, `pg`) | sim |
+| Listar os cofres da conta | `GET /safes` → `[{"uuid-safe", "name-safe"}]` | sim (botão "Buscar meus cofres") |
+| Listar o que espera assinatura na conta | `GET /documents/3/status` (500 por página, `pg`; cada item traz `uuidSafe`) | sim |
+| Listar um cofre | `GET /documents/{cofre}/safe` (500 por página, `pg`) | não (seria 1 chamada por cofre) |
 | Webhook do cofre inteiro (2.0) | `POST /webhooks/v2/` `{type:"cofre", uuid, url}`; ver: `GET /webhooks/v2/?type=cofre&uuid=…` | sim (botão) |
 | Autenticidade do webhook | `Content-Hmac: sha256=<HMAC do uuid com a Secret Key MAC>` | sim |
 | Eventos | `type_post` 1 finalizado · 2 e-mail não entregue · 3 cancelado · 4 um signatário assinou; form-data; até 6 novas tentativas em 27 h | sim |
@@ -133,7 +147,8 @@ Arquivos que outras frentes também mexem (o resto é novo):
 ## Não verificado
 
 - **Nada foi testado contra a D4Sign de verdade** (não há chave aqui). O formato segue a documentação; o que ela não mostra
-  com exemplo (paginação do cofre, formato das datas dos signatários) foi lido com folga. O "Testar" do painel e os ensaios
+  com exemplo (paginação da lista de pendentes, nomes dos campos de `GET /safes`, formato das datas dos signatários) foi
+  lido com folga. O "Testar" do painel e os ensaios
   `?dry=1` são o primeiro contato real.
 - Não confirmei se o webhook 2.0 manda form-data ou JSON: a rota aceita os dois (e urlencoded).
 - As telas não foram abertas no navegador (sem banco local); cobertas por tipos e testes de rota.

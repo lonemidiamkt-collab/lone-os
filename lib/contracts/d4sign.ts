@@ -1,5 +1,6 @@
 // lib/contracts/d4sign.ts — a conversa com a D4Sign (API v1 + webhook 2.0): ler um documento com os
-// signatários, listar o cofre dos contratos, conferir a assinatura do webhook e cadastrar o webhook do cofre.
+// signatários, listar os cofres da conta e os documentos esperando assinatura, conferir a assinatura do
+// webhook e cadastrar o webhook de cada cofre.
 //
 // As credenciais são do Roberto: entram pelo painel (Configurações › Jurídico, cifradas — lib/contracts/
 // d4sign-config.ts) ou, de reserva, no .env da VPS. Nunca no repositório, que é público. Sem token =
@@ -7,14 +8,15 @@
 //   D4SIGN_API_TOKEN     "tokenAPI" (Opções da conta › Dev (API))
 //   D4SIGN_CRYPT_KEY     "cryptKey" — só vai na chamada se existir (a D4Sign só exige quando está habilitada)
 //   D4SIGN_HMAC_SECRET   "Gerar Secret Key MAC" na mesma área: confere que o webhook veio da D4Sign
-//   D4SIGN_SAFE_UUID     o cofre dos contratos; consulta e webhook só olham ele
+//   D4SIGN_SAFE_UUID     os cofres dos contratos (UUIDs separados por vírgula); consulta e webhook só olham eles.
+//                        Na conta da Lone os contratos ficam em ~10 cofres (um por pacote, renovação…).
 //   D4SIGN_EMAILS_LONE   e-mails com que os sócios assinam na D4Sign, separados por vírgula ("quem é da Lone")
 //   D4SIGN_API_URL       opcional; padrão https://secure.d4sign.com.br/api/v1 (sandbox para teste)
 //   D4SIGN_LIMITE_HORA   opcional; padrão 10 chamadas por hora (lib/contracts/d4sign-cota.ts)
 //
 // Documentação seguida (docapi.d4sign.com.br, lida em 26/10/2026): "Introdução a API", "Endpoints
-// Documentos", "Endpoints Signatários", "WebHook (POSTBack)", "Segurança de Webhook" e a referência de
-// webhooks 2.0. O que a documentação não
+// Cofres" (GET /safes), "Endpoints Documentos" (GET /documents/{fase}/status), "Endpoints Signatários",
+// "WebHook (POSTBack)", "Segurança de Webhook" e a referência de webhooks 2.0. O que a documentação não
 // mostra com exemplo é lido com folga: campo que não veio vira null, nunca "assinado".
 
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -25,13 +27,21 @@ export interface ConfigD4Sign {
   token: string;
   cryptKey: string | null;
   hmac: string | null;
-  cofre: string | null;
+  /** Os cofres dos contratos (UUIDs, minúsculos). Vazio = nenhum escolhido: consulta e webhook ficam parados. */
+  cofres: string[];
   /** E-mails de quem assina pela Lone (minúsculos). */
   emailsLone: string[];
   limiteHora: number;
 }
 
 const URL_PADRAO = "https://secure.d4sign.com.br/api/v1";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** "UUID1, UUID2" → ["uuid1", "uuid2"]; o que não for UUID fica de fora. */
+export function listaDeUuids(v: string | null | undefined): string[] {
+  return [...new Set((v ?? "").split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => UUID.test(e)))];
+}
 
 /** "a@x.com, B@y.com" → ["a@x.com", "b@y.com"]; o que não for e-mail fica de fora. */
 export function listaDeEmails(v: string | null | undefined): string[] {
@@ -47,7 +57,7 @@ export function configD4Sign(env: Record<string, string | undefined> = process.e
     token,
     cryptKey: env.D4SIGN_CRYPT_KEY?.trim() || null,
     hmac: env.D4SIGN_HMAC_SECRET?.trim() || null,
-    cofre: env.D4SIGN_SAFE_UUID?.trim() || null,
+    cofres: listaDeUuids(env.D4SIGN_SAFE_UUID),
     emailsLone: listaDeEmails(env.D4SIGN_EMAILS_LONE),
     limiteHora: limiteDaHora(env),
   };
@@ -78,12 +88,17 @@ export interface DocumentoD4Sign {
   signatarios: Signatario[];
 }
 
-/** O que a listagem do cofre traz de cada documento (sem signatários). */
+/** O que uma listagem traz de cada documento (sem signatários). */
 export interface ResumoD4Sign {
   uuid: string;
   nome: string;
   statusId: string;
+  /** uuidSafe do documento, minúsculo (null se a listagem não trouxe). */
+  cofre: string | null;
 }
+
+/** Um cofre da conta (GET /safes). */
+export interface CofreD4Sign { uuid: string; nome: string }
 
 /**
  * A fase de verdade. Arquivado (5) só conta como assinado se a leitura trouxe os signatários e todos
@@ -146,14 +161,14 @@ export function lerDocumento(corpo: unknown): DocumentoD4Sign | null {
   return {
     uuid,
     nome: texto(d.nameDoc) ?? "",
-    cofre: texto(d.uuidSafe),
+    cofre: texto(d.uuidSafe)?.toLowerCase() ?? null,
     statusId,
     signatarios: lista.filter((s) => s && typeof s === "object").map((s) => lerSignatario(s as Record<string, unknown>)),
   };
 }
 
-/** Uma página da listagem do cofre: os documentos e, se vier, o total de páginas. */
-export function lerPaginaDoCofre(corpo: unknown): { docs: ResumoD4Sign[]; paginas: number | null } | null {
+/** Uma página de listagem de documentos: os documentos e, se vier, o total de páginas. */
+export function lerPaginaDeDocumentos(corpo: unknown): { docs: ResumoD4Sign[]; paginas: number | null } | null {
   if (!Array.isArray(corpo)) return null;
   const docs: ResumoD4Sign[] = [];
   let paginas: number | null = null;
@@ -162,13 +177,32 @@ export function lerPaginaDoCofre(corpo: unknown): { docs: ResumoD4Sign[]; pagina
     const d = x as Record<string, unknown>;
     const uuid = texto(d.uuidDoc);
     if (uuid) {
-      docs.push({ uuid, nome: texto(d.nameDoc) ?? "", statusId: texto(d.statusId) ?? "" });
+      docs.push({ uuid, nome: texto(d.nameDoc) ?? "", statusId: texto(d.statusId) ?? "", cofre: texto(d.uuidSafe)?.toLowerCase() ?? null });
       continue;
     }
     const total = Number(d.total_pages ?? d.total_paginas);
     if (Number.isFinite(total) && total > 0) paginas = Math.floor(total);
   }
   return { docs, paginas };
+}
+
+/**
+ * O corpo de GET /safes: lista de { "uuid-safe", "name-safe" } (a documentação usa hífen; aceita também
+ * uuid_safe/uuidSafe/uuid e name_safe/nameSafe/name). null = formato que não reconheço.
+ */
+export function lerCofres(corpo: unknown): CofreD4Sign[] | null {
+  const lista = Array.isArray(corpo) ? corpo : corpo && typeof corpo === "object" && Array.isArray((corpo as Record<string, unknown>).safes)
+    ? (corpo as Record<string, unknown>).safes as unknown[] : null;
+  if (!lista) return null;
+  const cofres: CofreD4Sign[] = [];
+  for (const x of lista) {
+    if (!x || typeof x !== "object") continue;
+    const d = x as Record<string, unknown>;
+    const uuid = texto(d["uuid-safe"] ?? d.uuid_safe ?? d.uuidSafe ?? d.uuid)?.toLowerCase();
+    if (!uuid || !UUID.test(uuid)) continue;
+    cofres.push({ uuid, nome: texto(d["name-safe"] ?? d.name_safe ?? d.nameSafe ?? d.name) ?? uuid });
+  }
+  return cofres;
 }
 
 /** `limite`: a chamada não saiu porque a cota da hora acabou (lib/contracts/d4sign-cota.ts). */
@@ -222,18 +256,32 @@ export async function buscarDocumento(cfg: ConfigD4Sign, uuid: string, origem: O
   return { ok: true, dados: doc };
 }
 
-/** GET /documents/{cofre}/safe, página a página (500 por página; teto de 5 páginas = 2.500 documentos). */
-export async function listarCofre(cfg: ConfigD4Sign, cofre: string, origem: OrigemChamada = "consulta"): Promise<Leitura<ResumoD4Sign[]>> {
-  const todos: ResumoD4Sign[] = [];
-  for (let pg = 1; pg <= 5; pg++) {
-    const r = await pedir(cfg, `/documents/${encodeURIComponent(cofre)}/safe`, { origem, extra: { pg: String(pg) } });
+/** GET /safes — todos os cofres da conta (para escolher, no painel, quais são de contrato). */
+export async function listarCofresDaConta(cfg: ConfigD4Sign): Promise<Leitura<CofreD4Sign[]>> {
+  const r = await pedir(cfg, "/safes", { origem: "manual" });
+  if (!r.ok) return r;
+  const cofres = lerCofres(r.dados);
+  return cofres ? { ok: true, dados: cofres } : { ok: false, erro: "a lista de cofres veio num formato que não reconheço" };
+}
+
+/**
+ * GET /documents/3/status — os documentos da conta INTEIRA esperando assinatura (fase 3), página a página
+ * (500 por página; teto de 3 páginas). `completa` = leu todas as páginas: só então "sumiu da lista" quer
+ * dizer "mudou de fase". Uma chamada por página, não uma por cofre.
+ */
+export async function listarPendentesDaConta(cfg: ConfigD4Sign, origem: OrigemChamada = "consulta"):
+  Promise<Leitura<{ docs: ResumoD4Sign[]; completa: boolean }>> {
+  const docs: ResumoD4Sign[] = [];
+  const TETO = 3;
+  for (let pg = 1; pg <= TETO; pg++) {
+    const r = await pedir(cfg, "/documents/3/status", { origem, extra: { pg: String(pg) } });
     if (!r.ok) return r;
-    const pagina = lerPaginaDoCofre(r.dados);
-    if (!pagina) return { ok: false, erro: "a listagem do cofre veio num formato que não reconheço" };
-    todos.push(...pagina.docs);
-    if (!pagina.paginas || pg >= pagina.paginas || pagina.docs.length === 0) break;
+    const pagina = lerPaginaDeDocumentos(Array.isArray(r.dados) ? r.dados : [r.dados]);
+    if (!pagina) return { ok: false, erro: "a lista de documentos esperando assinatura veio num formato que não reconheço" };
+    docs.push(...pagina.docs);
+    if (!pagina.paginas || pg >= pagina.paginas || pagina.docs.length === 0) return { ok: true, dados: { docs, completa: true } };
   }
-  return { ok: true, dados: todos };
+  return { ok: true, dados: { docs, completa: false } };
 }
 
 // ── Webhook do cofre ─────────────────────────────────────────────────────────────────────────────

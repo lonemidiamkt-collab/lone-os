@@ -4,14 +4,16 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import {
-  CAMPOS_D4SIGN, ligarWebhookD4Sign, salvarConfigD4Sign, situacaoDaConfig, testarConfigD4Sign, type CampoD4Sign, type PainelD4Sign,
+  CAMPOS_D4SIGN, ligarWebhookD4Sign, listarCofresD4Sign, salvarConfigD4Sign, situacaoDaConfig, testarConfigD4Sign,
+  type CampoD4Sign, type PainelD4Sign,
 } from "@/lib/contracts/d4sign-config";
 
 // /api/contracts/d4sign/config — as chaves da D4Sign pelo painel (Configurações › Jurídico). Só admin.
 //   GET                                   situação: o que está configurado, de onde (painel/servidor), quando, por quem
 //   POST { acao: "salvar", novos, apagar } grava cifrado o que veio preenchido; `apagar` volta a valer o .env
-//   POST { acao: "testar" }               lê o cofre na D4Sign com a configuração de agora (1 chamada)
-//   POST { acao: "webhook" }              cadastra o webhook 2.0 do cofre apontando para este painel (1 chamada)
+//   POST { acao: "testar" }               lista o que espera assinatura nos cofres escolhidos (1 chamada)
+//   POST { acao: "cofres" }               os cofres da conta, para escolher os de contrato (1 chamada)
+//   POST { acao: "webhook" }              cadastra o webhook 2.0 em cada cofre escolhido (1 chamada por cofre; retoma)
 // NENHUMA resposta devolve o valor de um segredo (lib/contracts/d4sign-config.ts).
 
 export async function GET(req: NextRequest) {
@@ -32,12 +34,16 @@ export async function POST(req: NextRequest) {
     const r = await testarConfigD4Sign(quem);
     return NextResponse.json(r);
   }
+  if (corpo?.acao === "cofres") {
+    const r = await listarCofresD4Sign();
+    return r.ok ? NextResponse.json(r) : NextResponse.json({ error: r.erro }, { status: 502 });
+  }
   if (corpo?.acao === "webhook") {
     const r = await ligarWebhookD4Sign(quem);
-    console.log(`[d4sign-config] ${quem} pediu o webhook do cofre: ${r.ok ? "ligado" : r.resultado}`);
+    console.log(`[d4sign-config] ${quem} pediu o aviso da D4Sign: ${r.ok ? "ligado" : r.resultado} (feitos ${r.feitos.length}, faltam ${r.faltam.length})`);
     return NextResponse.json(r);
   }
-  if (corpo?.acao !== "salvar") return NextResponse.json({ error: "acao precisa ser salvar ou testar" }, { status: 400 });
+  if (corpo?.acao !== "salvar") return NextResponse.json({ error: "acao precisa ser salvar, testar, cofres ou webhook" }, { status: 400 });
 
   const novos: PainelD4Sign = {};
   for (const c of CAMPOS_D4SIGN) {

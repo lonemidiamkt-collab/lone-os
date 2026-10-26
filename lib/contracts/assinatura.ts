@@ -9,8 +9,9 @@
 //   · ⏳ "Ainda não assinaram o contrato" ............. dia útil de manhã, só se houver contrato enviado há 3 dias
 //                                                       ou mais sem todas as assinaturas (avisarPendentes)
 //
-// De onde vem: o webhook 2.0 do cofre (POST /api/integracoes/d4sign) a cada assinatura, e uma consulta a cada
-// 3 horas (POST /api/system/contratos-d4sign) para o que o webhook não trouxe. Os dois chamam
+// De onde vem: o webhook 2.0 de cada cofre de contrato (POST /api/integracoes/d4sign) a cada assinatura, e uma
+// consulta a cada 3 horas (POST /api/system/contratos-d4sign) para o que o webhook não trouxe. Os contratos da
+// Lone ficam em vários cofres (um por pacote, renovação…): só contam os escolhidos no painel. Os dois chamam
 // processarDocumento(), que nunca confia no evento: relê o documento na D4Sign (signatários, quem assinou,
 // quando) e só chama de "assinado" a fase Finalizado (ou Arquivado com todos assinados). A D4Sign responde a
 // 10 chamadas por hora (lib/contracts/d4sign-cota.ts): as rotinas leem pouco e param antes das últimas.
@@ -20,8 +21,7 @@
 //     quem já tinha assinado). Evento repetido, retry da D4Sign e a consulta caem na mesma linha e só um manda.
 //     Envio que falha solta a trava; envio INCERTO (o WhatsApp não respondeu a tempo) não solta.
 //   · Leitura que falha (D4Sign ou banco) não vira "não assinado" nem "assinado": não grava, não manda.
-//   · Não é novidade, não é aviso: assinatura de mais de JANELA_AVISO_DIAS dias (a primeira consulta acha o
-//     histórico do cofre) é registrada em silêncio.
+//   · Não é novidade, não é aviso: assinatura de mais de JANELA_AVISO_DIAS dias é registrada em silêncio.
 //   · Ligação ao cadastro só com par ÚNICO (e-mail do signatário, depois o nome do arquivo). Sem par, a
 //     mensagem sai com o nome do documento e diz que a data não foi gravada na ficha.
 //   · Não mexe em signed_at nem em status do contrato: ele fecha com o PDF assinado na ficha, como sempre.
@@ -34,8 +34,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { jidDoGrupoCadastro } from "@/lib/portal/link-automatico";
 import {
-  buscarDocumento, listarCofre, statusEfetivo,
-  type ConfigD4Sign, type DocumentoD4Sign, type ResumoD4Sign, type StatusDoc,
+  buscarDocumento, listarPendentesDaConta, statusEfetivo,
+  type ConfigD4Sign, type DocumentoD4Sign, type StatusDoc,
 } from "./d4sign";
 import { chaveDoParcial, gravarSignatarios, lerSignatariosGravados, type SignatarioGravado } from "./d4sign-signatarios";
 import { juntar, quemAssina, resumoAssinaturas } from "./d4sign-resumo";
@@ -351,8 +351,11 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
       }
       doc = lido.dados;
     }
-    if (cfg.cofre && doc.cofre && doc.cofre !== cfg.cofre) {
-      return { uuid, ok: true, tentarDeNovo: false, acao: "ignorado", motivo: "documento de outro cofre (não é contrato)" };
+    if (!cfg.cofres.length) {
+      return { uuid, ok: true, tentarDeNovo: false, acao: "ignorado", motivo: "nenhum cofre de contrato escolhido no painel" };
+    }
+    if (doc.cofre && !cfg.cofres.includes(doc.cofre.toLowerCase())) {
+      return { uuid, ok: true, tentarDeNovo: false, acao: "ignorado", motivo: "documento de um cofre que não é de contrato" };
     }
 
     // 2. O que já se sabia deste documento.
@@ -516,11 +519,12 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
 export interface ResultadoConsulta {
   ok: boolean;
   dry: boolean;
-  /** Integração desligada (sem chave ou sem cofre): não é erro, é "ainda não ligado". */
+  /** Integração desligada (sem chave ou sem cofre escolhido): não é erro, é "ainda não ligado". */
   desligado?: string;
   /** A cota da hora da D4Sign acabou antes da listagem: não é erro, fica para a próxima rodada. */
   adiado?: string;
-  noCofre: number;
+  /** Documentos esperando assinatura nos cofres escolhidos (pela listagem da conta). */
+  pendentes: number;
   /** Documentos relidos na D4Sign (cada um gasta uma chamada). */
   lidos: number;
   /** Ficaram para a próxima rodada (teto por vez ou cota da hora). */
@@ -530,50 +534,51 @@ export interface ResultadoConsulta {
 }
 
 /**
- * Lê o cofre (1 chamada) e relê no máximo `limite` documentos, nesta ordem:
- *   0. o que o Lone OS viu pendente e mudou de fase (assinou, cancelou);
+ * Lista os documentos da CONTA esperando assinatura (1 chamada por página, não uma por cofre) e relê no
+ * máximo `limite` documentos, nesta ordem:
+ *   0. o que o Lone OS viu pendente e saiu da lista (assinou, cancelou) — só quando a lista veio completa;
  *   0. assinado cujo aviso não saiu (envio falhou e soltou a trava), dentro da janela;
- *   1. pendente que o Lone OS ainda não conhece — para ligar ao cadastro e saber quem assina.
- * O que já estava assinado quando o Lone OS o viu pela primeira vez entra em silêncio, sem chamada: é o
- * histórico do cofre (o que fecha agora chega pelo webhook, que a D4Sign repete por até 27 h).
+ *   1. pendente de um cofre escolhido que o Lone OS ainda não conhece — para ligar ao cadastro e saber quem assina.
+ * Documento de cofre não escolhido não gasta chamada. O que fecha chega pelo webhook (a D4Sign repete por 27 h).
  */
 export async function consultarCofre(opts: { dry?: boolean; agora?: Date; cfg?: ConfigD4Sign | null; limite?: number } = {}): Promise<ResultadoConsulta> {
   const dry = !!opts.dry;
-  const vazio = { dry, noCofre: 0, lidos: 0, sobraram: 0, resultados: [] as ResultadoDocumento[] };
+  const vazio = { dry, pendentes: 0, lidos: 0, sobraram: 0, resultados: [] as ResultadoDocumento[] };
   const cfg = opts.cfg === undefined ? await carregarConfigD4Sign() : opts.cfg;
   if (!cfg) return { ...vazio, ok: true, desligado: "D4Sign não configurada (chaves em Configurações › Jurídico, ou no servidor)", erros: [] };
-  if (!cfg.cofre) return { ...vazio, ok: true, desligado: "cofre dos contratos não configurado", erros: [] };
+  if (!cfg.cofres.length) return { ...vazio, ok: true, desligado: "nenhum cofre de contrato escolhido (Configurações › Jurídico › D4Sign)", erros: [] };
 
-  const lista = await listarCofre(cfg, cfg.cofre, "consulta");
+  const lista = await listarPendentesDaConta(cfg, "consulta");
   if (!lista.ok) return { ...vazio, ok: !!lista.limite, ...(lista.limite ? { adiado: lista.erro } : {}), erros: lista.limite ? [] : [lista.erro] };
-  const docs = lista.dados.filter((d) => uuidValido(d.uuid));
-
-  const conhecidos = new Map<string, LinhaDocumento>();
-  for (let i = 0; i < docs.length; i += 100) {
-    const lote = docs.slice(i, i + 100).map((d) => d.uuid);
-    const r = await supabaseAdmin.from(TABELA).select("document_uuid, status, assinado_em, aviso_reservado_em").in("document_uuid", lote);
-    if (r.error) {
-      return { ...vazio, ok: false, noCofre: docs.length,
-        erros: [faltaMigracao(r.error) ? "falta aplicar a migration 20261026150000_contrato_assinado_d4sign" : `não consegui ler os registros: ${r.error.message}`] };
-    }
-    for (const l of (r.data as LinhaDocumento[] | null) ?? []) conhecidos.set(l.document_uuid, l);
-  }
+  const naConta = new Set(lista.dados.docs.map((d) => d.uuid));
+  const escolhidos = lista.dados.docs.filter((d) => uuidValido(d.uuid) && (!d.cofre || cfg.cofres.includes(d.cofre)));
 
   const agora = opts.agora ?? new Date();
-  const recente = (iso: string | null | undefined) => !!iso && agora.getTime() - new Date(iso).getTime() <= JANELA_AVISO_DIAS * DIA;
-  const fila: { uuid: string; prioridade: number }[] = [];
-  const historico: ResumoD4Sign[] = [];
-  for (const d of docs) {
-    const k = conhecidos.get(d.uuid);
-    const fase = String(d.statusId);
-    if (k) {
-      if (k.status === "pendente" && fase !== "3") fila.push({ uuid: d.uuid, prioridade: 0 });
-      else if (k.status === "assinado" && !k.aviso_reservado_em && recente(k.assinado_em)) fila.push({ uuid: d.uuid, prioridade: 0 });
-      continue;
-    }
-    if (fase === "3") fila.push({ uuid: d.uuid, prioridade: 1 });
-    else if (fase === "4" || fase === "5") historico.push(d);
+  const erroDoBanco = (e: { code?: string; message?: string }) => ({ ...vazio, ok: false, pendentes: escolhidos.length,
+    erros: [faltaMigracao(e) ? "falta aplicar a migration 20261026150000_contrato_assinado_d4sign" : `não consegui ler os registros: ${e.message}`] });
+
+  // O que o Lone OS já conhece: os pendentes dele, os assinados recentes sem aviso e os da lista.
+  const pend = await supabaseAdmin.from(TABELA).select("document_uuid, status").eq("status", "pendente");
+  if (pend.error) return erroDoBanco(pend.error);
+  const desde = new Date(agora.getTime() - JANELA_AVISO_DIAS * DIA).toISOString();
+  const semAviso = await supabaseAdmin.from(TABELA).select("document_uuid").eq("status", "assinado")
+    .is("aviso_reservado_em", null).gte("assinado_em", desde);
+  if (semAviso.error) return erroDoBanco(semAviso.error);
+  const conhecidos = new Set<string>();
+  for (let i = 0; i < escolhidos.length; i += 100) {
+    const r = await supabaseAdmin.from(TABELA).select("document_uuid").in("document_uuid", escolhidos.slice(i, i + 100).map((d) => d.uuid));
+    if (r.error) return erroDoBanco(r.error);
+    for (const l of (r.data as LinhaDocumento[] | null) ?? []) conhecidos.add(l.document_uuid);
   }
+
+  const fila: { uuid: string; prioridade: number }[] = [];
+  const naFila = new Set<string>();
+  const entra = (uuid: string, prioridade: number) => { if (!naFila.has(uuid)) { naFila.add(uuid); fila.push({ uuid, prioridade }); } };
+  if (lista.dados.completa) {
+    for (const l of (pend.data as LinhaDocumento[] | null) ?? []) if (!naConta.has(l.document_uuid)) entra(l.document_uuid, 0);
+  }
+  for (const l of (semAviso.data as LinhaDocumento[] | null) ?? []) entra(l.document_uuid, 0);
+  for (const d of escolhidos) if (!conhecidos.has(d.uuid)) entra(d.uuid, 1);
   fila.sort((a, b) => a.prioridade - b.prioridade);
   const limite = opts.limite ?? LEITURAS_POR_CONSULTA;
 
@@ -587,15 +592,9 @@ export async function consultarCofre(opts: { dry?: boolean; agora?: Date; cfg?: 
     resultados.push(r);
     if (!r.ok && ehLimite(r.motivo)) { parouNaCota = true; break; }
   }
-  // O histórico do cofre: registrado pelo que a listagem diz, sem gastar chamada e sem aviso.
-  for (const h of historico) {
-    resultados.push(await processarDocumento(h.uuid, {
-      origem: "consulta", dry, agora, cfg, doc: { uuid: h.uuid, nome: h.nome, cofre: cfg.cofre, statusId: h.statusId, signatarios: [] },
-    }));
-  }
   const erros = resultados.filter((r) => !r.ok && !ehLimite(r.motivo)).map((r) => `${r.nome ?? r.uuid}: ${r.motivo ?? "erro"}`);
   return {
-    ok: erros.length === 0, dry, noCofre: docs.length, lidos: lidos - (parouNaCota ? 1 : 0),
+    ok: erros.length === 0, dry, pendentes: escolhidos.length, lidos: lidos - (parouNaCota ? 1 : 0),
     sobraram: fila.length - lidos + (parouNaCota ? 1 : 0), resultados, erros,
   };
 }

@@ -90,7 +90,15 @@ const TOKEN = "token-de-teste";
 const CRYPT = "crypt-de-teste";
 const SEGREDO_MAC = "segredo-mac-de-teste";
 const COFRE = "0b0b0b0b-0000-4000-8000-000000000001";
-const OUTRO_COFRE = "0b0b0b0b-0000-4000-8000-000000000002";
+const OUTRO_COFRE = "0b0b0b0b-0000-4000-8000-000000000002"; // "Prestadores de serviço": não é de contrato
+const COFRE2 = "0b0b0b0b-0000-4000-8000-000000000003";
+const COFRE3 = "0b0b0b0b-0000-4000-8000-000000000004";
+const COFRES_DA_CONTA = [
+  { "uuid-safe": COFRE, "name-safe": "LM - Lone Growth (pacote completo)" },
+  { "uuid-safe": COFRE2, "name-safe": "LM - Assessoria Social (Só midia)" },
+  { "uuid-safe": COFRE3, "name-safe": "Renovação de contrato" },
+  { "uuid-safe": OUTRO_COFRE, "name-safe": "Prestadores de serviço" },
+];
 
 const d4 = {
   docs: new Map<string, Linha>(),
@@ -113,6 +121,12 @@ async function fetchFalso(entrada: RequestInfo | URL): Promise<Response> {
     return d ? json([d]) : json({ message: "Documento não encontrado" }, 404);
   }
   if (url.pathname === "/api/v1/webhooks/v2/") return json({ message: "URL cadastrada/atualizada com sucesso!" });
+  if (url.pathname === "/api/v1/safes") return json(COFRES_DA_CONTA);
+  if (url.pathname === "/api/v1/documents/3/status") {
+    // Os pendentes da CONTA inteira (todos os cofres), sem signatários.
+    const pend = [...d4.docs.values()].filter((d) => d.statusId === "3").map(({ list: _l, ...resto }) => resto);
+    return json([{ total_documents: String(pend.length), total_pages: "1", current_page: url.searchParams.get("pg") ?? "1" }, ...pend]);
+  }
   m = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)\/safe$/);
   if (m) {
     const doCofre = [...d4.docs.values()].filter((d) => d.uuidSafe === m![1]).map(({ list: _l, ...resto }) => resto);
@@ -213,7 +227,7 @@ beforeEach(() => {
   d4.docs.set(DOC_ZE, docD4(DOC_ZE));
   vi.stubGlobal("fetch", fetchFalso);
   Object.assign(process.env, {
-    D4SIGN_API_TOKEN: TOKEN, D4SIGN_CRYPT_KEY: CRYPT, D4SIGN_HMAC_SECRET: SEGREDO_MAC, D4SIGN_SAFE_UUID: COFRE,
+    D4SIGN_API_TOKEN: TOKEN, D4SIGN_CRYPT_KEY: CRYPT, D4SIGN_HMAC_SECRET: SEGREDO_MAC, D4SIGN_SAFE_UUID: `${COFRE}, ${COFRE2}`,
     D4SIGN_API_URL: "https://d4sign.exemplo/api/v1", CS_CADASTRO_GROUP_JID: GRUPO_CADASTRO,
     D4SIGN_EMAILS_LONE: "roberto@lone.exemplo",
     VAULT_KEY: Buffer.alloc(32, 7).toString("base64"),
@@ -568,36 +582,46 @@ describe("webhook: falha de leitura nunca vira resposta", () => {
 
 // ── Consulta a cada 3 horas ──────────────────────────────────────────────────────────────────────
 
-describe("consulta do cofre", () => {
+describe("consulta: os pendentes da conta, filtrados pelos cofres escolhidos", () => {
   beforeEach(() => {
     d4.docs.clear();
     d4.docs.set(DOC_ANTIGO, docD4(DOC_ANTIGO, { nome: "Bruno Tintas - Contrato - Tráfego Pago.docx", emailCliente: "contato@bruno.exemplo", enviadoEm: "2026-09-01 10:00:00", assinadoEm: "2026-09-02 11:00:00" }));
     d4.docs.set(DOC_ZE, docD4(DOC_ZE, { status: "3", enviadoEm: "2026-10-21 10:00:00" }));
-    d4.docs.set(DOC_SEM_CADASTRO, docD4(DOC_SEM_CADASTRO, { nome: "Loja Nova - Contrato - Social Media.docx", emailCliente: "dono@lojanova.exemplo", assinadoEm: "2026-10-25 16:40:00" }));
+    // Pendente num cofre que NÃO é de contrato (Prestadores de serviço): não gasta chamada.
+    d4.docs.set(DOC_SEM_CADASTRO, docD4(DOC_SEM_CADASTRO, { status: "3", cofre: OUTRO_COFRE, nome: "Freelancer - Contrato de prestação.docx", emailCliente: "free@x.exemplo" }));
   });
 
-  it("primeira consulta: o já assinado entra em silêncio e sem chamada; só o pendente novo é relido", async () => {
+  it("primeira consulta: 1 chamada para a lista da conta; relê só o pendente novo de um cofre escolhido", async () => {
     const corpo = await (await rodarConsulta()).json();
-    expect(corpo).toMatchObject({ ok: true, noCofre: 3, lidos: 1, sobraram: 0 });
-    expect(d4.chamadas).toEqual([`/api/v1/documents/${COFRE}/safe`, `/api/v1/documents/${DOC_ZE}/list`]);
+    expect(corpo).toMatchObject({ ok: true, pendentes: 1, lidos: 1, sobraram: 0 });
+    expect(d4.chamadas).toEqual(["/api/v1/documents/3/status", `/api/v1/documents/${DOC_ZE}/list`]);
     expect(envio.fn).not.toHaveBeenCalled();
-    expect(doc(DOC_ANTIGO)).toMatchObject({ status: "assinado", client_id: "cli-bruno" });
-    expect(doc(DOC_SEM_CADASTRO)).toMatchObject({ status: "assinado" });
     expect(doc(DOC_ZE)).toMatchObject({ status: "pendente", client_id: "cli-ze" });
+    expect(doc(DOC_SEM_CADASTRO)).toBeUndefined();
+    expect(doc(DOC_ANTIGO)).toBeUndefined(); // assinado não está na lista de pendentes: nem é visto
   });
 
-  it("segunda consulta: só relê o que mudou; o pendente que fechou vira aviso, nada se repete", async () => {
+  it("pendente de outro cofre escolhido também conta (os contratos ficam em vários cofres)", async () => {
+    d4.docs.set(DOC_BRUNO, docD4(DOC_BRUNO, { status: "3", cofre: COFRE2, nome: "Bruno Tintas - Contrato - Social Media.docx", emailCliente: "contato@bruno.exemplo" }));
+    const corpo = await (await rodarConsulta()).json();
+    expect(corpo).toMatchObject({ pendentes: 2, lidos: 2 });
+    expect(doc(DOC_BRUNO)).toMatchObject({ status: "pendente", client_id: "cli-bruno" });
+  });
+
+  it("segunda consulta: só a lista; o pendente que saiu da lista é relido e vira aviso; nada se repete", async () => {
     await rodarConsulta();
     d4.chamadas.length = 0;
     const nada = await (await rodarConsulta()).json();
     expect(nada.lidos).toBe(0);
-    expect(d4.chamadas).toEqual([`/api/v1/documents/${COFRE}/safe`]);
+    expect(d4.chamadas).toEqual(["/api/v1/documents/3/status"]);
 
     d4.docs.set(DOC_ZE, docD4(DOC_ZE, { status: "4", assinadoEm: "2026-10-26 13:10:00" }));
     const corpo = await (await rodarConsulta()).json();
     expect(corpo.lidos).toBe(1);
     expect(mensagens().map((m) => m.texto)).toEqual(["✅ *Padaria do Zé* assinou o contrato em 26/10."]);
     expect(doc(DOC_ZE)).toMatchObject({ status: "assinado", origem: "consulta" });
+    await rodarConsulta();
+    expect(envio.fn).toHaveBeenCalledTimes(1);
   });
 
   it("webhook e consulta no mesmo documento: uma mensagem só", async () => {
@@ -608,7 +632,7 @@ describe("consulta do cofre", () => {
     expect(mensagens().filter((m) => m.texto.includes("Padaria do Zé"))).toHaveLength(1);
   });
 
-  it("a listagem do cofre falha: ok:false com o motivo, nada gravado, nada enviado", async () => {
+  it("a lista da conta falha: ok:false com o motivo, nada gravado, nada enviado", async () => {
     d4.falhar = "500";
     const corpo = await (await rodarConsulta()).json();
     expect(corpo.ok).toBe(false);
@@ -617,26 +641,26 @@ describe("consulta do cofre", () => {
     expect(envio.fn).not.toHaveBeenCalled();
   });
 
-  it("a leitura de UM documento falha: não vira resposta, e é tentado na próxima", async () => {
+  it("a leitura de UM documento falha: não vira resposta, e é tentada na próxima", async () => {
     await rodarConsulta();
     d4.docs.set(DOC_ZE, docD4(DOC_ZE, { status: "4" }));
     const original = d4.docs.get(DOC_ZE)!;
-    d4.docs.delete(DOC_ZE); // some da leitura individual, mas continua na listagem do cofre
-    const listar = fetchFalso;
-    vi.stubGlobal("fetch", async (e: RequestInfo | URL) => {
-      if (String(e).includes("/safe")) { d4.docs.set(DOC_ZE, original); const r = await listar(e); d4.docs.delete(DOC_ZE); return r; }
-      return listar(e);
-    });
+    d4.docs.delete(DOC_ZE); // some da leitura individual (e da lista de pendentes: mudou de fase)
     const corpo = await (await rodarConsulta()).json();
     expect(corpo.ok).toBe(false);
     expect(corpo.erros[0]).toMatch(/404/);
     expect(doc(DOC_ZE)!.status).toBe("pendente");
     expect(envio.fn).not.toHaveBeenCalled();
 
-    vi.stubGlobal("fetch", fetchFalso);
     d4.docs.set(DOC_ZE, original);
     await rodarConsulta();
     expect(mensagens().map((m) => m.texto)).toEqual(["✅ *Padaria do Zé* assinou o contrato em 26/10."]);
+  });
+
+  it("pendente conhecido de cofre não escolhido que continua na lista: não é relido a cada rodada", async () => {
+    db.d4sign_documentos = [{ document_uuid: DOC_SEM_CADASTRO, status: "pendente", signatarios: [] }];
+    await rodarConsulta();
+    expect(d4.chamadas).not.toContain(`/api/v1/documents/${DOC_SEM_CADASTRO}/list`);
   });
 
   it("ensaio: devolve a mensagem que sairia, sem gravar nem mandar", async () => {
@@ -650,18 +674,32 @@ describe("consulta do cofre", () => {
   });
 
   it("teto por vez: o resto fica para a próxima rodada", async () => {
-    d4.docs.set(DOC_BRUNO, docD4(DOC_BRUNO, { status: "3", nome: "Bruno Tintas - Contrato - Tráfego Pago.docx", emailCliente: "contato@bruno.exemplo" }));
+    d4.docs.set(DOC_BRUNO, docD4(DOC_BRUNO, { status: "3", cofre: COFRE2, nome: "Bruno Tintas - Contrato - Tráfego Pago.docx", emailCliente: "contato@bruno.exemplo" }));
     const r = await A.consultarCofre({ limite: 1 });
     expect(r).toMatchObject({ lidos: 1, sobraram: 1 });
   });
 
-  it("sem a chave ou sem o cofre: 'desligado', não é falha", async () => {
+  it("sem cofre escolhido ou sem a chave: 'desligado', não é falha, e não gasta chamada", async () => {
     delete process.env.D4SIGN_SAFE_UUID;
-    expect(await (await rodarConsulta()).json()).toMatchObject({ ok: true, desligado: expect.stringMatching(/cofre/) });
+    expect(await (await rodarConsulta()).json()).toMatchObject({ ok: true, desligado: expect.stringMatching(/nenhum cofre/) });
     delete process.env.D4SIGN_API_TOKEN;
     CFG.esquecerConfigD4Sign();
     expect(await (await rodarConsulta()).json()).toMatchObject({ ok: true, desligado: expect.stringMatching(/D4Sign não configurada/) });
     expect(d4.chamadas).toEqual([]);
+  });
+
+  it("webhook de documento num cofre escolhido além do primeiro: processa normal", async () => {
+    d4.docs.set(DOC_BRUNO, docD4(DOC_BRUNO, { cofre: COFRE2 }));
+    expect((await (await webhook(evento(DOC_BRUNO))).json()).acao).toBe("avisado");
+  });
+
+  it("rota: ?webhook=cadastrar&dry=1 só diz em quantos cofres ligaria; ?webhook=ver olha cada cofre escolhido", async () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://painel.lonemidia.com";
+    const dry = await (await rodarConsulta("?webhook=cadastrar&dry=1")).json();
+    expect(dry).toMatchObject({ ok: true, dry: true, resultado: "Ligaria o aviso em 2 cofre(s), apontando para https://painel.lonemidia.com/api/integracoes/d4sign." });
+    expect(d4.chamadas).toEqual([]);
+    const ver = await (await rodarConsulta("?webhook=ver")).json();
+    expect(ver.cofres.map((c: { cofre: string }) => c.cofre)).toEqual([COFRE, COFRE2]);
   });
 });
 
@@ -814,7 +852,8 @@ describe("chaves da D4Sign no painel", () => {
 
   it("o painel vale antes do .env; o campo vazio no painel cai no .env", () => {
     const env = { D4SIGN_API_TOKEN: "do-env", D4SIGN_SAFE_UUID: COFRE };
-    expect(CFG.mesclarConfig({ token: "do-painel" }, env)).toMatchObject({ token: "do-painel", cofre: COFRE });
+    expect(CFG.mesclarConfig({ token: "do-painel" }, env)).toMatchObject({ token: "do-painel", cofres: [COFRE] });
+    expect(CFG.mesclarConfig({ cofre: `${COFRE2}, ${COFRE3.toUpperCase()}` }, env)).toMatchObject({ cofres: [COFRE2, COFRE3] });
     expect(CFG.mesclarConfig(null, env)).toMatchObject({ token: "do-env" });
     expect(CFG.mesclarConfig({ token: "  " }, {})).toBeNull();
   });
@@ -861,31 +900,78 @@ describe("chaves da D4Sign no painel", () => {
     const r = await post({ acao: "salvar", novos: { cofre: "cofre-dos-contratos", token: "abc def ghi jkl", emailsLone: "roberto, lucas@lone.exemplo" } });
     expect(r.status).toBe(400);
     const corpo = await r.json();
-    expect(corpo.error).toMatch(/UUID do cofre/);
+    expect(corpo.error).toMatch(/"cofre-dos-contratos" precisa ser o UUID de um cofre/);
     expect(corpo.error).toMatch(/espaço/);
     expect(corpo.error).toMatch(/"roberto" não é e-mail/);
     expect(db.d4sign_config ?? []).toEqual([]);
   });
 
-  it("Testar lê o cofre e guarda o resultado; apagar do painel volta ao .env", async () => {
+  it("Testar lista os pendentes dos cofres escolhidos e guarda o resultado; apagar os cofres do painel volta ao .env", async () => {
     admin();
-    await post({ acao: "salvar", novos: { cofre: COFRE } });
+    d4.docs.set(DOC_BRUNO, docD4(DOC_BRUNO, { status: "3", cofre: COFRE2 }));
+    d4.docs.set(DOC_SEM_CADASTRO, docD4(DOC_SEM_CADASTRO, { status: "3", cofre: OUTRO_COFRE }));
+    await post({ acao: "salvar", novos: { cofre: `${COFRE},${COFRE2}` } });
     const t = await (await post({ acao: "testar" })).json();
-    expect(t).toMatchObject({ ok: true, resultado: expect.stringMatching(/Funcionou/) });
-    expect(db.d4sign_config[0]).toMatchObject({ teste_ok: true });
+    expect(t).toMatchObject({ ok: true, resultado: "Funcionou: 1 documento(s) esperando assinatura nos 2 cofre(s) escolhido(s)." });
+    expect(db.d4sign_config[0]).toMatchObject({ teste_ok: true, cofre: `${COFRE}, ${COFRE2}` });
     await post({ acao: "salvar", apagar: ["cofre"] });
     const tela = await (await get()).json();
     expect(tela.campos.cofre).toEqual({ configurado: true, origem: "servidor" });
+    expect(tela.cofres).toEqual([COFRE, COFRE2]);
     expect(tela.historico.map((h: { acao: string }) => h.acao)).toEqual(["apagou", "testou", "trocou"]);
   });
 
-  it("'Ligar o aviso da D4Sign' cadastra o webhook do cofre para este painel; sem o segredo, nem tenta", async () => {
+  it("'Buscar meus cofres': a lista da conta, com os escolhidos marcados", async () => {
+    admin();
+    const r = await (await post({ acao: "cofres" })).json();
+    expect(r.cofres).toEqual([
+      { uuid: COFRE2, nome: "LM - Assessoria Social (Só midia)", escolhido: true, avisoLigado: false },
+      { uuid: COFRE, nome: "LM - Lone Growth (pacote completo)", escolhido: true, avisoLigado: false },
+      { uuid: OUTRO_COFRE, nome: "Prestadores de serviço", escolhido: false, avisoLigado: false },
+      { uuid: COFRE3, nome: "Renovação de contrato", escolhido: false, avisoLigado: false },
+    ]);
+    expect(d4.chamadas).toEqual(["/api/v1/safes"]);
+    usuario.atual = null;
+    expect((await post({ acao: "cofres" })).status).toBe(403);
+  });
+
+  it("valida a lista de cofres: um UUID errado no meio recusa tudo", async () => {
+    admin();
+    const r = await post({ acao: "salvar", novos: { cofre: `${COFRE}, nao-e-uuid` } });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toMatch(/"nao-e-uuid" precisa ser o UUID/);
+  });
+
+  it("'Ligar o aviso' em vários cofres: para na cota, diz quantos faltam, e o clique seguinte só faz os que faltam", async () => {
+    admin();
+    process.env.D4SIGN_SAFE_UUID = `${COFRE}, ${COFRE2}, ${COFRE3}`;
+    // 8 chamadas já usadas na hora: cabem só 2 (o limite é 10).
+    db.d4sign_chamadas = Array.from({ length: 8 }, (_, i) => ({ id: i, em: AGORA.toISOString(), caminho: "/x", origem: "webhook" }));
+    const r1 = await (await post({ acao: "webhook" })).json();
+    expect(r1).toMatchObject({ ok: false, feitos: [COFRE, COFRE2], faltam: [COFRE3] });
+    expect(r1.resultado).toMatch(/Liguei 2 de 3; faltam 1.*uma hora/);
+    expect(db.d4sign_config[0].webhook_cofres).toBe(`${COFRE}, ${COFRE2}`);
+
+    db.d4sign_chamadas = [];
+    d4.chamadas.length = 0;
+    const r2 = await (await post({ acao: "webhook" })).json();
+    expect(r2).toMatchObject({ ok: true, faltam: [] });
+    expect(d4.chamadas).toEqual(["/api/v1/webhooks/v2/"]); // só o que faltava
+
+    d4.chamadas.length = 0;
+    expect(await (await post({ acao: "webhook" })).json()).toMatchObject({ ok: true, resultado: expect.stringMatching(/já está ligado nos 3/) });
+    expect(d4.chamadas).toEqual([]);
+    expect((await (await get()).json()).cofresComAviso).toEqual([COFRE, COFRE2, COFRE3]);
+  });
+
+  it("'Ligar o aviso da D4Sign' cadastra o webhook em cada cofre escolhido, para este painel; sem o segredo, nem tenta", async () => {
     admin();
     process.env.NEXT_PUBLIC_APP_URL = "https://painel.lonemidia.com";
     const r = await (await post({ acao: "webhook" })).json();
     expect(r).toMatchObject({ ok: true, resultado: expect.stringMatching(/painel\.lonemidia\.com\/api\/integracoes\/d4sign/) });
-    expect(d4.chamadas).toEqual(["/api/v1/webhooks/v2/"]);
+    expect(d4.chamadas).toEqual(["/api/v1/webhooks/v2/", "/api/v1/webhooks/v2/"]);
     delete process.env.D4SIGN_HMAC_SECRET;
+    db.d4sign_config[0].webhook_cofres = null;
     d4.chamadas.length = 0;
     expect(await (await post({ acao: "webhook" })).json()).toMatchObject({ ok: false, resultado: expect.stringMatching(/segredo do webhook/) });
     expect(d4.chamadas).toEqual([]);

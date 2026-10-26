@@ -13,7 +13,9 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { decryptVault, encryptVault } from "@/lib/crypto/vault";
-import { cadastrarWebhookDoCofre, configD4Sign, listaDeEmails, listarCofre, type ConfigD4Sign } from "./d4sign";
+import {
+  cadastrarWebhookDoCofre, configD4Sign, listaDeEmails, listaDeUuids, listarCofresDaConta, listarPendentesDaConta, type ConfigD4Sign,
+} from "./d4sign";
 
 export type CampoD4Sign = "token" | "cryptKey" | "hmac" | "cofre" | "emailsLone";
 export const CAMPOS_D4SIGN: CampoD4Sign[] = ["token", "cryptKey", "hmac", "cofre", "emailsLone"];
@@ -26,7 +28,7 @@ const VARIAVEL: Record<CampoD4Sign, string> = {
 };
 export const ROTULO_CAMPO: Record<CampoD4Sign, string> = {
   token: "Token da API (tokenAPI)", cryptKey: "Chave de criptografia (cryptKey)",
-  hmac: "Segredo do webhook (Secret Key MAC)", cofre: "Identificador do cofre dos contratos",
+  hmac: "Segredo do webhook (Secret Key MAC)", cofre: "Cofres dos contratos",
   emailsLone: "E-mails de quem assina pela Lone",
 };
 
@@ -53,8 +55,11 @@ export function validarCampo(campo: CampoD4Sign, valor: string): string | null {
     const ruins = itens.filter((e) => !listaDeEmails(e).length);
     return ruins.length ? `${ROTULO_CAMPO[campo]}: "${ruins[0]}" não é e-mail` : null;
   }
+  if (campo === "cofre") {
+    const ruins = v.split(/[,;\s]+/).filter(Boolean).filter((u) => !UUID.test(u));
+    return ruins.length ? `${ROTULO_CAMPO[campo]}: "${ruins[0]}" precisa ser o UUID de um cofre (formato xxxxxxxx-xxxx-…)` : null;
+  }
   if (/\s/.test(v)) return `${ROTULO_CAMPO[campo]}: tem espaço no meio — confira se colou inteiro`;
-  if (campo === "cofre" && !UUID.test(v)) return `${ROTULO_CAMPO[campo]}: precisa ser o UUID do cofre (formato xxxxxxxx-xxxx-…)`;
   if ((campo === "token" || campo === "cryptKey") && v.length < 10) return `${ROTULO_CAMPO[campo]}: curto demais para ser a chave da D4Sign`;
   if (campo === "hmac" && v.length < 8) return `${ROTULO_CAMPO[campo]}: curto demais`;
   if (v.length > 500) return `${ROTULO_CAMPO[campo]}: longo demais`;
@@ -66,6 +71,8 @@ interface LinhaConfig {
   crypt_key?: string | null;
   hmac?: string | null;
   cofre?: string | null;
+  /** Cofres em que o webhook 2.0 já foi cadastrado (UUIDs separados por vírgula; migration 20261026170000). */
+  webhook_cofres?: string | null;
   atualizado_em?: string | null;
   atualizado_por?: string | null;
   testado_em?: string | null;
@@ -121,10 +128,15 @@ export async function carregarConfigD4Sign(env: Record<string, string | undefine
 
 export interface EntradaHistorico { quem: string; quando: string; acao: "trocou" | "apagou" | "testou" | "ligou o webhook"; campos: string[]; resultado?: string }
 
+/** Os cofres em que o aviso (webhook 2.0) já está ligado. */
+const cofresComAviso = (linha: LinhaConfig | null) => listaDeUuids(linha?.webhook_cofres);
+
 export interface SituacaoConfig {
   campos: Record<CampoD4Sign, { configurado: boolean; origem: "painel" | "servidor" | null }>;
-  /** O cofre e os e-mails da Lone não são segredo: aparecem inteiros, para conferir. */
-  cofre: string | null;
+  /** Os cofres e os e-mails da Lone não são segredo: aparecem inteiros, para conferir. */
+  cofres: string[];
+  /** Cofres escolhidos em que o aviso da D4Sign já foi ligado. */
+  cofresComAviso: string[];
   emailsLone: string[];
   atualizadoEm: string | null;
   atualizadoPor: string | null;
@@ -153,7 +165,8 @@ export async function situacaoDaConfig(env: Record<string, string | undefined> =
   return {
     ok: true,
     situacao: {
-      campos, cofre: cfg?.cofre ?? (painel?.cofre || env.D4SIGN_SAFE_UUID?.trim() || null),
+      campos, cofres: cfg?.cofres ?? listaDeUuids(painel?.cofre || env.D4SIGN_SAFE_UUID),
+      cofresComAviso: cofresComAviso(linha).filter((c) => (cfg?.cofres ?? []).includes(c)),
       emailsLone: cfg?.emailsLone ?? listaDeEmails(painel?.emailsLone || env.D4SIGN_EMAILS_LONE),
       atualizadoEm: linha?.atualizado_em ?? null, atualizadoPor: linha?.atualizado_por ?? null,
       testadoEm: linha?.testado_em ?? null, testeOk: linha?.teste_ok ?? null, testeResultado: linha?.teste_resultado ?? null,
@@ -178,6 +191,7 @@ export async function salvarConfigD4Sign(p: { novos: PainelD4Sign; apagar: Campo
   try {
     for (const c of novos) {
       campos[COLUNA[c]] = c === "emailsLone" ? listaDeEmails(p.novos[c]).join(", ")
+        : c === "cofre" ? listaDeUuids(p.novos[c]).join(", ")
         : ABERTOS.includes(c) ? p.novos[c]!.trim() : encryptVault(p.novos[c]!.trim());
     }
   } catch (e) {
@@ -203,19 +217,20 @@ export async function salvarConfigD4Sign(p: { novos: PainelD4Sign; apagar: Campo
   return { ok: true };
 }
 
-/** "Testar": lê o cofre na D4Sign com a configuração que vale agora e guarda o resultado. 1 chamada. */
+/** "Testar": lista na D4Sign o que espera assinatura nos cofres escolhidos e guarda o resultado. 1 chamada. */
 export async function testarConfigD4Sign(quem: string): Promise<{ ok: boolean; resultado: string }> {
   esquecerConfigD4Sign();
   const cfg = await carregarConfigD4Sign();
   let ok = false;
   let resultado: string;
   if (!cfg) resultado = "Falta o token da API.";
-  else if (!cfg.cofre) resultado = "Falta o identificador do cofre dos contratos.";
+  else if (!cfg.cofres.length) resultado = "Falta escolher os cofres dos contratos (botão \"Buscar meus cofres na D4Sign\").";
   else {
-    const r = await listarCofre(cfg, cfg.cofre, "manual");
+    const r = await listarPendentesDaConta(cfg, "manual");
     ok = r.ok;
+    const nos = r.ok ? r.dados.docs.filter((d) => !d.cofre || cfg.cofres.includes(d.cofre)).length : 0;
     resultado = r.ok
-      ? `Funcionou: a D4Sign abriu o cofre e devolveu ${r.dados.length} documento(s).${cfg.hmac ? "" : " Falta o segredo do webhook (Secret Key MAC) para conferir os avisos da D4Sign."}`
+      ? `Funcionou: ${nos} documento(s) esperando assinatura nos ${cfg.cofres.length} cofre(s) escolhido(s).${cfg.hmac ? "" : " Falta o segredo do webhook (Secret Key MAC) para conferir os avisos da D4Sign."}`
       : `Não funcionou: ${r.erro}`;
   }
   const { linha } = await lerLinha();
@@ -225,33 +240,73 @@ export async function testarConfigD4Sign(quem: string): Promise<{ ok: boolean; r
   return { ok, resultado };
 }
 
+/** "Buscar meus cofres": todos os cofres da conta, com os já escolhidos e os que já têm o aviso ligado. 1 chamada. */
+export async function listarCofresD4Sign(): Promise<
+  { ok: true; cofres: { uuid: string; nome: string; escolhido: boolean; avisoLigado: boolean }[] } | { ok: false; erro: string }
+> {
+  esquecerConfigD4Sign();
+  const cfg = await carregarConfigD4Sign();
+  if (!cfg) return { ok: false, erro: "Falta o token da API: salve as chaves antes de buscar os cofres." };
+  const r = await listarCofresDaConta(cfg);
+  if (!r.ok) return { ok: false, erro: `Não consegui buscar os cofres: ${r.erro}` };
+  const { linha } = await lerLinha();
+  const comAviso = cofresComAviso(linha);
+  return {
+    ok: true,
+    cofres: r.dados.map((c) => ({ ...c, escolhido: cfg.cofres.includes(c.uuid), avisoLigado: comAviso.includes(c.uuid) }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+  };
+}
+
 /** O endereço que a D4Sign chama: o webhook deste painel. */
 export const urlDoWebhookD4Sign = (env: Record<string, string | undefined> = process.env) =>
   `${(env.NEXT_PUBLIC_APP_URL || "https://painel.lonemidia.com").replace(/\/+$/, "")}/api/integracoes/d4sign`;
 
 /**
- * "Ligar o aviso da D4Sign": cadastra o webhook 2.0 do cofre apontando para este painel (1 chamada). Exige
- * token, cofre e o segredo do webhook — sem o segredo a porta do webhook recusa tudo, então nem cadastra.
- * Antes, na D4Sign: Opções da conta › Dev (API) › Webhook › Ativar Webhook 2.0.
+ * "Ligar o aviso da D4Sign": cadastra o webhook 2.0 em CADA cofre escolhido, apontando para este painel (1
+ * chamada por cofre). Lembra os cofres já feitos (d4sign_config.webhook_cofres): clicar de novo só faz os que
+ * faltam. A conta responde a 10 chamadas por hora — parou na cota, diz quantos faltam. Exige token, cofres e o
+ * segredo do webhook (sem o segredo a porta do webhook recusa tudo, então nem cadastra).
+ * Antes, na D4Sign: Gerenciar conta › Webhooks › Ativar webhook 2.0.
  */
-export async function ligarWebhookD4Sign(quem: string): Promise<{ ok: boolean; resultado: string }> {
+export async function ligarWebhookD4Sign(quem: string, opts: { dry?: boolean } = {}): Promise<{ ok: boolean; resultado: string; feitos: string[]; faltam: string[] }> {
   esquecerConfigD4Sign();
   const cfg = await carregarConfigD4Sign();
+  const { linha } = await lerLinha();
+  const jaFeitos = cofresComAviso(linha);
+  const faltavam = (cfg?.cofres ?? []).filter((c) => !jaFeitos.includes(c));
+  const feitosAgora: string[] = [];
   let ok = false;
   let resultado: string;
   if (!cfg) resultado = "Falta o token da API.";
-  else if (!cfg.cofre) resultado = "Falta o identificador do cofre dos contratos.";
+  else if (!cfg.cofres.length) resultado = "Falta escolher os cofres dos contratos (botão \"Buscar meus cofres na D4Sign\").";
   else if (!cfg.hmac) resultado = "Falta o segredo do webhook (Secret Key MAC): sem ele o Lone OS recusa os avisos da D4Sign.";
+  else if (!faltavam.length) { ok = true; resultado = `O aviso já está ligado nos ${cfg.cofres.length} cofre(s) escolhido(s).`; }
+  else if (opts.dry) { ok = true; resultado = `Ligaria o aviso em ${faltavam.length} cofre(s), apontando para ${urlDoWebhookD4Sign()}.`; }
   else {
     const url = urlDoWebhookD4Sign();
-    const r = await cadastrarWebhookDoCofre(cfg, cfg.cofre, url);
-    ok = r.ok;
-    resultado = r.ok
-      ? `Ligado: a D4Sign vai avisar ${url} de cada assinatura no cofre dos contratos.`
-      : `Não ligou: ${r.erro}. Confira se o Webhook 2.0 está ativado na D4Sign (Opções da conta › Dev (API) › Webhook).`;
+    let parou: string | null = null;
+    let erro: string | null = null;
+    for (const cofre of faltavam) {
+      const r = await cadastrarWebhookDoCofre(cfg, cofre, url);
+      if (!r.ok) { if (r.limite) parou = r.erro; else erro = r.erro; break; }
+      feitosAgora.push(cofre);
+      // Grava a cada cofre: se o próximo falhar, o que já foi feito não se perde nem se repete.
+      await supabaseAdmin.from(TABELA).upsert({ id: 1, webhook_cofres: [...jaFeitos, ...feitosAgora].join(", ") }, { onConflict: "id" });
+    }
+    const faltam = faltavam.length - feitosAgora.length;
+    ok = !erro && !parou;
+    resultado = ok
+      ? `Ligado nos ${cfg.cofres.length} cofre(s) escolhido(s): a D4Sign vai avisar ${url} de cada assinatura.`
+      : parou
+        ? `Liguei ${feitosAgora.length} de ${faltavam.length}; faltam ${faltam}. A D4Sign só responde a 10 chamadas por hora: clique de novo daqui a uma hora (os já ligados não se repetem).`
+        : `Liguei ${feitosAgora.length} de ${faltavam.length}; parou com erro: ${erro}. Confira se o Webhook 2.0 está ativado na D4Sign (Gerenciar conta › Webhooks).`;
   }
-  const { linha } = await lerLinha();
-  const historico = [{ quem, quando: new Date().toISOString(), acao: "ligou o webhook" as const, campos: [], resultado: ok ? "funcionou" : "falhou" }, ...lerHistorico(linha?.historico)].slice(0, 30);
-  if (linha) await supabaseAdmin.from(TABELA).update({ historico }).eq("id", 1);
-  return { ok, resultado };
+  if (!opts.dry) {
+    const atual = (await lerLinha()).linha;
+    const historico = [{ quem, quando: new Date().toISOString(), acao: "ligou o webhook" as const, campos: [], resultado: ok ? "funcionou" : "falhou" }, ...lerHistorico(atual?.historico)].slice(0, 30);
+    if (atual) await supabaseAdmin.from(TABELA).update({ historico }).eq("id", 1);
+  }
+  const feitos = [...jaFeitos, ...feitosAgora].filter((c) => (cfg?.cofres ?? []).includes(c));
+  return { ok, resultado, feitos, faltam: (cfg?.cofres ?? []).filter((c) => !feitos.includes(c)) };
 }

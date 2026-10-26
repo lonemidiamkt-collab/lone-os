@@ -776,7 +776,7 @@ const MODULES: Module[] = [
       "CONTRATO E ADENDO SÓ FECHAM QUANDO GRAVARAM (21/10/2026): gerar contrato e registrar adendo passam pelo servidor. A janela só fecha com a gravação confirmada; erro aparece dentro dela, junto do botão, e o texto do adendo não some. A versão vem do banco (maior + 1) — se a leitura falhar, o sistema recusa em vez de voltar para V1. Lista de contratos que não carregou mostra o erro com 'Tentar de novo', não 'nenhum contrato'.",
       "TROCAR PDF ASSINADO (24/10/2026): o contrato ganhou 'Trocar PDF assinado', com confirmação; o PDF anterior fica guardado e abre em 'PDFs anteriores'.",
       "QUEM ASSINOU E QUEM FALTA, NO GRUPO DE CADASTRO (26/10/2026): o Lone OS acompanha cada contrato no cofre da D4Sign e avisa o grupo de cadastro. A cada assinatura: '✍️ *Cliente X*: assinado por José (cliente) em 26/10 · falta Roberto (Lone)'. Quando todos assinam: '✅ *Cliente X* assinou o contrato em dd/mm.' Cada aviso sai uma vez só, mesmo que a D4Sign avise duas vezes. Dia útil, 8h30, se houver contrato enviado há 3 dias ou mais sem todas as assinaturas, UMA mensagem '⏳ Ainda não assinaram o contrato' com cada um, quem falta e há quantos dias — sem pendência, nada sai. Na tela de Contratos e na aba Contratos do cliente aparece o mesmo: 'assinado por X em dd/mm · falta Y'. A data entra no contrato ('Assinado na D4Sign em dd/mm · falta subir o PDF'); o contrato continua fechando com o PDF assinado na ficha. O sistema liga o documento ao cliente pelo e-mail de quem assinou ou pelo nome do arquivo; se não achar o cadastro, a mensagem sai com o nome do arquivo.",
-      "CHAVES DA D4SIGN NO PAINEL (26/10/2026): Configurações › Jurídico › D4Sign (só admin). Cola o token, a chave de criptografia, o segredo do webhook, o identificador do cofre e os e-mails com que os sócios assinam; as chaves ficam guardadas cifradas e nunca voltam para a tela (para trocar, cola de novo). 'Testar' abre o cofre na D4Sign e diz se funcionou; 'Ligar o aviso da D4Sign' faz a D4Sign avisar o Lone OS de cada assinatura. Fica registrado quem trocou, testou ou ligou. A D4Sign responde a 10 chamadas por hora: as rotinas guardam as últimas para o aviso de assinatura.",
+      "CHAVES DA D4SIGN NO PAINEL (26/10/2026): Configurações › Jurídico › D4Sign (só admin). Cola o token, a chave de criptografia, o segredo do webhook e os e-mails com que os sócios assinam; as chaves ficam guardadas cifradas e nunca voltam para a tela (para trocar, cola de novo). Os contratos ficam em vários cofres na D4Sign: 'Buscar meus cofres na D4Sign' lista todos e você marca os de contrato de cliente. 'Testar' conta o que espera assinatura nesses cofres; 'Ligar o aviso da D4Sign' faz a D4Sign avisar o Lone OS de cada assinatura, cofre por cofre (se parar no limite da hora, é só clicar de novo depois). Fica registrado quem trocou, testou ou ligou. A D4Sign responde a 10 chamadas por hora: as rotinas guardam as últimas para o aviso de assinatura.",
     ],
     features: [
       "Template oficial Lone Mídia (3 tipos: Tráfego, Social, Lone Growth) com merge de dados do cliente",
@@ -801,7 +801,7 @@ const MODULES: Module[] = [
       "Use 'reajuste' quando o cliente quer começar com valor menor e depois normalizar.",
       "O rascunho de renovação aparece sozinho — abre, revisa valor/duração, baixa o DOCX e sobe no D4Sign.",
       "Antes de perguntar ao cliente se ele assinou, olhe o grupo de cadastro ou a tela de Contratos: lá está quem já assinou e quem falta.",
-      "Suba o .docx na D4Sign com o nome que o Lone OS deu ao arquivo e no cofre dos contratos: é assim que o aviso acha o cliente certo.",
+      "Suba o .docx na D4Sign com o nome que o Lone OS deu ao arquivo e num dos cofres de contrato escolhidos no painel: é assim que o aviso acha o cliente certo.",
     ],
     faq: [
       {
@@ -818,7 +818,7 @@ const MODULES: Module[] = [
       },
       {
         q: "Como o sistema sabe que o cliente assinou?",
-        a: "A D4Sign avisa o Lone OS a cada assinatura (depois de 'Ligar o aviso da D4Sign' em Configurações › Jurídico), e uma consulta a cada 3 horas confere o cofre dos contratos. Nos dois casos o Lone OS relê o documento na D4Sign antes de mandar a mensagem — um aviso falso ou repetido não vira mensagem. Se a D4Sign estiver fora do ar, nada é afirmado; o aviso sai quando ela voltar.",
+        a: "A D4Sign avisa o Lone OS a cada assinatura (depois de 'Ligar o aviso da D4Sign' em Configurações › Jurídico), e uma consulta a cada 3 horas confere os cofres dos contratos. Nos dois casos o Lone OS relê o documento na D4Sign antes de mandar a mensagem — um aviso falso ou repetido não vira mensagem. Se a D4Sign estiver fora do ar, nada é afirmado; o aviso sai quando ela voltar.",
       },
     ],
   },
