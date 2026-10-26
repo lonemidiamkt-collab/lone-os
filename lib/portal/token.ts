@@ -28,6 +28,12 @@ export type LeituraDoLink<T> =
   | { estado: "invalido" }
   | { estado: "indisponivel"; erro: string };
 
+/**
+ * Todo link do portal é um UUID (a coluna é uuid). Link cortado ao colar no WhatsApp ou digitado errado
+ * nem vai ao banco: lá ele vira erro de sintaxe (22P02), que não é o banco fora do ar (26/10/2026).
+ */
+const FORMATO_DO_LINK = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Frase para o cliente quando a leitura falhou (não é o link). */
 export const FRASE_INDISPONIVEL = "Não consegui abrir seu painel agora. Tente de novo em instantes.";
 
@@ -38,15 +44,15 @@ export function linkLiberado(c: LinhaDeAcesso, agora: Date = new Date()): boolea
 }
 
 /**
- * Decide pelo resultado da leitura. `PGRST116` é o "nenhuma linha" do `.single()` — isso sim é link
- * que não existe. Qualquer outro erro é o banco indisponível, não o link.
+ * Decide pelo resultado da leitura. `PGRST116` é o "nenhuma linha" do `.single()` e `22P02` é o texto
+ * que não é UUID — isso sim é link que não existe. Qualquer outro erro é o banco indisponível, não o link.
  */
 export function estadoDaLeitura<T extends LinhaDeAcesso>(
   linha: T | null,
   erro: { message?: string; code?: string } | null,
   agora: Date = new Date(),
 ): LeituraDoLink<T> {
-  if (erro && erro.code !== "PGRST116") return { estado: "indisponivel", erro: erro.message || "erro ao ler o link" };
+  if (erro && erro.code !== "PGRST116" && erro.code !== "22P02") return { estado: "indisponivel", erro: erro.message || "erro ao ler o link" };
   if (!linha || !linkLiberado(linha, agora)) return { estado: "invalido" };
   return { estado: "ok", linha };
 }
@@ -56,7 +62,7 @@ export async function lerLinkDoPortal<T extends LinhaDeAcesso = LinhaDeAcesso & 
   token: string,
   colunas = "id",
 ): Promise<LeituraDoLink<T>> {
-  if (!token || token.length > 200) return { estado: "invalido" };
+  if (!token || !FORMATO_DO_LINK.test(token)) return { estado: "invalido" };
   try {
     const { data, error } = await supabaseAdmin
       .from("clients")

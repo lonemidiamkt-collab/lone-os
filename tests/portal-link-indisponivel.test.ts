@@ -12,6 +12,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 import { estadoDaLeitura, lerLinkDoPortal, clienteDoLink, FRASE_INDISPONIVEL } from "@/lib/portal/token";
 
+const LINK = "5b0c6a2e-8f1d-4c3a-9e7b-2d4f6a8c0e1f";
 const ativo = { id: "c1", public_report_enabled: true, public_report_token_revoked_at: null, active: true, churned_at: null, paused_at: null, paused_until: null };
 
 describe("estadoDaLeitura — o banco que falha não é link inválido", () => {
@@ -22,6 +23,9 @@ describe("estadoDaLeitura — o banco que falha não é link inválido", () => {
   it("nenhuma linha (PGRST116 do .single, ou null do .maybeSingle) = link inválido", () => {
     expect(estadoDaLeitura(null, { message: "no rows", code: "PGRST116" }).estado).toBe("invalido");
     expect(estadoDaLeitura(null, null).estado).toBe("invalido");
+  });
+  it("texto que não é UUID (22P02) = link inválido, não banco fora do ar", () => {
+    expect(estadoDaLeitura(null, { message: 'invalid input syntax for type uuid: "abc"', code: "22P02" }).estado).toBe("invalido");
   });
   it("as regras de acesso continuam: revogado, desligado, ex-cliente e pausado não abrem", () => {
     expect(estadoDaLeitura(ativo, null).estado).toBe("ok");
@@ -38,16 +42,20 @@ describe("lerLinkDoPortal / clienteDoLink", () => {
 
   it("banco fora do ar: indisponível", async () => {
     resposta.error = { message: "connect ECONNREFUSED" };
-    expect((await lerLinkDoPortal("tok")).estado).toBe("indisponivel");
-    expect((await clienteDoLink("tok")).estado).toBe("indisponivel");
+    expect((await lerLinkDoPortal(LINK)).estado).toBe("indisponivel");
+    expect((await clienteDoLink(LINK)).estado).toBe("indisponivel");
   });
   it("link certo: ok com o nome", async () => {
     resposta.data = { ...ativo, name: "UNAFER", nome_fantasia: null };
-    expect(await clienteDoLink("tok")).toEqual({ estado: "ok", linha: { id: "c1", nome: "UNAFER" } });
+    expect(await clienteDoLink(LINK)).toEqual({ estado: "ok", linha: { id: "c1", nome: "UNAFER" } });
   });
-  it("token vazio ou absurdo nem consulta: inválido", async () => {
+  it("token vazio, absurdo ou cortado nem consulta: inválido (mesmo com o banco fora do ar)", async () => {
+    resposta.error = { message: "connect ECONNREFUSED" };
     expect((await lerLinkDoPortal("")).estado).toBe("invalido");
     expect((await lerLinkDoPortal("x".repeat(300))).estado).toBe("invalido");
+    expect((await lerLinkDoPortal("token-que-nao-existe-123")).estado).toBe("invalido");
+    expect((await lerLinkDoPortal(LINK.slice(0, 20))).estado).toBe("invalido"); // cortado ao colar
+    expect((await lerLinkDoPortal(LINK.toUpperCase())).estado).toBe("indisponivel"); // UUID válido vai ao banco
   });
   it("a frase para o cliente diz que é instabilidade, não link errado", () => {
     expect(FRASE_INDISPONIVEL).toMatch(/tente de novo/i);

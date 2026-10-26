@@ -86,7 +86,7 @@ const { POST } = await import("@/app/api/portal/[token]/approve/route");
 const D = await import("@/lib/portal/desfazer-ajuste");
 
 const CARD = "cccccccc-0000-4000-8000-000000000001";
-const post = (corpo: unknown) => POST(new NextRequest("http://x/api/portal/tok/approve", { method: "POST", body: JSON.stringify(corpo) }), { params: Promise.resolve({ token: "tok" }) });
+const post = (corpo: unknown) => POST(new NextRequest("http://x/api/portal/5b0c6a2e-8f1d-4c3a-9e7b-2d4f6a8c0e1f/approve", { method: "POST", body: JSON.stringify(corpo) }), { params: Promise.resolve({ token: "5b0c6a2e-8f1d-4c3a-9e7b-2d4f6a8c0e1f" }) });
 
 const AGENDADO = {
   id: CARD, client_id: "cli-1", title: "Promo de sexta", archived_at: null,

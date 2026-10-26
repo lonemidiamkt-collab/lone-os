@@ -27,7 +27,7 @@ const aviso = await import("@/app/api/portal/[token]/upload/aviso/route");
 const { mensagemDoLote, loteValido, podeApagarMaterial, criarRegistroDeLotes } = await import("@/lib/portal/envio-material");
 const { ESPERA_AVISO_AUTOMATICO_MS } = await import("@/lib/portal/envio-material-server");
 
-const params = { params: Promise.resolve({ token: "tok-portal" }) };
+const params = { params: Promise.resolve({ token: "5b0c6a2e-8f1d-4c3a-9e7b-2d4f6a8c0e1f" }) };
 let seqLote = 0;
 const novoLote = () => `lote-teste-${++seqLote}-${Date.now()}`;
 
@@ -48,7 +48,7 @@ beforeEach(() => {
   mensagens.length = 0;
   removidos.length = 0;
   process.env.CS_TEAM_GROUP_JID = "grupo-time@g.us";
-  banco.db.clients = [{ id: "c1", name: "Padaria Pão Bom", public_report_token: "tok-portal", public_report_enabled: true, active: true }];
+  banco.db.clients = [{ id: "c1", name: "Padaria Pão Bom", public_report_token: "5b0c6a2e-8f1d-4c3a-9e7b-2d4f6a8c0e1f", public_report_enabled: true, active: true }];
 });
 afterEach(() => { vi.useRealTimers(); delete process.env.CS_TEAM_GROUP_JID; });
 
