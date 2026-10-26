@@ -19,6 +19,7 @@ import {
   ArrowRight, PenLine, Upload, FileCheck2,
 } from "lucide-react";
 import LegacyContractModal from "@/components/LegacyContractModal";
+import DocumentosD4Sign from "@/components/contratos/DocumentosD4Sign";
 
 interface Props { client: Client; currentUser: string; }
 
@@ -481,6 +482,10 @@ export default function ContractGenerator({ client, currentUser }: Props) {
           </button>
         </div>
       )}
+
+      {/* D4Sign (26/10/2026): o que está lá, quem falta assinar e o PDF assinado — também de cliente sem
+          contrato registrado aqui. Recarrega junto com a lista de contratos. */}
+      <DocumentosD4Sign clientId={client.id} abrirPdf={(p) => void handleViewSigned(p)} recarregarEm={contracts.length} />
 
       {/* Contract list */}
       {loading && contracts.length === 0 ? <div className="flex justify-center py-10"><Loader2 size={20} className="text-primary animate-spin" /></div> : listaErro && contracts.length === 0 ? null : contracts.length === 0 ? (

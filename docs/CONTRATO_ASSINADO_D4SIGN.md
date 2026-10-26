@@ -1,98 +1,125 @@
-# Contrato assinado (D4Sign) — passagem (26/10/2026)
+# Contrato pela D4Sign — passagem (26/10/2026)
 
 Pedido do Roberto: "criar uma API que verifica quando o cliente assinou o contrato e informa dentro do grupo
-de cadastro: 'Cliente X assinou o contrato'". A equipe esquecia de olhar a D4Sign e perguntava ao cliente
-se ele tinha assinado quando ele já tinha.
+de cadastro" e depois "faça toda essa integração", com o Lone Finance ligado a ela.
 
-Branch `contrato-assinado-d4sign`, a partir de `deploy/budget-only` 152e8c98. **Sem push, sem deploy, sem
-webhook cadastrado na D4Sign e sem mensagem enviada a grupo nenhum.** Tudo isso espera o ok do Roberto.
+Branch `contrato-assinado-d4sign` (worktree `~/dev/lone-os/.claude/worktrees/contrato-assinado-d4sign`), a
+partir de `deploy/budget-only` 152e8c98. Sem push, sem deploy, sem webhook cadastrado e sem mensagem enviada.
+Tudo espera o ok do Roberto.
 
-## Como funciona
-
-| Peça | Onde | O que faz |
+| Etapa | O que | Situação |
 |---|---|---|
-| Webhook 2.0 do cofre | `POST /api/integracoes/d4sign` | A D4Sign chama quando algo acontece num documento do cofre dos contratos. O Lone OS confere o `Content-Hmac`, **relê o documento na D4Sign** e, se todas as assinaturas fecharam, manda a mensagem. |
-| Consulta de hora em hora | `POST /api/system/contratos-d4sign` (cron `15 11-23 * * *`) | Lista o cofre, relê só o que mudou de fase e pega o que o webhook não trouxe. Guarda há quantos dias cada documento espera assinatura. |
-| Linha da manhã | seção `contratos` do `cs-manha` (8h, grupo interno) | `✍️ *Contrato sem assinatura na D4Sign:* Cliente X (5 dias).` — a partir de **3 dias**, no máximo uma vez por semana por contrato. |
-| Tela | Contratos e ficha › Contratos | "Assinado na D4Sign em dd/mm · falta subir o PDF". O contrato continua fechando com o PDF assinado (não mexe em `signed_at` nem em `status`). |
+| 1 | Aviso no grupo de cadastro + PDF assinado entrando sozinho na ficha + chaves da D4Sign no painel | pronta nesta branch |
+| 2 | Enviar pelo Lone OS, quem falta assinar em Contratos, lembrete pela D4Sign (desligado) | em seguida |
+| 3 | Rota de leitura para o Lone Finance + rotina lá | Finance: commit 177fce3 na branch `contrato-assinado-d4sign` do lone-finance; rota do Lone OS em seguida |
 
-A mensagem, no grupo de cadastro (`CS_CADASTRO_GROUP_JID`, o mesmo do link do portal e do onboarding):
+## O que a D4Sign permite (documentação lida em docapi.d4sign.com.br)
 
-```
-✅ *Padaria do Zé* assinou o contrato em 26/10.
-```
+Base: `https://secure.d4sign.com.br/api/v1` (sandbox: `https://sandbox.d4sign.com.br/api/v1`). Autenticação por
+`tokenAPI` e `cryptKey` na URL (a `cryptKey` só quando está habilitada na conta). **Limite padrão: 10 chamadas
+por hora** — para subir, `comercial@d4sign.com.br`. Respostas em JSON; erro como `{ "message": "…" }`.
 
-Sem cadastro ligado, sai com o nome do arquivo e uma segunda linha: `_Não achei o cadastro no Lone OS: a data
-não foi gravada na ficha._`
+| Precisamos de | Endpoint | Usado em |
+|---|---|---|
+| Ler um documento e os signatários (quem assinou, quando, `key_signer`) | `GET /documents/{uuid}/list` | aviso, PDF, quem falta assinar |
+| Listar o cofre | `GET /documents/{cofre}/safe` (500 por página, `pg`) | consulta periódica |
+| Webhook do cofre inteiro (2.0) | `POST /webhooks/v2/` `{type:"cofre", uuid, url}`; ver: `GET /webhooks/v2/?type=cofre&uuid=…` | botão "Ligar o aviso da D4Sign" |
+| Autenticidade do webhook | cabeçalho `Content-Hmac: sha256=<HMAC do uuid com a Secret Key MAC>` | webhook |
+| Eventos do webhook | `type_post` 1 finalizado · 2 e-mail não entregue · 3 cancelado · 4 um signatário assinou; form-data; até 6 novas tentativas em 27 h | webhook |
+| Baixar o PDF assinado | `POST /documents/{uuid}/download` `{type:"PDF"}` → `{url, name}` | PDF na ficha |
+| Subir o contrato | `POST /documents/{cofre}/uploadbinary` `{base64_binary_file, mime_type, name}` → `{uuid}` (aceita DOCX e PDF) | etapa 2 |
+| Incluir signatários | `POST /documents/{uuid}/createlist` `{signers:[{email, act, foreign, certificadoicpbr, assinatura_presencial, …}]}`; `act` 4 = assinar como parte, 5 = testemunha | etapa 2 |
+| Mandar para assinar | `POST /documents/{uuid}/sendtosigner` `{skip_email:"0", workflow:"0", message?}` | etapa 2 |
+| Lembrete ao signatário | `POST /documents/{uuid}/resend` `{email, key_signer}` (e-mail da própria D4Sign, sem texto nosso) | etapa 2 (desligado) |
+| Cancelar | `POST /documents/{uuid}/cancel` `{comment?}` | não usado (cancelar continua na D4Sign) |
 
-Regras (todas com teste em `tests/contrato-assinado-d4sign.test.ts`, D4Sign e banco simulados):
+Também existem (não usados): templates Word/HTML da D4Sign, posição de assinatura e rubrica, observadores,
+tags, grupos de assinatura, certificado ICP-Brasil, embed e SSO.
 
-- **Uma mensagem por documento.** A trava é `d4sign_documentos.aviso_reservado_em`, marcada antes de mandar.
-  Evento repetido, dois eventos ao mesmo tempo e webhook + consulta no mesmo documento dão uma mensagem só.
-  Envio que falha solta a trava (o webhook responde 503 e a D4Sign repete; a consulta tenta na hora
-  seguinte). Envio incerto (o WhatsApp não respondeu a tempo) mantém a trava.
-- **O evento nunca é acreditado.** Vale a fase que a D4Sign devolve em `GET /documents/{uuid}/list`.
-- **Falha de leitura não vira resposta.** D4Sign com erro, fora do ar, lenta ou devolvendo HTML, e banco que
-  não lê: não grava assinatura, não manda, responde 503 (webhook) ou `ok:false` (consulta).
-- **Histórico não é novidade.** A primeira consulta acha o cofre inteiro: assinatura com mais de 4 dias entra
-  em silêncio. Lê no máximo 40 documentos por consulta (os pendentes primeiro); o resto fica para a hora seguinte.
-- **Ligação ao cadastro só com par único:** e-mail de quem assinou igual ao do cadastro (`email` ou
-  `email_corporativo`); senão, o nome do arquivo (o .docx do Lone OS sai como "Cliente - Contrato - Serviço").
-  O contrato escolhido é o mais recente sem assinatura que já existia quando o documento saiu para assinatura —
-  um documento antigo não cai no rascunho de renovação.
-- Distrato, aditivo e termo saem como "assinou _nome do documento_", sem gravar data de contrato.
-- Nunca manda para grupo de cliente (confere o JID antes).
+## Etapa 1 — como funciona
 
-## Onde a chave da D4Sign entra
+- **Webhook** (`POST /api/integracoes/d4sign`): confere o `Content-Hmac` (sem o segredo a porta fica fechada:
+  cada evento gastaria uma das 10 chamadas da hora), **relê o documento** e só chama de assinado a fase
+  Finalizado. Grava os signatários (quem falta assinar) a cada evento.
+- **Aviso**, uma vez por documento, no grupo de cadastro: `✅ *Padaria do Zé* assinou o contrato em 26/10.`
+  A trava (`d4sign_documentos.aviso_reservado_em`) é marcada antes de mandar.
+- **PDF assinado** (`anexarPdfAssinado`): baixado da D4Sign e guardado em `legal-docs/contracts-signed/{cliente}/…`,
+  o mesmo lugar do "Upload assinado". Contrato do Lone OS ligado → fecha pela mesma regra (PDF + `signed_at` +
+  `status active`), só se ainda não tinha PDF. Cliente sem contrato registrado no Lone OS (a maioria: a fonte do
+  contrato é o Finance) → o PDF aparece no bloco **"Na D4Sign"** da aba Contratos do cliente. Falhou → tenta de
+  novo nas consultas (até 5 vezes, nos 30 dias depois da assinatura).
+- **Consulta** (`POST /api/system/contratos-d4sign`, cron `15 11-23/3 * * *`): lê o cofre e no máximo mais 3
+  chamadas; pega o que o webhook não trouxe e o PDF que ficou para trás. O que já estava assinado quando o Lone OS
+  o viu pela primeira vez entra em silêncio e sem chamada.
+- **Cota** (`lib/contracts/d4sign-cota.ts`): conta as chamadas da última hora; as rotinas param 4 antes do limite.
+- **Linha da manhã** (`cs-manha`, grupo interno): `✍️ *Contrato sem assinatura na D4Sign:* Cliente X (5 dias).`
+  A partir de 3 dias, no máximo uma vez por semana por contrato.
+- **Chaves no painel** (Configurações › Jurídico › D4Sign, só admin): cifradas com a `VAULT_KEY` (a mesma do Cofre
+  de Acessos), numa tabela que só o servidor lê. A tela nunca recebe a chave de volta; mostra só se está configurada
+  e de onde vem (painel ou servidor), com "Testar", "Ligar o aviso da D4Sign" e o histórico de quem mexeu. O `.env`
+  vale para o campo que o painel deixar vazio.
 
-Só no `.env` da VPS (`/opt/loneos/.env`). **Nunca no repositório (é público) nem no chat.**
-O `docker-compose.prod.yml` já passa as variáveis para o app; vazias = integração desligada.
+**Por que o painel não piora a segurança em relação ao `.env`:** um vazamento do banco sozinho não entrega a chave
+(falta a `VAULT_KEY`, que só existe no servidor); nem o texto cifrado chega ao navegador (RLS sem policy); o token da
+Meta, hoje, volta inteiro para a tela — este não. O risco que muda: um admin com a conta tomada pode TROCAR a chave
+(não lê-la). O 2FA dos admins cobre isso.
 
-| Variável | Onde achar na D4Sign |
-|---|---|
-| `D4SIGN_API_TOKEN` | Opções da conta › Dev (API) › tokenAPI |
-| `D4SIGN_CRYPT_KEY` | mesma tela › cryptKey |
-| `D4SIGN_HMAC_SECRET` | mesma tela › "Gerar Secret Key MAC" |
-| `D4SIGN_SAFE_UUID` | UUID do cofre "Contratos Lone Midia" (aparece na URL do cofre) |
-| `D4SIGN_API_URL` | opcional; vazio = `https://secure.d4sign.com.br/api/v1` |
+## Passo a passo das chaves (Roberto)
 
-## Para ligar (depois do ok do Roberto, nesta ordem)
+Tudo no Lone OS em **Configurações › Jurídico › D4Sign**. Ninguém precisa mexer no servidor nem mandar chave no chat.
 
-1. Aplicar `supabase/migrations/20261026150000_contrato_assinado_d4sign.sql` (antes do deploy: sem a tabela o
-   webhook responde 503 e a consulta dá erro; a lista de contratos funciona com ou sem a coluna).
-2. Deploy (não em cima da publicação das 18h40 de 26/10 da outra frente; agrupar).
-3. Roberto põe as 5 variáveis no `/opt/loneos/.env` e recria o app (`docker compose -f docker-compose.prod.yml up -d app`).
-4. Na D4Sign: Opções da conta › Dev (API) › Webhook › **Ativar Webhook 2.0**.
-5. Ensaio do cadastro do webhook e depois o cadastro (com o CRON_SECRET, na VPS):
-   ```bash
-   CRON_JOB=- /opt/loneos/scripts/cron-call.sh "contratos-d4sign?webhook=cadastrar&dry=1" POST
-   ```
-   Confere a URL (`https://painel.lonemidia.com/api/integracoes/d4sign`) e o cofre; aí sem `&dry=1`.
-   `?webhook=ver` mostra o que ficou cadastrado. (`CRON_JOB=-` evita que a chamada à mão conte como execução
-   da rotina na Central de Automações.)
-6. Ensaio da consulta: `CRON_JOB=- … "contratos-d4sign?dry=1" POST` — lista o que mandaria (a primeira leitura do cofre deve dar
-   no máximo as assinaturas dos últimos 4 dias).
-7. Crontab: `15 11-23 * * * /opt/loneos/scripts/cron-call.sh contratos-d4sign POST >> /var/log/loneos-contratos-d4sign.log 2>&1`;
-   depois `crontab -l > ops/crontab-producao.txt`, `npx tsx scripts/gerar-agenda-cron.ts` e tirar
-   `contratos-d4sign` de `EM_TRANSICAO.entrando` em `tests/automacoes-registro.test.ts`.
-8. Changelog:
+1. Entre em https://secure.d4sign.com.br com a conta da Lone.
+2. **Token e chave de criptografia:** menu da conta (canto superior direito) › **Dev (API)**. Se não houver token,
+   clique para gerar. Copie o **tokenAPI** e cole em "Token da API"; copie a **cryptKey** e cole em "Chave de
+   criptografia".
+3. **Segredo do webhook:** na mesma tela, área **Webhook** › **Ativar Webhook 2.0**; depois **Gerar Secret Key MAC**.
+   Copie e cole em "Segredo do webhook".
+4. **Cofre:** menu **Cofres** › abra **Contratos Lone Midia** (ou o cofre onde os contratos ficam). O identificador
+   é o código no endereço da página, no formato `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`. Cole em "Identificador do cofre".
+5. **Salvar chaves** e depois **Testar**: tem que aparecer "Funcionou: a D4Sign abriu o cofre…".
+6. **Ligar o aviso da D4Sign** (com a confirmação): a D4Sign passa a avisar o Lone OS de cada assinatura.
+7. Recomendado: pedir à D4Sign (comercial@d4sign.com.br) para subir o limite de 10 chamadas por hora.
+
+Na etapa 2 entram os e-mails com que o Roberto e o Lucas assinam na D4Sign (para o envio pelo Lone OS).
+
+## Para publicar a etapa 1 (com o ok do Roberto)
+
+1. Aplicar `supabase/migrations/20261026150000_contrato_assinado_d4sign.sql` (antes do deploy).
+2. Deploy, depois da publicação das 18h40 de 26/10.
+3. Roberto faz o passo a passo acima (chaves, Testar, Ligar o aviso).
+4. Ensaio da consulta na VPS: `CRON_JOB=- /opt/loneos/scripts/cron-call.sh "contratos-d4sign?dry=1" POST`.
+5. Crontab: `15 11-23/3 * * * /opt/loneos/scripts/cron-call.sh contratos-d4sign POST >> /var/log/loneos-contratos-d4sign.log 2>&1`;
+   depois `crontab -l > ops/crontab-producao.txt`, `npx tsx scripts/gerar-agenda-cron.ts` e tirar `contratos-d4sign`
+   de `EM_TRANSICAO.entrando` em `tests/automacoes-registro.test.ts`.
+6. Changelog:
 
 ```sql
 insert into platform_updates (title, description, category, icon, published, created_by) values (
-  'Contrato assinado avisa no grupo de cadastro',
-  'Quando a D4Sign fecha todas as assinaturas de um contrato, o grupo de cadastro recebe uma mensagem: "✅ Cliente X assinou o contrato em dd/mm." — uma vez só, mesmo que a D4Sign avise duas vezes. A data aparece no contrato ("Assinado na D4Sign em dd/mm · falta subir o PDF"), então ninguém precisa perguntar ao cliente. Contrato há 3 dias ou mais sem assinatura entra numa linha do resumo da manhã, no máximo uma vez por semana.',
+  'Contrato assinado na D4Sign: aviso no grupo e PDF na ficha',
+  'Quando a D4Sign fecha todas as assinaturas de um contrato, o grupo de cadastro recebe "✅ Cliente X assinou o contrato em dd/mm" (uma vez só) e o PDF assinado entra sozinho na ficha do cliente — o contrato fecha sem ninguém subir arquivo. A aba Contratos mostra o que está na D4Sign, quem já assinou e quem falta. Contrato há 3 dias ou mais sem assinatura entra numa linha do resumo da manhã. As chaves da D4Sign são coladas em Configurações › Jurídico, guardadas cifradas.',
   'feature', '✍️', true, 'Sistema');
 ```
 
+## Conflitos para a junção com `deploy/budget-only`
+
+Arquivos que outras frentes também mexem (o resto é novo):
+
+- `middleware.ts` — uma entrada em `PUBLIC_PATHS` (`/api/integracoes/d4sign`).
+- `app/api/system/cs-manha/route.ts` e `lib/cs/manha.ts` — seção nova `contratos` (chave, ordem, rótulo do PDF).
+- `lib/automacoes/registro.ts` — entrada `contratos-d4sign` e destino `"grupo de cadastro"`;
+  `components/automacoes/LinhaAutomacao.tsx` (rótulo do destino); `tests/automacoes-registro.test.ts` (`EM_TRANSICAO`).
+- `app/sobre/page.tsx` — módulo Contratos.
+- `docker-compose.prod.yml` — variáveis `D4SIGN_*`.
+- `app/settings/page.tsx` (cartão D4Sign), `components/ContractGenerator.tsx`, `app/contratos/page.tsx`,
+  `app/api/contracts/list/route.ts`.
+
 ## Não verificado
 
-- **Nada foi testado contra a D4Sign de verdade** (não há chave aqui, e não se pede chave no chat). O formato
-  segue a documentação oficial; o que ela não mostra com exemplo foi lido com folga: a paginação do cofre
-  (`total_pages`) e o formato das datas dos signatários (`date_signed_atom`, `date_signed`, `date`). O
-  ensaio do passo 6 é o primeiro contato real — conferir ali que os nomes e as datas vieram certos.
-- Não confirmei se o webhook 2.0 manda em form-data ou JSON: a rota aceita os dois (e urlencoded).
-- O grupo de cadastro não tem resumo de manhã próprio; a linha "Contrato sem assinatura" foi para o resumo da
-  manhã que já existe (`cs-manha`, grupo interno), ao lado do "Marco de contrato". Se o Roberto quiser no grupo
-  de cadastro, é trocar o destino dessa seção — mas seria uma mensagem a mais por dia naquele grupo.
-- Quem assina pela Lone também conta: o documento só fecha quando todos assinam. Se a Lone assinar depois do
-  cliente, o aviso sai quando a Lone assinar.
+- **Nada foi testado contra a D4Sign de verdade** (não há chave aqui). O formato segue a documentação; o que ela não
+  mostra com exemplo (paginação do cofre, formato das datas dos signatários, o link do download) foi lido com folga.
+  O "Testar" do painel e o ensaio da consulta são o primeiro contato real.
+- Não confirmei se o webhook 2.0 manda form-data ou JSON: a rota aceita os dois (e urlencoded).
+- A tela não foi aberta no navegador (sem banco local); coberta por tipos e testes de rota.
+- O grupo de cadastro não tem resumo de manhã próprio; a linha "Contrato sem assinatura" foi para o `cs-manha`
+  (grupo interno), ao lado do "Marco de contrato".
+- O documento só fecha quando todos assinam, inclusive quem assina pela Lone.

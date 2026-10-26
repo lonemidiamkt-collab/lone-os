@@ -18,6 +18,9 @@ const db: Record<string, Linha[]> = {};
 /** Faz a próxima operação nesta tabela falhar (leitura ou escrita). */
 const falhaNaTabela: Record<string, Erro | undefined> = {};
 
+/** Os defaults das colunas, como o Postgres põe na linha nova (migration 20261026150000). */
+const PADROES: Record<string, Linha> = { d4sign_documentos: { pdf_tentativas: 0, signatarios: [] }, d4sign_config: { historico: [] } };
+
 class Consulta {
   private filtros: ((r: Linha) => boolean)[] = [];
   private op: "select" | "insert" | "update" | "upsert" = "select";
@@ -28,6 +31,7 @@ class Consulta {
   select() { return this; }
   eq(c: string, v: unknown) { this.filtros.push((r) => r[c] === v); return this; }
   is(c: string, v: unknown) { this.filtros.push((r) => (r[c] ?? null) === v); return this; }
+  gte(c: string, v: unknown) { this.filtros.push((r) => r[c] != null && String(r[c]) >= String(v)); return this; }
   in(c: string, vs: unknown[]) { this.filtros.push((r) => vs.includes(r[c])); return this; }
   or(expr: string) {
     const partes = expr.split(",").map((p) => {
@@ -54,10 +58,13 @@ class Consulta {
     const falha = falhaNaTabela[this.tabela];
     if (falha) return { data: null, error: falha };
     const t = db[this.tabela];
-    if (this.op === "insert") { t.push({ ...this.dados }); return { data: [{ ...this.dados }], error: null }; }
+    if (this.op === "insert") {
+      const linha = this.tabela === "d4sign_chamadas" ? { em: new Date().toISOString(), ...this.dados } : { ...this.dados };
+      t.push(linha); return { data: [{ ...linha }], error: null };
+    }
     if (this.op === "upsert") {
       const ja = t.find((r) => r[this.chave] === this.dados![this.chave]);
-      if (ja) Object.assign(ja, this.dados); else t.push({ ...this.dados });
+      if (ja) Object.assign(ja, this.dados); else t.push({ ...(PADROES[this.tabela] ?? {}), ...this.dados });
       return { data: null, error: null };
     }
     let alvo = t.filter((r) => this.filtros.every((f) => f(r)));
@@ -67,11 +74,26 @@ class Consulta {
   }
 }
 
+/** Storage simulado (bucket legal-docs). */
+const arquivos = new Map<string, Buffer>();
+let falhaNoStorage: string | null = null;
+const storage = {
+  from: () => ({
+    upload: async (caminho: string, dados: Buffer) => {
+      if (falhaNoStorage) return { data: null, error: { message: falhaNoStorage } };
+      if (arquivos.has(caminho)) return { data: null, error: { message: "The resource already exists" } };
+      arquivos.set(caminho, dados); return { data: { path: caminho }, error: null };
+    },
+    remove: async (caminhos: string[]) => { caminhos.forEach((c) => arquivos.delete(c)); return { data: null, error: null }; },
+  }),
+};
+
 const envio = vi.hoisted(() => ({ fn: vi.fn() }));
-vi.mock("@/lib/supabase/server", () => ({ supabaseAdmin: { from: (t: string) => new Consulta(t) } }));
+const usuario = vi.hoisted(() => ({ atual: null as null | { id: string; email: string; isAdmin: boolean } }));
+vi.mock("@/lib/supabase/server", () => ({ supabaseAdmin: { from: (t: string) => new Consulta(t), storage } }));
 vi.mock("@/lib/cs/notify", () => ({ csSendGroupText: envio.fn }));
 vi.mock("@/lib/api/cron-guard", () => ({ requireCron: () => null, isCronRequest: () => true }));
-vi.mock("@/lib/supabase/auth-server", () => ({ getServerUser: async () => null }));
+vi.mock("@/lib/supabase/auth-server", () => ({ getServerUser: async () => usuario.atual }));
 
 // ── A D4Sign de mentira ──────────────────────────────────────────────────────────────────────────
 const TOKEN = "token-de-teste";
@@ -85,7 +107,10 @@ const d4 = {
   /** Como a D4Sign vai falhar na próxima chamada (e nas seguintes, até voltar a null). */
   falhar: null as null | "500" | "rede" | "timeout" | "html",
   chamadas: [] as string[],
+  /** Como o arquivo do PDF vem: pdf de verdade, html no lugar, ou fora do ar. */
+  pdf: "ok" as "ok" | "html" | "fora",
 };
+const PDF_FALSO = Buffer.from("%PDF-1.4\n% contrato assinado de mentira\n%%EOF\n", "latin1");
 const json = (corpo: unknown, status = 200) => new Response(JSON.stringify(corpo), { status, headers: { "content-type": "application/json" } });
 async function fetchFalso(entrada: RequestInfo | URL): Promise<Response> {
   const url = new URL(String(entrada));
@@ -94,12 +119,21 @@ async function fetchFalso(entrada: RequestInfo | URL): Promise<Response> {
   if (d4.falhar === "timeout") { const e = new Error("The operation was aborted due to timeout"); e.name = "TimeoutError"; throw e; }
   if (d4.falhar === "500") return json({ message: "Erro interno" }, 500);
   if (d4.falhar === "html") return new Response("<html>502 Bad Gateway</html>", { status: 200 });
-  if (url.searchParams.get("tokenAPI") !== TOKEN || url.searchParams.get("cryptKey") !== CRYPT) return json({ message: "Token inválido" }, 401);
+  if (url.pathname.startsWith("/api/") && (url.searchParams.get("tokenAPI") !== TOKEN || url.searchParams.get("cryptKey") !== CRYPT)) return json({ message: "Token inválido" }, 401);
   let m = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)\/list$/);
   if (m) {
     const d = d4.docs.get(m[1]);
     return d ? json([d]) : json({ message: "Documento não encontrado" }, 404);
   }
+  if (url.pathname === "/api/v1/webhooks/v2/") return json({ message: "URL cadastrada/atualizada com sucesso!" });
+  m = url.pathname.match(/^\/arquivos\/([^/]+)\.pdf$/);
+  if (m) {
+    if (d4.pdf === "fora") return new Response("indisponível", { status: 503 });
+    if (d4.pdf === "html") return new Response("<html>login</html>", { status: 200 });
+    return new Response(PDF_FALSO, { status: 200, headers: { "content-type": "application/pdf" } });
+  }
+  m = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)\/download$/);
+  if (m) return d4.docs.has(m[1]) ? json({ url: `https://d4sign.exemplo/arquivos/${m[1]}.pdf`, name: "contrato.pdf" }) : json({ message: "não encontrado" }, 404);
   m = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)\/safe$/);
   if (m) {
     const doCofre = [...d4.docs.values()].filter((d) => d.uuidSafe === m![1]).map(({ list: _l, ...resto }) => resto);
@@ -138,6 +172,9 @@ const { POST: consulta } = await import("@/app/api/system/contratos-d4sign/route
 const A = await import("@/lib/contracts/assinatura");
 const D = await import("@/lib/contracts/d4sign");
 const { montarManha } = await import("@/lib/cs/manha");
+const CFG = await import("@/lib/contracts/d4sign-config");
+const { GET: configGet, POST: configPost } = await import("@/app/api/contracts/d4sign/config/route");
+const { GET: docsGet } = await import("@/app/api/contracts/d4sign/route");
 
 const GRUPO_CADASTRO = "120363000000000001@g.us";
 const GRUPO_DO_ZE = "120363999999999999@g.us";
@@ -179,12 +216,19 @@ beforeEach(() => {
   db.d4sign_documentos = [];
   d4.docs.clear();
   d4.falhar = null;
+  d4.pdf = "ok";
   d4.chamadas.length = 0;
+  arquivos.clear();
+  falhaNoStorage = null;
+  usuario.atual = null;
+  CFG.esquecerConfigD4Sign();
   d4.docs.set(DOC_ZE, docD4(DOC_ZE));
   vi.stubGlobal("fetch", fetchFalso);
   Object.assign(process.env, {
     D4SIGN_API_TOKEN: TOKEN, D4SIGN_CRYPT_KEY: CRYPT, D4SIGN_HMAC_SECRET: SEGREDO_MAC, D4SIGN_SAFE_UUID: COFRE,
     D4SIGN_API_URL: "https://d4sign.exemplo/api/v1", CS_CADASTRO_GROUP_JID: GRUPO_CADASTRO,
+    D4SIGN_EMAIL_ROBERTO: "roberto@lone.exemplo",
+    VAULT_KEY: Buffer.alloc(32, 7).toString("base64"),
   });
   envio.fn.mockReset();
   envio.fn.mockResolvedValue({ ok: true, id: "msg1" });
@@ -239,7 +283,7 @@ describe("o nome, a data e a mensagem", () => {
 
 describe("ligar ao cadastro (só par único)", () => {
   const clientes = () => db.clients as unknown as Parameters<typeof A.ligarAoCadastro>[1];
-  const sig = (email: string | null) => [{ email, nome: null, assinou: true, assinadoEm: null, incluidoEm: null }];
+  const sig = (email: string | null) => [{ email, nome: null, assinou: true, assinadoEm: null, incluidoEm: null, chave: null }];
 
   it("pelo e-mail de quem assinou (sem diferenciar maiúscula)", () => {
     expect(A.ligarAoCadastro({ nome: "qualquer.pdf", signatarios: sig("dono@padariadoze.exemplo") }, clientes()))
@@ -265,22 +309,32 @@ describe("ligar ao cadastro (só par único)", () => {
 // ── Webhook ──────────────────────────────────────────────────────────────────────────────────────
 
 describe("webhook: assinou → uma mensagem no grupo de cadastro", () => {
-  it("relê a D4Sign, manda '✅ *Padaria do Zé* assinou o contrato em 26/10.' e grava a data no contrato e no cliente", async () => {
+  it("relê a D4Sign, manda '✅ *Padaria do Zé* assinou o contrato em 26/10.', grava a data e fecha o contrato com o PDF", async () => {
     const res = await webhook(evento(DOC_ZE));
     const corpo = await res.json();
     expect(res.status).toBe(200);
     expect(corpo).toMatchObject({ ok: true, acao: "avisado", nome: "Padaria do Zé", clientId: "cli-ze", contractId: "ct-ze-v2", vinculo: "email" });
-    expect(d4.chamadas).toEqual([`/api/v1/documents/${DOC_ZE}/list`]);
+    expect(d4.chamadas).toEqual([`/api/v1/documents/${DOC_ZE}/list`, `/api/v1/documents/${DOC_ZE}/download`, `/arquivos/${DOC_ZE}.pdf`]);
+    expect(db.d4sign_chamadas.map((c) => c.origem)).toEqual(["webhook", "pdf"]);
     expect(mensagens()).toEqual([{ grupo: GRUPO_CADASTRO, texto: "✅ *Padaria do Zé* assinou o contrato em 26/10." }]);
     expect(envio.fn.mock.calls[0][3]).toMatchObject({ destino: "interno", idem: `contrato-assinado:${DOC_ZE}`, clientId: "cli-ze" });
 
     const ct = db.contracts.find((c) => c.id === "ct-ze-v2")!;
     expect(ct).toMatchObject({ d4sign_document_uuid: DOC_ZE, d4sign_assinado_em: "2026-10-26T17:02:27.000Z" });
-    expect(ct.signed_at).toBeNull(); // contrato fecha com o PDF na ficha, como sempre
-    expect(ct.status).toBe("draft");
+    // A mesma regra do Upload assinado: PDF no lugar de sempre + signed_at + ativo.
+    expect(ct).toMatchObject({ status: "active", signed_at: "2026-10-26T17:02:27.000Z", signed_uploaded_by: "D4Sign (automático)", signature_method: "d4sign_auto" });
+    expect(String(ct.signed_pdf_path)).toMatch(/^legal:\/\/contracts-signed\/cli-ze\/ct-ze-v2-v\d+-signed-d4sign-\d+\.pdf$/);
+    expect([...arquivos.values()][0].equals(PDF_FALSO)).toBe(true);
+    expect(corpo.pdf).toMatchObject({ ok: true, anexado: true, contratoFechado: true });
+    expect(db.contract_audit_log).toEqual([expect.objectContaining({ contract_id: "ct-ze-v2", action: "signed_d4sign" })]);
+    expect(db.timeline_entries[0]).toMatchObject({ client_id: "cli-ze", actor: "D4Sign (automático)" });
     expect(db.contracts.find((c) => c.id === "ct-ze-v1")!.d4sign_document_uuid).toBeNull();
     expect(db.clients.find((c) => c.id === "cli-ze")!.contrato_assinado_em).toBe("2026-10-26T17:02:27.000Z");
-    expect(doc(DOC_ZE)).toMatchObject({ status: "assinado", origem: "webhook", aviso_enviado_em: AGORA.toISOString() });
+    expect(doc(DOC_ZE)).toMatchObject({ status: "assinado", origem: "webhook", aviso_enviado_em: AGORA.toISOString(), pdf_tentativas: 1 });
+    expect(doc(DOC_ZE)!.signatarios).toEqual([
+      expect.objectContaining({ email: "roberto@lone.exemplo", papel: "lone", assinou: true, chave: "s1" }),
+      expect.objectContaining({ email: "dono@padariadoze.exemplo", papel: "cliente", assinou: true, chave: "s2" }),
+    ]);
   });
 
   it("aceita o corpo em form-data, urlencoded e JSON", async () => {
@@ -300,11 +354,13 @@ describe("webhook: assinou → uma mensagem no grupo de cadastro", () => {
     expect(envio.fn).toHaveBeenCalledTimes(1);
   });
 
-  it("dois eventos AO MESMO TEMPO (retry da D4Sign cruzando): uma mensagem só", async () => {
+  it("dois eventos AO MESMO TEMPO (retry da D4Sign cruzando): uma mensagem só e um PDF só", async () => {
     const [a, b] = await Promise.all([webhook(evento(DOC_ZE)), webhook(evento(DOC_ZE))]);
     const acoes = [(await a.json()).acao, (await b.json()).acao].sort();
     expect(acoes).toEqual(["avisado", "ja_avisado"]);
     expect(envio.fn).toHaveBeenCalledTimes(1);
+    expect(arquivos.size).toBe(1);
+    expect(d4.chamadas.filter((c) => c.endsWith("/download"))).toHaveLength(1);
   });
 
   it("um signatário assinou mas falta o cliente: não avisa, registra como pendente", async () => {
@@ -468,18 +524,19 @@ describe("consulta do cofre", () => {
     d4.docs.set(DOC_SEM_CADASTRO, docD4(DOC_SEM_CADASTRO, { nome: "Loja Nova - Contrato - Social Media.docx", emailCliente: "dono@lojanova.exemplo", assinadoEm: "2026-10-25 16:40:00" }));
   });
 
-  it("primeira consulta: o histórico do cofre entra em silêncio; só o assinado ontem vira aviso", async () => {
+  it("primeira consulta: o já assinado entra em silêncio e sem chamada; só o pendente novo é relido", async () => {
     const corpo = await (await rodarConsulta()).json();
-    expect(corpo).toMatchObject({ ok: true, noCofre: 3, lidos: 3, sobraram: 0 });
-    expect(mensagens().map((m) => m.texto)).toEqual([
-      "✅ *Loja Nova* assinou o contrato em 25/10.\n_Não achei o cadastro no Lone OS: a data não foi gravada na ficha._",
-    ]);
+    expect(corpo).toMatchObject({ ok: true, noCofre: 3, lidos: 1, sobraram: 0 });
+    expect(d4.chamadas).toEqual([`/api/v1/documents/${COFRE}/safe`, `/api/v1/documents/${DOC_ZE}/list`]);
+    expect(envio.fn).not.toHaveBeenCalled();
     expect(doc(DOC_ANTIGO)).toMatchObject({ status: "assinado", client_id: "cli-bruno" });
+    expect(doc(DOC_SEM_CADASTRO)).toMatchObject({ status: "assinado" });
     expect(doc(DOC_ANTIGO)!.aviso_reservado_em ?? null).toBeNull();
     expect(doc(DOC_ZE)).toMatchObject({ status: "pendente", client_id: "cli-ze" });
+    expect(arquivos.size).toBe(0);
   });
 
-  it("segunda consulta: só relê o que mudou; o pendente que fechou vira aviso, nada se repete", async () => {
+  it("segunda consulta: só relê o que mudou; o pendente que fechou vira aviso e PDF, nada se repete", async () => {
     await rodarConsulta();
     envio.fn.mockClear();
     d4.chamadas.length = 0;
@@ -493,6 +550,7 @@ describe("consulta do cofre", () => {
     expect(corpo.lidos).toBe(1);
     expect(mensagens().map((m) => m.texto)).toEqual(["✅ *Padaria do Zé* assinou o contrato em 26/10."]);
     expect(doc(DOC_ZE)).toMatchObject({ status: "assinado", origem: "consulta" });
+    expect(db.contracts.find((c) => c.id === "ct-ze-v2")).toMatchObject({ status: "active" });
   });
 
   it("webhook e consulta no mesmo documento: uma mensagem só", async () => {
@@ -501,6 +559,7 @@ describe("consulta do cofre", () => {
     await rodarConsulta();
     await rodarConsulta();
     expect(mensagens().filter((m) => m.texto.includes("Padaria do Zé"))).toHaveLength(1);
+    expect(arquivos.size).toBe(1);
   });
 
   it("a listagem do cofre falha: ok:false com o motivo, nada gravado, nada enviado", async () => {
@@ -512,7 +571,7 @@ describe("consulta do cofre", () => {
     expect(envio.fn).not.toHaveBeenCalled();
   });
 
-  it("a leitura de UM documento falha: os outros seguem, o que falhou é tentado na próxima", async () => {
+  it("a leitura de UM documento falha: não vira resposta, e é tentado na próxima", async () => {
     await rodarConsulta();
     envio.fn.mockClear();
     d4.docs.set(DOC_ZE, docD4(DOC_ZE, { status: "4" }));
@@ -535,25 +594,29 @@ describe("consulta do cofre", () => {
     expect(mensagens().map((m) => m.texto)).toEqual(["✅ *Padaria do Zé* assinou o contrato em 26/10."]);
   });
 
-  it("ensaio: devolve as mensagens que sairiam, não grava nem manda", async () => {
+  it("ensaio: devolve a mensagem que sairia e o PDF que baixaria, sem gravar nem mandar", async () => {
+    await rodarConsulta();
+    d4.docs.set(DOC_ZE, docD4(DOC_ZE, { status: "4" }));
     const corpo = await (await rodarConsulta("?dry=1")).json();
     expect(corpo.dry).toBe(true);
-    expect(corpo.mensagens).toHaveLength(1);
-    expect(corpo.mensagens[0]).toMatch(/Loja Nova/);
-    expect(db.d4sign_documentos).toEqual([]);
+    expect(corpo.mensagens).toEqual(["✅ *Padaria do Zé* assinou o contrato em 26/10."]);
+    expect(corpo.resultados.find((r: { uuid: string }) => r.uuid === DOC_ZE).pdf).toMatchObject({ anexado: false, motivo: "anexaria o PDF assinado da D4Sign" });
+    expect(doc(DOC_ZE)!.status).toBe("pendente");
     expect(envio.fn).not.toHaveBeenCalled();
+    expect(arquivos.size).toBe(0);
   });
 
-  it("teto de leituras por vez: o resto fica para a próxima, os pendentes primeiro", async () => {
+  it("teto por vez: o resto fica para a próxima rodada", async () => {
+    d4.docs.set(DOC_BRUNO, docD4(DOC_BRUNO, { status: "3", nome: "Bruno Tintas - Contrato - Tráfego Pago.docx", emailCliente: "contato@bruno.exemplo" }));
     const r = await A.consultarCofre({ limite: 1 });
-    expect(r).toMatchObject({ lidos: 1, sobraram: 2 });
-    expect(r.resultados[0].uuid).toBe(DOC_ZE);
+    expect(r).toMatchObject({ lidos: 1, sobraram: 1 });
   });
 
   it("sem a chave ou sem o cofre: 'desligado', não é falha", async () => {
     delete process.env.D4SIGN_SAFE_UUID;
-    expect(await (await rodarConsulta()).json()).toMatchObject({ ok: true, desligado: expect.stringMatching(/D4SIGN_SAFE_UUID/) });
+    expect(await (await rodarConsulta()).json()).toMatchObject({ ok: true, desligado: expect.stringMatching(/cofre/) });
     delete process.env.D4SIGN_API_TOKEN;
+    CFG.esquecerConfigD4Sign();
     expect(await (await rodarConsulta()).json()).toMatchObject({ ok: true, desligado: expect.stringMatching(/D4Sign não configurada/) });
     expect(d4.chamadas).toEqual([]);
   });
@@ -562,6 +625,175 @@ describe("consulta do cofre", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://painel.lonemidia.com";
     const corpo = await (await rodarConsulta("?webhook=cadastrar&dry=1")).json();
     expect(corpo.cadastraria).toEqual({ type: "cofre", uuid: COFRE, url: "https://painel.lonemidia.com/api/integracoes/d4sign" });
+    expect(d4.chamadas).toEqual([]);
+  });
+});
+
+// ── PDF assinado na ficha ────────────────────────────────────────────────────────────────────────
+
+describe("PDF assinado na ficha", () => {
+  it("o contrato já tinha PDF subido à mão: não troca; o da D4Sign fica guardado no registro", async () => {
+    Object.assign(db.contracts.find((c) => c.id === "ct-ze-v2")!, { d4sign_document_uuid: DOC_ZE, signed_pdf_path: "legal://contracts-signed/cli-ze/manual.pdf" });
+    const corpo = await (await webhook(evento(DOC_ZE))).json();
+    expect(corpo.pdf).toMatchObject({ ok: true, anexado: true, contratoFechado: false });
+    expect(corpo.pdf.motivo).toMatch(/já tinha PDF assinado/);
+    expect(db.contracts.find((c) => c.id === "ct-ze-v2")!.signed_pdf_path).toBe("legal://contracts-signed/cli-ze/manual.pdf");
+    expect(doc(DOC_ZE)!.pdf_path).toMatch(/^legal:\/\/contracts-signed\/cli-ze\//);
+  });
+
+  it("cliente sem contrato registrado no Lone OS: o PDF fica no cadastro e aparece na aba Contratos", async () => {
+    db.contracts = [];
+    const corpo = await (await webhook(evento(DOC_ZE))).json();
+    expect(corpo.pdf).toMatchObject({ ok: true, anexado: true, contratoFechado: false });
+    expect(doc(DOC_ZE)!.pdf_path).toMatch(new RegExp(`^legal://contracts-signed/cli-ze/d4sign-${DOC_ZE}-signed-\\d+\\.pdf$`));
+    expect(doc(DOC_ZE)!.pdf_sha256).toMatch(/^[0-9a-f]{64}$/);
+
+    usuario.atual = { id: "u1", email: "roberto@lone.exemplo", isAdmin: true };
+    const tela = await (await docsGet(new NextRequest("https://painel.lonemidia.com/api/contracts/d4sign?clientId=cli-ze"))).json();
+    expect(tela.documentos).toEqual([expect.objectContaining({ documento: DOC_ZE, situacao: "assinado", pdf: doc(DOC_ZE)!.pdf_path })]);
+    expect(JSON.stringify(tela)).not.toContain("\"chave\"");
+  });
+
+  it("o PDF não veio (não é PDF): o aviso sai, o erro fica registrado e a consulta baixa depois", async () => {
+    d4.pdf = "html";
+    const corpo = await (await webhook(evento(DOC_ZE))).json();
+    expect(corpo.acao).toBe("avisado");
+    expect(corpo.pdf).toMatchObject({ ok: false, anexado: false });
+    expect(doc(DOC_ZE)).toMatchObject({ pdf_tentativas: 1, pdf_erro: expect.stringMatching(/não é um PDF/) });
+    expect(db.contracts.find((c) => c.id === "ct-ze-v2")!.signed_pdf_path ?? null).toBeNull();
+
+    d4.pdf = "ok";
+    const consulta1 = await (await rodarConsulta()).json();
+    expect(consulta1.pdfs).toEqual([expect.objectContaining({ uuid: DOC_ZE, anexado: true, contratoFechado: true })]);
+    expect(db.contracts.find((c) => c.id === "ct-ze-v2")!.status).toBe("active");
+    expect(envio.fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("o storage recusa: o contrato não fecha e o erro fica registrado", async () => {
+    falhaNoStorage = "bucket indisponível";
+    const corpo = await (await webhook(evento(DOC_ZE))).json();
+    expect(corpo.pdf).toMatchObject({ ok: false, anexado: false });
+    expect(doc(DOC_ZE)!.pdf_erro).toMatch(/bucket indisponível/);
+    expect(db.contracts.find((c) => c.id === "ct-ze-v2")!.status).toBe("draft");
+  });
+
+  it("assinatura de mais de 30 dias: não baixa (é histórico)", async () => {
+    d4.docs.set(DOC_ANTIGO, docD4(DOC_ANTIGO, { enviadoEm: "2026-09-01 10:00:00", assinadoEm: "2026-09-02 11:00:00" }));
+    await webhook(evento(DOC_ANTIGO));
+    expect(d4.chamadas.some((c) => c.endsWith("/download"))).toBe(false);
+  });
+});
+
+// ── Cota da D4Sign ───────────────────────────────────────────────────────────────────────────────
+
+describe("cota: 10 chamadas por hora", () => {
+  const usadas = (n: number) => { db.d4sign_chamadas = Array.from({ length: n }, (_, i) => ({ id: i, em: AGORA.toISOString(), caminho: "/x", origem: "webhook" })); };
+
+  it("a régua: rotina para 4 antes do fim; o resto usa até o limite", async () => {
+    const C = await import("@/lib/contracts/d4sign-cota");
+    expect(C.cabemAinda(5, 10, "consulta")).toBe(1);
+    expect(C.cabemAinda(6, 10, "consulta")).toBe(0);
+    expect(C.cabemAinda(9, 10, "webhook")).toBe(1);
+    expect(C.limiteDaHora({ D4SIGN_LIMITE_HORA: "60" })).toBe(60);
+    expect(C.limiteDaHora({})).toBe(10);
+  });
+
+  it("10 chamadas na última hora: o webhook nem chama a D4Sign — 503, e a D4Sign repete depois", async () => {
+    usadas(10);
+    const res = await webhook(evento(DOC_ZE));
+    expect(res.status).toBe(503);
+    expect((await res.json()).motivo).toMatch(/limite de chamadas/);
+    expect(d4.chamadas).toEqual([]);
+    expect(doc(DOC_ZE)).toBeUndefined();
+  });
+
+  it("6 usadas: a consulta fica para depois (não é erro) e o webhook ainda passa", async () => {
+    usadas(6);
+    const corpo = await (await rodarConsulta()).json();
+    expect(corpo).toMatchObject({ ok: true, adiado: expect.stringMatching(/deixa as últimas/) });
+    expect(d4.chamadas).toEqual([]);
+    expect((await (await webhook(evento(DOC_ZE))).json()).acao).toBe("avisado");
+  });
+});
+
+// ── Chaves no painel ─────────────────────────────────────────────────────────────────────────────
+
+describe("chaves da D4Sign no painel", () => {
+  const admin = () => { usuario.atual = { id: "u1", email: "roberto@lone.exemplo", isAdmin: true }; };
+  const post = (corpo: unknown) => configPost(new NextRequest("https://painel.lonemidia.com/api/contracts/d4sign/config", { method: "POST", body: JSON.stringify(corpo) }));
+  const get = () => configGet(new NextRequest("https://painel.lonemidia.com/api/contracts/d4sign/config"));
+
+  it("o painel vale antes do .env; o campo vazio no painel cai no .env", () => {
+    const env = { D4SIGN_API_TOKEN: "do-env", D4SIGN_SAFE_UUID: COFRE };
+    expect(CFG.mesclarConfig({ token: "do-painel" }, env)).toMatchObject({ token: "do-painel", cofre: COFRE });
+    expect(CFG.mesclarConfig(null, env)).toMatchObject({ token: "do-env" });
+    expect(CFG.mesclarConfig({ token: "  " }, {})).toBeNull();
+  });
+
+  it("só admin vê ou troca", async () => {
+    expect((await get()).status).toBe(403);
+    expect((await post({ acao: "salvar", novos: { token: "x".repeat(20) } })).status).toBe(403);
+  });
+
+  it("salva cifrado com a VAULT_KEY e a tela nunca recebe a chave de volta", async () => {
+    admin();
+    const res = await post({ acao: "salvar", novos: { token: "TOKEN-DO-PAINEL-123456" } });
+    expect(res.status).toBe(200);
+    const linha = db.d4sign_config[0];
+    expect(String(linha.token)).toMatch(/^v1:/);
+    expect(JSON.stringify(linha)).not.toContain("TOKEN-DO-PAINEL-123456");
+    const tela = await (await get()).json();
+    expect(JSON.stringify(tela)).not.toContain("TOKEN-DO-PAINEL-123456");
+    expect(tela.campos.token).toEqual({ configurado: true, origem: "painel" });
+    expect(tela.campos.cryptKey).toEqual({ configurado: true, origem: "servidor" });
+    expect(tela.historico[0]).toMatchObject({ quem: "roberto@lone.exemplo", acao: "trocou", campos: ["Token da API (tokenAPI)"] });
+  });
+
+  it("a chave do painel é a que vale nas chamadas (o .env sem token não faz falta)", async () => {
+    admin();
+    delete process.env.D4SIGN_API_TOKEN;
+    await post({ acao: "salvar", novos: { token: TOKEN } });
+    expect((await (await webhook(evento(DOC_ZE))).json()).acao).toBe("avisado");
+  });
+
+  it("valida antes de gravar: cofre que não é UUID, chave com espaço", async () => {
+    admin();
+    const r = await post({ acao: "salvar", novos: { cofre: "cofre-dos-contratos", token: "abc def ghi jkl" } });
+    expect(r.status).toBe(400);
+    const corpo = await r.json();
+    expect(corpo.error).toMatch(/UUID do cofre/);
+    expect(corpo.error).toMatch(/espaço/);
+    expect(db.d4sign_config ?? []).toEqual([]);
+  });
+
+  it("Testar lê o cofre e guarda o resultado; apagar do painel volta ao .env", async () => {
+    admin();
+    await post({ acao: "salvar", novos: { cofre: COFRE } });
+    const t = await (await post({ acao: "testar" })).json();
+    expect(t).toMatchObject({ ok: true, resultado: expect.stringMatching(/Funcionou/) });
+    expect(db.d4sign_config[0]).toMatchObject({ teste_ok: true });
+    await post({ acao: "salvar", apagar: ["cofre"] });
+    const tela = await (await get()).json();
+    expect(tela.campos.cofre).toEqual({ configurado: true, origem: "servidor" });
+    expect(tela.historico.map((h: { acao: string }) => h.acao)).toEqual(["apagou", "testou", "trocou"]);
+  });
+
+  it("'Ligar o aviso da D4Sign' cadastra o webhook do cofre para este painel; sem o segredo, nem tenta", async () => {
+    admin();
+    process.env.NEXT_PUBLIC_APP_URL = "https://painel.lonemidia.com";
+    const r = await (await post({ acao: "webhook" })).json();
+    expect(r).toMatchObject({ ok: true, resultado: expect.stringMatching(/painel\.lonemidia\.com\/api\/integracoes\/d4sign/) });
+    expect(d4.chamadas).toEqual(["/api/v1/webhooks/v2/"]);
+    delete process.env.D4SIGN_HMAC_SECRET;
+    d4.chamadas.length = 0;
+    expect(await (await post({ acao: "webhook" })).json()).toMatchObject({ ok: false, resultado: expect.stringMatching(/segredo do webhook/) });
+    expect(d4.chamadas).toEqual([]);
+  });
+
+  it("webhook sem o segredo (Secret Key MAC) fica fechado: cada evento gastaria uma chamada da hora", async () => {
+    delete process.env.D4SIGN_HMAC_SECRET;
+    const res = await webhook(evento(DOC_ZE));
+    expect(res.status).toBe(503);
     expect(d4.chamadas).toEqual([]);
   });
 });

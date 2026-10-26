@@ -80,13 +80,18 @@ services:
       # Leitura assinada da situação dos clientes pelo financeiro privado (out/2026; só situação, nunca valor).
       # O mesmo valor fica no financeiro como LF_LONE_OS_READ_SECRET. Vazio = porta fechada (503).
       LONEOS_FINANCE_READ_SECRET: ${LONEOS_FINANCE_READ_SECRET:-}
-      # D4Sign (26/10/2026): "Cliente X assinou o contrato" no grupo de cadastro (lib/contracts/d4sign.ts).
-      # As chaves são do Roberto e ficam só no .env da VPS. Vazio = desligado (webhook 503, consulta pula).
+      # D4Sign (26/10/2026): aviso de contrato assinado, PDF assinado na ficha (lib/contracts/d4sign.ts).
+      # As chaves entram pelo painel (Configurações › Jurídico, cifradas); estas são a reserva. Vazio = vale o painel.
       D4SIGN_API_TOKEN: ${D4SIGN_API_TOKEN:-}
       D4SIGN_CRYPT_KEY: ${D4SIGN_CRYPT_KEY:-}
       D4SIGN_HMAC_SECRET: ${D4SIGN_HMAC_SECRET:-}
       D4SIGN_SAFE_UUID: ${D4SIGN_SAFE_UUID:-}
       D4SIGN_API_URL: ${D4SIGN_API_URL:-}
+      # Limite de chamadas por hora da conta (padrão 10) e quem assina pela Lone (e-mail de cada sócio na D4Sign).
+      D4SIGN_LIMITE_HORA: ${D4SIGN_LIMITE_HORA:-}
+      D4SIGN_EMAIL_ROBERTO: ${D4SIGN_EMAIL_ROBERTO:-}
+      D4SIGN_EMAIL_LUCAS: ${D4SIGN_EMAIL_LUCAS:-}
+      D4SIGN_TESTEMUNHAS: ${D4SIGN_TESTEMUNHAS:-}
       # E-mails PESSOAIS da equipe que o filtro de lixo trata como "teste da equipe" (não moram no código).
       CRM_EMAILS_EQUIPE: ${CRM_EMAILS_EQUIPE:-}
       # Grupos SANDBOX de teste: ali o agente trata msg da equipe como pedido e classifica mesmo

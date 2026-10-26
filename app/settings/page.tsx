@@ -13,6 +13,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { supabase } from "@/lib/supabase/client";
 import { useEffect } from "react";
 import DuasEtapas from "@/components/settings/DuasEtapas";
+import D4SignChaves from "@/components/settings/D4SignChaves";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "CEO / Administrador",
@@ -339,6 +340,9 @@ export default function SettingsPage() {
                   ))}
                 </div>
               </div>
+
+              {/* D4Sign: as chaves coladas no painel, cifradas (26/10/2026) */}
+              <D4SignChaves />
 
               {/* Templates & Clausulas */}
               <div className="card">

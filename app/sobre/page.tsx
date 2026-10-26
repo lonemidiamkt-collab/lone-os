@@ -761,7 +761,7 @@ const MODULES: Module[] = [
     id: "contratos",
     icon: FileText,
     title: "Contratos",
-    shortDesc: "Geração local do DOCX oficial + upload manual no D4Sign + aviso no grupo de cadastro quando o cliente assina + renovação automática",
+    shortDesc: "Geração local do DOCX oficial + D4Sign: aviso no grupo de cadastro quando o cliente assina e PDF assinado entrando sozinho na ficha + renovação automática",
     whoUses: "Admin, Manager (visibilidade restrita)",
     context: "Fluxo de contrato do zero ao envio pra assinatura. Gera DOCX preenchido com os dados do cliente, admin baixa e sobe manualmente no D4Sign (validade jurídica). O sistema monitora vencimento: 30 dias antes já cria rascunho de renovação + notifica o admin. 7 dias antes, alerta urgente.",
     howItWorks: [
@@ -775,7 +775,8 @@ const MODULES: Module[] = [
       "Admin abre o rascunho, revisa, baixa o DOCX V2 e repete o fluxo de assinatura.",
       "CONTRATO E ADENDO SÓ FECHAM QUANDO GRAVARAM (21/10/2026): gerar contrato e registrar adendo passam pelo servidor. A janela só fecha com a gravação confirmada; erro aparece dentro dela, junto do botão, e o texto do adendo não some. A versão vem do banco (maior + 1) — se a leitura falhar, o sistema recusa em vez de voltar para V1. Lista de contratos que não carregou mostra o erro com 'Tentar de novo', não 'nenhum contrato'.",
       "TROCAR PDF ASSINADO (24/10/2026): o contrato ganhou 'Trocar PDF assinado', com confirmação; o PDF anterior fica guardado e abre em 'PDFs anteriores'.",
-      "CONTRATO ASSINADO NO GRUPO DE CADASTRO (26/10/2026): quando a D4Sign fecha todas as assinaturas, o grupo de cadastro recebe UMA mensagem: '✅ *Cliente X* assinou o contrato em dd/mm.' A D4Sign avisa o Lone OS na hora (webhook do cofre dos contratos) e uma consulta de hora em hora pega o que o aviso não trouxe; os dois caminhos releem o documento na D4Sign antes de afirmar, e a mesma assinatura nunca vira duas mensagens. A data aparece no contrato ('Assinado na D4Sign em dd/mm · falta subir o PDF') — o contrato continua fechando com o PDF assinado na ficha. O sistema liga o documento ao cliente pelo e-mail de quem assinou ou pelo nome do arquivo; se não achar o cadastro, a mensagem sai com o nome do arquivo e avisa que a data não foi para a ficha. Contrato há 3 dias ou mais sem assinatura entra numa linha do resumo da manhã, no máximo uma vez por semana. Liga quando a chave da D4Sign estiver no servidor.",
+      "CONTRATO ASSINADO NO GRUPO DE CADASTRO (26/10/2026): quando a D4Sign fecha todas as assinaturas, o grupo de cadastro recebe UMA mensagem: '✅ *Cliente X* assinou o contrato em dd/mm.' A D4Sign avisa o Lone OS na hora (webhook do cofre dos contratos) e uma consulta de hora em hora pega o que o aviso não trouxe; os dois caminhos releem o documento na D4Sign antes de afirmar, e a mesma assinatura nunca vira duas mensagens. Logo depois o PDF assinado é baixado da D4Sign e entra sozinho na ficha: o contrato fecha pela mesma regra do 'Upload assinado' (fica Ativo, com 'Ver Assinado') — só se ninguém tiver subido um PDF antes; se tiver, o da D4Sign fica guardado e o subido não é trocado. Cliente que não tem contrato registrado no Lone OS também recebe o PDF: ele aparece no bloco 'Na D4Sign' da aba Contratos, com quem já assinou e quem falta. O sistema liga o documento ao cliente pelo e-mail de quem assinou ou pelo nome do arquivo; se não achar o cadastro, a mensagem sai com o nome do arquivo e avisa que a data não foi para a ficha. Contrato há 3 dias ou mais sem assinatura entra numa linha do resumo da manhã, no máximo uma vez por semana.",
+      "CHAVES DA D4SIGN NO PAINEL (26/10/2026): Configurações › Jurídico › D4Sign (só admin). Cola o token, a chave de criptografia, o segredo do webhook e o identificador do cofre; elas ficam guardadas cifradas e nunca voltam para a tela (para trocar, cola de novo). 'Testar' abre o cofre na D4Sign e diz se funcionou; 'Ligar o aviso da D4Sign' cadastra o aviso de cada assinatura. Fica registrado quem trocou, testou ou ligou. A D4Sign responde a 10 chamadas por hora: o sistema guarda as últimas para o aviso e o PDF.",
     ],
     features: [
       "Template oficial Lone Mídia (3 tipos: Tráfego, Social, Lone Growth) com merge de dados do cliente",
@@ -787,6 +788,9 @@ const MODULES: Module[] = [
       "Alerta URGENTE quando faltam ≤7 dias",
       "Upload manual no D4Sign preserva validade jurídica da assinatura digital",
       "Aviso '✅ Cliente X assinou o contrato em dd/mm' no grupo de cadastro, uma vez por contrato, com a data gravada no contrato e na ficha",
+      "PDF assinado baixado da D4Sign e anexado sozinho: o contrato fecha sem ninguém subir arquivo",
+      "Bloco 'Na D4Sign' na aba Contratos do cliente: situação, quem já assinou e quem falta, e o PDF assinado",
+      "Chaves da D4Sign coladas no painel, cifradas, com Testar e histórico de quem mexeu",
       "Linha 'Contrato sem assinatura na D4Sign' no resumo da manhã para quem espera há 3 dias ou mais (no máximo uma vez por semana)",
       "Auditoria automática antes de gerar: recusa o contrato quando o segmento do cadastro contradiz a razão social, quando o valor ou o vencimento da cláusula diferem do quadro-resumo, ou quando o escopo tem serviço que não foi vendido",
       "A legenda do PDF sempre diz o que a auditoria achou — inclusive quando não achou nada",
@@ -797,7 +801,7 @@ const MODULES: Module[] = [
       "O campo Nicho é o RAMO do cliente (loja de festas, farmácia), não o pacote contratado. Ele vai pro quadro-resumo do contrato, e a auditoria recusa se ele não bater com a razão social.",
       "Use 'reajuste' quando o cliente quer começar com valor menor e depois normalizar.",
       "O rascunho de renovação aparece sozinho — abre, revisa valor/duração, baixa o DOCX e sobe no D4Sign.",
-      "Antes de perguntar ao cliente se ele assinou, olhe o grupo de cadastro ou a aba Contratos: 'Assinado na D4Sign em dd/mm' quer dizer que ele já assinou — falta só subir o PDF.",
+      "Antes de perguntar ao cliente se ele assinou, olhe o grupo de cadastro ou o bloco 'Na D4Sign' da aba Contratos: lá aparece quem já assinou e quem falta.",
       "Suba o .docx na D4Sign com o nome que o Lone OS deu ao arquivo e no cofre dos contratos: é assim que o aviso acha o cliente certo.",
     ],
     faq: [
@@ -815,7 +819,11 @@ const MODULES: Module[] = [
       },
       {
         q: "Como o sistema sabe que o cliente assinou?",
-        a: "A D4Sign avisa o Lone OS quando o documento fecha todas as assinaturas, e uma consulta de hora em hora confere o cofre dos contratos. Nos dois casos o Lone OS relê o documento na D4Sign antes de mandar a mensagem — um aviso falso ou repetido não vira mensagem. Se a D4Sign estiver fora do ar, nada é afirmado; o aviso sai quando ela voltar.",
+        a: "A D4Sign avisa o Lone OS quando o documento fecha todas as assinaturas, e uma consulta a cada 3 horas confere o cofre dos contratos. Nos dois casos o Lone OS relê o documento na D4Sign antes de mandar a mensagem — um aviso falso ou repetido não vira mensagem. Se a D4Sign estiver fora do ar, nada é afirmado; o aviso sai quando ela voltar.",
+      },
+      {
+        q: "O PDF assinado não apareceu. E agora?",
+        a: "O sistema tenta baixar de novo sozinho (até 5 vezes, nos 30 dias depois da assinatura) e o bloco 'Na D4Sign' mostra o motivo enquanto isso. Se precisar antes, o 'Upload assinado' continua funcionando como sempre.",
       },
     ],
   },
