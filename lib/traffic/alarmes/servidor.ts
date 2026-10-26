@@ -73,7 +73,7 @@ export async function rodarAlarmes(opts: { dry: boolean; agora?: Date }): Promis
   const primeiroDoMes = `${hoje.slice(0, 8)}01`;
   const inicioJanela = diasAntes(hoje, DIAS_BASE)[0];
   const desde = primeiroDoMes < inicioJanela ? primeiroDoMes : inicioJanela;
-  const leitura = await lerCampanhasPorDia(token, contas.map((c) => c.metaAccountId), desde, hoje);
+  const { porConta: leitura, falhas } = await lerCampanhasPorDia(token, contas.map((c) => c.metaAccountId), desde, hoje);
 
   const ids = contas.map((c) => c.metaAccountId);
   const [{ data: abertos, error: eAb }, { data: doMes, error: eMes }] = await Promise.all([
@@ -90,7 +90,9 @@ export async function rodarAlarmes(opts: { dry: boolean; agora?: Date }): Promis
     verbaDoMes: (doMes ?? []) as EventoGravado[],
   });
   r.lidas = lidas;
-  r.falhasLeitura = falhasLeitura;
+  // Quem não deu para ler nem na releitura, com o motivo da Meta (antes vinha só o nome).
+  const motivoPorNome = new Map(contas.map((c) => [c.nome, falhas.get(c.metaAccountId)]));
+  r.falhasLeitura = falhasLeitura.map((nome) => (motivoPorNome.get(nome) ? `${nome} (${motivoPorNome.get(nome)})` : nome));
 
   r.semConversa = semConversa.map((s) => ({ cliente: s.conta.nome, decisao: s.decisao, gastoSemConversa: s.leitura.gastoSemConversa, limite: s.leitura.limite, desde: s.leitura.desde }));
   r.fechados = fechar.map((f) => f.conta.nome);
