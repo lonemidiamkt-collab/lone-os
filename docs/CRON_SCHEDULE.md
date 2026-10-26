@@ -5,7 +5,7 @@
 > Não edite à mão: rode `npx tsx scripts/gerar-agenda-cron.ts`. O teste `tests/agenda-cron-doc.test.ts`
 > quebra quando este arquivo fica para trás do retrato.
 
-**Linhas no crontab:** 86 · **Rotinas:** 84 · **Rotinas que usam IA:** 16
+**Linhas no crontab:** 88 · **Rotinas:** 86 · **Rotinas que usam IA:** 16
 
 - O servidor roda em UTC puro. Horário de Brasília = UTC − 3h (sem horário de verão).
 - Ligar, desligar, pausar, rodar agora e ver o histórico: Central de Automações (`/automations`).
@@ -121,6 +121,8 @@
 | dia 1º de cada mês, 7h | `0 10 1 * *` | Fechamento do mês das metas | `POST /api/system/metas-fechamento` | — |
 | todo dia, de hora em hora das 7h10 às 20h10 | `10 10-23 * * *` | Feed de prioridades | `POST /api/system/priority-recalcular` | — |
 | domingo, 8h | `0 11 * * 0` | Releitura do ciclo | `POST /api/system/cs-releitura` | Releitura do ciclo |
+| todo dia, 8h15, 11h15, 14h15, 17h15 e 20h15 (a D4Sign responde a 10 chamadas por hora) | `15 11-23/3 * * *` | Contrato assinado (D4Sign) | `POST /api/system/contratos-d4sign` | — |
+| seg a sex, 8h30 | `30 11 * * 1-5` | Contratos sem assinatura (D4Sign) | `POST /api/system/contratos-d4sign-pendentes` | — |
 | dia 2 de cada mês, 10h | `0 13 2 * *` | Vigia de CNPJ na Receita | `POST /api/system/receita-vigia` | — |
 
 ## Infra
