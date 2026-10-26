@@ -4,23 +4,19 @@ export const dynamic = "force-dynamic";
 import { ETAPAS_FINAIS, statusNaEtapa } from "@/lib/conteudo/etapas";
 import { capasDosAnexos, podePedirAlteracao } from "@/lib/portal/agenda";
 import { NextRequest, NextResponse } from "next/server";
+import { lerLinkDoPortal, FRASE_INDISPONIVEL, type LinhaDeAcesso } from "@/lib/portal/token";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { estaPausado } from "@/lib/clients/pausa";
 
 // GET /api/portal/[token]/content — conteúdo/artes ENTREGUES do cliente (pro portal de quem tem
 // pacote de social/design). Público via token, igual ao snapshot. Retorna posts com arte, recentes.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
-  const { data: client } = await supabaseAdmin
-    .from("clients")
-    .select("id, public_report_enabled, public_report_token_revoked_at, active, churned_at, paused_at, paused_until")
-    .eq("public_report_token", token)
-    .single();
-  // Ex-cliente (inativo/arquivado) não acessa mais o portal — ver app/portal/[token]/page.tsx.
-  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at || estaPausado(client)) {
-    return NextResponse.json({ error: "Token inválido ou revogado" }, { status: 404 });
-  }
+  // Banco que oscila não é link inválido (26/10/2026): 503 com "tente de novo", não 404.
+  const lido = await lerLinkDoPortal<LinhaDeAcesso & Record<string, unknown> & { id: string }>(token, "id");
+  if (lido.estado === "indisponivel") return NextResponse.json({ error: FRASE_INDISPONIVEL }, { status: 503 });
+  if (lido.estado === "invalido") return NextResponse.json({ error: "Token inválido ou revogado" }, { status: 404 });
+  const client = lido.linha;
 
   // Cards ENTREGUES (arte pronta).
   //

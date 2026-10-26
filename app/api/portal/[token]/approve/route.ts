@@ -3,9 +3,9 @@ export const dynamic = "force-dynamic";
 
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { lerLinkDoPortal, FRASE_INDISPONIVEL, type LinhaDeAcesso } from "@/lib/portal/token";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { aplicarAjusteNoCard } from "@/lib/cs/card";
-import { estaPausado } from "@/lib/clients/pausa";
 import { criarLimite } from "@/lib/portal/limite";
 import { FRASE_SEM_ALTERACAO, motivoSemAlteracao } from "@/lib/portal/agenda";
 import { lerCardEPedido } from "@/lib/conteudo/producao-server";
@@ -39,13 +39,11 @@ const LIMITE = criarLimite(20, 60_000); // até 20 ações/min por cliente
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
-  const { data: client } = await supabaseAdmin
-    .from("clients").select("id, name, nome_fantasia, public_report_enabled, public_report_token_revoked_at, active, churned_at, paused_at, paused_until")
-    .eq("public_report_token", token).single();
-  // Ex-cliente (inativo/arquivado) não acessa mais o portal — ver app/portal/[token]/page.tsx.
-  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at || estaPausado(client)) {
-    return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
-  }
+  // Banco que oscila não é link inválido (26/10/2026): 503 com "tente de novo", não 404.
+  const lido = await lerLinkDoPortal<LinhaDeAcesso & Record<string, unknown> & { id: string }>(token, "id, name, nome_fantasia");
+  if (lido.estado === "indisponivel") return NextResponse.json({ error: FRASE_INDISPONIVEL }, { status: 503 });
+  if (lido.estado === "invalido") return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
+  const client = lido.linha;
   if (LIMITE.estourou(client.id as string)) return NextResponse.json({ error: "Muitas ações. Aguarde 1 minuto." }, { status: 429 });
 
   const body = (await req.json().catch(() => ({}))) as { cardId?: string; action?: string; comment?: string; desfazerId?: string };

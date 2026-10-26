@@ -3,10 +3,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 import { NextRequest, NextResponse } from "next/server";
+import { lerLinkDoPortal, FRASE_INDISPONIVEL, type LinhaDeAcesso } from "@/lib/portal/token";
 import { randomBytes } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { csSendGroupText } from "@/lib/cs/notify";
-import { estaPausado } from "@/lib/clients/pausa";
 import { criarLimite } from "@/lib/portal/limite";
 import { loteValido, podeApagarMaterial } from "@/lib/portal/envio-material";
 import { registroDeLotes } from "@/lib/portal/envio-material-server";
@@ -40,13 +40,11 @@ const LIMITE_APAGAR = criarLimite(60, 3600_000); // apagar não gasta a cota de 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
-  const { data: client } = await supabaseAdmin.from("clients")
-    .select("id, name, public_report_enabled, public_report_token_revoked_at, active, churned_at, paused_at, paused_until, whatsapp_group_jid")
-    .eq("public_report_token", token).single();
-  // Ex-cliente (inativo/arquivado) não acessa mais o portal — ver app/portal/[token]/page.tsx.
-  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at || estaPausado(client)) {
-    return NextResponse.json({ error: "Token inválido ou revogado" }, { status: 404 });
-  }
+  // Banco que oscila não é link inválido (26/10/2026): 503 com "tente de novo", não 404.
+  const lido = await lerLinkDoPortal<LinhaDeAcesso & Record<string, unknown> & { id: string }>(token, "id, name, whatsapp_group_jid");
+  if (lido.estado === "indisponivel") return NextResponse.json({ error: FRASE_INDISPONIVEL }, { status: 503 });
+  if (lido.estado === "invalido") return NextResponse.json({ error: "Token inválido ou revogado" }, { status: 404 });
+  const client = lido.linha;
   if (LIMITE.estourou(client.id as string)) {
     return NextResponse.json({ error: "Muitos envios seguidos. Tente daqui a pouco." }, { status: 429 });
   }
@@ -121,12 +119,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ t
   const id = req.nextUrl.searchParams.get("id") ?? "";
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "Arquivo inválido." }, { status: 400 });
 
-  const { data: client } = await supabaseAdmin.from("clients")
-    .select("id, public_report_enabled, public_report_token_revoked_at, active, churned_at, paused_at, paused_until")
-    .eq("public_report_token", token).maybeSingle();
-  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at || estaPausado(client)) {
-    return NextResponse.json({ error: "Token inválido ou revogado" }, { status: 404 });
-  }
+  // Banco que oscila não é link inválido (26/10/2026): 503 com "tente de novo", não 404.
+  const lido = await lerLinkDoPortal<LinhaDeAcesso & Record<string, unknown> & { id: string }>(token, "id, name, whatsapp_group_jid");
+  if (lido.estado === "indisponivel") return NextResponse.json({ error: FRASE_INDISPONIVEL }, { status: 503 });
+  if (lido.estado === "invalido") return NextResponse.json({ error: "Token inválido ou revogado" }, { status: 404 });
+  const client = lido.linha;
   if (LIMITE_APAGAR.estourou(client.id as string)) {
     return NextResponse.json({ error: "Muitas ações seguidas. Tente daqui a pouco." }, { status: 429 });
   }

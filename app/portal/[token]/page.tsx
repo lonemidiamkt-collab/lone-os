@@ -5,7 +5,8 @@ import { obterSnapshot } from "@/lib/portal/snapshotCache";
 import type { SnapshotData } from "@/lib/portal/types";
 import { WHATSAPP_EQUIPE } from "@/lib/portal/contato";
 import PortalDashboard from "@/components/portal/PortalDashboard";
-import { estaPausado } from "@/lib/clients/pausa";
+import { lerLinkDoPortal, type LinhaDeAcesso } from "@/lib/portal/token";
+import PortalIndisponivel from "@/components/portal/PortalIndisponivel";
 
 export const dynamic = "force-dynamic";
 
@@ -17,19 +18,17 @@ export default async function PortalPage({
   const { token } = await params;
 
   // Valida token
-  const { data: client } = await supabaseAdmin
-    .from("clients")
-    .select("id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, public_report_enabled, public_report_token_revoked_at, service_type, meta_ad_account_id, ig_business_account_id, status, join_date, active, churned_at, paused_at, paused_until")
-    .eq("public_report_token", token)
-    .single();
-
   // EX-CLIENTE NÃO VÊ MAIS (23/09): desativar/arquivar o cliente parava o sync, as mensagens e a
   // carteira do time — mas NÃO o link público. Três ex-clientes (Dinho Cell, Dr. Cauana Barboza,
   // Quero Tintas) seguiam com o painel de resultados aberto, servindo dado da conta deles.
-  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at
-      || client.active === false || client.churned_at || estaPausado(client)) {
-    notFound();
-  }
+  // BANCO QUE OSCILA NÃO É LINK INVÁLIDO (26/10/2026): a queda de 16/10 e o soluço de 22/10 deram
+  // "página não encontrada" em links que funcionam — e o time ouviu "o link do painel não funciona".
+  // Agora a falha de leitura mostra "não consegui abrir agora, tente de novo" (lib/portal/token.ts).
+  const lido = await lerLinkDoPortal<LinhaDeAcesso & Record<string, unknown> & { id: string }>(token,
+    "id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, service_type, meta_ad_account_id, ig_business_account_id, status, join_date");
+  if (lido.estado === "indisponivel") return <PortalIndisponivel />;
+  if (lido.estado === "invalido") notFound();
+  const client = lido.linha;
 
   // Pacote do cliente decide as seções do portal. Anúncios aparecem POR PADRÃO (retrocompatível e à
   // prova de valores legados/desconhecidos como "trafego_pago") — só escondemos o tráfego pra pacote

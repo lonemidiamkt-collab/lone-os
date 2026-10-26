@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { clienteDoToken } from "@/lib/portal/token";
+import { clienteDoLink, FRASE_INDISPONIVEL } from "@/lib/portal/token";
 import { criarLimite } from "@/lib/portal/limite";
 import { capasDosAnexos, janelaDaAgenda, mesValido, montarAgenda, type LinhaCardAgenda } from "@/lib/portal/agenda";
 import { hojeSP } from "@/lib/clients/pausa";
@@ -21,8 +21,11 @@ const COLS = "id, title, format, status, due_date, due_time, scheduled_at, publi
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const cliente = await clienteDoToken(token);
-  if (!cliente) return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
+  // Banco que oscila não é link inválido (26/10/2026): 503 com "tente de novo", não 404.
+  const lido = await clienteDoLink(token);
+  if (lido.estado === "indisponivel") return NextResponse.json({ error: FRASE_INDISPONIVEL }, { status: 503 });
+  if (lido.estado === "invalido") return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
+  const cliente = lido.linha;
   if (LIMITE.estourou(cliente.id)) return NextResponse.json({ error: "Muitas buscas seguidas. Tente em 1 minuto." }, { status: 429 });
 
   const hoje = hojeSP();

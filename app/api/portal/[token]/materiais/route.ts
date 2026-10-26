@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { paraUrlPublica } from "@/lib/supabase/url-publica";
-import { clienteDoToken } from "@/lib/portal/token";
+import { clienteDoLink, FRASE_INDISPONIVEL } from "@/lib/portal/token";
 import { criarLimite } from "@/lib/portal/limite";
 import { montarMateriais, type LinhaUpload } from "@/lib/portal/materiais";
 import type { LinhaCardAgenda } from "@/lib/portal/agenda";
@@ -22,8 +22,11 @@ const COLS_CARD = "id, title, status, due_date, scheduled_at, publish_verified_a
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const cliente = await clienteDoToken(token);
-  if (!cliente) return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
+  // Banco que oscila não é link inválido (26/10/2026): 503 com "tente de novo", não 404.
+  const lido = await clienteDoLink(token);
+  if (lido.estado === "indisponivel") return NextResponse.json({ error: FRASE_INDISPONIVEL }, { status: 503 });
+  if (lido.estado === "invalido") return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
+  const cliente = lido.linha;
   if (LIMITE.estourou(cliente.id)) return NextResponse.json({ error: "Muitas buscas seguidas. Tente em 1 minuto." }, { status: 429 });
 
   // select("*"): card_id vem da migration 20260926120000 — antes dela a coluna não existe, e pedir

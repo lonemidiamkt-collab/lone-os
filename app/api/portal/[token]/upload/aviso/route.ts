@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { clienteDoToken } from "@/lib/portal/token";
+import { clienteDoLink, FRASE_INDISPONIVEL } from "@/lib/portal/token";
 import { criarLimite } from "@/lib/portal/limite";
 import { loteValido } from "@/lib/portal/envio-material";
 import { avisarTimeDoMaterial, registroDeLotes } from "@/lib/portal/envio-material-server";
@@ -15,8 +15,11 @@ const LIMITE = criarLimite(20, 3600_000);
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const cliente = await clienteDoToken(token);
-  if (!cliente) return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
+  // Banco que oscila não é link inválido (26/10/2026): 503 com "tente de novo", não 404.
+  const lido = await clienteDoLink(token);
+  if (lido.estado === "indisponivel") return NextResponse.json({ error: FRASE_INDISPONIVEL }, { status: 503 });
+  if (lido.estado === "invalido") return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
+  const cliente = lido.linha;
   if (LIMITE.estourou(cliente.id)) return NextResponse.json({ error: "Muitos avisos seguidos. Tente daqui a pouco." }, { status: 429 });
 
   const body = await req.json().catch(() => null) as { lote?: unknown; ids?: unknown } | null;
