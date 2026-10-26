@@ -8,25 +8,29 @@ import { csSendGroupText } from "@/lib/cs/notify";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
 
 const primeiroNome = (n: string) => (n || "").trim().split(/\s+/)[0] || n;
-import { avaliarSaude, formatSaudeDigest, type SinaisSaude } from "@/lib/cs/saude";
-import { nivelDoCliente } from "@/lib/saude/carteira";
 import { clientesSemPostar, clientesSemInstagram, clientesIlegiveis, instagramDuplicado, textoCobranca as cobrancaSemPostar, textoEscalada as escaladaSemPostar } from "@/lib/cs/sem-postar";
 import { saudePessoaPdfHtml, legendaSaude, ordenar, type BlocoSaude, type ClienteSaude } from "@/lib/reports/saudePdf";
 
-// POST /api/system/cs-saude — 3ª função: scan de saúde/risco de churn. Avalia sinais por cliente
-// (reclamação 14d, status, retração, dias sem postagem) e posta o digest dos em risco no grupo.
-// Cron sugerido: segunda 11h BRT (`0 14 * * 1`). ?dry=1 não posta.
+// POST /api/system/cs-saude — POSTAGEM NO INSTAGRAM POR PESSOA (segunda 11h, `0 14 * * 1`). ?dry=1 não posta.
+//
+// Quem está sem postar (medido no Instagram do cliente) e o que falta no cadastro do Instagram (sem conta
+// vinculada, conta que não conseguimos ler, mesmo Instagram em dois cadastros), um PDF por responsável.
+//
+// UM MOTOR DE RISCO SÓ (26/10/2026, semana 1 do plano de agentes). Até aqui esta rotina também julgava
+// "risco" com um cálculo próprio (reclamação e retração em 14 dias), e toda segunda o grupo recebia
+// "clientes pedindo atenção" duas vezes, com duas réguas diferentes: às 9h30 pelo cs-risco-semanal (nota de
+// saúde, escritor único /api/scores) e às 11h por aqui. Reclamação e retração já entram na nota de saúde
+// (sentimento e relacionamento), então o julgamento de risco saiu daqui: risco é só a nota de saúde,
+// no aviso das 9h30. Esta rotina ficou com o que só ela faz.
 export async function POST(req: NextRequest) {
   const denied = requireCron(req);
   if (denied) return denied;
   const dry = req.nextUrl.searchParams.get("dry") !== null;
 
-  const d14 = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-
   // Clientes ativos (em operação), sem o cliente-teste. Filtro de `active` obrigatório: cliente
   // arquivado/churnado mantém o status antigo e aparecia toda segunda como risco 🔴.
   const { data: clientsData } = await supabaseAdmin
-    .from("clients").select("id, name, nome_fantasia, status, active, assigned_social, current_health_level, current_health_score")
+    .from("clients").select("id, name, nome_fantasia, status, active, assigned_social")
     .in("status", ["good", "average", "at_risk"])
     .or("active.is.null,active.eq.true")
     .not("name", "ilike", "%(teste)%");
@@ -46,57 +50,13 @@ export async function POST(req: NextRequest) {
   // ("Varejão e UNAFER foi feito post sim!") e a conferência na Meta deu razão a ele em todos.
   //
   // `client_ig_posts` é lido do Instagram do cliente e bate com a Meta — conferido post a post.
-  const [recl, retr, posts] = await Promise.all([
-    supabaseAdmin.from("cs_demandas").select("client_id").eq("tipo", "reclamacao").gte("created_at", d14),
-    supabaseAdmin.from("cs_demandas").select("client_id").eq("tipo", "retracao").gte("created_at", d14),
-    supabaseAdmin.from("client_ig_posts").select("client_id, posted_at").order("posted_at", { ascending: false }),
-  ]);
-  const reclamou = new Set((recl.data ?? []).map((r) => r.client_id as string));
-  const retraiu = new Set((retr.data ?? []).map((r) => r.client_id as string));
-  const ultimoPost = new Map<string, string>();
-  for (const p of posts.data ?? []) {
-    const cid = p.client_id as string;
-    if (cid && !ultimoPost.has(cid) && p.posted_at) ultimoPost.set(cid, p.posted_at as string);
-  }
-
-  // Guarda o DONO e os dias junto da avaliação: o digest só precisava do texto, mas o PDF por
-  // pessoa precisa saber de quem é cada cliente.
   // Conta que POSTA e não conseguimos ler. Marcada como pendência de ACESSO — jamais como "não
   // postou". Foi o erro no Varejão (138 posts) e no UNAFER (124) que o Roberto pegou.
   const cegos = await clientesIlegiveis();
-  const idsCegos = new Set(cegos.map((c) => c.clientId));
   // Mesmo Instagram em dois cadastros: os posts caem em um e o outro parece parado.
   const duplicados = await instagramDuplicado();
-  const comDono = clientes.map((c) => {
-    const last = ultimoPost.get(c.id as string);
-    // Conta que a gente não consegue LER entra como `null` de "não sei", não de "não postou" —
-    // avaliarSaude trata null como sem sinal, e é isso que queremos: silêncio, não acusação.
-    const diasSemPost = (idsCegos.has(c.id as string) || duplicados.has(c.id as string)) ? null
-      : last ? Math.floor((Date.now() - new Date(last).getTime()) / 86_400_000) : null;
-    const sinais: SinaisSaude = {
-      status: (c.status as string) || "good",
-      // "Em risco" pela saúde (modelo único), não pelo resultado do anúncio — Leva 6A.
-      nivelSaude: nivelDoCliente(c as { current_health_level: string | null; current_health_score: number | null }),
-      reclamacaoRecente: reclamou.has(c.id as string),
-      retracaoRecente: retraiu.has(c.id as string),
-      diasSemPost,
-    };
-    const nome = (c.nome_fantasia as string) || (c.name as string) || "Cliente";
-    return {
-      aval: avaliarSaude(nome, sinais),
-      nome, diasSemPost,
-      responsavel: (c.assigned_social as string) || null,
-      reclamou: reclamou.has(c.id as string),
-      retraiu: retraiu.has(c.id as string),
-    };
-  });
-  const avaliacoes = comDono.map((x) => x.aval);
 
   const now = spNow();
-  const label = `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const texto = formatSaudeDigest(avaliacoes, label);
-  const emRisco = avaliacoes.filter((a) => a.risco !== "baixo").length;
-
   // CLIENTE SEM POSTAR — pelos posts REAIS do Instagram, não pelo status do quadro. O medidor
   // antigo dependia do time mover card pra "publicado" (ninguém move) e ignorava quem não tinha
   // NENHUM post — foi assim que o Bazar Ribeiro passou 35 dias invisível.
@@ -130,18 +90,8 @@ export async function POST(req: NextRequest) {
     nomesParados.add(p.cliente);
     push(p.responsavel, { cliente: p.cliente, diasSemPostar: p.diasSemPostar, motivos: [] });
   }
-  // Fonte 2: quem o scan de saúde marcou em risco por OUTRO motivo (reclamação, retração). Sem
-  // duplicar quem já entrou acima — o mesmo cliente em duas seções foi metade do ruído.
-  for (const x of comDono) {
-    if (x.aval.risco === "baixo" || nomesParados.has(x.nome)) continue;
-    const motivos = [x.reclamou ? "reclamou nos últimos 14 dias" : "", x.retraiu ? "pausou/cancelou pauta" : ""].filter(Boolean);
-    // SÓ entra por motivo próprio. O `diasSemPost` desta fonte vem de `content_cards.published`,
-    // que em agosto marcou 24 publicações contra 451 posts reais — usá-lo aqui colocava no PDF do
-    // Thiago três clientes "sem post registrado" que estavam postando normalmente. Quem está de
-    // fato parado já veio da fonte 1, medida no Instagram.
-    if (!motivos.length) continue;
-    push(x.responsavel, { cliente: x.nome, motivos }); // diasSemPostar fica undefined: não medido
-  }
+  // (A antiga "fonte 2", risco por reclamação/retração com régua própria, saiu: risco é só a nota de
+  // saúde, no aviso das 9h30 — ver o topo do arquivo.)
   // Fonte 3: cadastro incompleto. Vai no PDF do dono, mas marcado como problema de cadastro —
   // cobrar postagem de quem o sistema não consegue ler seria acusar pelo que não é dele.
   for (const c of semIg) {
@@ -238,13 +188,13 @@ export async function POST(req: NextRequest) {
     escalado = r.ok;
   }
 
-  console.log(`[cs-saude] clientes=${clientes.length} emRisco=${emRisco} semPostar=${parados.length} escalado=${escalado} dry=${dry}`);
+  console.log(`[cs-saude] clientes=${clientes.length} semPostar=${parados.length} escalado=${escalado} dry=${dry}`);
   return NextResponse.json({
-    ok: true, dry, enviado, escalado, clientes: clientes.length, emRisco,
+    ok: true, dry, enviado, escalado, clientes: clientes.length,
     pdfs_enviados: pdfsEnviados, falhas,
     por_pessoa: blocos.map((b) => ({ pessoa: b.pessoa, clientes: b.clientes.length })),
     semPostar: parados.length, semInstagram: semIg.length, semAcessoIg: cegos.length,
     ig_duplicado: [...duplicados.entries()].length,
-    detalhe_sem_acesso: cegos.map((c) => `${c.cliente} (@${c.usuario ?? "?"}, ${c.postsNaConta} posts)`), texto, textoSemPostar: txtParados, textoEscalada: txtEscalada,
+    detalhe_sem_acesso: cegos.map((c) => `${c.cliente} (@${c.usuario ?? "?"}, ${c.postsNaConta} posts)`), textoSemPostar: txtParados, textoEscalada: txtEscalada,
   });
 }

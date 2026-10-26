@@ -12,7 +12,7 @@ import type { CsSendMeta } from "@/lib/cs/notify";
 import { ehSoRecibo } from "@/lib/cs/recibo";
 import { deveOuvir, deveFalar, abreJanela, type SinaisDoPapo } from "@/lib/cs/porta-do-papo";
 import { ehPalpiteSobreSistema, ehFillerComNome, RESPOSTA_SEM_VISAO_DO_PAINEL } from "@/lib/cs/palpite";
-import { proporRegra, decidirRegra } from "@/lib/cs/regras-propostas";
+import { proporRegra, decidirRegra, decidirRegras, parseDecisaoLote, textoDoLote } from "@/lib/cs/regras-propostas";
 import { podeAgir, numerosDaEquipe } from "@/lib/cs/autoridade";
 import { textoSemAutoridade, type AcaoDoTime } from "@/lib/cs/autoridade-comandos";
 import { marcarTarefaPeloAviso, lembrarMensagem, ehCitacaoDeTarefa, responderCitacaoDeTarefa, type ResultadoAviso } from "@/lib/tarefas/auto-marcar-server";
@@ -2673,6 +2673,33 @@ async function processarInbound(req: NextRequest) {
     }
   }
 
+  // ─── Regras em lote (26/10/2026): "ok a1b2 c3d4", "não a1b2 c3d4", "ok todas" citando o resumo ───
+  // Vem antes do leitor de um código só, que não aceita vários códigos. Só regra: demanda segue no fluxo de baixo.
+  const loteRegras = parseDecisaoLote(msg.text);
+  if (loteRegras && isInternalCmdGroup(msg.groupJid) && podeAgirC) {
+    const r = await decidirRegras({
+      ...loteRegras, quotedMsgId: msg.quotedMsgId,
+      quem: msg.authorName || msg.authorJid || null, papel: autoridade.autor?.papel ?? null,
+    }).catch((e) => ({ tipo: "erro" as const, erro: e instanceof Error ? e.message : String(e) }));
+    if (r.tipo === "sem_autoridade") {
+      await csSendGroupText(msg.groupJid, `Salvar regra é com gestor ou admin. Chama o Julio ou o Roberto pra dar o ok. 😉`, msg.quotedMsgId || undefined);
+      return NextResponse.json({ ok: true, regras: "sem_autoridade" });
+    }
+    if (r.tipo === "decididas") {
+      await csSendGroupText(msg.groupJid, textoDoLote(r), msg.quotedMsgId || undefined);
+      return NextResponse.json({ ok: true, regras: r.acao, quantas: r.regras.length });
+    }
+    if (r.tipo === "erro") {
+      await csSendGroupText(msg.groupJid, `Não consegui decidir essas regras agora (${r.erro.slice(0, 80)}). Nada mudou; tenta de novo em instantes.`, msg.quotedMsgId || undefined);
+      return NextResponse.json({ ok: false, regras: "erro" });
+    }
+    if (loteRegras.todas) {
+      await csSendGroupText(msg.groupJid, `Para salvar todas, responde *ok todas* na mensagem do resumo das regras.`, msg.quotedMsgId || undefined);
+      return NextResponse.json({ ok: true, regras: "nao_achei" });
+    }
+    // Códigos que não são de regra: segue (podem ser de demandas — o fluxo de baixo responde).
+  }
+
   // ─── Decisão humana (grupo interno): RESPONDA a sugestão com "ok" (cria) ou "não" (descarta) ───
   const decision = parseDecision(msg.text);
   // Confirmar demanda ou regra é ação (nível C): precisa de remetente do time, não só do grupo.
@@ -2682,6 +2709,12 @@ async function processarInbound(req: NextRequest) {
       acao: decision.acao, codigo: decision.codigo, quotedMsgId: msg.quotedMsgId,
       quem: msg.authorName || msg.authorJid || null, papel: autoridade.autor?.papel ?? null,
     });
+    if (regra.tipo === "varias") {
+      await csSendGroupText(msg.groupJid,
+        `Essa mensagem tem ${regra.total} regras. Para salvar todas, responde *ok todas*; ou *ok a1b2 c3d4* só com os códigos que quiser.`,
+        msg.quotedMsgId || undefined);
+      return NextResponse.json({ ok: true, regra: "varias", total: regra.total });
+    }
     if (regra.tipo === "sem_autoridade") {
       // Designer/social/tráfego podem descartar, não ativar: ativar muda o agente para aquele cliente
       // daqui em diante — é decisão de gestor. Diz quem pode, em vez de calar.
@@ -3707,7 +3740,7 @@ async function processarInbound(req: NextRequest) {
   if (correcoes.length && c.id && isOpenAIConfigured()) {
     try {
       const { aprenderDaCorrecao, pareceReincidencia } = await import("@/lib/cs/aprender-correcao");
-      const { gravarRegras, ROTULO_TIPO } = await import("@/lib/cs/regras");
+      const { proporRegrasAprendidas, ROTULO_TIPO } = await import("@/lib/cs/regras");
       const { fetchClientCsRules } = await import("@/lib/supabase/queries");
       const regrasAtuais = (await fetchClientCsRules(c.id as string)).map((r) => r.texto);
 
@@ -3718,23 +3751,30 @@ async function processarInbound(req: NextRequest) {
         });
         if (!achadas.length) continue;
 
-        const { gravadas } = await gravarRegras(c.id as string, achadas, {
+        // REGRA SÓ COM OK (26/10/2026): a lição vira PROPOSTA com código; vale depois do ok de um gestor.
+        // A mensagem é a mesma que já saía (nenhuma a mais), agora com o código para decidir.
+        const { propostas } = await proporRegrasAprendidas(c.id as string, achadas, {
           author: `correção do ${clienteNome}`, sourceMessage: msg.text,
         });
-        if (!gravadas.length) continue;
+        if (!propostas.length) continue;
 
         // Reincidência ("de novo", "já falei") muda o tom do aviso: aí não é aprendizado novo, é
         // a casa repetindo um erro que o cliente já tinha apontado — e o time precisa sentir isso.
         const repetiu = pareceReincidencia(msg.text);
         if (internalJid) {
-          const linhas = gravadas.map((g) => `• _${g.texto}_  (${ROTULO_TIPO[g.tipo]})`).join("\n");
-          await csSendGroupText(internalJid,
+          const linhas = propostas.map((g) => `• _${g.texto}_  (${ROTULO_TIPO[g.tipo]}) — *${g.codigo}*`).join("\n");
+          const pedido = propostas.length === 1
+            ? `Salvar como regra fixa? *ok ${propostas[0].codigo}* ou *não ${propostas[0].codigo}* (só gestor salva).`
+            : `Salvar como regras fixas? *ok ${propostas.map((g) => g.codigo).join(" ")}* ou *não* com os códigos (só gestor salva).`;
+          const env = await csSendGroupText(internalJid,
             repetiu
-              ? `⚠️ O *${clienteNome}* corrigiu isso *de novo*. Anotei como regra fixa — daqui pra frente eu cobro:\n${linhas}`
-              : `🧠 Aprendi com a correção do *${clienteNome}*:\n${linhas}\n\nVou cobrar isso nas próximas artes e legendas.`,
+              ? `⚠️ O *${clienteNome}* corrigiu isso *de novo*. Proponho virar regra fixa:\n${linhas}\n\n${pedido}`
+              : `🧠 A correção do *${clienteNome}* parece uma regra fixa:\n${linhas}\n\n${pedido}`,
             undefined, { origem: "regra-de-correcao", destino: "interno" });
+          // Ligar a mensagem às propostas faz "ok" respondendo a ela funcionar (uma) ou pedir "ok todas" (várias).
+          if (env.id) await supabaseAdmin.from("cs_client_rules").update({ msg_id_proposta: env.id }).in("id", propostas.map((g) => g.id));
         }
-        console.log(`[CS/inbound] correção → ${gravadas.length} regra(s) (${clienteNome}): ${gravadas.map((g) => g.texto).join(" | ")}`);
+        console.log(`[CS/inbound] correção → ${propostas.length} regra(s) proposta(s) (${clienteNome}): ${propostas.map((g) => g.texto).join(" | ")}`);
       }
     } catch (err) {
       // Aprender é bônus: se falhar, o card da correção segue normalmente.

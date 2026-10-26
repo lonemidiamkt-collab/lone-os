@@ -75,6 +75,8 @@
 # Leva 2 (24/09/2026): resumo matinal único, risco semanal por dono, saldo a cada 2h, vigia da Central
 0 11 * * 1-5 /opt/loneos/scripts/cron-call.sh cs-manha POST >> /var/log/loneos-cs-manha.log 2>&1
 30 12 * * 1 /opt/loneos/scripts/cron-call.sh cs-risco-semanal POST >> /var/log/loneos-cs-risco-semanal.log 2>&1
+# Regras esperando ok (26/10/2026): o resumo de segunda das regras propostas
+15 13 * * 1 /opt/loneos/scripts/cron-call.sh regras-propostas POST >> /var/log/loneos-regras-propostas.log 2>&1
 0 11-23/2 * * * /opt/loneos/scripts/cron-call.sh sync-saldos POST >> /var/log/loneos-sync-saldos.log 2>&1
 # Alarmes de conversa e verba (25/10/2026): 5 min depois da leitura de saldo
 5 11-23/2 * * * /opt/loneos/scripts/cron-call.sh alarmes-trafego POST >> /var/log/loneos-alarmes-trafego.log 2>&1

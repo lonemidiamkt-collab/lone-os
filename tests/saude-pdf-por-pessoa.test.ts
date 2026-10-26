@@ -48,7 +48,7 @@ describe("a legenda que vai no grupo", () => {
     ] };
     const l = legendaSaude(so, "@552299");
     expect(l).toMatch(/vinculado/i);
-    expect(l).not.toMatch(/pedindo atenção/);
+    expect(l).not.toMatch(/sem postar/);
   });
 
   it("sem menção resolvida, usa o nome — nunca um arroba que não notifica", () => {
@@ -58,7 +58,7 @@ describe("a legenda que vai no grupo", () => {
 
   it("um cliente só não vira plural", () => {
     const um: BlocoSaude = { pessoa: "Ph", clientes: [{ cliente: "X", diasSemPostar: 20, motivos: [] }] };
-    expect(legendaSaude(um, "")).toMatch(/\*1 cliente\* pedindo/);
+    expect(legendaSaude(um, "")).toMatch(/\*1 cliente\* sem postar/);
   });
 });
 
@@ -66,7 +66,7 @@ describe("o PDF individual", () => {
   const html = saudePessoaPdfHtml(bloco, "", "2026-09-02");
 
   it("traz o nome no título e não repete cabeçalho de pessoa dentro", () => {
-    expect(html).toContain("Thiago, seus clientes pedindo atenção");
+    expect(html).toContain("Thiago, seus clientes sem postar");
     expect(html).not.toMatch(/<h2[^>]*>Thiago<\/h2>/);
   });
 
@@ -171,7 +171,7 @@ describe("conta que posta e não conseguimos ler", () => {
     const l = legendaSaude(so, "@552299");
     expect(l).toMatch(/postando/);
     expect(l).toMatch(/não é cobrança/i);
-    expect(l).not.toMatch(/pedindo atenção/);
+    expect(l).not.toMatch(/sem postar/);
   });
 });
 

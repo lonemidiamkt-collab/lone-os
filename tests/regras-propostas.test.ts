@@ -19,11 +19,20 @@ describe("regra permanente pede ok", () => {
 
   it("proposta nasce com ativo=false e estado=proposta — invisível a todo leitor de regra", () => {
     expect(MODULO).toMatch(/ativo: false, estado: "proposta"/);
-    // Todos os leitores filtram ativo = true; conferido em briefing-sync, load-briefing, regras, queries.
-    for (const f of ["lib/cs/briefing-sync.ts", "lib/cs/load-briefing.ts", "lib/cs/regras.ts"]) {
+    // Todos os leitores filtram ativo = true; conferido em briefing-sync e load-briefing.
+    for (const f of ["lib/cs/briefing-sync.ts", "lib/cs/load-briefing.ts"]) {
       const src = readFileSync(f, "utf8");
       expect(src, f).toMatch(/cs_client_rules[\s\S]{0,200}\.eq\("ativo", true\)/);
     }
+    // 26/10/2026: lib/cs/regras.ts deixou de gravar regra ativa — as três fontes de aprendizado (conversas,
+    // releitura, correção) só PROPÕEM, e ninguém mais insere regra aprendida já valendo.
+    const regras = readFileSync("lib/cs/regras.ts", "utf8");
+    expect(regras).toMatch(/ativo: false, estado: "proposta"/);
+    expect(regras).not.toMatch(/export async function gravarRegras/);
+    for (const f of ["app/api/system/cs-briefing-update/route.ts", "app/api/system/cs-releitura/route.ts"]) {
+      expect(readFileSync(f, "utf8"), f).toMatch(/proporRegrasAprendidas\(/);
+    }
+    expect(INBOUND).toMatch(/proporRegrasAprendidas\(c\.id as string, achadas/);
   });
 
   it("a decisão de regra é checada ANTES da decisão de demanda, no mesmo 'ok xxxx'", () => {

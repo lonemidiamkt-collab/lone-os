@@ -162,6 +162,12 @@ export const AUTOMACOES: Automacao[] = [
     nome: "Clientes pedindo atenção", descricao: "Clientes em risco, em atenção ou que esfriaram, numa seção por responsável e com o porquê de cada um.",
     familia: "CS / time", destino: "grupo do time", cron: "30 12 * * 1", agendaBRT: "segunda, 9h30", maxSilencioHoras: 8 * 24, ensaio: "dry=1",
   }),
+  // 26/10/2026 (semana 1 do plano de agentes): regra aprendida só vale com ok de gestor. As das rotinas de
+  // domingo esperam este resumo; proposta sem resposta em 14 dias é descartada aqui.
+  ep("regras-propostas", {
+    nome: "Regras esperando ok", descricao: "Uma mensagem no grupo do time com as regras que o Loninho aprendeu na semana e ainda não valem, cada uma com o código para salvar (ok a1b2) ou descartar. Descarta as que passaram 14 dias sem resposta.",
+    familia: "CS / time", destino: "grupo do time", cron: "15 13 * * 1", agendaBRT: "segunda, 10h15", maxSilencioHoras: 8 * 24, ensaio: "dry=1",
+  }),
   // Leva 7D (N31). NASCE DESLIGADO (migration 20260926120000 grava enabled=false) e a rota exige o job
   // ligado explicitamente: sem linha na Central, não manda nada.
   ep("revisao-semanal", {
@@ -178,7 +184,7 @@ export const AUTOMACOES: Automacao[] = [
     familia: "CS / time", destino: "grupo do time", cron: "0 13,16,19 * * 1-5", agendaBRT: "seg a sex, 10h, 13h e 16h", maxSilencioHoras: 68,
   }),
   ep("cs-saude", {
-    nome: "Saúde da carteira", descricao: "Avalia reclamação, status, retração e dias sem post de cada cliente e posta os que estão em risco.",
+    nome: "Postagem no Instagram por pessoa", descricao: "Quem está sem postar (lido no Instagram, nunca no quadro) e o que falta no cadastro do Instagram, um PDF por responsável. Risco de cliente não é daqui: sai só no aviso de segunda das 9h30, pela nota de saúde.",
     familia: "CS / time", destino: "grupo do time", cron: "0 14 * * 1", agendaBRT: "segunda, 11h", maxSilencioHoras: 8 * 24, ensaio: "dry=1",
   }),
   ep("cs-sem-resposta", {

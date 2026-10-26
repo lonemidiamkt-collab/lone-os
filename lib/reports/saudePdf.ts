@@ -162,11 +162,11 @@ export function saudePdfHtml(blocos: BlocoSaude[], logo: string, hoje: string, d
   </style></head><body>
     <div class="head">
       ${logo ? `<img src="${logo}" alt="Lone Mídia">` : `<div style="font-weight:800;font-size:19px">Lone Mídia</div>`}
-      <div style="text-align:right;color:${SUAVE};font-size:11px;line-height:1.6">Saúde da carteira<br>${esc(dia)}</div>
+      <div style="text-align:right;color:${SUAVE};font-size:11px;line-height:1.6">Postagem no Instagram<br>${esc(dia)}</div>
     </div>
 
     <h1 style="font-size:24px;letter-spacing:-.02em;margin-bottom:5px">
-      ${dono ? `${esc(dono)}, seus clientes pedindo atenção` : "Clientes pedindo atenção"}
+      ${dono ? `${esc(dono)}, seus clientes sem postar` : "Clientes sem postar"}
     </h1>
     <p style="color:${SUAVE};font-size:12.5px;margin-bottom:22px">
       ${todos.length} cliente${todos.length > 1 ? "s" : ""}${graves ? ` · ${graves} há mais de um mês sem post` : ""}
@@ -197,5 +197,5 @@ export function legendaSaude(bloco: BlocoSaude, mencao: string): string {
     : pior.diasSemPostar === null
       ? `*${pior.cliente}* segue sem nenhum post registrado`
       : `o mais parado é *${pior.cliente}*, há ${pior.diasSemPostar} dias`;
-  return `🩺 ${quem} — *${reais.length} cliente${reais.length > 1 ? "s" : ""}* pedindo atenção; ${detalhe}.`;
+  return `🩺 ${quem} — *${reais.length} cliente${reais.length > 1 ? "s" : ""}* sem postar no Instagram; ${detalhe}.`;
 }

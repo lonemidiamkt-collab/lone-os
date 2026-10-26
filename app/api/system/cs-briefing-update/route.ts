@@ -5,9 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
-import { sincronizarBriefingAprendido } from "@/lib/cs/briefing-sync";
 import { chatJson, isOpenAIConfigured } from "@/lib/ai/openai";
-import { DEFINICAO_DE_REGRA, SCHEMA_REGRAS, filtrarRegras, ESCOPO_POR_TIPO } from "@/lib/cs/regras";
+import { DEFINICAO_DE_REGRA, SCHEMA_REGRAS, filtrarRegras, proporRegrasAprendidas } from "@/lib/cs/regras";
 
 // POST /api/system/cs-briefing-update — extrai REGRAS das conversas dos grupos.
 //
@@ -22,6 +21,9 @@ import { DEFINICAO_DE_REGRA, SCHEMA_REGRAS, filtrarRegras, ESCOPO_POR_TIPO } fro
 // quebrado, porque ninguém vai olhar.
 //
 // Quem cria o briefing estruturado de quem não tem é `/api/system/cs-briefing-inicial`.
+//
+// REGRA SÓ COM OK (26/10/2026): as regras saem como PROPOSTA (até 2 por cliente na semana) e entram no resumo de
+// segunda (/api/system/regras-propostas); só valem depois do ok de um gestor. Antes gravavam já ativas.
 //
 // Lê o corpus cs_message_corpus (mensagens do CLIENTE, is_team=false). ?dry=1 não grava.
 // Cron: domingo 7h BRT. ?clientId=… roda só um cliente.
@@ -70,18 +72,15 @@ export async function POST(req: NextRequest) {
       .filter((g) => !existentes.some((e) => e.includes(g.texto.toLowerCase()) || g.texto.toLowerCase().includes(e)))
       .slice(0, 5);
 
-    if (novos.length && !dry) {
-      await supabaseAdmin.from("cs_client_rules").insert(
-        novos.map((g) => ({
-          client_id: c.id, texto: g.texto,
-          escopo: ESCOPO_POR_TIPO[g.tipo],   // cada regra no escopo certo — antes ia tudo em "sempre"
-          origem: "aprendido", author: "IA (conversas)",
-        }))
-      );
-      await sincronizarBriefingAprendido(c.id as string);
+    if (!novos.length) continue;
+    if (dry) {
+      resultados.push({ cliente: (c.nome_fantasia as string) || (c.name as string), novos: novos.length });
+      continue;
     }
-    if (novos.length) resultados.push({ cliente: (c.nome_fantasia as string) || (c.name as string), novos: novos.length });
+    // Duas por semana por cliente: cada uma custa a atenção de um gestor no resumo de segunda.
+    const { propostas } = await proporRegrasAprendidas(c.id as string, novos, { author: "IA (conversas)", capPorDia: 2 });
+    if (propostas.length) resultados.push({ cliente: (c.nome_fantasia as string) || (c.name as string), novos: propostas.length });
   }
 
-  return NextResponse.json({ ok: true, dry, o_que_atualizou: "regras (cs_client_rules) — NÃO o briefing estruturado", regras_novas_por_cliente: resultados.length, detalhe: resultados });
+  return NextResponse.json({ ok: true, dry, o_que_atualizou: "regras PROPOSTAS (cs_client_rules, esperando ok) — NÃO o briefing estruturado", clientes_com_proposta: resultados.length, detalhe: resultados });
 }

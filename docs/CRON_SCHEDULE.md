@@ -5,7 +5,7 @@
 > Não edite à mão: rode `npx tsx scripts/gerar-agenda-cron.ts`. O teste `tests/agenda-cron-doc.test.ts`
 > quebra quando este arquivo fica para trás do retrato.
 
-**Linhas no crontab:** 85 · **Rotinas:** 83 · **Rotinas que usam IA:** 16
+**Linhas no crontab:** 86 · **Rotinas:** 84 · **Rotinas que usam IA:** 16
 
 - O servidor roda em UTC puro. Horário de Brasília = UTC − 3h (sem horário de verão).
 - Ligar, desligar, pausar, rodar agora e ver o histórico: Central de Automações (`/automations`).
@@ -44,7 +44,8 @@
 | todo dia, 9h e 10h | `0 13 * * *` | Cobrança de tarefas | `POST /api/system/task-reminders` | — |
 | segunda, 10h | `0 13 * * 1` | Acurácia do agente | `POST /api/system/cs-autoavaliacao` | — |
 | seg a sex, 10h, 13h e 16h | `0 13,16,19 * * 1-5` | Vigilância de fluxo | `POST /api/system/cs-vigilancia` | — |
-| segunda, 11h | `0 14 * * 1` | Saúde da carteira | `POST /api/system/cs-saude` | — |
+| segunda, 10h15 | `15 13 * * 1` | Regras esperando ok | `POST /api/system/regras-propostas` | — |
+| segunda, 11h | `0 14 * * 1` | Postagem no Instagram por pessoa | `POST /api/system/cs-saude` | — |
 | sexta, 14h | `0 17 * * 5` | Pauta da semana seguinte | `POST /api/system/cs-pauta` | Pauta semanal |
 | dom, ter e qui, 16h | `0 19 * * 0,2,4` | Véspera de postagem | `POST /api/system/cs-vespera` | — |
 | sexta, 16h | `0 19 * * 5` | Raio-X do gestor | `POST /api/system/cs-raio-x` | — |

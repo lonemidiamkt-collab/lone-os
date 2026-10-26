@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { chatJson, isOpenAIConfigured } from "@/lib/ai/openai";
-import { DEFINICAO_DE_REGRA, SCHEMA_REGRAS, filtrarRegras, gravarRegras } from "@/lib/cs/regras";
+import { DEFINICAO_DE_REGRA, SCHEMA_REGRAS, filtrarRegras, proporRegrasAprendidas } from "@/lib/cs/regras";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 
 // POST /api/system/cs-releitura — a leitura semanal do ciclo inteiro de cada cliente.
@@ -34,6 +34,9 @@ import { fetchClientCsRules } from "@/lib/supabase/queries";
 //   cs-briefing-update  → o que o CLIENTE fala no grupo
 //   cs-releitura        → o ciclo de PRODUÇÃO (pedido, entrega, correção, aprovação)
 //   inbound (tempo real)→ a CORREÇÃO que o cliente pede na hora
+//
+// REGRA SÓ COM OK (26/10/2026): o que esta leitura acha vira PROPOSTA (até 2 por cliente) e entra no resumo de
+// segunda (/api/system/regras-propostas); só vale depois do ok de um gestor. Antes gravava já ativa.
 //
 // ?dry=1 não grava · ?dias=90 · ?clientId= roda um só · Cron: domingo.
 
@@ -160,17 +163,17 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const { gravadas } = await gravarRegras(clientId, candidatas, {
-      author: "IA (releitura do ciclo)", capPorDia: 5,
+    const { propostas } = await proporRegrasAprendidas(clientId, candidatas, {
+      author: "IA (releitura do ciclo)", capPorDia: 2,
     });
-    if (gravadas.length) {
-      resultados.push({ cliente: nome, material: resumo, novas: gravadas.length, regras: gravadas.map((x) => x.texto) });
+    if (propostas.length) {
+      resultados.push({ cliente: nome, material: resumo, novas: propostas.length, regras: propostas.map((x) => x.texto) });
     }
   }
 
   return NextResponse.json({
     ok: true, dry, janela_dias: dias,
-    clientes_com_regra_nova: resultados.length,
+    clientes_com_proposta: resultados.length,
     clientes_sem_material: semMaterial.length,
     detalhe: resultados,
   });

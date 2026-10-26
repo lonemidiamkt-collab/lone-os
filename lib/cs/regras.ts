@@ -250,64 +250,96 @@ export function filtrarRegras(brutas: unknown): RegraExtraida[] {
   return out;
 }
 
-// ── Gravação ────────────────────────────────────────────────────────────────
-// Os três pontos que aprendem (job semanal, correção no grupo, cards da equipe) passam por aqui,
-// pra dedup, cap e sincronia do briefing serem os mesmos em todos. Antes cada um tinha o seu.
+// ── Proposta ────────────────────────────────────────────────────────────────
+// Os três pontos que aprendem (regras da semana nas conversas, releitura do ciclo, correção no grupo)
+// passam por aqui, pra dedup e cap serem os mesmos em todos.
+//
+// REGRA APRENDIDA SÓ COM OK (26/10/2026, semana 1 do plano de agentes). Até aqui os três gravavam a regra
+// JÁ ATIVA: 248 + 186 regras em 60 dias sem ninguém olhar (de 378 regras, só 10 eram acionáveis). Agora a
+// regra nasce PROPOSTA (ativo = false, invisível para o agente e para a tela) com um código de 4 letras; um
+// gestor salva com "ok <código>" no grupo interno (lib/cs/regras-propostas.ts). As das rotinas de domingo
+// saem num resumo só, na segunda; a da correção sai na mesma mensagem que já existia.
 
+import { randomBytes } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { sincronizarBriefingAprendido } from "@/lib/cs/briefing-sync";
 
-/** Teto por cliente/dia: guarda-corpo contra envenenamento (um dia ruim não reescreve o cliente). */
+/** Teto por cliente/dia e por fonte: guarda-corpo contra envenenamento e contra pedir ok demais. */
 const CAP_POR_DIA = 5;
 
-export interface ResultadoGravacao { gravadas: RegraExtraida[]; puladas: number }
+export interface RegraProposta extends RegraExtraida { id: string; codigo: string }
+export interface ResultadoProposta { propostas: RegraProposta[]; puladas: number }
 
-export async function gravarRegras(
+/** Mesma lição escrita duas vezes ("conferir o endereço" ⊂ "conferir o endereço na arte") conta como uma. */
+export function mesmaLicao(a: string, b: string): boolean {
+  const x = a.toLowerCase().trim();
+  const y = b.toLowerCase().trim();
+  return !!x && !!y && (x.includes(y) || y.includes(x));
+}
+
+/**
+ * Quais regras viram proposta: as que não repetem uma regra ativa nem uma proposta aberta, até o teto
+ * que sobra no dia. Pura (o teste roda sem banco).
+ */
+export function separarNovas(regras: RegraExtraida[], jaExistem: string[], restante: number): { novas: RegraExtraida[]; puladas: number } {
+  const vistas = [...jaExistem];
+  const novas: RegraExtraida[] = [];
+  let puladas = 0;
+  let sobra = Math.max(0, restante);
+  for (const r of regras) {
+    if (vistas.some((e) => mesmaLicao(e, r.texto))) { puladas++; continue; }
+    if (sobra <= 0) { puladas++; continue; }
+    novas.push(r); vistas.push(r.texto); sobra--;
+  }
+  return { novas, puladas };
+}
+
+/** Código de 4 letras hex que não esteja em uso por outra proposta aberta. */
+export function novoCodigo(usados: Set<string>, sortear: () => string = () => randomBytes(2).toString("hex")): string {
+  for (let i = 0; i < 50; i++) {
+    const c = sortear();
+    if (!usados.has(c)) { usados.add(c); return c; }
+  }
+  const c = sortear(); usados.add(c); return c; // 50 colisões seguidas: vale o sorteio
+}
+
+export async function proporRegrasAprendidas(
   clientId: string,
   regras: RegraExtraida[],
   meta: { author: string; sourceMessage?: string; capPorDia?: number },
-): Promise<ResultadoGravacao> {
-  if (!regras.length) return { gravadas: [], puladas: 0 };
+): Promise<ResultadoProposta> {
+  if (!regras.length) return { propostas: [], puladas: 0 };
 
   const desde24h = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  // O cap conta POR FONTE, não no total do cliente. Antes era global, e como três jobs de
-  // aprendizado rodam no mesmo domingo, o primeiro a rodar consumia as 5 vagas e calava os outros
-  // dois — o job mais valioso (a releitura do ciclo) seria silenciado pelo menos valioso só por
-  // rodar meia hora depois. O guarda-corpo continua de pé: cada fonte tem seu teto, e uma fonte
-  // ruim num dia ruim ainda não consegue reescrever o cliente.
-  const [{ data: existentes }, { count: hoje }] = await Promise.all([
+  // O cap conta POR FONTE, não no total do cliente: três fontes rodam no mesmo domingo, e a primeira
+  // não pode calar as outras. Conta proposta e ativa, para o teto valer de verdade.
+  const [{ data: existentes, error: eEx }, { count: hoje }, { data: abertas }] = await Promise.all([
     supabaseAdmin.from("cs_client_rules").select("texto")
-      .eq("client_id", clientId).eq("ativo", true),
+      .eq("client_id", clientId).in("estado", ["ativa", "proposta"]),
     supabaseAdmin.from("cs_client_rules").select("id", { count: "exact", head: true })
       .eq("client_id", clientId).eq("origem", "aprendido").eq("author", meta.author)
       .gte("created_at", desde24h),
+    supabaseAdmin.from("cs_client_rules").select("codigo").eq("estado", "proposta").not("codigo", "is", null),
   ]);
+  if (eEx) { console.error("[CS/regras] não li as regras do cliente:", eEx.message); return { propostas: [], puladas: regras.length }; }
 
-  const jaTem = (existentes ?? []).map((e) => String(e.texto).toLowerCase().trim());
-  const cap = meta.capPorDia ?? CAP_POR_DIA;
-  let restante = Math.max(0, cap - (hoje ?? 0));
-
-  const novas: RegraExtraida[] = [];
-  let puladas = 0;
-  for (const r of regras) {
-    const t = r.texto.toLowerCase().trim();
-    // Contenção por inclusão, não igualdade: "conferir o endereço" e "conferir o endereço na arte"
-    // são a mesma lição escrita duas vezes, e duplicata vira ruído no prompt de quem produz.
-    if (jaTem.some((e) => e.includes(t) || t.includes(e))) { puladas++; continue; }
-    if (restante <= 0) { puladas++; continue; }
-    novas.push(r); jaTem.push(t); restante--;
-  }
-  if (!novas.length) return { gravadas: [], puladas };
-
-  const { error } = await supabaseAdmin.from("cs_client_rules").insert(
-    novas.map((r) => ({
-      client_id: clientId, texto: r.texto, escopo: ESCOPO_POR_TIPO[r.tipo],
-      origem: "aprendido", author: meta.author,
-      source_message: meta.sourceMessage?.slice(0, 1000) ?? null,
-    })),
+  const { novas, puladas } = separarNovas(
+    regras, (existentes ?? []).map((e) => String(e.texto)), (meta.capPorDia ?? CAP_POR_DIA) - (hoje ?? 0),
   );
-  if (error) { console.error("[CS/regras] falhou ao gravar:", error.message); return { gravadas: [], puladas }; }
+  if (!novas.length) return { propostas: [], puladas };
 
-  await sincronizarBriefingAprendido(clientId);
-  return { gravadas: novas, puladas };
+  const usados = new Set((abertas ?? []).map((a) => String(a.codigo)));
+  const linhas = novas.map((r) => ({
+    client_id: clientId, texto: r.texto, escopo: ESCOPO_POR_TIPO[r.tipo],
+    origem: "aprendido", author: meta.author, ativo: false, estado: "proposta",
+    codigo: novoCodigo(usados), source_message: meta.sourceMessage?.slice(0, 1000) ?? null,
+  }));
+  const { data, error } = await supabaseAdmin.from("cs_client_rules").insert(linhas).select("id, codigo, texto");
+  if (error) { console.error("[CS/regras] falhou ao propor:", error.message); return { propostas: [], puladas }; }
+
+  const porTexto = new Map((data ?? []).map((d) => [String(d.texto), d]));
+  const propostas = novas.flatMap((r) => {
+    const d = porTexto.get(r.texto);
+    return d ? [{ ...r, id: String(d.id), codigo: String(d.codigo) }] : [];
+  });
+  return { propostas, puladas };
 }
