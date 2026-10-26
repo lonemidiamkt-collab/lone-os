@@ -165,13 +165,18 @@ describe("a mesma resposta em toda tela", () => {
       "components/Sidebar.tsx", "components/conteudo/QuadroProducao.tsx", "app/ceo/page.tsx",
       // lib/hooks/useSnapshots.ts saiu na Leva 7D (N33): a tela de Metas passou a ler do servidor.
       "lib/metrics/cockpit.ts", "lib/priority/fontes/index.ts",
-      "app/api/system/cs-saude/route.ts", "app/api/system/cs-risco-semanal/route.ts",
+      "app/api/system/cs-risco-semanal/route.ts",
     ];
     for (const t of telas) {
       const src = ler(t);
       expect(src, t).not.toMatch(/status\s*===\s*"at_risk"/);
       expect(src, t).toMatch(/lib\/saude\/carteira/);
     }
+    // 26/10/2026, um cálculo de risco só: o cs-saude deixou de julgar risco (ficou com postagem e cadastro do
+    // Instagram). Risco de cliente é só a nota de saúde, no aviso das 9h30.
+    const csSaude = ler("app/api/system/cs-saude/route.ts");
+    expect(csSaude).not.toMatch(/avaliarSaude|formatSaudeDigest|reclamacao.*gte\(/);
+    expect(ler("lib/reports/saudePdf.ts")).not.toMatch(/pedindo atenção/);
     // "Em risco" não é mais rótulo de resultado de anúncio (Tráfego diz "Resultados ruins").
     expect(ler("app/traffic/page.tsx")).not.toMatch(/"Em Risco"/);
     expect(ler("lib/traffic/status-resultado.ts")).not.toMatch(/at_risk: "Em risco"/);
