@@ -483,9 +483,8 @@ export default function ContractGenerator({ client, currentUser }: Props) {
         </div>
       )}
 
-      {/* D4Sign (26/10/2026): o que está lá, quem falta assinar e o PDF assinado — também de cliente sem
-          contrato registrado aqui. Recarrega junto com a lista de contratos. */}
-      <DocumentosD4Sign clientId={client.id} abrirPdf={(p) => void handleViewSigned(p)} recarregarEm={contracts.length} />
+      {/* D4Sign (26/10/2026): quem já assinou e quem falta — também de cliente sem contrato registrado aqui. */}
+      <DocumentosD4Sign clientId={client.id} recarregarEm={contracts.length} />
 
       {/* Contract list */}
       {loading && contracts.length === 0 ? <div className="flex justify-center py-10"><Loader2 size={20} className="text-primary animate-spin" /></div> : listaErro && contracts.length === 0 ? null : contracts.length === 0 ? (

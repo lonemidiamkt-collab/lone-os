@@ -8,10 +8,11 @@ import { useEffect, useState } from "react";
 import { CheckCircle, FileSignature, Loader2, RefreshCw, Save, XCircle } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 
-type Campo = "token" | "cryptKey" | "hmac" | "cofre";
+type Campo = "token" | "cryptKey" | "hmac" | "cofre" | "emailsLone";
 interface Situacao {
   campos: Record<Campo, { configurado: boolean; origem: "painel" | "servidor" | null }>;
   cofre: string | null;
+  emailsLone: string[];
   atualizadoEm: string | null;
   atualizadoPor: string | null;
   testadoEm: string | null;
@@ -26,6 +27,7 @@ const CAMPOS: { campo: Campo; rotulo: string; onde: string; segredo: boolean }[]
   { campo: "cryptKey", rotulo: "Chave de criptografia (cryptKey)", onde: "mesma tela, logo abaixo do token", segredo: true },
   { campo: "hmac", rotulo: "Segredo do webhook (Secret Key MAC)", onde: "mesma tela › \"Gerar Secret Key MAC\"", segredo: true },
   { campo: "cofre", rotulo: "Identificador do cofre dos contratos", onde: "abra o cofre na D4Sign: é o código no endereço da página", segredo: false },
+  { campo: "emailsLone", rotulo: "E-mails de quem assina pela Lone", onde: "os e-mails com que Roberto e Lucas assinam na D4Sign, separados por vírgula", segredo: false },
 ];
 
 const quando = (iso: string | null) => (iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "");
@@ -33,7 +35,7 @@ const quando = (iso: string | null) => (iso ? new Date(iso).toLocaleString("pt-B
 export default function D4SignChaves() {
   const [sit, setSit] = useState<Situacao | null>(null);
   const [erroLeitura, setErroLeitura] = useState<string | null>(null);
-  const [valores, setValores] = useState<Record<Campo, string>>({ token: "", cryptKey: "", hmac: "", cofre: "" });
+  const [valores, setValores] = useState<Record<Campo, string>>({ token: "", cryptKey: "", hmac: "", cofre: "", emailsLone: "" });
   const [salvando, setSalvando] = useState(false);
   const [testando, setTestando] = useState(false);
   const [ligando, setLigando] = useState(false);
@@ -54,7 +56,7 @@ export default function D4SignChaves() {
     setSalvando(false);
     if (!r.ok) { setMsg({ ok: false, texto: r.erro ?? "Não salvei." }); return; }
     // O que foi colado sai da tela assim que gravou: a chave não fica no navegador.
-    setValores({ token: "", cryptKey: "", hmac: "", cofre: "" });
+    setValores({ token: "", cryptKey: "", hmac: "", cofre: "", emailsLone: "" });
     setMsg({ ok: true, texto: apagar.length ? "Apagado do painel: volta a valer o que estiver no servidor." : "Salvo (cifrado). Clique em Testar para conferir." });
     await carregar();
   };
@@ -69,7 +71,7 @@ export default function D4SignChaves() {
   };
 
   const ligarWebhook = async () => {
-    if (!window.confirm("Ligar o aviso da D4Sign? A partir daí a D4Sign avisa o Lone OS de cada assinatura no cofre dos contratos, e o grupo de cadastro passa a receber \"✅ Cliente X assinou o contrato\".")) return;
+    if (!window.confirm("Ligar o aviso da D4Sign? A partir daí a D4Sign avisa o Lone OS de cada assinatura no cofre dos contratos, e o grupo de cadastro passa a receber quem assinou e quem falta.")) return;
     setLigando(true); setMsg(null);
     const r = await chamar<{ ok: boolean; resultado: string }>("/api/contracts/d4sign/config", { acao: "webhook" });
     setLigando(false);
@@ -115,7 +117,9 @@ export default function D4SignChaves() {
                 autoComplete="off" spellCheck={false}
                 value={valores[campo]}
                 onChange={(e) => setValores((p) => ({ ...p, [campo]: e.target.value }))}
-                placeholder={c?.configurado ? (segredo ? "•••••• configurada — cole para trocar" : sit?.cofre ?? "") : "cole aqui"}
+                placeholder={c?.configurado
+                  ? (segredo ? "•••••• configurada — cole para trocar" : campo === "cofre" ? sit?.cofre ?? "" : sit?.emailsLone.join(", ") ?? "")
+                  : "cole aqui"}
                 className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 font-mono"
               />
               <div className="flex items-center justify-between text-[10px]">

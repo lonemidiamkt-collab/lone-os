@@ -3,16 +3,13 @@
 //
 // Cada seção sai do MESMO builder da rota antiga, com o mesmo portão de dia:
 //   bom-dia e pendências → dia útil · postagem → seg–sex · setup → sempre (o cron já é seg–sex)
-//   contratos (26/10/2026) → sempre: uma linha com quem está há 3+ dias sem assinar na D4Sign
-//   (lib/contracts/assinatura.ts; cada contrato volta no máximo uma vez por semana)
 // Seção vazia some; tudo vazio = não manda nada. Texto ou PDF segue o volume (enviar-aviso).
 //
 // Vai pro grupo de ARTES (CS_INTERNAL_GROUP_JID): é lá que o "ok <código>" das pendências funciona —
 // no grupo EQUIPE o inbound não aceita comando de demanda.
 //
 //   ?dry=1 → devolve o texto exato (e a legenda, se for PDF) sem enviar e sem mexer no banco
-//            (não expira pendência, não cria/fecha tarefa, não marca marco de contrato nem a cobrança
-//            do contrato sem assinatura).
+//            (não expira pendência, não cria/fecha tarefa, não marca marco de contrato).
 //
 // Cron: `0 11 * * 1-5` (8h BRT).
 
@@ -29,7 +26,6 @@ import { montarManha, secaoBomDia, secaoPendencias, resumoManha, type SecaoManha
 import { SEM_DONO, type BlocoDono } from "@/lib/cs/cobranca-nominal";
 import type { PanoramaBomDia } from "@/lib/reports/bomDiaPdf";
 import { avisoNominal, type Rotulo } from "@/lib/cs/aviso-nominal";
-import { coletarSemAssinatura } from "@/lib/contracts/assinatura";
 
 const TITULO = "Bom dia, time";
 
@@ -89,15 +85,6 @@ export async function POST(req: NextRequest) {
     const s = await executarCobrancaSetup({ aplicar: !dry, promover: false, marcarMarcos: !dry });
     if (s.texto) outras.push({ chave: "setup", texto: s.texto, fatos: s.fatos });
     detalhe.setup = { em_setup: s.emSetup, tarefas_criadas: s.criadas.length, fechadas_por_prova: s.autoFechadas.length, marcos: s.marcos };
-  });
-
-  // ── CONTRATOS ── (fora do dry marca a cobrança: o mesmo contrato só volta daqui a uma semana)
-  await tentar("contratos", async () => {
-    const c = await coletarSemAssinatura(new Date(), { aplicar: !dry }); // instante real, não o "SP-local" do spNow
-    if ("pulado" in c) { puladas.contratos = c.pulado; return; }
-    if ("erro" in c) { erros.push(`contratos: ${c.erro}`); return; }
-    if (c.texto) outras.push({ chave: "contratos", texto: c.texto });
-    detalhe.contratos = { sem_assinatura: c.itens.length };
   });
 
   const secoes = (rotulo?: Rotulo): SecaoManha[] => [

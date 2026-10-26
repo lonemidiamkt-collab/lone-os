@@ -8,10 +8,10 @@ import { processarDocumento, uuidValido } from "@/lib/contracts/assinatura";
 import { isCronRequest } from "@/lib/api/cron-guard";
 import { getServerUser } from "@/lib/supabase/auth-server";
 
-// POST /api/integracoes/d4sign — o webhook 2.0 do cofre dos contratos na D4Sign. Quando o documento fecha
-// todas as assinaturas, o grupo de cadastro recebe UMA mensagem: "✅ *Cliente X* assinou o contrato em dd/mm."
-// e o PDF assinado entra sozinho na ficha (lib/contracts/assinatura.ts). Cada assinatura avulsa (tipo 4)
-// atualiza quem falta assinar. Cadastro do webhook: POST /api/system/contratos-d4sign?webhook=cadastrar.
+// POST /api/integracoes/d4sign — o webhook 2.0 do cofre dos contratos na D4Sign. A cada assinatura (tipo 4) o
+// Lone OS relê quem assinou e quem falta e o grupo de cadastro recebe "✍️ Cliente X: assinado por A · falta B";
+// quando todos assinam (tipo 1), "✅ *Cliente X* assinou o contrato em dd/mm." — cada um UMA vez
+// (lib/contracts/assinatura.ts). Cadastro do webhook: botão "Ligar o aviso da D4Sign" em Configurações › Jurídico.
 //
 // Rota pública (middleware), protegida pela ASSINATURA da D4Sign: cabeçalho Content-Hmac = "sha256=" +
 // HMAC-SHA256 do UUID do documento com a Secret Key MAC (painel ou D4SIGN_HMAC_SECRET). Sem esse segredo a

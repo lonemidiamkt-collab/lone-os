@@ -1,19 +1,15 @@
-// lib/contracts/d4sign-signatarios.ts — quem assina cada contrato na D4Sign e quem ainda falta. Módulo PURO.
+// lib/contracts/d4sign-signatarios.ts — quem é quem entre os signatários de um documento da D4Sign. Módulo PURO.
 //
-// Quem assina pela Lone sai do gerador do contrato (lib/contracts/generateDocx.ts: "ambos", "roberto",
-// "lucas"). Os e-mails com que eles assinam na D4Sign NÃO moram no código (o repositório é público): ficam
-// no .env da VPS, junto das chaves da D4Sign:
-//   D4SIGN_EMAIL_ROBERTO, D4SIGN_EMAIL_LUCAS   e-mail de cada sócio na D4Sign
-//   D4SIGN_TESTEMUNHAS                          opcional: e-mails das testemunhas, separados por vírgula
-//
-// Papel de cada signatário: "lone" (e-mail de um sócio), "testemunha" (da lista), "cliente" (todo o resto —
-// o outro lado do contrato). E-mail e chave (key_signer) ficam no servidor: a tela mostra nome e papel, e o
-// Lone Finance recebe só nome, papel e se assinou.
+// Papel de cada signatário, pelo e-mail:
+//   "lone"       um dos e-mails de quem assina pela Lone (painel ou D4SIGN_EMAILS_LONE) ou o e-mail da CONTRATADA
+//   "cliente"    um e-mail do cadastro do cliente (email ou email_corporativo)
+//   "cliente"    também quem sobra, QUANDO os e-mails da Lone estão configurados (é o outro lado do contrato)
+//   "indefinido" quem sobra quando os e-mails da Lone não estão configurados — sem chute: a tela mostra só o nome
+// E-mail e chave (key_signer) ficam no servidor; a tela mostra nome e papel.
 
+import { CONTRATADA } from "./contratada";
 import type { Signatario } from "./d4sign";
-
-export type Papel = "cliente" | "lone" | "testemunha";
-export type QuemAssinaPelaLone = "ambos" | "roberto" | "lucas";
+import type { Papel } from "./d4sign-resumo";
 
 export interface SignatarioGravado {
   nome: string | null;
@@ -24,68 +20,38 @@ export interface SignatarioGravado {
   chave: string | null;
 }
 
-export interface SocioQueAssina { quem: "roberto" | "lucas"; nome: string; email: string | null }
-
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-export const emailValido = (e: string | null | undefined): e is string => !!e && EMAIL.test(e.trim());
 const limpo = (e: string | null | undefined) => (e ?? "").trim().toLowerCase();
 
-export function sociosQueAssinam(env: Record<string, string | undefined> = process.env): SocioQueAssina[] {
-  return [
-    { quem: "roberto", nome: "Roberto Lino Machado Neto", email: emailValido(env.D4SIGN_EMAIL_ROBERTO) ? limpo(env.D4SIGN_EMAIL_ROBERTO) : null },
-    { quem: "lucas", nome: "Lucas Bueno dos Santos", email: emailValido(env.D4SIGN_EMAIL_LUCAS) ? limpo(env.D4SIGN_EMAIL_LUCAS) : null },
-  ];
-}
-
-export function testemunhas(env: Record<string, string | undefined> = process.env): string[] {
-  return (env.D4SIGN_TESTEMUNHAS ?? "").split(",").map(limpo).filter(emailValido);
-}
-
-export function papelDe(email: string | null, env: Record<string, string | undefined> = process.env): Papel {
+export function papelDe(email: string | null, p: { emailsLone: string[]; emailsCliente: string[] }): Papel {
   const e = limpo(email);
-  if (e && sociosQueAssinam(env).some((s) => s.email === e)) return "lone";
-  if (e && testemunhas(env).includes(e)) return "testemunha";
-  return "cliente";
+  const lone = new Set([...p.emailsLone.map(limpo), limpo(CONTRATADA.email)]);
+  if (e && lone.has(e)) return "lone";
+  if (e && p.emailsCliente.map(limpo).includes(e)) return "cliente";
+  return p.emailsLone.length ? "cliente" : "indefinido";
 }
 
 /** Os signatários lidos da D4Sign, com o papel de cada um, prontos para gravar. */
-export function gravarSignatarios(lista: Signatario[], env: Record<string, string | undefined> = process.env): SignatarioGravado[] {
+export function gravarSignatarios(lista: Signatario[], p: { emailsLone: string[]; emailsCliente: string[] }): SignatarioGravado[] {
   return lista.map((s) => ({
-    nome: s.nome, email: s.email, papel: papelDe(s.email, env), assinou: s.assinou, assinadoEm: s.assinadoEm, chave: s.chave,
+    nome: s.nome, email: s.email, papel: papelDe(s.email, p), assinou: s.assinou, assinadoEm: s.assinadoEm, chave: s.chave,
   }));
 }
 
 /** Lê o jsonb gravado, tolerando o que não for lista. */
 export function lerSignatariosGravados(v: unknown): SignatarioGravado[] {
   if (!Array.isArray(v)) return [];
+  const papeis: Papel[] = ["cliente", "lone", "testemunha", "indefinido"];
   return v.filter((x): x is SignatarioGravado => !!x && typeof x === "object" && typeof (x as SignatarioGravado).assinou === "boolean")
-    .map((x) => ({ ...x, papel: (["cliente", "lone", "testemunha"] as Papel[]).includes(x.papel) ? x.papel : "cliente" }));
+    .map((x) => ({ ...x, papel: papeis.includes(x.papel) ? x.papel : "indefinido" }));
 }
 
-export const faltamAssinar = (lista: SignatarioGravado[]) => lista.filter((s) => !s.assinou);
-
 /**
- * Quem vai receber o contrato quando ele sai pelo Lone OS: o cliente (act 4, "como parte"), os sócios
- * escolhidos no gerador (act 4) e as testemunhas configuradas (act 5). `faltando` diz o que impede o envio.
+ * A "assinatura" do estado parcial: quem já assinou (e-mails em ordem). Muda a cada nova assinatura — é a
+ * trava do aviso parcial (d4sign_documentos.aviso_parcial). Só letras, números e hífen.
  */
-export function signatariosDoEnvio(p: {
-  emailCliente: string | null;
-  nomeCliente: string;
-  quemAssina: QuemAssinaPelaLone;
-  env?: Record<string, string | undefined>;
-}): { lista: { papel: Papel; nome: string; email: string; act: "4" | "5" }[]; faltando: string[] } {
-  const env = p.env ?? process.env;
-  const faltando: string[] = [];
-  const lista: { papel: Papel; nome: string; email: string; act: "4" | "5" }[] = [];
-  if (emailValido(p.emailCliente)) lista.push({ papel: "cliente", nome: p.nomeCliente, email: limpo(p.emailCliente), act: "4" });
-  else faltando.push("o e-mail de quem assina pelo cliente");
-  for (const s of sociosQueAssinam(env)) {
-    if (p.quemAssina !== "ambos" && p.quemAssina !== s.quem) continue;
-    if (s.email) lista.push({ papel: "lone", nome: s.nome, email: s.email, act: "4" });
-    else faltando.push(`o e-mail do ${s.nome.split(" ")[0]} na D4Sign (D4SIGN_EMAIL_${s.quem.toUpperCase()} no servidor)`);
-  }
-  for (const t of testemunhas(env)) lista.push({ papel: "testemunha", nome: t, email: t, act: "5" });
-  const repetidos = lista.map((s) => s.email).filter((e, i, a) => a.indexOf(e) !== i);
-  if (repetidos.length) faltando.push(`e-mail repetido entre os signatários (${[...new Set(repetidos)].join(", ")})`);
-  return { lista, faltando };
+export function chaveDoParcial(lista: SignatarioGravado[]): string {
+  const feitos = lista.filter((s) => s.assinou).map((s) => limpo(s.email) || limpo(s.nome)).sort();
+  let h = 0;
+  for (const c of feitos.join("|")) h = (Math.imul(31, h) + c.charCodeAt(0)) | 0;
+  return `p${feitos.length}-${(h >>> 0).toString(36)}`;
 }

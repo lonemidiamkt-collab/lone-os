@@ -13,17 +13,21 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { decryptVault, encryptVault } from "@/lib/crypto/vault";
-import { cadastrarWebhookDoCofre, configD4Sign, listarCofre, type ConfigD4Sign } from "./d4sign";
+import { cadastrarWebhookDoCofre, configD4Sign, listaDeEmails, listarCofre, type ConfigD4Sign } from "./d4sign";
 
-export type CampoD4Sign = "token" | "cryptKey" | "hmac" | "cofre";
-export const CAMPOS_D4SIGN: CampoD4Sign[] = ["token", "cryptKey", "hmac", "cofre"];
-const COLUNA: Record<CampoD4Sign, string> = { token: "token", cryptKey: "crypt_key", hmac: "hmac", cofre: "cofre" };
+export type CampoD4Sign = "token" | "cryptKey" | "hmac" | "cofre" | "emailsLone";
+export const CAMPOS_D4SIGN: CampoD4Sign[] = ["token", "cryptKey", "hmac", "cofre", "emailsLone"];
+/** Não são segredo: ficam em texto e a tela mostra. */
+const ABERTOS: CampoD4Sign[] = ["cofre", "emailsLone"];
+const COLUNA: Record<CampoD4Sign, string> = { token: "token", cryptKey: "crypt_key", hmac: "hmac", cofre: "cofre", emailsLone: "emails_lone" };
 const VARIAVEL: Record<CampoD4Sign, string> = {
   token: "D4SIGN_API_TOKEN", cryptKey: "D4SIGN_CRYPT_KEY", hmac: "D4SIGN_HMAC_SECRET", cofre: "D4SIGN_SAFE_UUID",
+  emailsLone: "D4SIGN_EMAILS_LONE",
 };
 export const ROTULO_CAMPO: Record<CampoD4Sign, string> = {
   token: "Token da API (tokenAPI)", cryptKey: "Chave de criptografia (cryptKey)",
   hmac: "Segredo do webhook (Secret Key MAC)", cofre: "Identificador do cofre dos contratos",
+  emailsLone: "E-mails de quem assina pela Lone",
 };
 
 export type PainelD4Sign = Partial<Record<CampoD4Sign, string | null>>;
@@ -44,6 +48,11 @@ export function mesclarConfig(painel: PainelD4Sign | null, env: Record<string, s
 export function validarCampo(campo: CampoD4Sign, valor: string): string | null {
   const v = valor.trim();
   if (!v) return `${ROTULO_CAMPO[campo]}: vazio`;
+  if (campo === "emailsLone") {
+    const itens = v.split(/[,;\s]+/).filter(Boolean);
+    const ruins = itens.filter((e) => !listaDeEmails(e).length);
+    return ruins.length ? `${ROTULO_CAMPO[campo]}: "${ruins[0]}" não é e-mail` : null;
+  }
   if (/\s/.test(v)) return `${ROTULO_CAMPO[campo]}: tem espaço no meio — confira se colou inteiro`;
   if (campo === "cofre" && !UUID.test(v)) return `${ROTULO_CAMPO[campo]}: precisa ser o UUID do cofre (formato xxxxxxxx-xxxx-…)`;
   if ((campo === "token" || campo === "cryptKey") && v.length < 10) return `${ROTULO_CAMPO[campo]}: curto demais para ser a chave da D4Sign`;
@@ -83,7 +92,7 @@ function decifrar(linha: LinhaConfig | null): PainelD4Sign | null {
   for (const c of CAMPOS_D4SIGN) {
     const bruto = linha[COLUNA[c] as keyof LinhaConfig] as string | null | undefined;
     if (!bruto) continue;
-    try { painel[c] = c === "cofre" ? bruto : decryptVault(bruto); }
+    try { painel[c] = ABERTOS.includes(c) ? bruto : decryptVault(bruto); }
     catch (e) { console.error(`[d4sign-config] não consegui decifrar ${c} (VAULT_KEY trocada?):`, e instanceof Error ? e.message : e); }
   }
   return painel;
@@ -114,8 +123,9 @@ export interface EntradaHistorico { quem: string; quando: string; acao: "trocou"
 
 export interface SituacaoConfig {
   campos: Record<CampoD4Sign, { configurado: boolean; origem: "painel" | "servidor" | null }>;
-  /** O cofre não é segredo: aparece inteiro, para conferir. */
+  /** O cofre e os e-mails da Lone não são segredo: aparecem inteiros, para conferir. */
   cofre: string | null;
+  emailsLone: string[];
   atualizadoEm: string | null;
   atualizadoPor: string | null;
   testadoEm: string | null;
@@ -144,6 +154,7 @@ export async function situacaoDaConfig(env: Record<string, string | undefined> =
     ok: true,
     situacao: {
       campos, cofre: cfg?.cofre ?? (painel?.cofre || env.D4SIGN_SAFE_UUID?.trim() || null),
+      emailsLone: cfg?.emailsLone ?? listaDeEmails(painel?.emailsLone || env.D4SIGN_EMAILS_LONE),
       atualizadoEm: linha?.atualizado_em ?? null, atualizadoPor: linha?.atualizado_por ?? null,
       testadoEm: linha?.testado_em ?? null, testeOk: linha?.teste_ok ?? null, testeResultado: linha?.teste_resultado ?? null,
       historico: lerHistorico(linha?.historico).slice(0, 10),
@@ -165,7 +176,10 @@ export async function salvarConfigD4Sign(p: { novos: PainelD4Sign; apagar: Campo
 
   const campos: Record<string, string | null> = {};
   try {
-    for (const c of novos) campos[COLUNA[c]] = c === "cofre" ? p.novos[c]!.trim() : encryptVault(p.novos[c]!.trim());
+    for (const c of novos) {
+      campos[COLUNA[c]] = c === "emailsLone" ? listaDeEmails(p.novos[c]).join(", ")
+        : ABERTOS.includes(c) ? p.novos[c]!.trim() : encryptVault(p.novos[c]!.trim());
+    }
   } catch (e) {
     return { ok: false, erro: `Não salvei: o servidor está sem a chave de cifra (VAULT_KEY). ${e instanceof Error ? e.message.split(".")[0] : ""}`.trim() };
   }

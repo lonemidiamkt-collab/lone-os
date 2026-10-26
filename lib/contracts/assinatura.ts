@@ -1,71 +1,62 @@
-// lib/contracts/assinatura.ts — "✅ Cliente X assinou o contrato" no grupo de cadastro, UMA vez.
+// lib/contracts/assinatura.ts — quem assinou e quem falta na D4Sign, avisado no grupo de cadastro.
 //
-// Pedido do Roberto (26/10/2026): o contrato sai do Lone OS (.docx), alguém sobe na D4Sign e manda para
-// assinar — e depois ninguém olhava a D4Sign; a equipe perguntava ao cliente se ele já tinha assinado
-// quando ele já tinha. Agora:
+// Pedido do Roberto (26/10/2026): "a maior questão é a gente saber quem assinou, quem não assinou; se o
+// cliente assinou, enviar lá no nosso grupo de cadastro 'cliente acabou de assinar o contrato', ou 'o cliente
+// ainda não assinou o contrato'". Três mensagens, todas no grupo de cadastro:
 //
-//   · webhook 2.0 do cofre (POST /api/integracoes/d4sign) ............ na hora em que o documento fecha
-//   · consulta de hora em hora (POST /api/system/contratos-d4sign) .... o que o webhook não trouxe, e há
-//                                                                       quantos dias cada um espera
-//   · resumo da manhã (cs-manha) ...................................... uma linha com quem está há mais de
-//                                                                       DIAS_SEM_ASSINATURA dias sem assinar
+//   · ✅ "Cliente X assinou o contrato em dd/mm" ..... todas as assinaturas feitas (uma vez por documento)
+//   · ✍️ "Cliente X: assinado por A em dd/mm · falta B"  uma parte assinou (uma vez a cada assinatura nova)
+//   · ⏳ "Ainda não assinaram o contrato" ............. dia útil de manhã, só se houver contrato enviado há 3 dias
+//                                                       ou mais sem todas as assinaturas (avisarPendentes)
 //
-// Os dois caminhos chamam processarDocumento(), que nunca confia no evento: relê o documento na D4Sign e
-// só chama de "assinado" a fase Finalizado (ou Arquivado com todos os signatários assinados). Cada leitura
-// grava os signatários (quem falta assinar) e, quando fecha, o PDF assinado é baixado e anexado ao
-// contrato pela mesma regra do "Upload assinado" (anexarPdfAssinado). A D4Sign responde a 10 chamadas
-// por hora (lib/contracts/d4sign-cota.ts): a consulta lê pouco por vez e para antes de gastar as últimas.
+// De onde vem: o webhook 2.0 do cofre (POST /api/integracoes/d4sign) a cada assinatura, e uma consulta a cada
+// 3 horas (POST /api/system/contratos-d4sign) para o que o webhook não trouxe. Os dois chamam
+// processarDocumento(), que nunca confia no evento: relê o documento na D4Sign (signatários, quem assinou,
+// quando) e só chama de "assinado" a fase Finalizado (ou Arquivado com todos assinados). A D4Sign responde a
+// 10 chamadas por hora (lib/contracts/d4sign-cota.ts): as rotinas leem pouco e param antes das últimas.
 //
 // Regras que não se negociam:
-//   · UMA mensagem por documento. A trava é d4sign_documentos.aviso_reservado_em, marcada ANTES do envio
-//     com `update … where aviso_reservado_em is null` — webhook repetido, retry da D4Sign e a consulta
-//     caem na mesma linha e só um manda. Envio que falha solta a trava (a D4Sign repete o webhook e a
-//     consulta tenta na próxima hora); envio INCERTO (o WhatsApp não respondeu a tempo) não solta.
-//   · Leitura que falha (D4Sign ou banco) não vira "não assinado" nem "assinado": não grava, não manda,
-//     e devolve erro com tentarDeNovo.
-//   · Não é novidade, não é aviso: documento assinado há mais de JANELA_AVISO_DIAS dias (a primeira
-//     consulta encontra o histórico do cofre inteiro) é registrado em silêncio.
+//   · Cada aviso sai UMA vez. Trava antes de mandar: aviso_reservado_em (final) e aviso_parcial (o retrato de
+//     quem já tinha assinado). Evento repetido, retry da D4Sign e a consulta caem na mesma linha e só um manda.
+//     Envio que falha solta a trava; envio INCERTO (o WhatsApp não respondeu a tempo) não solta.
+//   · Leitura que falha (D4Sign ou banco) não vira "não assinado" nem "assinado": não grava, não manda.
+//   · Não é novidade, não é aviso: assinatura de mais de JANELA_AVISO_DIAS dias (a primeira consulta acha o
+//     histórico do cofre) é registrada em silêncio.
 //   · Ligação ao cadastro só com par ÚNICO (e-mail do signatário, depois o nome do arquivo). Sem par, a
 //     mensagem sai com o nome do documento e diz que a data não foi gravada na ficha.
-//   · O contrato FECHA com o PDF assinado na ficha, como sempre: quando o PDF baixado da D4Sign entra, ganha
-//     signed_pdf_path + signed_at + status active — só se ainda não tinha PDF (nunca troca um que existe).
-//     Antes disso a tela mostra "assinado na D4Sign em dd/mm" (contracts.d4sign_assinado_em, e
-//     clients.contrato_assinado_em no cadastro).
+//   · Não mexe em signed_at nem em status do contrato: ele fecha com o PDF assinado na ficha, como sempre.
+//     Grava contracts.d4sign_assinado_em e clients.contrato_assinado_em.
 //   · NUNCA para grupo de cliente: confere que o grupo configurado não é o de nenhum cliente.
 //
 // Testado em tests/contrato-assinado-d4sign.test.ts (D4Sign e banco simulados).
 
-import { createHash } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { jidDoGrupoCadastro } from "@/lib/portal/link-automatico";
 import {
-  baixarPdfAssinado, buscarDocumento, listarCofre, statusEfetivo,
+  buscarDocumento, listarCofre, statusEfetivo,
   type ConfigD4Sign, type DocumentoD4Sign, type ResumoD4Sign, type StatusDoc,
 } from "./d4sign";
-import { gravarSignatarios, lerSignatariosGravados, type SignatarioGravado } from "./d4sign-signatarios";
+import { chaveDoParcial, gravarSignatarios, lerSignatariosGravados, type SignatarioGravado } from "./d4sign-signatarios";
+import { juntar, quemAssina, resumoAssinaturas } from "./d4sign-resumo";
 import { carregarConfigD4Sign } from "./d4sign-config";
 
 export const JANELA_AVISO_DIAS = 4;
 export const DIAS_SEM_ASSINATURA = 3;
-export const REPETE_COBRANCA_DIAS = 7;
-/** Chamadas por consulta além da listagem (a conta responde a 10 por hora; o resto fica para a próxima). */
+/** Chamadas por rodada além da listagem (a conta responde a 10 por hora; o resto fica para a próxima). */
 export const LEITURAS_POR_CONSULTA = 3;
-/** O PDF assinado é baixado para assinatura de até 30 dias, em até 5 tentativas. */
-export const PDF_JANELA_DIAS = 30;
-export const PDF_TENTATIVAS = 5;
-export const BUCKET_CONTRATOS = "legal-docs";
 
 const DIA = 86_400_000;
 const TABELA = "d4sign_documentos";
-const ORIGEM_ENVIO = "contrato-assinado";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type Origem = "webhook" | "consulta" | "envio";
+export type Origem = "webhook" | "consulta" | "manha";
 export type Vinculo = "documento" | "email" | "nome";
 
 export const uuidValido = (s: string) => UUID.test(s);
 export const idemDoAviso = (uuid: string) => `contrato-assinado:${uuid}`;
+export const idemDoParcial = (uuid: string, chave: string) => `contrato-parcial:${uuid}:${chave}`;
+export const idemDosPendentes = (dia: string) => `contratos-pendentes:${dia}`;
 
 // ── Puras ────────────────────────────────────────────────────────────────────────────────────────
 
@@ -217,13 +208,37 @@ export function mensagemAssinatura(p: {
   return p.ligado ? linha : `${linha}\n_Não achei o cadastro no Lone OS: a data não foi gravada na ficha._`;
 }
 
-/** A linha do resumo da manhã. "" = ninguém esperando há tempo demais. */
-export function linhaSemAssinatura(itens: { nome: string; dias: number }[]): string {
+/** Aviso parcial? Só documento esperando assinatura, com alguém que assinou E alguém que falta, assinatura
+ *  recente, e um retrato de "quem já assinou" diferente do último avisado. Pura. */
+export function decidirParcial(p: {
+  status: StatusDoc;
+  signatarios: SignatarioGravado[];
+  agora: Date;
+  jaAvisado: string | null;
+}): { avisar: boolean; chave: string; motivo: string | null } {
+  const chave = chaveDoParcial(p.signatarios);
+  const nada = (motivo: string | null) => ({ avisar: false, chave, motivo });
+  if (p.status !== "pendente") return nada(null);
+  const feitos = p.signatarios.filter((s) => s.assinou);
+  if (!feitos.length || feitos.length === p.signatarios.length) return nada(null);
+  const ultima = feitos.map((s) => s.assinadoEm).filter((d): d is string => !!d).sort().pop();
+  if (!ultima || p.agora.getTime() - new Date(ultima).getTime() > JANELA_AVISO_DIAS * DIA) return nada("assinatura parcial antiga: não é novidade");
+  if (p.jaAvisado === chave) return nada("o grupo de cadastro já recebeu esta assinatura");
+  return { avisar: true, chave, motivo: null };
+}
+
+export const mensagemParcial = (nome: string, lista: SignatarioGravado[]) => `✍️ *${nome}*: ${resumoAssinaturas(lista)}.`;
+
+export interface ItemPendente { uuid: string; nome: string; faltam: SignatarioGravado[]; dias: number }
+
+/** O aviso da manhã. "" = ninguém esperando. Os mais antigos primeiro, no máximo 10 linhas. Pura. */
+export function mensagemPendentes(itens: ItemPendente[]): string {
   if (!itens.length) return "";
   const ordem = [...itens].sort((a, b) => b.dias - a.dias);
-  const nomes = ordem.slice(0, 5).map((i) => `${i.nome} (${i.dias} dias)`).join(", ");
-  const resto = ordem.length > 5 ? ` e mais ${ordem.length - 5}` : "";
-  return `✍️ *Contrato sem assinatura na D4Sign:* ${nomes}${resto}.`;
+  const linhas = ordem.slice(0, 10).map((i) =>
+    `• *${i.nome}* — falta ${i.faltam.length ? juntar(i.faltam.map(quemAssina)) : "assinar (a D4Sign não disse quem)"} · enviado há ${i.dias} dia${i.dias === 1 ? "" : "s"}`);
+  if (ordem.length > 10) linhas.push(`• e mais ${ordem.length - 10}`);
+  return ["⏳ *Ainda não assinaram o contrato*", ...linhas].join("\n");
 }
 
 // ── Banco ────────────────────────────────────────────────────────────────────────────────────────
@@ -233,9 +248,11 @@ export interface LinhaDocumento {
   nome?: string | null;
   status?: StatusDoc;
   status_id?: string | null;
+  tipo?: "contrato" | "documento" | null;
   contract_id?: string | null;
   client_id?: string | null;
   vinculo?: Vinculo | null;
+  signatarios?: SignatarioGravado[] | unknown;
   enviado_em?: string | null;
   assinado_em?: string | null;
   visto_em?: string | null;
@@ -244,19 +261,8 @@ export interface LinhaDocumento {
   aviso_reservado_em?: string | null;
   aviso_enviado_em?: string | null;
   aviso_motivo?: string | null;
-  cobrado_em?: string | null;
+  aviso_parcial?: string | null;
   leitura_erro?: string | null;
-  tipo?: "contrato" | "documento" | null;
-  signatarios?: SignatarioGravado[] | unknown;
-  envio_etapa?: "subido" | "signatarios" | "enviado" | null;
-  enviado_por?: string | null;
-  pdf_path?: string | null;
-  pdf_sha256?: string | null;
-  pdf_tamanho?: number | null;
-  pdf_baixado_em?: string | null;
-  pdf_tentativas?: number | null;
-  pdf_erro?: string | null;
-  lembrado_em?: string | null;
 }
 
 const COLS_CONTRATO = "id, client_id, created_at, signed_at, d4sign_document_uuid, d4sign_assinado_em";
@@ -275,12 +281,20 @@ async function ehGrupoDeCliente(jid: string): Promise<boolean> {
   return (data?.length ?? 0) > 0;
 }
 
+/** O grupo de cadastro, conferido. null = pode mandar; texto = por que não. */
+async function grupoDeCadastro(): Promise<{ jid: string } | { erro: string; tentarDeNovo: boolean }> {
+  const jid = jidDoGrupoCadastro();
+  if (!jid) return { erro: "grupo de cadastro não configurado (CS_CADASTRO_GROUP_JID)", tentarDeNovo: true };
+  if (await ehGrupoDeCliente(jid)) return { erro: "o grupo configurado é de um cliente — não mando", tentarDeNovo: false };
+  return { jid };
+}
+
 export interface ResultadoDocumento {
   uuid: string;
   ok: boolean;
-  /** Vale tentar de novo: o webhook devolve 503 (a D4Sign repete) e a consulta pega na próxima hora. */
+  /** Vale tentar de novo: o webhook devolve 503 (a D4Sign repete) e a consulta pega na próxima rodada. */
   tentarDeNovo: boolean;
-  acao: "avisado" | "avisaria" | "ja_avisado" | "registrado" | "ignorado" | "erro";
+  acao: "avisado" | "avisaria" | "parcial" | "parcial_avisaria" | "ja_avisado" | "registrado" | "ignorado" | "erro";
   status?: StatusDoc;
   /** Do cadastro, ou do nome do arquivo quando não ligou. */
   nome?: string;
@@ -288,13 +302,13 @@ export interface ResultadoDocumento {
   contractId?: string | null;
   vinculo?: Vinculo | null;
   assinadoEm?: string | null;
+  /** "assinado por X em dd/mm · falta Y". */
+  resumo?: string;
   /** O texto que saiu (ou sairia, no ensaio). */
   mensagem?: string;
   motivo?: string | null;
   /** O que falhou sem impedir o resto (gravar a data no contrato, etc.). */
   avisos?: string[];
-  /** O PDF assinado (só quando o documento fechou e é de um cliente ligado). */
-  pdf?: ResultadoPdf;
 }
 
 export interface OpcoesDocumento {
@@ -305,24 +319,30 @@ export interface OpcoesDocumento {
   /** A data do evento do webhook — só usada se a D4Sign não trouxer a do último signatário. */
   quandoEvento?: string | null;
   cfg?: ConfigD4Sign | null;
-  /** Já lido (a consulta reaproveita); sem isto, lê na D4Sign. */
+  /** Já lido (a consulta reaproveita a listagem); sem isto, lê na D4Sign. */
   doc?: DocumentoD4Sign;
+  /** Aviso parcial ("assinado por X · falta Y"). Padrão: sim; a releitura da manhã passa false. */
+  avisarParcial?: boolean;
 }
 
-/** Relê o documento na D4Sign, registra, liga ao cadastro, grava a data e avisa uma vez. Nunca lança. */
+const ehLimite = (motivo: string | null | undefined) => /limite de chamadas/.test(motivo ?? "");
+
+/** Relê o documento na D4Sign, registra quem assinou, liga ao cadastro, grava a data e avisa. Nunca lança. */
 export async function processarDocumento(uuid: string, opts: OpcoesDocumento): Promise<ResultadoDocumento> {
   const agora = opts.agora ?? new Date();
   const agoraIso = agora.toISOString();
   const falha = (erro: string, tentarDeNovo = true): ResultadoDocumento => ({ uuid, ok: false, tentarDeNovo, acao: "erro", motivo: erro });
+  const semMigracao = (e: { code?: string; message?: string }, o: string) =>
+    faltaMigracao(e) ? "falta aplicar a migration 20261026150000_contrato_assinado_d4sign" : `${o}: ${e.message}`;
   try {
     if (!uuidValido(uuid)) return falha("UUID de documento inválido", false);
     const cfg = opts.cfg === undefined ? await carregarConfigD4Sign() : opts.cfg;
-    if (!cfg) return falha("D4Sign não configurada (chaves no painel em Configurações › Jurídico, ou no servidor)");
+    if (!cfg) return falha("D4Sign não configurada (chaves em Configurações › Jurídico, ou no servidor)");
 
     // 1. A verdade é a D4Sign, não o evento.
     let doc = opts.doc;
     if (!doc) {
-      const lido = await buscarDocumento(cfg, uuid, opts.origem === "consulta" ? "consulta" : opts.origem === "envio" ? "envio" : "webhook");
+      const lido = await buscarDocumento(cfg, uuid, opts.origem);
       if (!lido.ok) {
         if (!opts.dry && !lido.limite) {
           await supabaseAdmin.from(TABELA).update({ leitura_erro: lido.erro.slice(0, 300), atualizado_em: agoraIso }).eq("document_uuid", uuid);
@@ -337,7 +357,7 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
 
     // 2. O que já se sabia deste documento.
     const ex = await supabaseAdmin.from(TABELA).select("*").eq("document_uuid", uuid).maybeSingle();
-    if (ex.error) return falha(faltaMigracao(ex.error) ? "falta aplicar a migration 20261026150000_contrato_assinado_d4sign" : `não consegui ler o registro: ${ex.error.message}`);
+    if (ex.error) return falha(semMigracao(ex.error, "não consegui ler o registro"));
     const existente = (ex.data as LinhaDocumento | null) ?? null;
 
     // Assinado não "desassina": arquivado depois de finalizado, lido sem a lista de signatários, segue assinado.
@@ -355,7 +375,7 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
     let motivoVinculo: string | null = null;
     if (!clientId) {
       const pelo = await supabaseAdmin.from("contracts").select(COLS_CONTRATO).eq("d4sign_document_uuid", uuid).limit(1);
-      if (pelo.error) return falha(faltaMigracao(pelo.error) ? "falta aplicar a migration 20261026150000_contrato_assinado_d4sign" : `não consegui ler os contratos: ${pelo.error.message}`);
+      if (pelo.error) return falha(semMigracao(pelo.error, "não consegui ler os contratos"));
       const c = (pelo.data as ContratoCadastro[] | null)?.[0];
       if (c) { clientId = c.client_id; contractId = c.id; vinculo = "documento"; }
     }
@@ -376,14 +396,24 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
     const cliente = clientId ? clientes.find((c) => c.id === clientId) : undefined;
     const nome = cliente ? nomeDoCliente(cliente) : nomeDoDocumento(doc.nome);
 
-    // 4. Avisar?
+    // Quem assinou e quem falta. A listagem do cofre não traz signatários: sem leitura, fica o que já se sabia.
+    const emailsCliente = [cliente?.email, cliente?.email_corporativo].filter((e): e is string => !!e);
+    const signatarios = doc.signatarios.length
+      ? gravarSignatarios(doc.signatarios, { emailsLone: cfg.emailsLone, emailsCliente })
+      : lerSignatariosGravados(existente?.signatarios);
+
+    // 4. Avisar? O final (todos assinaram) ou o parcial (alguém assinou, alguém falta).
     const d = decidirAviso({ status, assinadoEm, agora, viuPendente: existente?.status === "pendente", reservadoEm: existente?.aviso_reservado_em ?? null });
+    const parcial = opts.avisarParcial === false
+      ? { avisar: false, chave: chaveDoParcial(signatarios), motivo: null }
+      : decidirParcial({ status, signatarios, agora, jaAvisado: existente?.aviso_parcial ?? null });
     const mensagem = d.avisar
       ? mensagemAssinatura({ nome, assinadoEm, tipo, nomeDocumento: doc.nome, ligado: !!clientId })
-      : undefined;
+      : parcial.avisar ? mensagemParcial(nome, signatarios) : undefined;
     const base: ResultadoDocumento = {
       uuid, ok: true, tentarDeNovo: false, acao: "registrado", status, nome, clientId, contractId, vinculo, assinadoEm,
-      motivo: d.motivo ?? (clientId ? null : motivoVinculo),
+      resumo: resumoAssinaturas(signatarios),
+      motivo: d.motivo ?? parcial.motivo ?? (clientId ? null : motivoVinculo),
     };
 
     const linha: LinhaDocumento = {
@@ -392,8 +422,7 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
       status,
       status_id: doc.statusId,
       tipo,
-      // A listagem do cofre não traz signatários: sem leitura, fica o que já se sabia.
-      signatarios: doc.signatarios.length ? gravarSignatarios(doc.signatarios) : lerSignatariosGravados(existente?.signatarios),
+      signatarios,
       client_id: clientId,
       contract_id: contractId,
       vinculo,
@@ -406,17 +435,14 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
       ...(status === "assinado" && !d.avisar && !existente?.aviso_reservado_em ? { aviso_motivo: d.motivo } : {}),
     };
 
-    const anexar = deveAnexarPdf({ status, tipo, clientId, assinadoEm, agora, existente });
     if (opts.dry) {
-      return {
-        ...base, acao: d.avisar ? "avisaria" : existente?.aviso_reservado_em ? "ja_avisado" : "registrado", mensagem,
-        ...(anexar ? { pdf: { ok: true, anexado: false, motivo: "anexaria o PDF assinado da D4Sign" } } : {}),
-      };
+      const acao = d.avisar ? "avisaria" : parcial.avisar ? "parcial_avisaria" : existente?.aviso_reservado_em ? "ja_avisado" : "registrado";
+      return { ...base, acao, mensagem };
     }
 
-    // 5. Registrar (o registro vem antes do aviso: é nele que mora a trava).
+    // 5. Registrar (o registro vem antes do aviso: é nele que moram as travas).
     const up = await supabaseAdmin.from(TABELA).upsert(linha, { onConflict: "document_uuid" });
-    if (up.error) return falha(faltaMigracao(up.error) ? "falta aplicar a migration 20261026150000_contrato_assinado_d4sign" : `não consegui registrar o documento: ${up.error.message}`);
+    if (up.error) return falha(semMigracao(up.error, "não consegui registrar o documento"));
 
     // 6. A data na ficha: contrato e cliente. Falhar aqui não segura o aviso, mas aparece no resultado.
     const avisos: string[] = [];
@@ -440,168 +466,52 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
     }
     const comAvisos = (r: ResultadoDocumento): ResultadoDocumento => (avisos.length ? { ...r, avisos } : r);
 
-    // 7. O aviso: grupo de cadastro, nunca de cliente; reserva antes de mandar.
-    const avisar = async (): Promise<ResultadoDocumento> => {
-      if (!d.avisar || !mensagem) return { ...base, acao: existente?.aviso_reservado_em ? "ja_avisado" : "registrado" };
-      const jid = jidDoGrupoCadastro();
-      if (!jid) return { ...base, ok: false, tentarDeNovo: true, acao: "erro", motivo: "grupo de cadastro não configurado (CS_CADASTRO_GROUP_JID)" };
-      if (await ehGrupoDeCliente(jid)) return { ...base, ok: false, acao: "erro", motivo: "o grupo configurado é de um cliente — não mando" };
+    if (!mensagem) return comAvisos({ ...base, acao: existente?.aviso_reservado_em ? "ja_avisado" : "registrado" });
 
+    // 7. O aviso: grupo de cadastro, nunca de cliente; reserva antes de mandar.
+    const grupo = await grupoDeCadastro();
+    if ("erro" in grupo) return comAvisos({ ...base, ok: false, tentarDeNovo: grupo.tentarDeNovo, acao: "erro", motivo: grupo.erro });
+
+    if (d.avisar) {
       const marca = new Date().toISOString();
       const reserva = await supabaseAdmin.from(TABELA).update({ aviso_reservado_em: marca })
         .eq("document_uuid", uuid).is("aviso_reservado_em", null).select("document_uuid");
-      if (reserva.error) return { ...base, ok: false, tentarDeNovo: true, acao: "erro", motivo: `não consegui reservar o aviso: ${reserva.error.message}` };
-      if (!reserva.data?.length) return { ...base, acao: "ja_avisado", motivo: "o grupo de cadastro já recebeu este aviso" };
+      if (reserva.error) return comAvisos({ ...base, ok: false, tentarDeNovo: true, acao: "erro", motivo: `não consegui reservar o aviso: ${reserva.error.message}` });
+      if (!reserva.data?.length) return comAvisos({ ...base, acao: "ja_avisado", motivo: "o grupo de cadastro já recebeu este aviso" });
 
-      const env = await csSendGroupText(jid, mensagem, undefined,
-        { origem: ORIGEM_ENVIO, destino: "interno", clientId, idem: idemDoAviso(uuid) });
+      const env = await csSendGroupText(grupo.jid, mensagem, undefined, { origem: "contrato-assinado", destino: "interno", clientId, idem: idemDoAviso(uuid) });
       if (env.ok) {
         await supabaseAdmin.from(TABELA).update({ aviso_enviado_em: new Date().toISOString(), aviso_motivo: null }).eq("document_uuid", uuid);
-        return { ...base, acao: "avisado", mensagem, motivo: null };
+        return comAvisos({ ...base, acao: "avisado", mensagem, motivo: null });
       }
       if (env.incerto) {
         // Pode ter saído: manter a trava. Repetir seria pior que faltar (e o motivo fica no registro).
         await supabaseAdmin.from(TABELA).update({ aviso_motivo: `envio incerto: ${env.error ?? "sem resposta"}` }).eq("document_uuid", uuid);
-        return { ...base, ok: false, acao: "erro", mensagem, motivo: `o WhatsApp não confirmou o envio (pode ter saído): ${env.error ?? ""}`.trim() };
+        return comAvisos({ ...base, ok: false, acao: "erro", mensagem, motivo: `o WhatsApp não confirmou o envio (pode ter saído): ${env.error ?? ""}`.trim() });
       }
       // Não saiu: solta a trava (só a nossa) para a próxima tentativa.
       await supabaseAdmin.from(TABELA).update({ aviso_reservado_em: null, aviso_motivo: `envio falhou: ${env.error ?? "erro"}` })
         .eq("document_uuid", uuid).eq("aviso_reservado_em", marca);
-      return { ...base, ok: false, tentarDeNovo: true, acao: "erro", mensagem, motivo: `o aviso não saiu: ${env.error ?? "erro no WhatsApp"}` };
-    };
-    const r = comAvisos(await avisar());
+      return comAvisos({ ...base, ok: false, tentarDeNovo: true, acao: "erro", mensagem, motivo: `o aviso não saiu: ${env.error ?? "erro no WhatsApp"}` });
+    }
 
-    // 8. O PDF assinado na ficha. Falhar aqui não desfaz o aviso: a consulta tenta de novo depois.
-    if (!anexar) return r;
-    const pdf = await anexarPdfAssinado({
-      uuid, clientId: clientId!, contractId, assinadoEm, cfg, tentativas: existente?.pdf_tentativas ?? 0,
-    });
-    return { ...r, pdf };
+    // Parcial: a trava é o retrato de quem já tinha assinado (só letras, números e hífen — seguro no filtro).
+    const anterior = existente?.aviso_parcial ?? null;
+    const reserva = await supabaseAdmin.from(TABELA).update({ aviso_parcial: parcial.chave })
+      .eq("document_uuid", uuid).or(`aviso_parcial.is.null,aviso_parcial.neq.${parcial.chave}`).select("document_uuid");
+    if (reserva.error) return comAvisos({ ...base, ok: false, tentarDeNovo: true, acao: "erro", motivo: `não consegui reservar o aviso parcial: ${reserva.error.message}` });
+    if (!reserva.data?.length) return comAvisos({ ...base, acao: "ja_avisado", motivo: "o grupo de cadastro já recebeu esta assinatura" });
+    const env = await csSendGroupText(grupo.jid, mensagem, undefined, { origem: "contrato-parcial", destino: "interno", clientId, idem: idemDoParcial(uuid, parcial.chave) });
+    if (env.ok) return comAvisos({ ...base, acao: "parcial", mensagem, motivo: null });
+    if (env.incerto) return comAvisos({ ...base, ok: false, acao: "erro", mensagem, motivo: `o WhatsApp não confirmou o envio (pode ter saído): ${env.error ?? ""}`.trim() });
+    await supabaseAdmin.from(TABELA).update({ aviso_parcial: anterior }).eq("document_uuid", uuid).eq("aviso_parcial", parcial.chave);
+    return comAvisos({ ...base, ok: false, tentarDeNovo: true, acao: "erro", mensagem, motivo: `o aviso não saiu: ${env.error ?? "erro no WhatsApp"}` });
   } catch (e) {
     return falha(e instanceof Error ? e.message : "erro");
   }
 }
 
-// ── PDF assinado ─────────────────────────────────────────────────────────────────────────────────
-
-export interface ResultadoPdf {
-  ok: boolean;
-  /** O PDF foi baixado e guardado (legal-docs/contracts-signed/…). */
-  anexado: boolean;
-  /** O contrato do Lone OS fechou com este PDF (signed_pdf_path + signed_at + status active). */
-  contratoFechado?: boolean;
-  caminho?: string;
-  motivo: string | null;
-}
-
-/** Baixar o PDF? Só contrato assinado, de cliente ligado, ainda sem PDF, assinado há até 30 dias. Pura. */
-export function deveAnexarPdf(p: {
-  status: StatusDoc;
-  tipo: "contrato" | "documento";
-  clientId: string | null;
-  assinadoEm: string | null;
-  agora: Date;
-  existente: LinhaDocumento | null;
-}): boolean {
-  if (p.status !== "assinado" || p.tipo !== "contrato" || !p.clientId || !p.assinadoEm) return false;
-  if (p.existente?.pdf_path) return false;
-  if ((p.existente?.pdf_tentativas ?? 0) >= PDF_TENTATIVAS) return false;
-  return p.agora.getTime() - new Date(p.assinadoEm).getTime() <= PDF_JANELA_DIAS * DIA;
-}
-
-/**
- * Baixa o PDF assinado da D4Sign, guarda no mesmo lugar do "Upload assinado" (legal-docs/contracts-signed/
- * {cliente}/…) e fecha o contrato pela mesma regra: signed_pdf_path + signed_at + status active — só se o
- * contrato ainda não tinha PDF (nunca troca o que alguém subiu). Sem contrato do Lone OS ligado, o PDF fica
- * no registro do documento, visível na aba Contratos do cliente. Nunca lança.
- */
-export async function anexarPdfAssinado(p: {
-  uuid: string;
-  clientId: string;
-  contractId: string | null;
-  assinadoEm: string | null;
-  cfg: ConfigD4Sign;
-  tentativas: number;
-}): Promise<ResultadoPdf> {
-  const errar = async (motivo: string): Promise<ResultadoPdf> => {
-    await supabaseAdmin.from(TABELA).update({ pdf_erro: motivo.slice(0, 300) }).eq("document_uuid", p.uuid);
-    return { ok: false, anexado: false, motivo };
-  };
-  try {
-    // Trava otimista: só quem conseguir subir a contagem de tentativas baixa. Dois eventos ao mesmo tempo
-    // (webhook repetido, webhook + consulta) não baixam nem guardam o PDF duas vezes.
-    const vez = await supabaseAdmin.from(TABELA).update({ pdf_tentativas: p.tentativas + 1 })
-      .eq("document_uuid", p.uuid).eq("pdf_tentativas", p.tentativas).is("pdf_path", null).select("document_uuid");
-    if (vez.error) return { ok: false, anexado: false, motivo: `não consegui reservar o download do PDF: ${vez.error.message}` };
-    if (!vez.data?.length) return { ok: true, anexado: false, motivo: "outro processo já está cuidando deste PDF" };
-
-    const baixado = await baixarPdfAssinado(p.cfg, p.uuid);
-    if (!baixado.ok) {
-      // Cota da hora acabou: devolve a tentativa, fica para a próxima consulta.
-      if (baixado.limite) {
-        await supabaseAdmin.from(TABELA).update({ pdf_tentativas: p.tentativas }).eq("document_uuid", p.uuid).eq("pdf_tentativas", p.tentativas + 1);
-        return { ok: false, anexado: false, motivo: baixado.erro };
-      }
-      return errar(baixado.erro);
-    }
-
-    let versao = 1;
-    let contractId: string | null = null;
-    if (p.contractId) {
-      const c = await supabaseAdmin.from("contracts").select("id, client_id, version").eq("id", p.contractId).maybeSingle();
-      if (c.error) return errar(`não li o contrato: ${c.error.message}`);
-      const linha = c.data as { client_id?: string; version?: number } | null;
-      if (linha?.client_id === p.clientId) { contractId = p.contractId; versao = Number(linha.version) || 1; }
-    }
-    const quando = Date.now();
-    const caminho = contractId
-      ? `contracts-signed/${p.clientId}/${contractId}-v${versao}-signed-d4sign-${quando}.pdf`
-      : `contracts-signed/${p.clientId}/d4sign-${p.uuid}-signed-${quando}.pdf`;
-    const arquivo = baixado.dados.arquivo;
-    const up = await supabaseAdmin.storage.from(BUCKET_CONTRATOS).upload(caminho, arquivo, { contentType: "application/pdf", upsert: false });
-    if (up.error) return errar(`não consegui guardar o PDF: ${up.error.message}`);
-
-    const ref = `legal://${caminho}`;
-    const g = await supabaseAdmin.from(TABELA).update({
-      pdf_path: ref, pdf_sha256: createHash("sha256").update(arquivo).digest("hex"), pdf_tamanho: arquivo.length,
-      pdf_baixado_em: new Date().toISOString(), pdf_erro: null,
-    }).eq("document_uuid", p.uuid);
-    if (g.error) {
-      await supabaseAdmin.storage.from(BUCKET_CONTRATOS).remove([caminho]);
-      return errar(`não registrei o PDF: ${g.error.message}`);
-    }
-    if (!contractId) {
-      return { ok: true, anexado: true, caminho: ref, contratoFechado: false,
-        motivo: "sem contrato do Lone OS ligado: o PDF ficou no cadastro do cliente (aba Contratos)" };
-    }
-
-    // A mesma regra do Upload assinado (app/api/contracts/upload-signed), só onde ainda não há PDF.
-    const fechou = await supabaseAdmin.from("contracts").update({
-      signed_pdf_path: ref, signed_at: p.assinadoEm ?? new Date().toISOString(),
-      signed_uploaded_by: "D4Sign (automático)", signature_method: "d4sign_auto", status: "active",
-    }).eq("id", contractId).is("signed_pdf_path", null).select("id");
-    if (fechou.error) return { ok: false, anexado: true, caminho: ref, contratoFechado: false, motivo: `o PDF foi guardado, mas o contrato não fechou: ${fechou.error.message}` };
-    if (!fechou.data?.length) {
-      return { ok: true, anexado: true, caminho: ref, contratoFechado: false,
-        motivo: "o contrato já tinha PDF assinado: não troquei (o da D4Sign ficou guardado no registro)" };
-    }
-    // Histórico do contrato e linha do tempo do cliente, como no upload. Best-effort.
-    await supabaseAdmin.from("contract_audit_log").insert({
-      contract_id: contractId, action: "signed_d4sign", actor: "D4Sign (automático)",
-      details: `PDF assinado baixado da D4Sign (documento ${p.uuid}); contrato ativo.`,
-    });
-    await supabaseAdmin.from("timeline_entries").insert({
-      client_id: p.clientId, type: "manual", actor: "D4Sign (automático)",
-      description: `Contrato V${versao} assinado na D4Sign — o PDF assinado entrou sozinho na ficha.`,
-      timestamp: new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
-    });
-    return { ok: true, anexado: true, caminho: ref, contratoFechado: true, motivo: null };
-  } catch (e) {
-    return errar(e instanceof Error ? e.message : "erro");
-  }
-}
-
-// ── Consulta periódica ───────────────────────────────────────────────────────────────────────────
+// ── Consulta a cada 3 horas ──────────────────────────────────────────────────────────────────────
 
 export interface ResultadoConsulta {
   ok: boolean;
@@ -613,27 +523,25 @@ export interface ResultadoConsulta {
   noCofre: number;
   /** Documentos relidos na D4Sign (cada um gasta uma chamada). */
   lidos: number;
-  /** Ficaram para a próxima consulta (teto por vez ou cota da hora). */
+  /** Ficaram para a próxima rodada (teto por vez ou cota da hora). */
   sobraram: number;
   resultados: ResultadoDocumento[];
-  pdfs: (ResultadoPdf & { uuid: string })[];
   erros: string[];
 }
 
 /**
- * Lê o cofre (1 chamada) e gasta no máximo `limite` chamadas a mais, nesta ordem:
- *   0. o que o Lone OS viu pendente e mudou de fase (assinou, cancelou) — relê e avisa;
+ * Lê o cofre (1 chamada) e relê no máximo `limite` documentos, nesta ordem:
+ *   0. o que o Lone OS viu pendente e mudou de fase (assinou, cancelou);
  *   0. assinado cujo aviso não saiu (envio falhou e soltou a trava), dentro da janela;
- *   1. assinado sem o PDF ainda (download falhou ou a cota acabou) — só baixa, sem reler;
- *   2. pendente que o Lone OS ainda não conhece — relê para ligar ao cadastro e saber quem assina.
+ *   1. pendente que o Lone OS ainda não conhece — para ligar ao cadastro e saber quem assina.
  * O que já estava assinado quando o Lone OS o viu pela primeira vez entra em silêncio, sem chamada: é o
  * histórico do cofre (o que fecha agora chega pelo webhook, que a D4Sign repete por até 27 h).
  */
 export async function consultarCofre(opts: { dry?: boolean; agora?: Date; cfg?: ConfigD4Sign | null; limite?: number } = {}): Promise<ResultadoConsulta> {
   const dry = !!opts.dry;
-  const vazio = { dry, noCofre: 0, lidos: 0, sobraram: 0, resultados: [] as ResultadoDocumento[], pdfs: [] as (ResultadoPdf & { uuid: string })[] };
+  const vazio = { dry, noCofre: 0, lidos: 0, sobraram: 0, resultados: [] as ResultadoDocumento[] };
   const cfg = opts.cfg === undefined ? await carregarConfigD4Sign() : opts.cfg;
-  if (!cfg) return { ...vazio, ok: true, desligado: "D4Sign não configurada (chaves no painel em Configurações › Jurídico, ou no servidor)", erros: [] };
+  if (!cfg) return { ...vazio, ok: true, desligado: "D4Sign não configurada (chaves em Configurações › Jurídico, ou no servidor)", erros: [] };
   if (!cfg.cofre) return { ...vazio, ok: true, desligado: "cofre dos contratos não configurado", erros: [] };
 
   const lista = await listarCofre(cfg, cfg.cofre, "consulta");
@@ -643,9 +551,7 @@ export async function consultarCofre(opts: { dry?: boolean; agora?: Date; cfg?: 
   const conhecidos = new Map<string, LinhaDocumento>();
   for (let i = 0; i < docs.length; i += 100) {
     const lote = docs.slice(i, i + 100).map((d) => d.uuid);
-    const r = await supabaseAdmin.from(TABELA)
-      .select("document_uuid, status, client_id, contract_id, assinado_em, aviso_reservado_em, pdf_path, pdf_tentativas, tipo")
-      .in("document_uuid", lote);
+    const r = await supabaseAdmin.from(TABELA).select("document_uuid, status, assinado_em, aviso_reservado_em").in("document_uuid", lote);
     if (r.error) {
       return { ...vazio, ok: false, noCofre: docs.length,
         erros: [faltaMigracao(r.error) ? "falta aplicar a migration 20261026150000_contrato_assinado_d4sign" : `não consegui ler os registros: ${r.error.message}`] };
@@ -654,48 +560,32 @@ export async function consultarCofre(opts: { dry?: boolean; agora?: Date; cfg?: 
   }
 
   const agora = opts.agora ?? new Date();
-  const recente = (iso: string | null | undefined, dias: number) => !!iso && agora.getTime() - new Date(iso).getTime() <= dias * DIA;
-  type Tarefa = { uuid: string; prioridade: number; so: "ler" | "pdf"; linha?: LinhaDocumento };
-  const fila: Tarefa[] = [];
+  const recente = (iso: string | null | undefined) => !!iso && agora.getTime() - new Date(iso).getTime() <= JANELA_AVISO_DIAS * DIA;
+  const fila: { uuid: string; prioridade: number }[] = [];
   const historico: ResumoD4Sign[] = [];
   for (const d of docs) {
     const k = conhecidos.get(d.uuid);
     const fase = String(d.statusId);
     if (k) {
-      if (k.status === "pendente" && fase !== "3") fila.push({ uuid: d.uuid, prioridade: 0, so: "ler" });
-      else if (k.status === "assinado" && !k.aviso_reservado_em && recente(k.assinado_em, JANELA_AVISO_DIAS)) fila.push({ uuid: d.uuid, prioridade: 0, so: "ler" });
-      else if (k.status === "assinado" && deveAnexarPdf({
-        status: "assinado", tipo: k.tipo === "documento" ? "documento" : "contrato", clientId: k.client_id ?? null,
-        assinadoEm: k.assinado_em ?? null, agora, existente: k,
-      })) fila.push({ uuid: d.uuid, prioridade: 1, so: "pdf", linha: k });
+      if (k.status === "pendente" && fase !== "3") fila.push({ uuid: d.uuid, prioridade: 0 });
+      else if (k.status === "assinado" && !k.aviso_reservado_em && recente(k.assinado_em)) fila.push({ uuid: d.uuid, prioridade: 0 });
       continue;
     }
-    if (fase === "3") fila.push({ uuid: d.uuid, prioridade: 2, so: "ler" });
+    if (fase === "3") fila.push({ uuid: d.uuid, prioridade: 1 });
     else if (fase === "4" || fase === "5") historico.push(d);
   }
   fila.sort((a, b) => a.prioridade - b.prioridade);
   const limite = opts.limite ?? LEITURAS_POR_CONSULTA;
 
   const resultados: ResultadoDocumento[] = [];
-  const pdfs: (ResultadoPdf & { uuid: string })[] = [];
-  let chamadas = 0;
+  let lidos = 0;
   let parouNaCota = false;
   for (const t of fila) {
-    if (chamadas >= limite) break;
-    chamadas++;
-    if (t.so === "pdf") {
-      if (dry) { pdfs.push({ uuid: t.uuid, ok: true, anexado: false, motivo: "baixaria o PDF assinado" }); continue; }
-      const r = await anexarPdfAssinado({
-        uuid: t.uuid, clientId: t.linha!.client_id!, contractId: t.linha!.contract_id ?? null,
-        assinadoEm: t.linha!.assinado_em ?? null, cfg, tentativas: t.linha!.pdf_tentativas ?? 0,
-      });
-      pdfs.push({ uuid: t.uuid, ...r });
-      if (!r.ok && /limite de chamadas/.test(r.motivo ?? "")) { parouNaCota = true; break; }
-      continue;
-    }
+    if (lidos >= limite) break;
+    lidos++;
     const r = await processarDocumento(t.uuid, { origem: "consulta", dry, agora, cfg });
     resultados.push(r);
-    if (!r.ok && /limite de chamadas/.test(r.motivo ?? "")) { parouNaCota = true; break; }
+    if (!r.ok && ehLimite(r.motivo)) { parouNaCota = true; break; }
   }
   // O histórico do cofre: registrado pelo que a listagem diz, sem gastar chamada e sem aviso.
   for (const h of historico) {
@@ -703,66 +593,91 @@ export async function consultarCofre(opts: { dry?: boolean; agora?: Date; cfg?: 
       origem: "consulta", dry, agora, cfg, doc: { uuid: h.uuid, nome: h.nome, cofre: cfg.cofre, statusId: h.statusId, signatarios: [] },
     }));
   }
-  const lidos = resultados.length - historico.length;
-  const erros = [
-    ...resultados.filter((r) => !r.ok && !/limite de chamadas/.test(r.motivo ?? "")).map((r) => `${r.nome ?? r.uuid}: ${r.motivo ?? "erro"}`),
-    ...pdfs.filter((r) => !r.ok && !/limite de chamadas/.test(r.motivo ?? "")).map((r) => `PDF ${r.uuid}: ${r.motivo ?? "erro"}`),
-  ];
+  const erros = resultados.filter((r) => !r.ok && !ehLimite(r.motivo)).map((r) => `${r.nome ?? r.uuid}: ${r.motivo ?? "erro"}`);
   return {
-    ok: erros.length === 0, dry, noCofre: docs.length, lidos,
-    // O que parou na cota conta como "sobrou": tenta de novo na próxima consulta.
-    sobraram: fila.length - chamadas + (parouNaCota ? 1 : 0), resultados, pdfs, erros,
+    ok: erros.length === 0, dry, noCofre: docs.length, lidos: lidos - (parouNaCota ? 1 : 0),
+    sobraram: fila.length - lidos + (parouNaCota ? 1 : 0), resultados, erros,
   };
 }
 
-// ── Resumo da manhã ──────────────────────────────────────────────────────────────────────────────
+// ── "Ainda não assinaram" — dia útil de manhã ────────────────────────────────────────────────────
 
-export type ColetaSemAssinatura =
-  | { texto: string; itens: { uuid: string; nome: string; dias: number }[] }
-  | { pulado: string }
-  | { erro: string };
+export interface ResultadoPendentes {
+  ok: boolean;
+  dry: boolean;
+  enviado: boolean;
+  texto: string;
+  itens: ItemPendente[];
+  /** Pendentes relidos na D4Sign antes de escrever (para "quem falta" estar em dia). */
+  relidos: number;
+  motivo: string | null;
+  erros: string[];
+}
 
 /**
- * Quem está há DIAS_SEM_ASSINATURA dias ou mais esperando assinatura. Cada documento volta à linha no
- * máximo uma vez por semana (cobrado_em) — a manhã não repete o mesmo nome todo dia.
- * `aplicar` marca cobrado_em (fora do ensaio).
+ * UMA mensagem no grupo de cadastro, só se houver contrato enviado há DIAS_SEM_ASSINATURA dias ou mais sem
+ * todas as assinaturas: cada um com quem falta e há quantos dias. Antes de escrever, relê na D4Sign os mais
+ * antigos (o que couber na cota) — quem assinou de madrugada não aparece como faltando. Uma por dia (idem).
+ * O portão de dia útil fica na rota (feriado não manda).
  */
-export async function coletarSemAssinatura(agora: Date, opts: { aplicar: boolean }): Promise<ColetaSemAssinatura> {
-  const r = await supabaseAdmin.from(TABELA).select("document_uuid, nome, client_id, contract_id, enviado_em, visto_em, cobrado_em").eq("status", "pendente");
-  if (r.error) {
-    return faltaMigracao(r.error) ? { pulado: "falta aplicar a migration 20261026150000_contrato_assinado_d4sign" } : { erro: r.error.message };
-  }
-  const linhas = (r.data as LinhaDocumento[] | null) ?? [];
-  const folga = 2 * 3600_000; // o cron das 8h não cai sempre no mesmo minuto
-  const candidatos = linhas
-    .map((l) => ({ l, dias: Math.floor((agora.getTime() - new Date(l.enviado_em ?? l.visto_em ?? agora.toISOString()).getTime()) / DIA) }))
-    .filter(({ l, dias }) => dias >= DIAS_SEM_ASSINATURA
-      && (!l.cobrado_em || agora.getTime() - new Date(l.cobrado_em).getTime() >= REPETE_COBRANCA_DIAS * DIA - folga));
-  if (!candidatos.length) return { texto: "", itens: [] };
+export async function avisarPendentes(opts: { dry?: boolean; agora?: Date; dia: string; cfg?: ConfigD4Sign | null }): Promise<ResultadoPendentes> {
+  const dry = !!opts.dry;
+  const agora = opts.agora ?? new Date();
+  const base = { dry, enviado: false, texto: "", itens: [] as ItemPendente[], relidos: 0, erros: [] as string[] };
+  const ler = async () => supabaseAdmin.from(TABELA).select("document_uuid, nome, client_id, enviado_em, visto_em, signatarios").eq("status", "pendente");
+  const diasDe = (l: LinhaDocumento) => Math.floor((agora.getTime() - new Date(l.enviado_em ?? l.visto_em ?? agora.toISOString()).getTime()) / DIA);
 
-  const idsCliente = [...new Set(candidatos.map((c) => c.l.client_id).filter((x): x is string => !!x))];
-  const idsContrato = [...new Set(candidatos.map((c) => c.l.contract_id).filter((x): x is string => !!x))];
+  let r = await ler();
+  if (r.error) return { ...base, ok: false, motivo: faltaMigracao(r.error) ? "falta aplicar a migration 20261026150000_contrato_assinado_d4sign" : `não consegui ler os pendentes: ${r.error.message}` };
+  let vencidos = ((r.data as LinhaDocumento[] | null) ?? []).filter((l) => diasDe(l) >= DIAS_SEM_ASSINATURA);
+  if (!vencidos.length) return { ...base, ok: true, motivo: `nenhum contrato esperando assinatura há ${DIAS_SEM_ASSINATURA} dias ou mais` };
+
+  // Relê os mais antigos (o que couber na cota). Ensaio não relê: mostra o que já se sabe.
+  let relidos = 0;
+  const erros: string[] = [];
+  if (!dry) {
+    const cfg = opts.cfg === undefined ? await carregarConfigD4Sign() : opts.cfg;
+    if (cfg) {
+      for (const l of [...vencidos].sort((a, b) => diasDe(b) - diasDe(a)).slice(0, LEITURAS_POR_CONSULTA)) {
+        const p = await processarDocumento(l.document_uuid, { origem: "manha", agora, cfg, avisarParcial: false });
+        if (!p.ok && ehLimite(p.motivo)) break;
+        relidos++;
+        if (!p.ok) erros.push(`${p.nome ?? p.uuid}: ${p.motivo ?? "erro"}`);
+      }
+      if (relidos) {
+        r = await ler();
+        if (r.error) return { ...base, ok: false, relidos, erros, motivo: `não consegui reler os pendentes: ${r.error.message}` };
+        vencidos = ((r.data as LinhaDocumento[] | null) ?? []).filter((l) => diasDe(l) >= DIAS_SEM_ASSINATURA);
+      }
+    }
+  }
+  if (!vencidos.length) return { ...base, ok: erros.length === 0, relidos, erros, motivo: "os pendentes assinaram na releitura" };
+
+  const ids = [...new Set(vencidos.map((l) => l.client_id).filter((x): x is string => !!x))];
   const nomes = new Map<string, string>();
-  if (idsCliente.length) {
-    const c = await supabaseAdmin.from("clients").select("id, name, nome_fantasia").in("id", idsCliente);
-    if (c.error) return { erro: `clientes: ${c.error.message}` };
+  if (ids.length) {
+    const c = await supabaseAdmin.from("clients").select("id, name, nome_fantasia").in("id", ids);
+    if (c.error) return { ...base, ok: false, relidos, erros, motivo: `não consegui ler os clientes: ${c.error.message}` };
     for (const x of (c.data as ClienteCadastro[] | null) ?? []) nomes.set(x.id, nomeDoCliente(x));
   }
-  // Contrato que já fechou por outro caminho (PDF assinado subido na ficha) não é cobrado.
-  const fechados = new Set<string>();
-  if (idsContrato.length) {
-    const c = await supabaseAdmin.from("contracts").select("id, signed_at").in("id", idsContrato);
-    if (c.error) return { erro: `contratos: ${c.error.message}` };
-    for (const x of (c.data as { id: string; signed_at: string | null }[] | null) ?? []) if (x.signed_at) fechados.add(x.id);
-  }
-  const itens = candidatos
-    .filter(({ l }) => !(l.contract_id && fechados.has(l.contract_id)))
-    .map(({ l, dias }) => ({ uuid: l.document_uuid, nome: (l.client_id && nomes.get(l.client_id)) || nomeDoDocumento(l.nome ?? ""), dias }));
-  if (!itens.length) return { texto: "", itens: [] };
+  const itens: ItemPendente[] = vencidos.map((l) => ({
+    uuid: l.document_uuid,
+    nome: (l.client_id && nomes.get(l.client_id)) || nomeDoDocumento(l.nome ?? ""),
+    faltam: lerSignatariosGravados(l.signatarios).filter((s) => !s.assinou),
+    dias: diasDe(l),
+  }));
+  const texto = mensagemPendentes(itens);
+  const pronto = { ...base, relidos, erros, itens, texto };
+  if (dry) return { ...pronto, ok: true, motivo: null };
 
-  if (opts.aplicar) {
-    const u = await supabaseAdmin.from(TABELA).update({ cobrado_em: agora.toISOString() }).in("document_uuid", itens.map((i) => i.uuid));
-    if (u.error) return { erro: `não consegui marcar a cobrança: ${u.error.message}` };
-  }
-  return { texto: linhaSemAssinatura(itens), itens };
+  const idem = idemDosPendentes(opts.dia);
+  const ja = await supabaseAdmin.from("cs_outbound").select("id").eq("idem_key", idem).eq("enviado", true).limit(1);
+  if (ja.error) return { ...pronto, ok: false, motivo: `não consegui conferir se já mandei hoje: ${ja.error.message}` };
+  if (ja.data?.length) return { ...pronto, ok: true, motivo: "o grupo de cadastro já recebeu o aviso de hoje" };
+
+  const grupo = await grupoDeCadastro();
+  if ("erro" in grupo) return { ...pronto, ok: false, motivo: grupo.erro };
+  const env = await csSendGroupText(grupo.jid, texto, undefined, { origem: "contratos-pendentes", destino: "interno", idem });
+  if (!env.ok) return { ...pronto, ok: false, motivo: `o aviso não saiu: ${env.error ?? "erro no WhatsApp"}` };
+  return { ...pronto, ok: erros.length === 0, enviado: true, motivo: null };
 }

@@ -1,10 +1,9 @@
 // app/api/system/contratos-d4sign/route.ts — a consulta periódica do cofre dos contratos na D4Sign.
 //
 // O caminho principal é o webhook (/api/integracoes/d4sign). Esta consulta pega o que ele não trouxe
-// (Lone OS fora do ar por mais de 27 h, webhook ainda não cadastrado), baixa o PDF assinado que ficou
-// para trás e guarda há quantos dias cada documento espera assinatura — é daí que sai a linha "Contrato
-// sem assinatura" do resumo da manhã. A conta da D4Sign responde a 10 chamadas por HORA: cada rodada lê o
-// cofre e no máximo mais 3 (lib/contracts/assinatura.ts#consultarCofre); o resto fica para a seguinte.
+// (Lone OS fora do ar por mais de 27 h, webhook ainda não cadastrado) e conhece os documentos que esperam
+// assinatura — é daí que sai o "Ainda não assinaram" da manhã (contratos-d4sign-pendentes). A conta da D4Sign
+// responde a 10 chamadas por HORA: cada rodada lê o cofre e no máximo mais 3; o resto fica para a seguinte.
 //
 //   ?dry=1 ............... o que aconteceria: lê a D4Sign e o banco, devolve as mensagens, não grava nem manda
 //   ?webhook=ver ......... a URL de webhook cadastrada hoje no cofre (só leitura)
@@ -46,14 +45,14 @@ export async function POST(req: NextRequest) {
   }
 
   const r = await consultarCofre({ dry });
-  const avisados = r.resultados.filter((x) => x.acao === "avisado" || x.acao === "avisaria");
-  console.log(`[contratos-d4sign] cofre=${r.noCofre} lidos=${r.lidos} pdfs=${r.pdfs.length} sobraram=${r.sobraram} avisos=${avisados.length} dry=${dry} erros=${r.erros.length}${r.desligado ? ` desligado=${r.desligado}` : ""}`);
+  const avisados = r.resultados.filter((x) => ["avisado", "avisaria", "parcial", "parcial_avisaria"].includes(x.acao));
+  console.log(`[contratos-d4sign] cofre=${r.noCofre} lidos=${r.lidos} sobraram=${r.sobraram} avisos=${avisados.length} dry=${dry} erros=${r.erros.length}${r.desligado ? ` desligado=${r.desligado}` : ""}${r.adiado ? " adiado=cota" : ""}`);
   return NextResponse.json({
     ...r,
     mensagens: avisados.map((x) => x.mensagem),
     resultados: r.resultados.map((x) => ({
       uuid: x.uuid, acao: x.acao, status: x.status, nome: x.nome, vinculo: x.vinculo, assinadoEm: x.assinadoEm,
-      motivo: x.motivo, ...(x.avisos ? { avisos: x.avisos } : {}), ...(x.pdf ? { pdf: x.pdf } : {}),
+      resumo: x.resumo, motivo: x.motivo, ...(x.avisos ? { avisos: x.avisos } : {}),
     })),
   });
 }

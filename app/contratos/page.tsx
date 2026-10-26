@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { SERVICE_LABELS } from "@/lib/contracts/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import DocumentosD4Sign from "@/components/contratos/DocumentosD4Sign";
 
 interface Row {
   id: string;
@@ -202,6 +203,10 @@ export default function ContratosGlobalPage() {
             <SummaryCard label="Vencidos" value={summary.expired} color="text-lone-danger" />
           </div>
         )}
+
+        {/* D4Sign (26/10/2026): quem assinou e quem falta, de toda a carteira — inclusive de cliente sem
+            contrato registrado aqui (a fonte do contrato é o Finance). */}
+        <DocumentosD4Sign />
 
         {/* Filters */}
         <div className="rounded-xl border border-border bg-card p-4 flex flex-wrap items-center gap-3">

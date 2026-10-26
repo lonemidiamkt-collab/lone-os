@@ -420,8 +420,12 @@ export const AUTOMACOES: Automacao[] = [
     familia: "Dados e sync", destino: "sistema", cron: "40 9 * * *", agendaBRT: "todo dia, 6h40", maxSilencioHoras: 26,
   }),
   ep("contratos-d4sign", {
-    nome: "Contrato assinado (D4Sign)", descricao: "Confere o cofre dos contratos na D4Sign: o contrato que fechou todas as assinaturas e o webhook não trouxe vira UMA mensagem no grupo de cadastro (\"✅ Cliente X assinou o contrato em dd/mm\"), a data entra no contrato e na ficha e o PDF assinado é baixado e anexado (fecha o contrato). Guarda há quantos dias cada um espera assinatura — é daí que sai a linha do resumo da manhã. Sem a chave da D4Sign, só registra que está desligado.",
+    nome: "Contrato assinado (D4Sign)", descricao: "Confere o cofre dos contratos na D4Sign: o que o webhook não trouxe (assinatura nova, contrato que fechou) vira mensagem no grupo de cadastro — \"✍️ Cliente X: assinado por A · falta B\" ou \"✅ Cliente X assinou o contrato em dd/mm\", cada uma uma vez — e a data entra no contrato e na ficha. Conhece os contratos que esperam assinatura (base do aviso da manhã). Sem a chave da D4Sign, só registra que está desligado.",
     familia: "Dados e sync", destino: "grupo de cadastro", cron: "15 11-23/3 * * *", agendaBRT: "todo dia, 8h15, 11h15, 14h15, 17h15 e 20h15 (a D4Sign responde a 10 chamadas por hora)", maxSilencioHoras: 14, ensaio: "dry=1",
+  }),
+  ep("contratos-d4sign-pendentes", {
+    nome: "Contratos sem assinatura (D4Sign)", descricao: "Dia útil de manhã, UMA mensagem no grupo de cadastro com cada contrato enviado há 3 dias ou mais sem todas as assinaturas: quem falta e há quantos dias. Sem pendência, nada sai. Relê na D4Sign os mais antigos antes de escrever.",
+    familia: "Dados e sync", destino: "grupo de cadastro", cron: "30 11 * * 1-5", agendaBRT: "seg a sex, 8h30", maxSilencioHoras: 74, ensaio: "dry=1",
   }),
   ep("contract-renewal", {
     nome: "Renovação de contratos", descricao: "Cria o rascunho de renovação dos contratos a 30 dias do fim e avisa os admins.",

@@ -1,19 +1,20 @@
 // lib/contracts/d4sign.ts — a conversa com a D4Sign (API v1 + webhook 2.0): ler um documento com os
-// signatários, listar o cofre dos contratos, subir o contrato e mandar para assinar, baixar o PDF assinado,
-// reenviar o link a um signatário, conferir a assinatura do webhook e cadastrar o webhook do cofre.
+// signatários, listar o cofre dos contratos, conferir a assinatura do webhook e cadastrar o webhook do cofre.
 //
-// As credenciais são do Roberto e moram SÓ no .env da VPS (/opt/loneos/.env), nunca no repositório, que é
-// público. Vazias = integração desligada (o webhook responde 503, a consulta pula, o envio recusa):
+// As credenciais são do Roberto: entram pelo painel (Configurações › Jurídico, cifradas — lib/contracts/
+// d4sign-config.ts) ou, de reserva, no .env da VPS. Nunca no repositório, que é público. Sem token =
+// integração desligada (o webhook responde 503 e as rotinas pulam). Variáveis de reserva:
 //   D4SIGN_API_TOKEN     "tokenAPI" (Opções da conta › Dev (API))
 //   D4SIGN_CRYPT_KEY     "cryptKey" — só vai na chamada se existir (a D4Sign só exige quando está habilitada)
 //   D4SIGN_HMAC_SECRET   "Gerar Secret Key MAC" na mesma área: confere que o webhook veio da D4Sign
-//   D4SIGN_SAFE_UUID     o cofre dos contratos; consulta, webhook e envio só usam ele
+//   D4SIGN_SAFE_UUID     o cofre dos contratos; consulta e webhook só olham ele
+//   D4SIGN_EMAILS_LONE   e-mails com que os sócios assinam na D4Sign, separados por vírgula ("quem é da Lone")
 //   D4SIGN_API_URL       opcional; padrão https://secure.d4sign.com.br/api/v1 (sandbox para teste)
 //   D4SIGN_LIMITE_HORA   opcional; padrão 10 chamadas por hora (lib/contracts/d4sign-cota.ts)
 //
 // Documentação seguida (docapi.d4sign.com.br, lida em 26/10/2026): "Introdução a API", "Endpoints
 // Documentos", "Endpoints Signatários", "WebHook (POSTBack)", "Segurança de Webhook" e a referência de
-// upload binário, createlist, sendtosigner, download, resend e webhooks 2.0. O que a documentação não
+// webhooks 2.0. O que a documentação não
 // mostra com exemplo é lido com folga: campo que não veio vira null, nunca "assinado".
 
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -25,10 +26,17 @@ export interface ConfigD4Sign {
   cryptKey: string | null;
   hmac: string | null;
   cofre: string | null;
+  /** E-mails de quem assina pela Lone (minúsculos). */
+  emailsLone: string[];
   limiteHora: number;
 }
 
 const URL_PADRAO = "https://secure.d4sign.com.br/api/v1";
+
+/** "a@x.com, B@y.com" → ["a@x.com", "b@y.com"]; o que não for e-mail fica de fora. */
+export function listaDeEmails(v: string | null | undefined): string[] {
+  return [...new Set((v ?? "").split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)))];
+}
 
 /** null = desligada (falta o token). */
 export function configD4Sign(env: Record<string, string | undefined> = process.env): ConfigD4Sign | null {
@@ -40,6 +48,7 @@ export function configD4Sign(env: Record<string, string | undefined> = process.e
     cryptKey: env.D4SIGN_CRYPT_KEY?.trim() || null,
     hmac: env.D4SIGN_HMAC_SECRET?.trim() || null,
     cofre: env.D4SIGN_SAFE_UUID?.trim() || null,
+    emailsLone: listaDeEmails(env.D4SIGN_EMAILS_LONE),
     limiteHora: limiteDaHora(env),
   };
 }
@@ -57,7 +66,7 @@ export interface Signatario {
   assinadoEm: string | null;
   /** Quando foi incluído no documento — é quando o documento saiu para assinatura. */
   incluidoEm: string | null;
-  /** key_signer: a D4Sign pede no reenvio do link e na remoção do signatário. */
+  /** key_signer da D4Sign (o reenvio do link precisa dele). */
   chave: string | null;
 }
 
@@ -225,88 +234,6 @@ export async function listarCofre(cfg: ConfigD4Sign, cofre: string, origem: Orig
     if (!pagina.paginas || pg >= pagina.paginas || pagina.docs.length === 0) break;
   }
   return { ok: true, dados: todos };
-}
-
-// ── Envio (o contrato sai do Lone OS) ────────────────────────────────────────────────────────────
-
-export const MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-
-/** POST /documents/{cofre}/uploadbinary — sobe o .docx; a D4Sign converte e devolve o uuid do documento. */
-export async function subirDocumento(cfg: ConfigD4Sign, cofre: string, arquivo: Buffer, nome: string, mime = MIME_DOCX): Promise<Leitura<string>> {
-  const r = await pedir(cfg, `/documents/${encodeURIComponent(cofre)}/uploadbinary`, {
-    origem: "envio", metodo: "POST",
-    corpo: { base64_binary_file: arquivo.toString("base64"), mime_type: mime, name: nome },
-  });
-  if (!r.ok) return r;
-  const uuid = texto((r.dados as Record<string, unknown>)?.uuid) ?? texto((r.dados as Record<string, unknown>)?.uuidDoc);
-  return uuid ? { ok: true, dados: uuid } : { ok: false, erro: "a D4Sign aceitou o arquivo mas não devolveu o identificador do documento" };
-}
-
-/**
- * act da D4Sign: 4 = "Assinar como parte", 5 = "Assinar como testemunha". Assinatura eletrônica padrão
- * (sem certificado ICP-Brasil, não presencial), autenticação por e-mail, signatário com CPF (foreign 0).
- */
-export interface NovoSignatario { email: string; act: "4" | "5" }
-
-/** POST /documents/{uuid}/createlist — inclui os signatários. */
-export async function cadastrarSignatarios(cfg: ConfigD4Sign, uuid: string, signatarios: NovoSignatario[]): Promise<Leitura<unknown>> {
-  return pedir(cfg, `/documents/${encodeURIComponent(uuid)}/createlist`, {
-    origem: "envio", metodo: "POST",
-    corpo: {
-      signers: signatarios.map((s) => ({
-        email: s.email, act: s.act, foreign: "0", certificadoicpbr: "0", assinatura_presencial: "0",
-        docauth: "0", docauthandselfie: "0", embed_methodauth: "email", embed_smsnumber: "", upload_allow: "0", upload_obs: "",
-      })),
-    },
-  });
-}
-
-/**
- * POST /documents/{uuid}/sendtosigner — manda para assinatura: todos ao mesmo tempo (workflow 0) e com o
- * e-mail padrão da D4Sign (skip_email 0). Sem `message`: texto para o cliente só com o ok do Roberto.
- */
-export async function mandarParaAssinar(cfg: ConfigD4Sign, uuid: string): Promise<Leitura<unknown>> {
-  return pedir(cfg, `/documents/${encodeURIComponent(uuid)}/sendtosigner`, {
-    origem: "envio", metodo: "POST", corpo: { skip_email: "0", workflow: "0" },
-  });
-}
-
-// ── PDF assinado ─────────────────────────────────────────────────────────────────────────────────
-
-export const PDF_MAXIMO = 20 * 1024 * 1024;
-
-/**
- * POST /documents/{uuid}/download (type PDF) → { url, name }, e o arquivo nessa URL. Só aceita o que é PDF
- * de verdade (começa com %PDF) e até 20 MB — o mesmo teto do "Upload assinado".
- */
-export async function baixarPdfAssinado(cfg: ConfigD4Sign, uuid: string): Promise<Leitura<{ arquivo: Buffer; nome: string }>> {
-  const r = await pedir(cfg, `/documents/${encodeURIComponent(uuid)}/download`, {
-    origem: "pdf", metodo: "POST", corpo: { type: "PDF", language: "pt" },
-  });
-  if (!r.ok) return r;
-  const d = (r.dados ?? {}) as Record<string, unknown>;
-  const link = texto(d.url);
-  const nome = texto(d.name) ?? `${uuid}.pdf`;
-  if (!link || !/^https:\/\//i.test(link)) return { ok: false, erro: "a D4Sign não devolveu o link do PDF assinado" };
-  try {
-    const f = await fetch(link, { signal: AbortSignal.timeout(PRAZO_MS * 2), cache: "no-store" });
-    if (!f.ok) return { ok: false, erro: `o link do PDF da D4Sign respondeu ${f.status}` };
-    const arquivo = Buffer.from(await f.arrayBuffer());
-    if (arquivo.length === 0 || arquivo.length > PDF_MAXIMO) return { ok: false, erro: `o PDF da D4Sign veio com ${arquivo.length} bytes` };
-    if (arquivo.subarray(0, 5).toString("latin1") !== "%PDF-") return { ok: false, erro: "o arquivo da D4Sign não é um PDF" };
-    return { ok: true, dados: { arquivo, nome } };
-  } catch (e) {
-    return { ok: false, erro: `não consegui baixar o PDF da D4Sign: ${e instanceof Error ? e.message : "erro de rede"}` };
-  }
-}
-
-// ── Lembrete ─────────────────────────────────────────────────────────────────────────────────────
-
-/** POST /documents/{uuid}/resend — a D4Sign reenvia o link ao signatário (e-mail dela; a API não leva texto). */
-export async function reenviarLink(cfg: ConfigD4Sign, uuid: string, email: string, chave: string): Promise<Leitura<unknown>> {
-  return pedir(cfg, `/documents/${encodeURIComponent(uuid)}/resend`, {
-    origem: "lembrete", metodo: "POST", corpo: { email, key_signer: chave },
-  });
 }
 
 // ── Webhook do cofre ─────────────────────────────────────────────────────────────────────────────

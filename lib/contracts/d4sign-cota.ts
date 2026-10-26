@@ -3,20 +3,20 @@
 // A conta da D4Sign responde, por padrão, a 10 chamadas por HORA ("Introdução a API", docapi.d4sign.com.br;
 // para subir, comercial@d4sign.com.br). D4SIGN_LIMITE_HORA ajusta quando o limite mudar.
 //
-// Cada chamada fica em d4sign_chamadas. As rotinas (consulta do cofre e lembrete) param antes de gastar as
-// últimas RESERVA chamadas da hora: elas sobram para o que alguém está esperando — o webhook, o PDF
-// assinado e o "Enviar pela D4Sign" da tela. Passou do limite, a chamada nem sai: volta "limite" e quem
-// chamou tenta depois (o webhook responde 503 e a D4Sign repete; a consulta tenta na rodada seguinte).
+// Cada chamada fica em d4sign_chamadas. As rotinas (consulta do cofre e aviso da manhã) param antes de gastar
+// as últimas RESERVA chamadas da hora: elas sobram para o webhook, que é quem traz "acabou de assinar".
+// Passou do limite, a chamada nem sai: volta "limite" e quem chamou tenta depois (o webhook responde 503 e a
+// D4Sign repete; a rotina usa o que já sabe ou tenta na rodada seguinte).
 //
 // O contador é proteção, não verdade: se o banco não responder, a chamada segue (e a D4Sign é quem recusa).
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 
-export type OrigemChamada = "webhook" | "consulta" | "envio" | "pdf" | "lembrete" | "manual";
+export type OrigemChamada = "webhook" | "consulta" | "manha" | "manual";
 
 export const LIMITE_PADRAO_HORA = 10;
 export const RESERVA = 4;
-const ROTINAS: OrigemChamada[] = ["consulta", "lembrete"];
+const ROTINAS: OrigemChamada[] = ["consulta", "manha"];
 
 export function limiteDaHora(env: Record<string, string | undefined> = process.env): number {
   const n = Number(env.D4SIGN_LIMITE_HORA);
