@@ -113,11 +113,18 @@ export default function D4SignChaves() {
         <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
           <FileSignature size={14} className="text-primary" /> D4Sign (assinatura dos contratos)
         </h3>
-        {sit && (
-          <span className={`text-[10px] px-2 py-0.5 rounded border ${sit.ligada ? "bg-lone-success-bg text-lone-success border-lone-success-border" : "bg-muted text-muted-foreground border-border"}`}>
-            {sit.ligada ? "Ligada" : "Desligada"}
-          </span>
-        )}
+        {sit && (() => {
+          // O selo diz o que falta: token, cofres, aviso — "Ligada" só com o aviso ligado em todos os cofres.
+          const etapa = !sit.ligada ? "Desligada"
+            : !sit.cofres.length ? "Falta escolher os cofres"
+            : sit.cofresComAviso.length < sit.cofres.length ? `Falta ligar o aviso (${sit.cofresComAviso.length} de ${sit.cofres.length})`
+            : "Ligada";
+          return (
+            <span className={`text-[10px] px-2 py-0.5 rounded border ${etapa === "Ligada" ? "bg-lone-success-bg text-lone-success border-lone-success-border" : etapa === "Desligada" ? "bg-muted text-muted-foreground border-border" : "bg-lone-warning-bg text-lone-warning border-lone-warning-border"}`}>
+              {etapa}
+            </span>
+          );
+        })()}
       </div>
       <p className="text-[10px] text-muted-foreground mb-4">
         Cole cada chave uma vez. Ela é guardada cifrada e nunca volta para a tela — para trocar, cole de novo.

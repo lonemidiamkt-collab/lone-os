@@ -977,3 +977,15 @@ describe("chaves da D4Sign no painel", () => {
     expect(d4.chamadas).toEqual([]);
   });
 });
+
+describe("sem cofre escolhido", () => {
+  it("o evento é ignorado ANTES de reler: não gasta nenhuma das 10 chamadas da hora", async () => {
+    delete process.env.D4SIGN_SAFE_UUID;
+    CFG.esquecerConfigD4Sign();
+    const res = await webhook(evento(DOC_ZE));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, acao: "ignorado", motivo: expect.stringMatching(/nenhum cofre/) });
+    expect(d4.chamadas).toEqual([]);
+    expect(envio.fn).not.toHaveBeenCalled();
+  });
+});

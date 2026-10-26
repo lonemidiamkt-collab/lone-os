@@ -338,6 +338,10 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
     if (!uuidValido(uuid)) return falha("UUID de documento inválido", false);
     const cfg = opts.cfg === undefined ? await carregarConfigD4Sign() : opts.cfg;
     if (!cfg) return falha("D4Sign não configurada (chaves em Configurações › Jurídico, ou no servidor)");
+    // Antes de reler: sem cofre escolhido nada conta, e reler gastaria uma das 10 chamadas da hora.
+    if (!cfg.cofres.length) {
+      return { uuid, ok: true, tentarDeNovo: false, acao: "ignorado", motivo: "nenhum cofre de contrato escolhido no painel" };
+    }
 
     // 1. A verdade é a D4Sign, não o evento.
     let doc = opts.doc;
@@ -350,9 +354,6 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
         return falha(lido.erro);
       }
       doc = lido.dados;
-    }
-    if (!cfg.cofres.length) {
-      return { uuid, ok: true, tentarDeNovo: false, acao: "ignorado", motivo: "nenhum cofre de contrato escolhido no painel" };
     }
     if (doc.cofre && !cfg.cofres.includes(doc.cofre.toLowerCase())) {
       return { uuid, ok: true, tentarDeNovo: false, acao: "ignorado", motivo: "documento de um cofre que não é de contrato" };
