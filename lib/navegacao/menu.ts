@@ -121,6 +121,9 @@ export const MENU: readonly GrupoMenu[] = [
         descricao: "Hoje, alertas, status dos clientes e anúncios", termos: ["meta ads", "campanhas"],
         secoes: [
           { titulo: "Tráfego Pago", itens: [
+            // Mesa do gestor (26/10/2026): a fila do dia do gestor de tráfego, com conferência do "Já fiz".
+            { id: "trafego-mesa", rotulo: "Mesa do gestor", icone: ClipboardCheck, href: "/traffic", aba: "mesa",
+              termos: ["mesa", "tarefas", "fila", "prioridades", "o que fazer", "já fiz", "pendências do tráfego"] },
             { id: "trafego-hoje", rotulo: "Hoje", icone: Sun, href: "/traffic", aba: "hoje",
               termos: ["rotina", "rotina diária", "cockpit", "alertas", "saldo"] },
             { id: "trafego-defesa", rotulo: "Defesa Ativa", icone: ShieldAlert, href: "/traffic", aba: "defesa",

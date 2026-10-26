@@ -5,6 +5,7 @@ import { anotar, idCorrelacao } from "@/lib/obs/correlacao";
 import { coletarTudo } from "./fontes";
 import { ranquear, reconciliar } from "./motor";
 import { emSilencio, SILENCIO_HORAS, type Decidida } from "./silencio";
+import { proximaConferencia, type ResultadoConferencia } from "./conferencia";
 import type { Recomendacao, EstadoRecomendacao } from "./tipos";
 
 const ABERTAS: EstadoRecomendacao[] = ["nova", "vista", "aceita"];
@@ -21,7 +22,7 @@ function linhaDe(r: Recomendacao) {
 }
 
 export interface ResultadoRecalculo {
-  coletados: number; validos: number; inseridas: number; atualizadas: number; resolvidas: number;
+  coletados: number; validos: number; inseridas: number; atualizadas: number; resolvidas: number; conferidas: number;
   porFonte: Record<string, number>; erros: string[];
 }
 
@@ -62,8 +63,9 @@ export async function recalcular(): Promise<ResultadoRecalculo> {
       .update({ estado: "resolvida", resolvida_em: new Date().toISOString(), updated_at: new Date().toISOString() }).in("id", resolver);
     if (e) erros.push(`resolver: ${e.message}`); else resolvidas = resolver.length;
   }
-  anotar(`priority: ${inseridas} novas, ${atualizadas} atualizadas, ${resolvidas} resolvidas`);
-  return { coletados: itens.length, validos: novas.length, inseridas, atualizadas, resolvidas, porFonte, erros };
+  const conferidas = await conferirFeitas(new Set(novas.map((n) => n.fingerprint)), erros);
+  anotar(`priority: ${inseridas} novas, ${atualizadas} atualizadas, ${resolvidas} resolvidas, ${conferidas} conferidas`);
+  return { coletados: itens.length, validos: novas.length, inseridas, atualizadas, resolvidas, conferidas, porFonte, erros };
 }
 
 export interface FiltroFeed { papel: string | null; nome: string | null; admin: boolean; escopo: "meu" | "todos"; limite?: number }
@@ -74,7 +76,9 @@ export type LinhaRecomendacao = Record<string, unknown> & { id: string; fonte: s
 export async function feed(f: FiltroFeed): Promise<LinhaRecomendacao[] & { total: number }> {
   // Limite por pessoa: o plano é "no máximo N por pessoa"; o resto existe e aparece em "mostrar
   // mais", mas a primeira tela é o que cabe na atenção de alguém.
-  let q = supabaseAdmin.from("recommendations").select("*", { count: "exact" }).in("estado", ABERTAS).order("score", { ascending: false }).limit(f.limite ?? 12);
+  let q = supabaseAdmin.from("recommendations").select("*", { count: "exact" }).in("estado", ABERTAS)
+    .or(`adiada_ate.is.null,adiada_ate.lte.${new Date().toISOString()}`) // "Adiar até" (Mesa do Gestor)
+    .order("score", { ascending: false }).limit(f.limite ?? 12);
   if (!(f.escopo === "todos" && (f.admin || f.papel === "manager"))) {
     const partes: string[] = [];
     if (f.nome) partes.push(`owner.ilike.${f.nome.replace(/[,.()]/g, " ").trim()}`);
@@ -100,7 +104,7 @@ export type EstadoAberto = (typeof ESTADOS_ABERTOS)[number];
  */
 export async function reabrir(id: string, estado: EstadoAberto = "vista") {
   const { data, error } = await supabaseAdmin.from("recommendations")
-    .update({ estado, decidido_por: null, decidido_em: null, motivo_decisao: null, updated_at: new Date().toISOString() })
+    .update({ estado, decidido_por: null, decidido_em: null, motivo_decisao: null, resultado: null, conferencia: null, medido_em: null, updated_at: new Date().toISOString() })
     .eq("id", id).in("estado", ["ignorada", "incorreta", "executada"]).select("id, estado, titulo").maybeSingle();
   if (error) {
     if (error.code === "23505") throw new Error("o feed já recriou essa mesma recomendação — recarregue a lista");
@@ -112,6 +116,8 @@ export async function reabrir(id: string, estado: EstadoAberto = "vista") {
 export async function decidir(id: string, decisao: Decisao, quem: string, motivo?: string | null) {
   const patch: Record<string, unknown> = { estado: decisao, updated_at: new Date().toISOString() };
   if (decisao !== "vista") { patch.decidido_por = quem; patch.decidido_em = new Date().toISOString(); patch.motivo_decisao = motivo ?? null; }
+  // "Já fiz" abre a conferência automática (1 e 3 dias depois, em conferirFeitas).
+  if (decisao === "executada") { patch.resultado = "aguardando"; patch.conferencia = null; patch.medido_em = null; }
   const { data, error } = await supabaseAdmin.from("recommendations").update(patch).eq("id", id).select("id, estado, titulo").maybeSingle();
   if (error) throw new Error(error.message);
   return data;
@@ -127,4 +133,63 @@ export async function taxaDeDecisao(dias = 14) {
   const porEstado: Record<string, number> = {};
   for (const r of data ?? []) porEstado[r.estado as string] = (porEstado[r.estado as string] ?? 0) + 1;
   return { dias, total, decididas, taxa: total ? Math.round((decididas / total) * 100) : null, porEstado };
+}
+
+/**
+ * "Adiar até" (Mesa do Gestor, 26/10/2026): some da fila até `ate` e volta sozinha. Não conta como decisão — o
+ * problema continua lá; quem adiou só disse quando vai olhar. Máximo de 14 dias para ninguém enterrar um item.
+ */
+export async function adiar(id: string, ate: Date, quem: string) {
+  const limite = Date.now() + 14 * 864e5;
+  const quando = new Date(Math.min(ate.getTime(), limite)).toISOString();
+  const { data, error } = await supabaseAdmin.from("recommendations")
+    .update({ estado: "vista", adiada_ate: quando, motivo_decisao: `adiada por ${quem}`, updated_at: new Date().toISOString() })
+    .eq("id", id).in("estado", ABERTAS).select("id, estado, titulo, adiada_ate").maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+/** Fonte que falhou nesta rodada não pode "resolver" o que ela não leu: o item sumiu por erro, não por conserto. */
+export function fontesSemLeitura(erros: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const e of erros) {
+    const nome = e.split(":")[0].trim();
+    // "alarmes" (verba e conversa) também gera itens de fonte "trafego".
+    out.add(nome === "alarmes" ? "trafego" : nome);
+  }
+  return out;
+}
+
+/**
+ * A conferência do "Já fiz": para cada recomendação feita nos últimos 10 dias que ainda não terminou, olha se a
+ * rodada de agora reporta o mesmo fingerprint (lib/priority/conferencia.ts). Nunca lança.
+ */
+async function conferirFeitas(reportadosAgora: Set<string>, erros: string[]): Promise<number> {
+  try {
+    const semLeitura = fontesSemLeitura(erros);
+    const desde = new Date(Date.now() - 10 * 864e5).toISOString();
+    const { data, error } = await supabaseAdmin.from("recommendations")
+      .select("id, fonte, fingerprint, decidido_em, resultado, conferencia")
+      .eq("estado", "executada").gte("decidido_em", desde)
+      .or("resultado.is.null,resultado.eq.aguardando,resultado.eq.confirmado_1d");
+    if (error) { erros.push(`conferência: ${error.message}`); return 0; }
+    let n = 0;
+    const agora = new Date();
+    for (const r of data ?? []) {
+      if (semLeitura.has(r.fonte as string)) continue;
+      const passo = proximaConferencia(
+        { decidido_em: r.decidido_em as string, resultado: (r.resultado as ResultadoConferencia | null) ?? "aguardando" },
+        reportadosAgora.has(r.fingerprint as string), agora,
+      );
+      if (!passo) continue;
+      const conferencia = { ...((r.conferencia as Record<string, unknown> | null) ?? {}), [passo.etapa]: { em: agora.toISOString(), reportada: reportadosAgora.has(r.fingerprint as string) } };
+      const { error: e } = await supabaseAdmin.from("recommendations")
+        .update({ resultado: passo.resultado, medido_em: agora.toISOString(), conferencia }).eq("id", r.id as string);
+      if (e) erros.push(`conferir ${r.id}: ${e.message}`); else n++;
+    }
+    return n;
+  } catch (e) {
+    erros.push(`conferência: ${e instanceof Error ? e.message : String(e)}`);
+    return 0;
+  }
 }

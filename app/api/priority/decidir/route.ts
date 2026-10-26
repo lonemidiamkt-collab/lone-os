@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { decidir, reabrir, ESTADOS_ABERTOS, type Decisao, type EstadoAberto } from "@/lib/priority/repo";
+import { adiar, decidir, reabrir, ESTADOS_ABERTOS, type Decisao, type EstadoAberto } from "@/lib/priority/repo";
 
 const DECISOES: Decisao[] = ["vista", "aceita", "ignorada", "incorreta", "executada"];
 
@@ -24,6 +24,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, ...r });
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 409 });
+    }
+  }
+  // Mesa do Gestor (26/10/2026): { id, decisao: "adiar", ate: "YYYY-MM-DD" } tira da fila até a data.
+  if (id && body?.decisao === "adiar") {
+    const ate = typeof body?.ate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.ate) ? new Date(`${body.ate}T08:00:00-03:00`) : null;
+    if (!ate || ate.getTime() <= Date.now()) return NextResponse.json({ error: "ate (YYYY-MM-DD, no futuro) é obrigatório para adiar" }, { status: 400 });
+    const { data: quem } = await supabaseAdmin.from("team_members").select("name").eq("email", user.email).maybeSingle();
+    try {
+      const r = await adiar(id, ate, (quem?.name as string) ?? user.email ?? "alguém");
+      if (!r) return NextResponse.json({ error: "essa recomendação não está mais aberta" }, { status: 409 });
+      return NextResponse.json({ ok: true, ...r });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
     }
   }
   const decisao = body?.decisao as Decisao;

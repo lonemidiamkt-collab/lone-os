@@ -37,6 +37,7 @@ import DefesaAtiva from "@/components/trafego/defesa/DefesaAtiva";
 import AnunciosMeta from "@/components/trafego/AnunciosMeta";
 import RetornoConexaoMeta from "@/components/trafego/RetornoConexaoMeta";
 import { Sun, History, ShoppingBag, DatabaseZap } from "lucide-react";
+import MesaGestor from "@/components/trafego/mesa/MesaGestor";
 import OQueMudou from "@/components/trafego/mudancas/OQueMudou";
 import VendasCarteira from "@/components/trafego/vendas/VendasCarteira";
 import CoberturaDados from "@/components/trafego/cobertura/CoberturaDados";
@@ -53,7 +54,7 @@ const STATUS_COLUMNS = [
   { id: "at_risk", title: "Resultados Ruins", color: "bg-destructive" },
 ];
 
-type TabType = "hoje" | "defesa" | "status" | "anuncios" | "mudancas" | "vendas" | "cobertura";
+type TabType = "mesa" | "hoje" | "defesa" | "status" | "anuncios" | "mudancas" | "vendas" | "cobertura";
 
 export default function TrafficPage() {
   const router = useRouter();
@@ -118,13 +119,14 @@ export default function TrafficPage() {
   const { currentUser, role } = useRole();
   const isAdmin = role === "admin" || role === "manager";
   const { pendingTab, setPendingTab, setCurrentTab, secondaryOpen } = useNav();
-  const [activeTab, setActiveTab] = useState<TabType>("hoje");
+  // Mesa do gestor (26/10/2026) abre primeiro: é onde o gestor decide o que o sistema apontou.
+  const [activeTab, setActiveTab] = useState<TabType>("mesa");
 
   // Aba pedida pelo painel lateral ou pela busca ⌘K. Só consome (e apaga) o pedido que é DESTA tela:
   // apagar o de outra página fazia a busca abrir a tela certa na aba errada.
   useEffect(() => {
     if (!pendingTab) return;
-    const VALID: TabType[] = ["hoje","defesa","status","anuncios","mudancas","vendas","cobertura"];
+    const VALID: TabType[] = ["mesa","hoje","defesa","status","anuncios","mudancas","vendas","cobertura"];
     // A aba Investimento saiu (Leva 4): verba e ritmo do mês moram em Tráfego › Contas & Verba.
     if (pendingTab === "investimento") { setPendingTab(""); router.push("/traffic/budgets"); return; }
     // "rotina" é o nome antigo do Hoje (Leva 4): link, favorito ou ⌘K antigo cai no Hoje.
@@ -169,6 +171,7 @@ export default function TrafficPage() {
 
   // Mesmos nomes do painel lateral (lib/navegacao/menu.ts).
   const tabs: { key: TabType; label: string; icon?: React.ReactNode }[] = [
+    { key: "mesa", label: "Mesa do gestor", icon: <ClipboardCheck size={14} /> },
     { key: "hoje", label: "Hoje", icon: <Sun size={14} /> },
     { key: "defesa", label: "Defesa Ativa", icon: <ShieldAlert size={14} /> },
     { key: "status", label: "Status dos Clientes", icon: <Users size={14} /> },
@@ -267,6 +270,9 @@ export default function TrafficPage() {
               </button>
             ))}
           </div>
+
+          {/* Mesa do gestor — a fila do dia: no máximo 10, com Já fiz / Não é problema / Adiar e conferência */}
+          {activeTab === "mesa" && <MesaGestor />}
 
           {/* Hoje — o cockpit do gestor (era a Rotina Diária; o checklist da semana mora no fim dele) */}
           {activeTab === "hoje" && (

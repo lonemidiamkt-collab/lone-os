@@ -23,6 +23,15 @@ export interface ItemDiagnostico {
   prioridade: number;
   /** Quanto de verba está em jogo por dia — o que torna o item comparável entre contas. */
   emJogoDia?: number;
+  /**
+   * De qual coisa é o achado (26/10/2026, Mesa do Gestor). Vira UM item por criativo, conjunto ou campanha na
+   * fila — antes era um por cliente e por tipo, e o segundo anúncio ruim do mesmo cliente simplesmente sumia.
+   * "criativo" = anúncios com o mesmo nome: na carteira um criativo roda em ~9 anúncios, e é o criativo que
+   * não converte (nenhum anúncio sozinho chega ao piso). `ids` = os ids da Meta, para conferir depois.
+   */
+  entidade?: { nivel: "criativo" | "conjunto" | "campanha"; chave: string; nome: string; ids: string[] };
+  /** 0–1: quanto o dado sustenta o achado. Sem valor, quem consome decide pelo R$ em jogo. */
+  confianca?: number;
 }
 
 export interface Diagnostico {
@@ -62,7 +71,7 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
       .not("meta_ad_account_id", "is", null).neq("meta_ad_account_id", "")
       .or("active.is.null,active.eq.true").is("draft_status", null),
     supabaseAdmin.from("meta_entity_snapshots")
-      .select("client_id, nivel, entity_name, campaign_name, adset_name, metric_date, spend, impressions, clicks, ctr, frequency, conversions, cost_per_conversion")
+      .select("client_id, nivel, entity_id, entity_name, campaign_name, adset_name, metric_date, spend, impressions, clicks, ctr, frequency, conversions, cost_per_conversion")
       .gte("metric_date", seteDias).lte("metric_date", ontem),
     supabaseAdmin.from("anomaly_alerts")
       .select("client_id, metric, severity, percent_change, current_value, baseline_value, metric_date")
@@ -99,6 +108,17 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
   const gastoOntem = contaDia === null ? null : contaDia
     .filter((m) => m.metric_date === ontem)
     .reduce((s, m) => s + (Number(m.spend) || 0), 0);
+
+  // AINDA GASTANDO (26/10/2026). Anúncio que o gestor pausou continuava na janela de 7 dias como "desperdício"
+  // por mais uma semana — o "Já fiz" da Mesa do Gestor voltava no dia seguinte. Agora desperdício, cansaço,
+  // custo acima da meta e realocação só falam do que GASTOU no último dia com dado daquele cliente (não
+  // "ontem": a coleta não roda no fim de semana, e "ontem" vazio faria tudo sumir e voltar na segunda).
+  const ultimoDia = new Map<string, string>();
+  for (const e of entidades ?? []) {
+    const id = e.client_id as string, d = e.metric_date as string;
+    if (!ultimoDia.has(id) || d > ultimoDia.get(id)!) ultimoDia.set(id, d);
+  }
+  const noUltimoDia = (e: { client_id: unknown; metric_date: unknown }) => ultimoDia.get(e.client_id as string) === e.metric_date;
 
   // ── 1. AUDITOR DE CONTAS ────────────────────────────────────────────────────
   // Conta de cliente ativo que simplesmente não entregou nada ontem. É o problema mais grave e o
@@ -146,56 +166,68 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
         ? "Vários sinais ao mesmo tempo costumam ser um só problema — conferir se a campanha mudou ou o criativo cansou."
         : "Abrir a conta e comparar com a semana anterior.",
       prioridade: 60 + Math.min(30, (lista?.length ?? 0) * 6),
+      // Queda só de impressão ou de clique raramente é problema de resultado (81 de 109 "quedas" de outubro
+      // eram impressão): fica na lista, mas atrás do que mexe em gasto ou custo por conversa.
+      ...((lista ?? []).every((a) => a.metric === "impressions" || a.metric === "ctr") ? { confianca: 0.45 } : {}),
     };
   }).sort((a, b) => b.prioridade - a.prioridade);
 
   // ── 3. CAÇADOR DE DESPERDÍCIO ───────────────────────────────────────────────
   // Anúncio que gastou e não trouxe uma conversa. É dinheiro saindo sem contrapartida — o item de
   // maior retorno por minuto de atenção do gestor.
-  const porAnuncio = new Map<string, { cliente: string; clientId: string; nome: string; campanha: string; gasto: number; conv: number; impr: number }>();
+  const porAnuncio = new Map<string, { cliente: string; clientId: string; nome: string; campanha: string; gasto: number; conv: number; impr: number; ids: Set<string>; ativo: boolean }>();
   for (const e of entidades ?? []) {
     if (e.nivel !== "ad") continue;
     const k = `${e.client_id}|${e.entity_name}`;
     const at = porAnuncio.get(k) ?? {
       cliente: nome.get(e.client_id as string) ?? "?", clientId: e.client_id as string,
       nome: (e.entity_name as string) ?? "(sem nome)", campanha: (e.campaign_name as string) ?? "",
-      gasto: 0, conv: 0, impr: 0,
+      gasto: 0, conv: 0, impr: 0, ids: new Set<string>(), ativo: false,
     };
     at.gasto += Number(e.spend) || 0;
     at.conv += Number(e.conversions) || 0;
     at.impr += Number(e.impressions) || 0;
+    if (e.entity_id) at.ids.add(e.entity_id as string);
+    if (noUltimoDia(e) && Number(e.spend) > 0) at.ativo = true;
     porAnuncio.set(k, at);
   }
   const desperdicio: ItemDiagnostico[] = [...porAnuncio.values()]
     // Piso de R$40 em 7 dias: abaixo disso não houve gasto suficiente pra concluir nada, e apontar
     // um anúncio de R$8 como desperdício só gasta a atenção de quem lê.
-    .filter((a) => a.conv === 0 && a.gasto >= 40)
+    .filter((a) => a.conv === 0 && a.gasto >= 40 && a.ativo)
     .map((a) => ({
       cliente: a.cliente, clientId: a.clientId,
-      achado: `"${a.nome}" gastou ${dinheiro(a.gasto)} em 7 dias, ${a.impr.toLocaleString("pt-BR")} pessoas viram, e nenhuma conversa.`,
-      acao: "Pausar este anúncio e realocar a verba para os que estão convertendo na mesma campanha.",
+      achado: a.ids.size > 1
+        ? `"${a.nome}" (${a.ids.size} anúncios com esse criativo) gastou ${dinheiro(a.gasto)} em 7 dias, ${a.impr.toLocaleString("pt-BR")} pessoas viram, e nenhuma conversa.`
+        : `"${a.nome}" gastou ${dinheiro(a.gasto)} em 7 dias, ${a.impr.toLocaleString("pt-BR")} pessoas viram, e nenhuma conversa.`,
+      acao: a.ids.size > 1
+        ? `Pausar os ${a.ids.size} anúncios desse criativo e realocar a verba para os que estão convertendo.`
+        : "Pausar este anúncio e realocar a verba para os que estão convertendo na mesma campanha.",
       prioridade: Math.min(95, 60 + Math.round(a.gasto / 5)),
       emJogoDia: a.gasto / 7,
+      entidade: { nivel: "criativo" as const, chave: a.nome, nome: a.nome, ids: [...a.ids] },
     }))
     .sort((a, b) => (b.emJogoDia ?? 0) - (a.emJogoDia ?? 0));
 
   // ── 4. DETECTOR DE FADIGA ───────────────────────────────────────────────────
   // Frequência é quantas vezes a MESMA pessoa viu. Acima de 3 o público começou a saturar; o
   // criativo não está errado, está gasto.
-  const porFreq = new Map<string, { cliente: string; clientId: string; nome: string; freq: number; gasto: number; ctrRecente: number; ctrAntes: number }>();
+  const porFreq = new Map<string, { cliente: string; clientId: string; nome: string; freq: number; gasto: number; ids: Set<string>; ativo: boolean }>();
   for (const e of entidades ?? []) {
     if (e.nivel !== "ad" || !e.frequency) continue;
     const k = `${e.client_id}|${e.entity_name}`;
     const at = porFreq.get(k) ?? {
       cliente: nome.get(e.client_id as string) ?? "?", clientId: e.client_id as string,
-      nome: (e.entity_name as string) ?? "?", freq: 0, gasto: 0, ctrRecente: 0, ctrAntes: 0,
+      nome: (e.entity_name as string) ?? "?", freq: 0, gasto: 0, ids: new Set<string>(), ativo: false,
     };
     at.freq = Math.max(at.freq, Number(e.frequency) || 0);
     at.gasto += Number(e.spend) || 0;
+    if (e.entity_id) at.ids.add(e.entity_id as string);
+    if (noUltimoDia(e) && Number(e.spend) > 0) at.ativo = true;
     porFreq.set(k, at);
   }
   const fadiga: ItemDiagnostico[] = [...porFreq.values()]
-    .filter((a) => a.freq >= 3 && a.gasto >= 30)
+    .filter((a) => a.freq >= 3 && a.gasto >= 30 && a.ativo)
     .map((a) => ({
       cliente: a.cliente, clientId: a.clientId,
       achado: `"${a.nome}" está sendo mostrado ${a.freq.toFixed(1)}x para a mesma pessoa.`,
@@ -204,24 +236,30 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
         : "Pedir variação nova para o designer antes que o custo suba.",
       prioridade: Math.min(88, 50 + Math.round(a.freq * 6)),
       emJogoDia: a.gasto / 7,
+      entidade: { nivel: "criativo" as const, chave: a.nome, nome: a.nome, ids: [...a.ids] },
     }))
     .sort((a, b) => b.prioridade - a.prioridade);
 
   // ── 5. CONTROLADOR DE VERBA (dentro da campanha) ────────────────────────────
   // Conjunto caro convivendo com conjunto barato na MESMA campanha: é a realocação mais óbvia e a
   // que mais aparece no dia a dia — foi o exemplo que o Roberto deu.
-  const porConjunto = new Map<string, { cliente: string; clientId: string; campanha: string; nome: string; gasto: number; conv: number }>();
+  const porConjunto = new Map<string, { cliente: string; clientId: string; campanha: string; nome: string; gasto: number; conv: number; ids: Set<string>; ativo: boolean }>();
   for (const e of entidades ?? []) {
     if (e.nivel !== "adset") continue;
     const k = `${e.client_id}|${e.campaign_name}|${e.entity_name}`;
     const at = porConjunto.get(k) ?? {
       cliente: nome.get(e.client_id as string) ?? "?", clientId: e.client_id as string,
       campanha: (e.campaign_name as string) ?? "", nome: (e.entity_name as string) ?? "?", gasto: 0, conv: 0,
+      ids: new Set<string>(), ativo: false,
     };
     at.gasto += Number(e.spend) || 0;
     at.conv += Number(e.conversions) || 0;
+    if (e.entity_id) at.ids.add(e.entity_id as string);
+    if (noUltimoDia(e) && Number(e.spend) > 0) at.ativo = true;
     porConjunto.set(k, at);
   }
+  const conjuntoDe = (c: { campanha: string; nome: string; ids: Set<string> }) =>
+    ({ nivel: "conjunto" as const, chave: `${c.campanha}|${c.nome}`, nome: c.nome, ids: [...c.ids] });
   const porCampanha = new Map<string, typeof porConjunto extends Map<string, infer V> ? V[] : never>();
   for (const cj of porConjunto.values()) {
     const k = `${cj.clientId}|${cj.campanha}`;
@@ -235,12 +273,14 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
     const melhor = custo[0], pior = custo[custo.length - 1];
     // Só vale falar quando a diferença é grande o bastante pra não ser ruído de amostra.
     if (pior.cpc < melhor.cpc * 2.5) continue;
+    if (!pior.ativo) continue; // o caro já parou: não há verba para mover
     realocar.push({
       cliente: pior.cliente, clientId: pior.clientId,
       achado: `Na campanha "${pior.campanha}", o conjunto "${pior.nome}" custa ${dinheiro(pior.cpc)} por conversa e "${melhor.nome}" custa ${dinheiro(melhor.cpc)}.`,
       acao: `Mover verba do "${pior.nome}" para o "${melhor.nome}" — a mesma campanha entrega ${(pior.cpc / melhor.cpc).toFixed(1)}x mais barato do outro lado.`,
       prioridade: Math.min(92, 55 + Math.round((pior.cpc / melhor.cpc) * 5)),
       emJogoDia: pior.gasto / 7,
+      entidade: { nivel: "campanha", chave: pior.campanha, nome: pior.campanha, ids: [...pior.ids] },
     });
   }
   realocar.sort((a, b) => b.prioridade - a.prioridade);
@@ -254,7 +294,7 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
   const acimaDaMeta: ItemDiagnostico[] = [];
   for (const cj of porConjunto.values()) {
     const pol = politica.get(cj.clientId);
-    if (!pol?.cpl_critico || cj.conv === 0) continue;
+    if (!pol?.cpl_critico || cj.conv === 0 || !cj.ativo) continue;
 
     const cpl = cj.gasto / cj.conv;
     const critico = Number(pol.cpl_critico);
@@ -285,13 +325,14 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
         : `Volume suficiente para decidir. Vale pausar ou reduzir a verba deste conjunto.`,
       prioridade: Math.min(96, 65 + Math.round((cpl / meta) * 8)),
       emJogoDia: cj.gasto / 7,
+      entidade: conjuntoDe(cj),
     });
   }
   acimaDaMeta.sort((a, b) => b.prioridade - a.prioridade);
 
   // ── 7. ASSISTENTE DE OTIMIZAÇÃO: o que está indo bem e merece mais ──────────
   const escalar: ItemDiagnostico[] = [...porConjunto.values()]
-    .filter((c) => c.conv >= 5 && c.gasto >= 50)
+    .filter((c) => c.conv >= 5 && c.gasto >= 50 && c.ativo)
     .map((c) => ({ ...c, cpc: c.gasto / c.conv }))
     .sort((a, b) => a.cpc - b.cpc)
     .slice(0, 5)
@@ -301,6 +342,7 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
       acao: "Se houver verba disponível, este é o lugar de colocar.",
       prioridade: 40,
       emJogoDia: c.gasto / 7,
+      entidade: conjuntoDe(c),
     }));
 
   // A seção que depende de uma fonte que não foi lida diz isso — e não "nada encontrado".
