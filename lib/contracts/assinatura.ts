@@ -10,7 +10,9 @@
 //                                                       ou mais sem todas as assinaturas (avisarPendentes)
 //
 // De onde vem: o webhook 2.0 de cada cofre de contrato (POST /api/integracoes/d4sign) a cada assinatura, e uma
-// consulta a cada 3 horas (POST /api/system/contratos-d4sign) para o que o webhook não trouxe. Os contratos da
+// consulta de hora em hora (POST /api/system/contratos-d4sign) que relê os pendentes em rodízio — assim o "✍️"
+// sai mesmo quando o webhook falha (28/10/2026: o código do aviso não bateu e a assinatura do Matheus ficou
+// um dia sem aviso, porque a consulta só relia o que SAÍA da lista de pendentes). Os contratos da
 // Lone ficam em vários cofres (um por pacote, renovação…): só contam os escolhidos no painel. Os dois chamam
 // processarDocumento(), que nunca confia no evento: relê o documento na D4Sign (signatários, quem assinou,
 // quando) e só chama de "assinado" a fase Finalizado (ou Arquivado com todos assinados). A D4Sign responde a
@@ -44,6 +46,9 @@ import type { OrigemChamada } from "./d4sign-cota";
 
 export const JANELA_AVISO_DIAS = 4;
 export const DIAS_SEM_ASSINATURA = 3;
+/** Pendente há mais que isso (contrato de experiência de 2024 esquecido na D4Sign) sai da lista da manhã e do
+ *  rodízio da consulta — vira uma linha só, pedindo para cancelar lá. */
+export const DIAS_PARADO = 180;
 /** Chamadas por rodada além da listagem (a conta responde a 10 por hora; o resto fica para a próxima). */
 export const LEITURAS_POR_CONSULTA = 3;
 
@@ -234,13 +239,18 @@ export const mensagemParcial = (nome: string, lista: SignatarioGravado[]) => `�
 
 export interface ItemPendente { uuid: string; nome: string; faltam: SignatarioGravado[]; dias: number }
 
-/** O aviso da manhã. "" = ninguém esperando. Os mais antigos primeiro, no máximo 10 linhas. Pura. */
-export function mensagemPendentes(itens: ItemPendente[]): string {
+/**
+ * O aviso da manhã. "" = ninguém esperando. Os mais antigos primeiro, no máximo 10 linhas. `parados` = quantos
+ * esperam há mais de DIAS_PARADO dias (não entram um a um: viram uma linha pedindo para cancelar na D4Sign). Pura.
+ */
+export function mensagemPendentes(itens: ItemPendente[], parados = 0): string {
+  // Só os parados não viram mensagem: repetir todo dia "há N parados" é ruído (eles saem quando cancelados lá).
   if (!itens.length) return "";
   const ordem = [...itens].sort((a, b) => b.dias - a.dias);
   const linhas = ordem.slice(0, 10).map((i) =>
     `• *${i.nome}* — falta ${i.faltam.length ? juntar(i.faltam.map(quemAssina)) : "assinar (a D4Sign não disse quem)"} · enviado há ${i.dias} dia${i.dias === 1 ? "" : "s"}`);
   if (ordem.length > 10) linhas.push(`• e mais ${ordem.length - 10}`);
+  if (parados) linhas.push(`_E mais ${parados} parado${parados === 1 ? "" : "s"} na D4Sign há mais de 6 meses — vale cancelar lá._`);
   return ["⏳ *Ainda não assinaram o contrato*", ...linhas].join("\n");
 }
 
@@ -337,6 +347,13 @@ export interface OpcoesDocumento {
 }
 
 const ehLimite = (motivo: string | null | undefined) => /limite de chamadas/.test(motivo ?? "");
+
+/** O documento foi relido na D4Sign há menos de `segundos`? (repetição do mesmo evento não gasta chamada). */
+export async function lidoHaPouco(uuid: string, segundos = 60): Promise<boolean> {
+  const r = await supabaseAdmin.from(TABELA).select("atualizado_em").eq("document_uuid", uuid).maybeSingle();
+  const em = (r.data as { atualizado_em?: string | null } | null)?.atualizado_em;
+  return !r.error && !!em && Date.now() - new Date(em).getTime() < segundos * 1000;
+}
 
 /** Relê o documento na D4Sign, registra quem assinou, liga ao cadastro, grava a data e avisa. Nunca lança. */
 export async function processarDocumento(uuid: string, opts: OpcoesDocumento): Promise<ResultadoDocumento> {
@@ -553,12 +570,27 @@ export interface ResultadoConsulta {
 }
 
 /**
+ * O rodízio da consulta: pendentes conhecidos que continuam na lista da D4Sign num cofre de contrato
+ * (`naLista`), enviados há no máximo DIAS_PARADO dias, do lido há mais tempo ao mais recente. Pura.
+ */
+export function filaDoRodizio<T extends Pick<LinhaDocumento, "document_uuid" | "enviado_em" | "visto_em" | "atualizado_em">>(
+  pendentes: T[], naLista: Set<string>, agora: Date,
+): T[] {
+  const limite = agora.getTime() - DIAS_PARADO * DIA;
+  return pendentes
+    .filter((l) => naLista.has(l.document_uuid))
+    .filter((l) => new Date(l.enviado_em ?? l.visto_em ?? agora.toISOString()).getTime() >= limite)
+    .sort((a, b) => String(a.atualizado_em ?? "").localeCompare(String(b.atualizado_em ?? "")));
+}
+
+/**
  * Lista os documentos da CONTA esperando assinatura (1 chamada por página, não uma por cofre) e relê no
  * máximo `limite` documentos, nesta ordem:
  *   0. o que o Lone OS viu pendente e saiu da lista (assinou, cancelou) — só quando a lista veio completa;
  *   0. assinado cujo aviso não saiu (envio falhou e soltou a trava), dentro da janela;
- *   1. pendente de um cofre escolhido que o Lone OS ainda não conhece — para ligar ao cadastro e saber quem assina.
- * Documento de cofre não escolhido não gasta chamada. O que fecha chega pelo webhook (a D4Sign repete por 27 h).
+ *   1. pendente de um cofre escolhido que o Lone OS ainda não conhece — para ligar ao cadastro e saber quem assina;
+ *   2. rodízio dos pendentes conhecidos (filaDoRodizio) — quem assinou uma parte vira "✍️" mesmo sem o webhook.
+ * Documento de cofre não escolhido não gasta chamada.
  */
 export async function consultarCofre(opts: { dry?: boolean; agora?: Date; cfg?: ConfigD4Sign | null; limite?: number } = {}): Promise<ResultadoConsulta> {
   const dry = !!opts.dry;
@@ -577,7 +609,7 @@ export async function consultarCofre(opts: { dry?: boolean; agora?: Date; cfg?: 
     erros: [faltaMigracao(e) ? "falta aplicar a migration 20261026150000_contrato_assinado_d4sign" : `não consegui ler os registros: ${e.message}`] });
 
   // O que o Lone OS já conhece: os pendentes dele, os assinados recentes sem aviso e os da lista.
-  const pend = await supabaseAdmin.from(TABELA).select("document_uuid, status").eq("status", "pendente");
+  const pend = await supabaseAdmin.from(TABELA).select("document_uuid, status, enviado_em, visto_em, atualizado_em").eq("status", "pendente");
   if (pend.error) return erroDoBanco(pend.error);
   const desde = new Date(agora.getTime() - JANELA_AVISO_DIAS * DIA).toISOString();
   const semAviso = await supabaseAdmin.from(TABELA).select("document_uuid").eq("status", "assinado")
@@ -598,6 +630,10 @@ export async function consultarCofre(opts: { dry?: boolean; agora?: Date; cfg?: 
   }
   for (const l of (semAviso.data as LinhaDocumento[] | null) ?? []) entra(l.document_uuid, 0);
   for (const d of escolhidos) if (!conhecidos.has(d.uuid)) entra(d.uuid, 1);
+  // 2. Rodízio: o pendente que o Lone OS conhece e continua na lista pode ter ganhado uma assinatura (o "✍️").
+  //    Relê o que foi lido há mais tempo; o parado há mais de DIAS_PARADO dias fica de fora.
+  const dosCofres = new Set(escolhidos.map((d) => d.uuid));
+  for (const l of filaDoRodizio((pend.data as LinhaDocumento[] | null) ?? [], dosCofres, agora)) entra(l.document_uuid, 2);
   fila.sort((a, b) => a.prioridade - b.prioridade);
   const limite = opts.limite ?? LEITURAS_POR_CONSULTA;
 
@@ -642,21 +678,29 @@ export async function avisarPendentes(opts: { dry?: boolean; agora?: Date; dia: 
   const dry = !!opts.dry;
   const agora = opts.agora ?? new Date();
   const base = { dry, enviado: false, texto: "", itens: [] as ItemPendente[], relidos: 0, erros: [] as string[] };
-  const ler = async () => supabaseAdmin.from(TABELA).select("document_uuid, nome, client_id, enviado_em, visto_em, signatarios").eq("status", "pendente");
+  const ler = async () => supabaseAdmin.from(TABELA).select("document_uuid, nome, client_id, enviado_em, visto_em, atualizado_em, signatarios").eq("status", "pendente");
   const diasDe = (l: LinhaDocumento) => Math.floor((agora.getTime() - new Date(l.enviado_em ?? l.visto_em ?? agora.toISOString()).getTime()) / DIA);
 
   let r = await ler();
   if (r.error) return { ...base, ok: false, motivo: faltaMigracao(r.error) ? "falta aplicar a migration 20261026150000_contrato_assinado_d4sign" : `não consegui ler os pendentes: ${r.error.message}` };
-  let vencidos = ((r.data as LinhaDocumento[] | null) ?? []).filter((l) => diasDe(l) >= DIAS_SEM_ASSINATURA);
-  if (!vencidos.length) return { ...base, ok: true, motivo: `nenhum contrato esperando assinatura há ${DIAS_SEM_ASSINATURA} dias ou mais` };
+  // Parado há mais de DIAS_PARADO dias não entra um a um nem gasta releitura: vira uma linha no fim.
+  const separar = (linhas: LinhaDocumento[]) => {
+    const vencidos = linhas.filter((l) => diasDe(l) >= DIAS_SEM_ASSINATURA);
+    return { vencidos: vencidos.filter((l) => diasDe(l) <= DIAS_PARADO), parados: vencidos.filter((l) => diasDe(l) > DIAS_PARADO).length };
+  };
+  let { vencidos, parados } = separar((r.data as LinhaDocumento[] | null) ?? []);
+  if (!vencidos.length) return { ...base, ok: true, motivo: `nenhum contrato esperando assinatura há ${DIAS_SEM_ASSINATURA} dias ou mais (fora os parados há mais de ${DIAS_PARADO})` };
 
-  // Relê os mais antigos (o que couber na cota). Ensaio não relê: mostra o que já se sabe.
+  // Relê os que vão para a mensagem, começando pelo lido há mais tempo (o que couber na cota): quem assinou de
+  // madrugada não aparece como faltando. Em 28/10 ela relia os 3 MAIS ANTIGOS (dois de 2024) e disse que o
+  // Matheus ainda não tinha assinado. Ensaio não relê: mostra o que já se sabe.
   let relidos = 0;
   const erros: string[] = [];
   if (!dry) {
     const cfg = opts.cfg === undefined ? await carregarConfigD4Sign() : opts.cfg;
     if (cfg) {
-      for (const l of [...vencidos].sort((a, b) => diasDe(b) - diasDe(a)).slice(0, LEITURAS_POR_CONSULTA)) {
+      const ordem = [...vencidos].sort((a, b) => String(a.atualizado_em ?? "").localeCompare(String(b.atualizado_em ?? "")));
+      for (const l of ordem.slice(0, LEITURAS_POR_CONSULTA)) {
         const p = await processarDocumento(l.document_uuid, { origem: "manha", agora, cfg, avisarParcial: false });
         if (!p.ok && ehLimite(p.motivo)) break;
         relidos++;
@@ -665,7 +709,7 @@ export async function avisarPendentes(opts: { dry?: boolean; agora?: Date; dia: 
       if (relidos) {
         r = await ler();
         if (r.error) return { ...base, ok: false, relidos, erros, motivo: `não consegui reler os pendentes: ${r.error.message}` };
-        vencidos = ((r.data as LinhaDocumento[] | null) ?? []).filter((l) => diasDe(l) >= DIAS_SEM_ASSINATURA);
+        ({ vencidos, parados } = separar((r.data as LinhaDocumento[] | null) ?? []));
       }
     }
   }
@@ -684,7 +728,7 @@ export async function avisarPendentes(opts: { dry?: boolean; agora?: Date; dia: 
     faltam: lerSignatariosGravados(l.signatarios).filter((s) => !s.assinou),
     dias: diasDe(l),
   }));
-  const texto = mensagemPendentes(itens);
+  const texto = mensagemPendentes(itens, parados);
   const pronto = { ...base, relidos, erros, itens, texto };
   if (dry) return { ...pronto, ok: true, motivo: null };
 

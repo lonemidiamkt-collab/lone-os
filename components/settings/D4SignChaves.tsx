@@ -22,6 +22,8 @@ interface Situacao {
   testeResultado: string | null;
   historico: { quem: string; quando: string; acao: string; campos: string[]; resultado?: string }[];
   ligada: boolean;
+  /** O código de cada aviso da D4Sign bate com o segredo colado aqui? (lib/contracts/d4sign-config.ts) */
+  aviso?: { conferiuEm: string | null; falhouEm: string | null; recebido: string | null; segredoErrado: boolean };
 }
 
 const CAMPOS: { campo: Campo; rotulo: string; onde: string; segredo: boolean }[] = [
@@ -130,6 +132,17 @@ export default function D4SignChaves() {
         Cole cada chave uma vez. Ela é guardada cifrada e nunca volta para a tela — para trocar, cole de novo.
         O que ficar vazio aqui usa o que estiver no servidor.
       </p>
+
+      {sit?.aviso?.segredoErrado && (
+        <p role="alert" className="mb-4 rounded-lg border border-lone-warning-border bg-lone-warning-bg px-3 py-2 text-xs text-lone-warning">
+          O último aviso da D4Sign ({quando(sit.aviso.falhouEm)}) chegou com um código que não bate com o segredo colado aqui.
+          O Lone OS relê o contrato na D4Sign mesmo assim (até 4 por hora), mas cole de novo o <strong>Segredo do webhook</strong>:
+          copie o que aparece hoje na D4Sign (Gerenciar conta › Webhooks) — se gerar um novo lá, cole o novo aqui.
+        </p>
+      )}
+      {sit?.aviso && !sit.aviso.segredoErrado && sit.aviso.conferiuEm && (
+        <p className="mb-4 text-[10px] text-lone-success">Último aviso da D4Sign conferido em {quando(sit.aviso.conferiuEm)}.</p>
+      )}
 
       {erroLeitura && (
         <p role="alert" className="mb-4 rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-lone-danger">

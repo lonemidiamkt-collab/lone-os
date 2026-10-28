@@ -124,6 +124,27 @@ URL; **10 chamadas por hora** por padrão; JSON; erro como `{ "message": "…" }
 | Lembrete ao signatário | `POST /documents/{uuid}/resend` `{email, key_signer}` (e-mail da D4Sign, sem texto nosso) | depois |
 | Cancelar | `POST /documents/{uuid}/cancel` | não |
 
+## Incidente de 27/10/2026 e o que mudou (28/10)
+
+O Matheus assinou Boali e Dominos em 27/10, ~15h50. A D4Sign chamou o webhook 24 vezes (cada 15 min, até 18h36, e
+desistiu) e o Lone OS respondeu 401 em todas: o `Content-Hmac` não bateu com o segredo colado no painel (64 hex,
+sem espaço, diferente do token e da cryptKey — o mais provável é a Secret Key MAC ter sido gerada de novo na D4Sign
+depois de colada). A consulta de 3 em 3 horas não ajudou: ela só relia o que SAÍA da lista de pendentes, e um
+contrato em que só o cliente assinou continua pendente. A mensagem da manhã de 28/10 relia os 3 mais antigos (dois
+de 2024) e disse que o Matheus ainda não tinha assinado.
+
+- `conferirHmac` (lib/contracts/d4sign.ts) testa o HMAC padrão e as outras leituras da frase da documentação
+  ("hash SHA256 do UUID junto com a secret key"): HMAC com a chave em hex, sha256(uuid+chave), sha256(chave+uuid).
+  Todas exigem o segredo. A variante que bateu vai para o log e para `d4sign_config.hmac_variante`.
+- Código que não bate NÃO descarta o evento: o documento é relido na D4Sign (origem `aviso` na cota, teto de 4 por
+  hora, sem usar a data do evento; repetição do mesmo documento em menos de 1 min não relê). O card mostra
+  "o último aviso não bateu" (`hmac_falhou_em` > `hmac_conferiu_em`); colar o segredo de novo zera o alerta.
+  Migration `20261028120000_d4sign_conferencia_aviso.sql` (só datas, variante e formato — nunca o segredo).
+- Consulta de hora em hora (`15 11-23 * * *`), com rodízio dos pendentes conhecidos (`filaDoRodizio`: o lido há
+  mais tempo primeiro, só cofres de contrato, fora os parados há mais de 180 dias).
+- Manhã: relê primeiro o lido há mais tempo entre os que vai listar; parados há mais de 180 dias viram uma linha.
+- `POST /api/system/contratos-d4sign?documento=<uuid>` relê e processa um documento só (o aviso que faltou sai).
+
 ## Arquivo por mês (26/10/2026)
 
 Pedido do Roberto: "uma área de arquivos para vermos contratos de cada mês, e podermos baixar eles também".

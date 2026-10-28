@@ -19,7 +19,7 @@
 // "WebHook (POSTBack)", "Segurança de Webhook" e a referência de webhooks 2.0. O que a documentação não
 // mostra com exemplo é lido com folga: campo que não veio vira null, nunca "assinado".
 
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { reservarChamada, limiteDaHora, type OrigemChamada } from "./d4sign-cota";
 
 export interface ConfigD4Sign {
@@ -339,16 +339,42 @@ export async function cadastrarWebhookDoCofre(cfg: ConfigD4Sign, cofre: string, 
   return pedir(cfg, "/webhooks/v2/", { origem: "manual", metodo: "POST", corpo: { type: "cofre", uuid: cofre, url } });
 }
 
+/** Como o código do aviso bateu (ou por que não). Só o NOME da variante vai para log; nunca o segredo. */
+export interface ConferenciaHmac {
+  ok: boolean;
+  /** Qual cálculo bateu. A documentação da D4Sign diz "hash SHA256 do UUID junto com a Secret Key MAC" sem dar a
+   *  fórmula; o padrão (HMAC-SHA256, hex) é o primeiro, e os outros cobrem as leituras possíveis da frase. */
+  variante: "hmac" | "hmac-chave-hex" | "sha256-uuid-chave" | "sha256-chave-uuid" | null;
+  /** O que chegou no cabeçalho, para o diagnóstico: "ausente", "formato estranho" ou "sha256=… (64)". */
+  recebido: string;
+}
+
 /**
- * Confere o cabeçalho Content-Hmac: "sha256=" + HMAC-SHA256 do UUID do documento com a Secret Key MAC
- * da conta. Comparação em tempo constante.
+ * Confere o cabeçalho Content-Hmac ("sha256=" + 64 hex) contra o UUID do documento e a Secret Key MAC. Toda
+ * variante exige o segredo — aceitar mais de uma não abre a porta. Comparação em tempo constante.
  */
-export function hmacConfere(uuid: string, cabecalho: string | null, segredo: string): boolean {
-  if (!cabecalho) return false;
+export function conferirHmac(uuid: string, cabecalho: string | null, segredo: string): ConferenciaHmac {
+  if (!cabecalho) return { ok: false, variante: null, recebido: "ausente" };
   const recebido = cabecalho.trim().replace(/^sha256=/i, "").toLowerCase();
-  const esperado = createHmac("sha256", segredo).update(uuid).digest("hex");
-  if (recebido.length !== esperado.length) return false;
-  return timingSafeEqual(Buffer.from(recebido), Buffer.from(esperado));
+  if (!/^[0-9a-f]{64}$/.test(recebido)) return { ok: false, variante: null, recebido: `formato estranho (${cabecalho.trim().length} caracteres)` };
+  const candidatos: [NonNullable<ConferenciaHmac["variante"]>, string][] = [
+    ["hmac", createHmac("sha256", segredo).update(uuid).digest("hex")],
+    ...(/^[0-9a-f]+$/i.test(segredo) && segredo.length % 2 === 0
+      ? [["hmac-chave-hex", createHmac("sha256", Buffer.from(segredo, "hex")).update(uuid).digest("hex")] as [NonNullable<ConferenciaHmac["variante"]>, string]]
+      : []),
+    ["sha256-uuid-chave", createHash("sha256").update(uuid + segredo).digest("hex")],
+    ["sha256-chave-uuid", createHash("sha256").update(segredo + uuid).digest("hex")],
+  ];
+  const r = Buffer.from(recebido);
+  for (const [variante, esperado] of candidatos) {
+    if (timingSafeEqual(r, Buffer.from(esperado))) return { ok: true, variante, recebido: "sha256=… (64)" };
+  }
+  return { ok: false, variante: null, recebido: "sha256=… (64)" };
+}
+
+/** Atalho booleano de conferirHmac. */
+export function hmacConfere(uuid: string, cabecalho: string | null, segredo: string): boolean {
+  return conferirHmac(uuid, cabecalho, segredo).ok;
 }
 
 /** 1 Finalizado · 2 E-mail não entregue · 3 Cancelado · 4 Um signatário assinou. */

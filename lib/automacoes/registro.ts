@@ -421,7 +421,7 @@ export const AUTOMACOES: Automacao[] = [
   }),
   ep("contratos-d4sign", {
     nome: "Contrato assinado (D4Sign)", descricao: "Confere o cofre dos contratos na D4Sign: o que o webhook não trouxe (assinatura nova, contrato que fechou) vira mensagem no grupo de cadastro — \"✍️ Cliente X: assinado por A · falta B\" ou \"✅ Cliente X assinou o contrato em dd/mm\", cada uma uma vez — e a data entra no contrato e na ficha. Conhece os contratos que esperam assinatura (base do aviso da manhã). Sem a chave da D4Sign, só registra que está desligado.",
-    familia: "Dados e sync", destino: "grupo de cadastro", cron: "15 11-23/3 * * *", agendaBRT: "todo dia, 8h15, 11h15, 14h15, 17h15 e 20h15 (a D4Sign responde a 10 chamadas por hora)", maxSilencioHoras: 14, ensaio: "dry=1",
+    familia: "Dados e sync", destino: "grupo de cadastro", cron: "15 11-23 * * *", agendaBRT: "todo dia, de hora em hora das 8h15 às 20h15 (relê até 3 contratos por vez: a D4Sign responde a 10 chamadas por hora)", maxSilencioHoras: 14, ensaio: "dry=1",
   }),
   ep("contratos-d4sign-pendentes", {
     nome: "Contratos sem assinatura (D4Sign)", descricao: "Dia útil de manhã, UMA mensagem no grupo de cadastro com cada contrato enviado há 3 dias ou mais sem todas as assinaturas: quem falta e há quantos dias. Sem pendência, nada sai. Relê na D4Sign os mais antigos antes de escrever.",

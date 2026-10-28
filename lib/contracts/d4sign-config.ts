@@ -79,6 +79,11 @@ interface LinhaConfig {
   teste_ok?: boolean | null;
   teste_resultado?: string | null;
   historico?: unknown;
+  /** Conferência do código do aviso (migration 20261028120000). */
+  hmac_conferiu_em?: string | null;
+  hmac_variante?: string | null;
+  hmac_falhou_em?: string | null;
+  hmac_recebido?: string | null;
 }
 
 const TABELA = "d4sign_config";
@@ -145,6 +150,11 @@ export interface SituacaoConfig {
   testeResultado: string | null;
   historico: EntradaHistorico[];
   ligada: boolean;
+  /**
+   * O código que a D4Sign manda em cada aviso bate com o segredo colado? `segredoErrado` = o último aviso não bateu
+   * (e nenhum bateu depois): o Lone OS relê o contrato mesmo assim, mas o segredo precisa ser colado de novo.
+   */
+  aviso: { conferiuEm: string | null; falhouEm: string | null; recebido: string | null; segredoErrado: boolean };
 }
 
 const lerHistorico = (v: unknown): EntradaHistorico[] =>
@@ -172,8 +182,28 @@ export async function situacaoDaConfig(env: Record<string, string | undefined> =
       testadoEm: linha?.testado_em ?? null, testeOk: linha?.teste_ok ?? null, testeResultado: linha?.teste_resultado ?? null,
       historico: lerHistorico(linha?.historico).slice(0, 10),
       ligada: !!cfg,
+      aviso: {
+        conferiuEm: linha?.hmac_conferiu_em ?? null, falhouEm: linha?.hmac_falhou_em ?? null, recebido: linha?.hmac_recebido ?? null,
+        segredoErrado: segredoErrado(linha?.hmac_conferiu_em ?? null, linha?.hmac_falhou_em ?? null),
+      },
     },
   };
+}
+
+/** O último aviso não bateu e nenhum bateu depois. Pura. */
+export function segredoErrado(conferiuEm: string | null, falhouEm: string | null): boolean {
+  return !!falhouEm && (!conferiuEm || falhouEm > conferiuEm);
+}
+
+/**
+ * Registra como foi a conferência do código de um aviso da D4Sign (o painel mostra). Só datas, a variante que bateu
+ * e o FORMATO do que chegou — nunca o segredo nem o código. Nunca lança.
+ */
+export async function registrarConferenciaDoAviso(r: { ok: boolean; variante: string | null; recebido: string }): Promise<void> {
+  const agora = new Date().toISOString();
+  const campos = r.ok ? { hmac_conferiu_em: agora, hmac_variante: r.variante } : { hmac_falhou_em: agora, hmac_recebido: r.recebido };
+  const u = await supabaseAdmin.from(TABELA).update(campos).eq("id", 1);
+  if (u.error) console.warn(`[d4sign-config] não registrei a conferência do aviso: ${u.error.message}`);
 }
 
 /**
@@ -198,6 +228,8 @@ export async function salvarConfigD4Sign(p: { novos: PainelD4Sign; apagar: Campo
     return { ok: false, erro: `Não salvei: o servidor está sem a chave de cifra (VAULT_KEY). ${e instanceof Error ? e.message.split(".")[0] : ""}`.trim() };
   }
   for (const c of apagar) campos[COLUNA[c]] = null;
+  // Segredo do aviso trocado: o "não bate" de antes era do segredo velho (o próximo aviso diz se o novo bate).
+  if (novos.includes("hmac") || apagar.includes("hmac")) campos.hmac_falhou_em = null;
 
   const { linha, erro } = await lerLinha();
   if (erro) return { ok: false, erro: /d4sign_config/.test(erro) ? "falta aplicar a migration 20261026150000_contrato_assinado_d4sign" : `Não li a configuração atual: ${erro}` };

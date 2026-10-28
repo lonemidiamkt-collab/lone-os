@@ -12,11 +12,16 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 
-/** "arquivo": a rotina da madrugada que baixa os PDFs assinados para o arquivo por mês (é rotina: respeita a reserva). */
-export type OrigemChamada = "webhook" | "consulta" | "manha" | "manual" | "arquivo";
+/**
+ * "arquivo": a rotina da madrugada que baixa os PDFs assinados para o arquivo por mês (é rotina: respeita a reserva).
+ * "aviso": evento da D4Sign cujo código (Content-Hmac) não bateu — o documento é relido mesmo assim, mas no máximo
+ * TETO_AVISO_SEM_CONFERENCIA vezes por hora, para um evento falso não gastar a cota de quem está esperando.
+ */
+export type OrigemChamada = "webhook" | "consulta" | "manha" | "manual" | "arquivo" | "aviso";
 
 export const LIMITE_PADRAO_HORA = 10;
 export const RESERVA = 4;
+export const TETO_AVISO_SEM_CONFERENCIA = 4;
 const ROTINAS: OrigemChamada[] = ["consulta", "manha", "arquivo"];
 
 export function limiteDaHora(env: Record<string, string | undefined> = process.env): number {
@@ -35,12 +40,15 @@ export async function reservarChamada(caminho: string, origem: OrigemChamada, li
   Promise<{ ok: true } | { ok: false; erro: string }> {
   try {
     const desde = new Date(Date.now() - 3600_000).toISOString();
-    const r = await supabaseAdmin.from("d4sign_chamadas").select("id").gte("em", desde);
+    const r = await supabaseAdmin.from("d4sign_chamadas").select("id, origem").gte("em", desde);
     if (r.error) {
       console.warn(`[d4sign-cota] não consegui contar as chamadas (${r.error.message}) — sigo sem o contador`);
       return { ok: true };
     }
     const usadas = r.data?.length ?? 0;
+    if (origem === "aviso" && ((r.data as { origem?: string }[] | null) ?? []).filter((x) => x.origem === "aviso").length >= TETO_AVISO_SEM_CONFERENCIA) {
+      return { ok: false, erro: `limite de chamadas da D4Sign para aviso sem conferência nesta hora (${TETO_AVISO_SEM_CONFERENCIA}); tente de novo em alguns minutos` };
+    }
     if (cabemAinda(usadas, limite, origem) <= 0) {
       return {
         ok: false,

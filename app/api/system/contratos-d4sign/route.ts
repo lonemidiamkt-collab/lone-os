@@ -1,17 +1,19 @@
 // app/api/system/contratos-d4sign/route.ts — a consulta periódica dos contratos na D4Sign.
 //
 // O caminho principal é o webhook (/api/integracoes/d4sign). Esta consulta pega o que ele não trouxe
-// (Lone OS fora do ar por mais de 27 h, webhook ainda não cadastrado) e conhece os documentos que esperam
+// (Lone OS fora do ar, webhook recusado, D4Sign que desistiu de repetir) e conhece os documentos que esperam
 // assinatura — é daí que sai o "Ainda não assinaram" da manhã (contratos-d4sign-pendentes). A conta da D4Sign
 // responde a 10 chamadas por HORA: cada rodada lista os pendentes da CONTA (1 chamada, não uma por cofre),
-// filtra pelos cofres escolhidos no painel e relê no máximo mais 3; o resto fica para a seguinte.
+// filtra pelos cofres escolhidos no painel e relê no máximo mais 3 — o novo, o que mudou de fase e, em rodízio,
+// os pendentes conhecidos (é assim que o "✍️ assinado por X · falta Y" sai mesmo sem o webhook).
 //
 //   ?dry=1 ............... o que aconteceria: lê a D4Sign e o banco, devolve as mensagens, não grava nem manda
+//   ?documento=<uuid> .... relê e processa SÓ este documento (o aviso que faltou sai no grupo de cadastro)
 //   ?webhook=ver ......... a URL de webhook cadastrada hoje em cada cofre escolhido (só leitura; 1 chamada por cofre)
 //   ?webhook=cadastrar ... cadastra o webhook 2.0 nos cofres escolhidos que ainda não têm (com ?dry=1 só mostra)
 //
 // Integração desligada (sem token ou sem cofre, no painel ou no servidor) devolve ok com `desligado`.
-// Cron: `15 11-23/3 * * *` (8h15, 11h15, 14h15, 17h15 e 20h15 BRT).
+// Cron: `15 11-23 * * *` (de hora em hora, das 8h15 às 20h15 BRT).
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,12 +23,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { verWebhookDoCofre } from "@/lib/contracts/d4sign";
 import { carregarConfigD4Sign, ligarWebhookD4Sign } from "@/lib/contracts/d4sign-config";
-import { consultarCofre } from "@/lib/contracts/assinatura";
+import { consultarCofre, processarDocumento, uuidValido } from "@/lib/contracts/assinatura";
 
 export async function POST(req: NextRequest) {
   const denied = requireCron(req); if (denied) return denied;
   const dry = req.nextUrl.searchParams.get("dry") !== null;
   const webhook = req.nextUrl.searchParams.get("webhook");
+  const documento = req.nextUrl.searchParams.get("documento");
+
+  if (documento) {
+    if (!uuidValido(documento)) return NextResponse.json({ ok: false, erro: "documento= precisa ser o UUID do documento na D4Sign" }, { status: 400 });
+    const r = await processarDocumento(documento, { origem: "consulta", dry });
+    console.log(`[contratos-d4sign] documento=${documento} acao=${r.acao} dry=${dry}${r.motivo ? ` motivo=${r.motivo}` : ""}`);
+    return NextResponse.json(r, { status: r.ok ? 200 : 502 });
+  }
 
   if (webhook) {
     const cfg = await carregarConfigD4Sign();

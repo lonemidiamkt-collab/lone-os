@@ -452,12 +452,69 @@ describe("webhook: todos assinaram → '✅ assinou o contrato', uma vez", () =>
     expect(await (await webhook(evento(DOC_BRUNO))).json()).toMatchObject({ acao: "avisado", contractId: "ct-ze-v2" });
   });
 
-  it("assinatura do webhook que não confere: 401, nem lê a D4Sign", async () => {
+  it("código do aviso que não confere (27/10: o segredo do painel não batia): relê na D4Sign mesmo assim e avisa", async () => {
     const res = await webhook(evento(DOC_ZE, { hmac: mac(DOC_BRUNO) }));
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ conferido: false, acao: "avisado" });
+    // A data vem da leitura (José assinou às 14h02), nunca do evento sem conferência.
+    expect(doc(DOC_ZE)!.assinado_em).toBe("2026-10-26T17:02:27.000Z");
+    expect(db.d4sign_chamadas.map((c) => c.origem)).toEqual(["aviso"]);
+    expect(mensagens()).toEqual([{ grupo: GRUPO_CADASTRO, texto: "✅ *Padaria do Zé* assinou o contrato em 26/10." }]);
+  });
+
+  it("sem conferência: o mesmo documento relido há menos de 1 min não gasta outra chamada", async () => {
+    await webhook(evento(DOC_ZE, { hmac: null }));
+    d4.chamadas.length = 0;
+    expect(await (await webhook(evento(DOC_ZE, { hmac: null }))).json()).toMatchObject({ acao: "relido_ha_pouco" });
+    expect(d4.chamadas).toEqual([]);
+    expect(envio.fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("sem conferência: no máximo 4 releituras por hora — evento falso não gasta a cota de quem espera (503: a D4Sign repete)", async () => {
+    db.d4sign_chamadas = Array.from({ length: 4 }, () => ({ em: new Date().toISOString(), caminho: "/x", origem: "aviso" }));
+    const res = await webhook(evento(DOC_ZE, { hmac: "sha256=" + "0".repeat(64) }));
+    expect(res.status).toBe(503);
     expect(d4.chamadas).toEqual([]);
     expect(envio.fn).not.toHaveBeenCalled();
-    expect((await webhook(evento(DOC_ZE, { hmac: null }))).status).toBe(401);
+    // O aviso conferido não tem esse teto.
+    expect((await webhook(evento(DOC_ZE))).status).toBe(200);
+  });
+
+  it("o painel mostra quando o código não bate, e para de mostrar quando volta a bater ou o segredo é colado de novo", async () => {
+    db.d4sign_config = [{ id: 1, historico: [] }];
+    await webhook(evento(DOC_ZE, { hmac: mac(DOC_BRUNO) }));
+    let s = await CFG.situacaoDaConfig();
+    expect(s.ok && s.situacao.aviso).toMatchObject({ segredoErrado: true, recebido: "sha256=… (64)" });
+    vi.setSystemTime(new Date(AGORA.getTime() + 120_000));
+    await webhook(evento(DOC_BRUNO));
+    s = await CFG.situacaoDaConfig();
+    expect(s.ok && s.situacao.aviso.segredoErrado).toBe(false);
+    // Nem o segredo nem o código vão para o banco.
+    expect(JSON.stringify(db.d4sign_config)).not.toContain(SEGREDO_MAC);
+    expect(JSON.stringify(db.d4sign_config)).not.toMatch(/[0-9a-f]{64}/);
+  });
+
+  it("colar o segredo de novo tira o alerta (o próximo aviso diz se o novo bate)", async () => {
+    db.d4sign_config = [{ id: 1, historico: [] }];
+    await webhook(evento(DOC_ZE, { hmac: mac(DOC_BRUNO) }));
+    expect(CFG.segredoErrado(null, db.d4sign_config[0].hmac_falhou_em as string)).toBe(true);
+    expect(await CFG.salvarConfigD4Sign({ novos: { hmac: "segredo-novo-colado-0001" }, apagar: [], quem: "roberto@lone.exemplo" })).toEqual({ ok: true });
+    const s = await CFG.situacaoDaConfig();
+    expect(s.ok && s.situacao.aviso.segredoErrado).toBe(false);
+  });
+
+  it("as leituras possíveis da documentação da D4Sign batem (todas exigem o segredo)", async () => {
+    const { createHash } = await import("node:crypto");
+    expect(D.conferirHmac(DOC_ZE, mac(DOC_ZE), SEGREDO_MAC)).toMatchObject({ ok: true, variante: "hmac" });
+    const h = (s: string) => `sha256=${createHash("sha256").update(s).digest("hex")}`;
+    expect(D.conferirHmac(DOC_ZE, h(DOC_ZE + SEGREDO_MAC), SEGREDO_MAC)).toMatchObject({ ok: true, variante: "sha256-uuid-chave" });
+    expect(D.conferirHmac(DOC_ZE, h(SEGREDO_MAC + DOC_ZE), SEGREDO_MAC)).toMatchObject({ ok: true, variante: "sha256-chave-uuid" });
+    const chaveHex = "ab".repeat(32);
+    const comHex = `sha256=${createHmac("sha256", Buffer.from(chaveHex, "hex")).update(DOC_ZE).digest("hex")}`;
+    expect(D.conferirHmac(DOC_ZE, comHex, chaveHex)).toMatchObject({ ok: true, variante: "hmac-chave-hex" });
+    expect(D.conferirHmac(DOC_ZE, h(DOC_ZE), SEGREDO_MAC)).toMatchObject({ ok: false });
+    expect(D.conferirHmac(DOC_ZE, null, SEGREDO_MAC)).toMatchObject({ ok: false, recebido: "ausente" });
+    expect(D.conferirHmac(DOC_ZE, "abc", SEGREDO_MAC)).toMatchObject({ ok: false, recebido: expect.stringMatching(/formato estranho/) });
   });
 
   it("sem o segredo do webhook configurado a porta fica fechada (503): cada evento gastaria uma chamada da hora", async () => {
@@ -646,12 +703,14 @@ describe("consulta: os pendentes da conta, filtrados pelos cofres escolhidos", (
     expect(doc(DOC_BRUNO)).toMatchObject({ status: "pendente", client_id: "cli-bruno" });
   });
 
-  it("segunda consulta: só a lista; o pendente que saiu da lista é relido e vira aviso; nada se repete", async () => {
+  it("segunda consulta: a lista e o rodízio dos pendentes; o pendente que saiu da lista é relido e vira aviso; nada se repete", async () => {
     await rodarConsulta();
     d4.chamadas.length = 0;
     const nada = await (await rodarConsulta()).json();
-    expect(nada.lidos).toBe(0);
-    expect(d4.chamadas).toEqual(["/api/v1/documents/3/status"]);
+    // Rodízio: o pendente conhecido é relido (pode ter ganhado assinatura); sem novidade, nada sai.
+    expect(nada.lidos).toBe(1);
+    expect(d4.chamadas).toEqual(["/api/v1/documents/3/status", `/api/v1/documents/${DOC_ZE}/list`]);
+    expect(envio.fn).not.toHaveBeenCalled();
 
     d4.docs.set(DOC_ZE, docD4(DOC_ZE, { status: "4", assinadoEm: "2026-10-26 13:10:00" }));
     const corpo = await (await rodarConsulta()).json();
@@ -693,6 +752,29 @@ describe("consulta: os pendentes da conta, filtrados pelos cofres escolhidos", (
     d4.docs.set(DOC_ZE, original);
     await rodarConsulta();
     expect(mensagens().map((m) => m.texto)).toEqual(["✅ *Padaria do Zé* assinou o contrato em 26/10."]);
+  });
+
+  it("rodízio (28/10): o cliente assinou e o webhook não chegou — a consulta relê o pendente e manda o '✍️'", async () => {
+    await rodarConsulta(); // conhece o DOC_ZE pendente: falta a Lone e o José
+    d4.docs.set(DOC_ZE, docD4(DOC_ZE, { status: "3", enviadoEm: "2026-10-21 10:00:00", loneAssinou: false, clienteAssinou: true, assinadoEm: "2026-10-26 11:00:00" }));
+    vi.setSystemTime(new Date(AGORA.getTime() + 3600_000));
+    await rodarConsulta();
+    expect(mensagens()).toEqual([{ grupo: GRUPO_CADASTRO, texto: "✍️ *Padaria do Zé*: assinado por José (cliente) em 26/10 · falta Roberto (Lone)." }]);
+    vi.setSystemTime(new Date(AGORA.getTime() + 7200_000));
+    await rodarConsulta();
+    expect(envio.fn).toHaveBeenCalledTimes(1); // uma vez por assinatura
+  });
+
+  it("rodízio: relê o lido há mais tempo primeiro, e deixa de fora o parado há mais de 6 meses", () => {
+    const agora = new Date("2026-10-28T12:00:00Z");
+    const l = (id: string, lido: string, enviado: string) => ({ document_uuid: id, atualizado_em: lido, enviado_em: enviado, visto_em: null });
+    const fila = A.filaDoRodizio([
+      l("recente-lido-agora", "2026-10-28T11:00:00Z", "2026-10-21T12:00:00Z"),
+      l("recente-lido-ontem", "2026-10-27T11:00:00Z", "2026-10-21T12:00:00Z"),
+      l("de-2024", "2026-10-20T11:00:00Z", "2024-10-10T12:00:00Z"),
+      l("fora-da-lista", "2026-10-01T11:00:00Z", "2026-10-21T12:00:00Z"),
+    ], new Set(["recente-lido-agora", "recente-lido-ontem", "de-2024"]), agora);
+    expect(fila.map((x) => x.document_uuid)).toEqual(["recente-lido-ontem", "recente-lido-agora"]);
   });
 
   it("pendente conhecido de cofre não escolhido que continua na lista: não é relido a cada rodada", async () => {
@@ -795,6 +877,43 @@ describe("manhã: '⏳ Ainda não assinaram o contrato' no grupo de cadastro", (
     expect(corpo).toMatchObject({ relidos: 1, enviado: false, motivo: "os pendentes assinaram na releitura" });
     expect(mensagens().map((m) => m.texto)).toEqual(["✅ *Padaria do Zé* assinou o contrato em 26/10."]);
     expect(db.d4sign_chamadas.map((c) => c.origem)).toEqual(["manha"]);
+  });
+
+  it("28/10: relê primeiro o lido há mais tempo (não o mais antigo de 2024) — o Matheus não aparece como faltando", async () => {
+    db.d4sign_documentos = [
+      // Dois contratos de experiência de 2024, esquecidos na D4Sign: viram uma linha só, sem releitura.
+      pendente("d0c00000-0000-4000-8000-00000000e001", "2024-10-10T13:00:00Z", { nome: "Rede Sim - Contrato de experiência.pdf", atualizado_em: "2026-10-01T00:00:00Z" }),
+      pendente("d0c00000-0000-4000-8000-00000000e002", "2024-11-06T13:00:00Z", { nome: "LC Multimarcas - experiência.pdf", atualizado_em: "2026-10-01T00:00:00Z" }),
+      // Lido há 2 dias — o cliente assinou ontem e o webhook não chegou.
+      pendente(DOC_ZE, "2026-10-21T13:00:00Z", { client_id: "cli-ze", nome: "Padaria do Zé - Contrato - Social Media.docx", atualizado_em: "2026-10-24T00:00:00Z" }),
+      pendente(DOC_BRUNO, "2026-10-14T13:00:00Z", { client_id: "cli-bruno", atualizado_em: "2026-10-26T12:00:00Z" }),
+    ];
+    d4.docs.set(DOC_ZE, docD4(DOC_ZE, { status: "3", enviadoEm: "2026-10-21 10:00:00", loneAssinou: false, clienteAssinou: true, assinadoEm: "2026-10-25 16:00:00" }));
+    d4.docs.set(DOC_BRUNO, docD4(DOC_BRUNO, { status: "3", nome: "Bruno Tintas - Contrato - Tráfego Pago.docx", emailCliente: "contato@bruno.exemplo", enviadoEm: "2026-10-14 10:00:00" }));
+    const corpo = await (await rodarManha()).json();
+    expect(corpo.relidos).toBe(2);
+    expect(d4.chamadas).toEqual([`/api/v1/documents/${DOC_ZE}/list`, `/api/v1/documents/${DOC_BRUNO}/list`]);
+    const texto = mensagens().at(-1)!.texto;
+    expect(texto).toContain("• *Padaria do Zé* — falta Roberto (Lone) · enviado há 5 dias");
+    expect(texto).not.toMatch(/Rede Sim|LC Multimarcas/);
+    expect(texto).toContain("_E mais 2 parados na D4Sign há mais de 6 meses — vale cancelar lá._");
+  });
+
+  it("só contratos parados há mais de 6 meses: nada sai (não repete todo dia)", async () => {
+    db.d4sign_documentos = [pendente(DOC_BRUNO, "2024-10-10T13:00:00Z")];
+    expect(await (await rodarManha()).json()).toMatchObject({ enviado: false, motivo: expect.stringMatching(/fora os parados/) });
+    expect(envio.fn).not.toHaveBeenCalled();
+  });
+
+  it("?documento=<uuid> na consulta: relê só aquele e manda o aviso que faltou (uma vez)", async () => {
+    d4.docs.set(DOC_ZE, docD4(DOC_ZE, { status: "3", enviadoEm: "2026-10-21 10:00:00", loneAssinou: false, clienteAssinou: true, assinadoEm: "2026-10-26 11:00:00" }));
+    const r = await (await rodarConsulta(`?documento=${DOC_ZE}`)).json();
+    expect(r).toMatchObject({ ok: true, acao: "parcial" });
+    expect(mensagens()).toEqual([{ grupo: GRUPO_CADASTRO, texto: "✍️ *Padaria do Zé*: assinado por José (cliente) em 26/10 · falta Roberto (Lone)." }]);
+    expect(d4.chamadas).toEqual([`/api/v1/documents/${DOC_ZE}/list`]);
+    await rodarConsulta(`?documento=${DOC_ZE}`);
+    expect(envio.fn).toHaveBeenCalledTimes(1);
+    expect((await rodarConsulta("?documento=nao-e-uuid")).status).toBe(400);
   });
 
   it("feriado ou fim de semana: não manda", async () => {
