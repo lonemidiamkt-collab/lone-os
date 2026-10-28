@@ -145,6 +145,23 @@ de 2024) e disse que o Matheus ainda não tinha assinado.
 - Manhã: relê primeiro o lido há mais tempo entre os que vai listar; parados há mais de 180 dias viram uma linha.
 - `POST /api/system/contratos-d4sign?documento=<uuid>` relê e processa um documento só (o aviso que faltou sai).
 
+## Envio para assinatura pelo Lone OS (28/10/2026, leva 3)
+
+- `lib/contracts/enviar-d4sign.ts` + `POST /api/contracts/d4sign/enviar` (`acao: prever | enviar`, só gestão) + botão
+  `components/contratos/EnviarParaAssinatura.tsx` no contrato da ficha. Prévia: e-mails do cadastro, `emailsLone`
+  (lonemidiamkt@gmail.com), cofre sugerido pelo nome do cofre × serviço (nomes guardados 6 h — 1 chamada).
+- Três chamadas: `POST /documents/{cofre}/uploadbinary` (PDF em base64), `POST /documents/{uuid}/createlist` (act 4 =
+  parte, email, foreign 0, sem ICP, não presencial) e `POST /documents/{uuid}/sendtosigner` (skip_email 0, workflow 0,
+  mensagem curta sem valor). Origem `envio` na cota (não é rotina).
+- Um contrato, um documento: trava atômica (`d4sign_envio_por`) antes de subir; etapa gravada
+  (`contracts.d4sign_envio_etapa` subido → signatarios → enviado; migration `20261028150000_contrato_envio_d4sign.sql`);
+  falha no meio vira "Continuar envio" com o mesmo `d4sign_document_uuid`. Contrato ligado a documento do painel,
+  assinado ou arquivado não envia. Depois do envio: linha em `d4sign_documentos` (pendente) e "📨" no grupo de cadastro.
+- NÃO testado contra a D4Sign de verdade (só com a D4Sign simulada): o primeiro envio real é o teste — se algum
+  campo for recusado, o erro aparece na tela e no `d4sign_envio_erro`, e o documento pode ser terminado pelo painel.
+- O contrato do grupo agora é registrado (`lib/contracts/registrar-do-grupo.ts`, bucket `contracts`, rascunho), e o
+  valor vendido no Comercial (`lib/contracts/valor-da-venda.ts`) entra no contrato do grupo e na ficha.
+
 ## Arquivo por mês (26/10/2026)
 
 Pedido do Roberto: "uma área de arquivos para vermos contratos de cada mês, e podermos baixar eles também".
@@ -167,7 +184,7 @@ nova a contrato arquivado.
 
 ## Ficou para depois (não entra nesta publicação)
 
-- **Botão de enviar, lembrete ao cliente**: ainda não começaram. (O PDF automático virou o arquivo por mês, acima.)
+- **Lembrete ao cliente** (resend da D4Sign): ainda não começou. Envio e PDF automático: ver acima.
 - **Lone Finance**: branch `contrato-assinado-d4sign` do `~/dev/lone-finance` (commit 177fce3) — lê uma porta do Lone OS
   que ainda não existe aqui. Não publicar o Finance antes dessa porta (e o compose de lá exige o arquivo do segredo novo).
 

@@ -585,13 +585,21 @@ export async function POST(req: NextRequest) {
             || process.env.NEXT_PUBLIC_SITE_URL
             || "https://painel.lonemidia.com";
           const linkFicha = `${base}/clients/${clientId}`;
+          // 28/10/2026: com venda no Comercial, o valor já entra no contrato — o grupo só diz o vencimento (e o
+          // valor nunca aparece aqui: número da agência não vai em mensagem de grupo).
+          const { valorDaVenda } = await import("@/lib/contracts/valor-da-venda");
+          const venda = clientId ? await valorDaVenda(clientId) : null;
+          const oferta = venda
+            ? `📄 *Quer que eu gere o contrato?* O valor combinado no Comercial já entra — me manda só o *dia de vencimento* `
+              + `— ex: _"gera o contrato: dia 10"_.\n`
+            : `📄 *Quer que eu gere o contrato?* Me manda *valor mensal e dia de vencimento* `
+              + `— ex: _"gera o contrato: 2500, dia 10"_ — que eu monto com os dados que ele preencheu.\n`;
           const msg = `🎉 *${clientName}* concluiu o cadastro do onboarding (100%)!\n`
             + `${time ? `Time: ${time} — já podem se preparar.\n` : ""}`
             + `${observacao ? `📝 Observação do cliente: “${observacao}”\n` : ""}`
             + `\n👉 ${linkFicha}\n`
             + `Falta revisar e ativar em *Clientes → Cadastros Pendentes* (botão "Revisar").\n\n`
-            + `📄 *Quer que eu gere o contrato?* Me manda *valor mensal e dia de vencimento* `
-            + `— ex: _"gera o contrato: 2500, dia 10"_ — que eu monto com os dados que ele preencheu.\n`
+            + oferta
             + `_Vigência é a padrão: ciclos de 3 meses com renovação automática. Se for teste de prazo fechado, diga "teste de 1 mês"._`;
           // Fire-and-forget: não segura a resposta ao cliente (Evolution pode levar até ~21s no pior
           // caso). O servidor Node é persistente (VPS), então o envio completa em background.

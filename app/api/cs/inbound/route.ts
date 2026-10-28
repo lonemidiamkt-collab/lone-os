@@ -1662,6 +1662,17 @@ async function processarInbound(req: NextRequest) {
           undefined, { origem: "contrato-falta-cliente", destino: "interno" });
         return NextResponse.json({ ok: true, acao: "contrato_sem_cliente" });
       }
+      // O valor vendido no Comercial entra sozinho (28/10/2026): com venda ligada, o grupo só diz o vencimento.
+      let valorDoComercial = false;
+      if (pedido.valorMensal === undefined) {
+        const { valorDaVenda } = await import("@/lib/contracts/valor-da-venda");
+        const venda = await valorDaVenda(alvo.id);
+        if (venda) {
+          pedido.valorMensal = venda.mensal;
+          pedido.faltando = pedido.faltando.filter((f) => f !== "valor mensal");
+          valorDoComercial = true;
+        }
+      }
       if (pedido.faltando.length) {
         // NÃO CHUTA NÚMERO DE CONTRATO. Pede o que falta e mostra o que já entendeu.
         const entendi = [
@@ -1714,11 +1725,24 @@ async function processarInbound(req: NextRequest) {
         return NextResponse.json({ ok: true, acao: "contrato_erro_pdf" });
       }
 
+      // O contrato fica no Lone OS (28/10/2026): ficha › Contratos, de onde sai para assinatura na D4Sign.
+      const { registrarContratoDoGrupo } = await import("@/lib/contracts/registrar-do-grupo");
+      const registro = await registrarContratoDoGrupo({
+        clientId: alvo.id, pdf: pdf.buffer, valorMensal: pedido.valorMensal!, diaPagamento: pedido.diaPagamento!,
+        modalidade: pedido.modalidade, duracaoMeses: pedido.duracaoMeses, dataInicio: pedido.dataInicio,
+        autor: autoridade.autor?.nome ? `${autoridade.autor.nome} (grupo de cadastro)` : "grupo de cadastro",
+      });
+      if (!registro.ok) console.error("[inbound] contrato do grupo não registrado:", registro.erro);
+
       // Sem o valor na legenda: número financeiro da agência não vai em mensagem de grupo (o valor está no PDF).
       const legenda = `📄 *Contrato — ${montado.cliente}*\n`
+        + (valorDoComercial ? "Valor: o combinado no Comercial · " : "")
         + `${pedido.modalidade === "ciclos" ? "ciclos de 3 meses (renovação automática)" : `${pedido.duracaoMeses} meses, sem renovação`} · `
         + `vencimento dia ${pedido.diaPagamento}\n\n`
-        + `_Confira o valor e os dados no PDF antes de mandar pro cliente. O .docx oficial pro D4Sign continua saindo em Contratos._`
+        + `_Confira o valor e os dados no PDF antes de mandar pro cliente._\n`
+        + (registro.ok
+          ? `_Ficou na ficha › Contratos (V${registro.version}). Quando o cliente concordar, use *Enviar para assinatura* lá: vai para o e-mail dele pela D4Sign._`
+          : `_Não consegui guardar na ficha (${registro.erro}) — gere de novo ou pela aba Contratos._`)
         + (await import("@/lib/contracts/validacao")).avisosDaAuditoria(montado.achados);
       const envPdf = await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), montado.nomeArquivo!, legenda);
       if (!envPdf.ok) {

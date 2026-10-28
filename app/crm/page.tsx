@@ -14,6 +14,7 @@ import { Plus, X, Search, Trophy, CalendarClock, AlertCircle, MessageCircle, Pho
 import type { LucideIcon } from "lucide-react";
 import type { ExtrasLead } from "@/lib/crm/extras";
 import { seloDoContrato } from "@/lib/crm/contrato-do-lead";
+import SemVendaComercial from "@/components/crm/SemVendaComercial";
 import { proximoToque, rotuloToque, TIPOS_AVANCO, TIPOS_TOQUE, type ProximoToque } from "@/lib/crm/cadencia";
 import type { DesfazerRegistro } from "@/lib/crm/desfazer-registro";
 import { anotarEnvio, textoWhatsappDoHoje, tirarEnvio, TEXTO_WHATSAPP_PAINEL, type EnvioPendente } from "@/lib/crm/enviou";
@@ -224,6 +225,13 @@ export default function CrmPage() {
 
   const podeVer = podeVerComercial(role);
   const casco = useCascoComercial(); // em comercial.lonemidia.com as abas moram no cabeçalho do casco
+
+  const carregarLeads = useCallback(() =>
+    chamar<{ leads?: Lead[]; segmentosIcp?: string[]; historico?: EtapaHist[] | null; historicoErro?: string | null }>("/api/crm/leads").then((r) => {
+      if (!r.ok) { console.error("[crm] carga dos leads falhou:", r.erro); setErroCarga(r.erro ?? "erro"); return; }
+      setLeads(r.data?.leads ?? []); setSegmentosIcp(r.data?.segmentosIcp ?? []);
+      setHistorico(r.data?.historico ?? null);
+    }), []);
 
   useEffect(() => {
     if (!podeVer) { setLoading(false); return; }
@@ -1153,6 +1161,8 @@ export default function CrmPage() {
                 </button>
               ))}
             </div>
+            {/* 28/10/2026: cliente que entrou pelo "Novo cliente" sem venda no Comercial (lib/crm/sem-venda.ts). */}
+            <SemVendaComercial onMudou={() => void carregarLeads()} />
             {secao("Falta enviar o cadastro", "venda fechada sem cadastro no Lone OS — fica aqui até enviar o link, de qualquer mês", f.converter,
               "Nenhuma venda esperando. Quando marcar um negócio como Ganho, ele aparece aqui.",
               (l) => linha(l, <>

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import LegacyContractModal from "@/components/LegacyContractModal";
 import DocumentosD4Sign from "@/components/contratos/DocumentosD4Sign";
+import EnviarParaAssinatura from "@/components/contratos/EnviarParaAssinatura";
 
 interface Props { client: Client; currentUser: string; }
 
@@ -34,6 +35,11 @@ interface ContractFull extends ContractRecord {
   d4signAssinadoEm?: string | null;
   /** Arquivado na tela de Contratos: fica aqui no histórico, marcado, mas não é pendência. */
   archivedAt?: string | null;
+  /** Envio para assinatura pelo Lone OS (28/10/2026): documento na D4Sign e em que etapa o envio está. */
+  d4signDocumentUuid?: string | null;
+  d4signEnvioEtapa?: "subido" | "signatarios" | "enviado" | null;
+  d4signEnviadoEm?: string | null;
+  d4signEnvioErro?: string | null;
   signedUploadedBy?: string | null;
   signatureMethod?: string | null;
   /** PDFs assinados que já valeram (trocados pela tela) — 24/10/2026, auditoria 3.13. */
@@ -137,6 +143,10 @@ export default function ContractGenerator({ client, currentUser }: Props) {
       signedAt: (r.signed_at as string) || null,
       d4signAssinadoEm: (r.d4sign_assinado_em as string) || null,
       archivedAt: (r.archived_at as string) || null,
+      d4signDocumentUuid: (r.d4sign_document_uuid as string) || null,
+      d4signEnvioEtapa: (r.d4sign_envio_etapa as ContractFull["d4signEnvioEtapa"]) || null,
+      d4signEnviadoEm: (r.d4sign_enviado_em as string) || null,
+      d4signEnvioErro: (r.d4sign_envio_erro as string) || null,
       signedUploadedBy: (r.signed_uploaded_by as string) || null,
       signatureMethod: (r.signature_method as string) || null,
       signedPdfAnteriores: lerAnteriores(r.signed_pdf_anteriores),
@@ -182,6 +192,15 @@ export default function ContractGenerator({ client, currentUser }: Props) {
       setPaymentDay(from.paymentDay || 10);
     } else {
       setRenewFrom(null);
+      // 28/10/2026: o valor vendido no Comercial já entra (o vínculo é o cadastro ↔ lead Ganho). Só se estiver vazio.
+      if (!valor) {
+        void chamar<{ venda: { mensal: number } | null }>(`/api/contracts/valor-da-venda?clientId=${encodeURIComponent(client.id)}`).then((r) => {
+          if (r.ok && r.data?.venda?.mensal) {
+            setValor((atual) => atual || String(r.data!.venda!.mensal));
+            toast.info("Valor da venda no Comercial preenchido — confira antes de gerar.");
+          }
+        });
+      }
     }
     const errs = validateClientData();
     setValidationErrors(errs);
@@ -589,6 +608,9 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                       {uploadingSignedId === c.id ? "Enviando..." : "Upload Assinado"}
                     </button>
                   )}
+
+                  {/* 28/10/2026: o contrato vai para assinatura pela D4Sign daqui (lib/contracts/enviar-d4sign.ts). */}
+                  <EnviarParaAssinatura contrato={c} onEnviado={() => void loadContracts()} />
 
                   {c.signedAt ? (
                     <span className="flex items-center gap-1 text-[10px] text-lone-success" title={`Assinado em ${new Date(c.signedAt).toLocaleDateString("pt-BR")}`}>

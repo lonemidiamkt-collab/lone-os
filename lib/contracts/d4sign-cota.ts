@@ -17,7 +17,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
  * "aviso": evento da D4Sign cujo código (Content-Hmac) não bateu — o documento é relido mesmo assim, mas no máximo
  * TETO_AVISO_SEM_CONFERENCIA vezes por hora, para um evento falso não gastar a cota de quem está esperando.
  */
-export type OrigemChamada = "webhook" | "consulta" | "manha" | "manual" | "arquivo" | "aviso";
+export type OrigemChamada = "webhook" | "consulta" | "manha" | "manual" | "arquivo" | "aviso" | "envio";
 
 export const LIMITE_PADRAO_HORA = 10;
 export const RESERVA = 4;

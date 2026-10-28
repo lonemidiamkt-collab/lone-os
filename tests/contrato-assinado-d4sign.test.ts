@@ -129,10 +129,14 @@ const d4 = {
   /** Como a D4Sign vai falhar na próxima chamada (e nas seguintes, até voltar a null). */
   falhar: null as null | "500" | "rede" | "timeout" | "html",
   chamadas: [] as string[],
+  /** Corpo das chamadas de envio (uploadbinary, createlist, sendtosigner). */
+  corpos: [] as { caminho: string; corpo: Record<string, unknown> }[],
+  /** Faz SÓ esta etapa do envio falhar (500). */
+  falharEnvio: null as null | "uploadbinary" | "createlist" | "sendtosigner",
 };
 const json = (corpo: unknown, status = 200) => new Response(JSON.stringify(corpo), { status, headers: { "content-type": "application/json" } });
 const PDF_FALSO = Buffer.from("%PDF-1.4\n% contrato assinado de mentira\n%%EOF");
-async function fetchFalso(entrada: RequestInfo | URL): Promise<Response> {
+async function fetchFalso(entrada: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = new URL(String(entrada));
   // O link do PDF assinado é do armazenamento da D4Sign: não é a API e não conta no limite.
   if (url.hostname === "arquivos.d4sign.exemplo") return new Response(new Uint8Array(PDF_FALSO), { status: 200 });
@@ -153,6 +157,19 @@ async function fetchFalso(entrada: RequestInfo | URL): Promise<Response> {
     // Os finalizados da CONTA inteira (todos os cofres), sem signatários.
     const fin = [...d4.docs.values()].filter((d) => d.statusId === "4").map(({ list: _l, ...resto }) => resto);
     return json([{ total_documents: String(fin.length), total_pages: "1", current_page: url.searchParams.get("pg") ?? "1" }, ...fin]);
+  }
+  const mEnvio = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)\/(uploadbinary|createlist|sendtosigner)$/);
+  if (mEnvio) {
+    const corpo = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {};
+    d4.corpos.push({ caminho: mEnvio[2], corpo });
+    if (d4.falharEnvio === mEnvio[2]) return json({ message: "Erro interno" }, 500);
+    if (mEnvio[2] === "uploadbinary") {
+      const novo = "d0c00000-0000-4000-8000-0000000000e9";
+      d4.docs.set(novo, { uuidDoc: novo, nameDoc: String(corpo.name), uuidSafe: mEnvio[1], statusId: "1", list: [] });
+      return json({ uuid: novo });
+    }
+    if (mEnvio[2] === "sendtosigner") { const d = d4.docs.get(mEnvio[1]); if (d) d.statusId = "3"; }
+    return json({ message: "success" });
   }
   const mDown = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)\/download$/);
   if (mDown) {
@@ -258,6 +275,8 @@ beforeEach(() => {
   d4.docs.clear();
   d4.falhar = null;
   d4.chamadas.length = 0;
+  d4.corpos.length = 0;
+  d4.falharEnvio = null;
   armazem.clear();
   usuario.atual = null;
   diaUtil.valor = true;
@@ -1378,3 +1397,90 @@ describe("esteira de entrada (8h30): contrato, cadastro esperando aprovação e 
     expect(envio.fn).not.toHaveBeenCalled();
   });
 });
+
+// ── Enviar para assinatura pelo Lone OS (28/10/2026, leva 3) ──────────────────────────────────────
+
+describe("enviar para assinatura: cliente concordou → D4Sign manda o link para o e-mail dele", () => {
+  const E = () => import("@/lib/contracts/enviar-d4sign");
+  const CONTRATO = "ct-ze-v3";
+  beforeEach(async () => {
+    (await E())._esquecerCofres();
+    db.contracts.push({ id: CONTRATO, client_id: "cli-ze", version: 3, service_type: "lone_growth", status: "draft",
+      pdf_url: "/storage/v1/object/public/contracts/cli-ze/contrato-v3.pdf", signed_at: null, d4sign_document_uuid: null,
+      d4sign_assinado_em: null, d4sign_envio_etapa: null, d4sign_envio_por: null, archived_at: null });
+    armazem.set("contracts/cli-ze/contrato-v3.pdf", PDF_FALSO);
+  });
+  const contrato = () => db.contracts.find((c) => c.id === CONTRATO)!;
+
+  it("regras puras: quem pode, o nome do arquivo, o cofre do serviço e onde está o PDF", async () => {
+    const { situacaoDoEnvio, nomeDoArquivo, cofreSugerido, caminhoDoPdf } = await E();
+    const base = { id: "x", client_id: "c", version: 1, service_type: "lone_growth", pdf_url: "/storage/v1/object/public/contracts/c/a.pdf", signed_at: null, d4sign_document_uuid: null };
+    expect(situacaoDoEnvio(base)).toEqual({ ok: true, continuaDe: "subir" });
+    expect(situacaoDoEnvio({ ...base, d4sign_document_uuid: "u", d4sign_envio_etapa: "subido" })).toEqual({ ok: true, continuaDe: "signatarios" });
+    expect(situacaoDoEnvio({ ...base, d4sign_document_uuid: "u" })).toMatchObject({ ok: false, motivo: expect.stringMatching(/painel/) });
+    expect(situacaoDoEnvio({ ...base, signed_at: "2026-10-01" })).toMatchObject({ ok: false });
+    expect(situacaoDoEnvio({ ...base, pdf_url: null })).toMatchObject({ ok: false, motivo: expect.stringMatching(/PDF/) });
+    expect(nomeDoArquivo("Padaria do Zé", "assessoria_trafego", 2)).toBe("Padaria do Zé - Contrato - Assessoria de Trafego Pago V2.pdf");
+    const cofres = [{ uuid: "a", nome: "Renovação de contrato" }, { uuid: "b", nome: "LM - Assessoria Social (Só midia)" }, { uuid: "c", nome: "LM - Lone Growth (pacote completo)" }];
+    expect(cofreSugerido(cofres, "lone_growth")).toBe("c");
+    expect(cofreSugerido(cofres, "assessoria_social")).toBe("b");
+    expect(caminhoDoPdf("/storage/v1/object/public/contracts/cli/x.pdf")).toEqual({ bucket: "contracts", caminho: "cli/x.pdf" });
+  });
+
+  it("prévia: e-mail do cadastro, quem assina pela Lone e o cofre sugerido — nada sai", async () => {
+    const r = await (await E()).preverEnvio(CONTRATO);
+    expect(r).toMatchObject({ ok: true, previa: { cliente: "Padaria do Zé", emailsCliente: ["dono@padariadoze.exemplo"], emailsLone: ["roberto@lone.exemplo"], continuaDe: "subir" } });
+    if (r.ok) expect(r.previa.cofres.find((c) => c.sugerido)?.nome).toMatch(/Lone Growth/);
+    expect(d4.chamadas).toEqual(["/api/v1/safes"]);
+    expect(envio.fn).not.toHaveBeenCalled();
+  });
+
+  it("envia: sobe o PDF, cadastra cliente e Lone como parte, manda — e o grupo de cadastro sabe (sem valor)", async () => {
+    const r = await (await E()).enviarParaAssinatura({ contractId: CONTRATO, cofre: COFRE, email: "dono@padariadoze.exemplo", quem: "roberto@lone.exemplo" });
+    expect(r).toMatchObject({ ok: true, etapa: "enviado", documento: "d0c00000-0000-4000-8000-0000000000e9" });
+    expect(d4.corpos.map((c) => c.caminho)).toEqual(["uploadbinary", "createlist", "sendtosigner"]);
+    expect(d4.corpos[0].corpo).toMatchObject({ mime_type: "application/pdf", name: "Padaria do Zé - Contrato - Lone Growth (Trafego + Social + Design) V3.pdf" });
+    expect(Buffer.from(String(d4.corpos[0].corpo.base64_binary_file), "base64").subarray(0, 5).toString()).toBe("%PDF-");
+    expect((d4.corpos[1].corpo.signers as { email: string; act: string }[]).map((x) => [x.email, x.act])).toEqual([["dono@padariadoze.exemplo", "4"], ["roberto@lone.exemplo", "4"]]);
+    expect(d4.corpos[2].corpo).toMatchObject({ skip_email: "0", workflow: "0" });
+    expect(String(d4.corpos[2].corpo.message)).not.toMatch(/R\$|\d{3,}/);
+    expect(contrato()).toMatchObject({ d4sign_envio_etapa: "enviado", d4sign_document_uuid: "d0c00000-0000-4000-8000-0000000000e9", d4sign_envio_erro: null });
+    expect(doc("d0c00000-0000-4000-8000-0000000000e9")).toMatchObject({ status: "pendente", client_id: "cli-ze", contract_id: CONTRATO });
+    expect(mensagens()).toEqual([{ grupo: GRUPO_CADASTRO, texto: expect.stringMatching(/^📨 Contrato de \*Padaria do Zé\* enviado para assinatura/) }]);
+    // De novo: recusa, nada sai.
+    d4.corpos.length = 0;
+    expect(await (await E()).enviarParaAssinatura({ contractId: CONTRATO, cofre: COFRE, email: "dono@padariadoze.exemplo", quem: "x" }))
+      .toMatchObject({ ok: false, erro: expect.stringMatching(/já foi enviado/) });
+    expect(d4.corpos).toEqual([]);
+  });
+
+  it("falha no meio: o arquivo fica, o erro aparece, e o clique seguinte CONTINUA sem subir de novo", async () => {
+    d4.falharEnvio = "createlist";
+    const r1 = await (await E()).enviarParaAssinatura({ contractId: CONTRATO, cofre: COFRE, email: "dono@padariadoze.exemplo", quem: "x" });
+    expect(r1).toMatchObject({ ok: false, etapa: "subido", erro: expect.stringMatching(/não cadastrei quem assina/) });
+    expect(contrato()).toMatchObject({ d4sign_envio_etapa: "subido", d4sign_envio_erro: expect.stringMatching(/não cadastrei/) });
+    expect(envio.fn).not.toHaveBeenCalled();
+    d4.falharEnvio = null;
+    d4.corpos.length = 0;
+    const r2 = await (await E()).enviarParaAssinatura({ contractId: CONTRATO, cofre: COFRE, email: "dono@padariadoze.exemplo", quem: "x" });
+    expect(r2).toMatchObject({ ok: true, etapa: "enviado" });
+    expect(d4.corpos.map((c) => c.caminho)).toEqual(["createlist", "sendtosigner"]);
+  });
+
+  it("e-mail fora do cadastro, cofre que não é de contrato e contrato que veio do painel: recusa sem chamar a D4Sign", async () => {
+    const { enviarParaAssinatura } = await E();
+    expect(await enviarParaAssinatura({ contractId: CONTRATO, cofre: COFRE, email: "outro@x.exemplo", quem: "x" })).toMatchObject({ ok: false, erro: expect.stringMatching(/não é o do cadastro/) });
+    expect(await enviarParaAssinatura({ contractId: CONTRATO, cofre: OUTRO_COFRE, email: "dono@padariadoze.exemplo", quem: "x" })).toMatchObject({ ok: false, erro: expect.stringMatching(/cofre/) });
+    contrato().d4sign_document_uuid = DOC_ZE;
+    expect(await enviarParaAssinatura({ contractId: CONTRATO, cofre: COFRE, email: "dono@padariadoze.exemplo", quem: "x" })).toMatchObject({ ok: false, erro: expect.stringMatching(/painel/) });
+    expect(d4.chamadas).toEqual([]);
+  });
+
+  it("limite da hora antes de subir: nada fica pela metade e dá para tentar de novo", async () => {
+    db.d4sign_chamadas = Array.from({ length: 10 }, () => ({ em: new Date().toISOString(), caminho: "/x", origem: "webhook" }));
+    const r = await (await E()).enviarParaAssinatura({ contractId: CONTRATO, cofre: COFRE, email: "dono@padariadoze.exemplo", quem: "x" });
+    expect(r).toMatchObject({ ok: false, limite: true, etapa: null });
+    expect(contrato()).toMatchObject({ d4sign_envio_etapa: null, d4sign_envio_por: null, d4sign_document_uuid: null });
+  });
+});
+

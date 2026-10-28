@@ -296,6 +296,51 @@ export async function listarFinalizadosDaConta(cfg: ConfigD4Sign, pagina: number
   return lida ? { ok: true, dados: lida } : { ok: false, erro: "a lista de documentos finalizados veio num formato que não reconheço" };
 }
 
+// ── Envio (o contrato sai do Lone OS para assinatura) ───────────────────────────────────────────
+
+/**
+ * POST /documents/{cofre}/uploadbinary — sobe o PDF (base64) e devolve o uuid do documento na D4Sign.
+ * Uma das 3 chamadas do envio; cada envio também gasta 1 dos envios do mês do plano.
+ */
+export async function subirDocumento(cfg: ConfigD4Sign, cofre: string, arquivo: Buffer, nome: string, mime = "application/pdf"): Promise<Leitura<string>> {
+  const r = await pedir(cfg, `/documents/${encodeURIComponent(cofre)}/uploadbinary`, {
+    origem: "envio", metodo: "POST", corpo: { base64_binary_file: arquivo.toString("base64"), mime_type: mime, name: nome },
+  });
+  if (!r.ok) return r;
+  const d = (r.dados && typeof r.dados === "object" ? r.dados : {}) as Record<string, unknown>;
+  const uuid = texto(d.uuid) ?? texto(d.uuidDoc);
+  return uuid && UUID.test(uuid.toLowerCase()) ? { ok: true, dados: uuid } : { ok: false, erro: "a D4Sign aceitou o arquivo mas não devolveu o identificador do documento" };
+}
+
+/**
+ * Quem assina: act "4" = assinar como parte. Assinatura eletrônica padrão (sem certificado ICP-Brasil, não
+ * presencial), identificação por e-mail, signatário brasileiro (foreign 0). Os campos são os da documentação.
+ */
+export interface NovoSignatario { email: string; act: "4" | "5" }
+
+/** POST /documents/{uuid}/createlist — inclui os signatários. */
+export async function cadastrarSignatarios(cfg: ConfigD4Sign, uuid: string, signatarios: NovoSignatario[]): Promise<Leitura<unknown>> {
+  return pedir(cfg, `/documents/${encodeURIComponent(uuid)}/createlist`, {
+    origem: "envio", metodo: "POST",
+    corpo: {
+      signers: signatarios.map((s) => ({
+        email: s.email, act: s.act, foreign: "0", certificadoicpbr: "0", assinatura_presencial: "0",
+        docauth: "0", docauthandselfie: "0", embed_methodauth: "email", embed_smsnumber: "", upload_allow: "0", upload_obs: "",
+      })),
+    },
+  });
+}
+
+/**
+ * POST /documents/{uuid}/sendtosigner — manda para assinatura: todos ao mesmo tempo (workflow 0) e com o e-mail
+ * da D4Sign com o link (skip_email 0). A mensagem é curta e neutra — nada de valor.
+ */
+export async function mandarParaAssinar(cfg: ConfigD4Sign, uuid: string, mensagem: string): Promise<Leitura<unknown>> {
+  return pedir(cfg, `/documents/${encodeURIComponent(uuid)}/sendtosigner`, {
+    origem: "envio", metodo: "POST", corpo: { message: mensagem, skip_email: "0", workflow: "0" },
+  });
+}
+
 // ── PDF assinado ─────────────────────────────────────────────────────────────────────────────────
 
 /** O mesmo teto do "Upload assinado". */
