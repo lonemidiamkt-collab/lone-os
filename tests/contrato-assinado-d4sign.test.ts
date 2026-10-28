@@ -847,7 +847,9 @@ describe("manhã: '⏳ Ainda não assinaram o contrato' no grupo de cadastro", (
     const corpo = await (await rodarManha()).json();
     expect(corpo).toMatchObject({ ok: true, enviado: true, relidos: 0 });
     expect(mensagens()).toEqual([{ grupo: GRUPO_CADASTRO, texto: [
-      "⏳ *Ainda não assinaram o contrato*",
+      "⏳ *Entrada de clientes — o que está parado*",
+      "",
+      "*Contrato esperando assinatura*",
       "• *Bruno Tintas* — falta Bruno (cliente) · enviado há 12 dias",
       "• *Padaria do Zé* — falta Bruno (cliente) · enviado há 5 dias",
     ].join("\n") }]);
@@ -926,7 +928,7 @@ describe("manhã: '⏳ Ainda não assinaram o contrato' no grupo de cadastro", (
   it("ensaio: o texto exato, sem reler e sem mandar", async () => {
     db.d4sign_documentos = [pendente(DOC_BRUNO, "2026-10-14T13:00:00Z", { client_id: "cli-bruno" })];
     const corpo = await (await rodarManha("?dry=1")).json();
-    expect(corpo.texto).toMatch(/^⏳ \*Ainda não assinaram o contrato\*\n• \*Bruno Tintas\*/);
+    expect(corpo.texto).toMatch(/^⏳ \*Entrada de clientes — o que está parado\*\n\n\*Contrato esperando assinatura\*\n• \*Bruno Tintas\*/);
     expect(envio.fn).not.toHaveBeenCalled();
     expect(d4.chamadas).toEqual([]);
   });
@@ -1266,5 +1268,113 @@ describe("arquivo por mês: o PDF assinado vem da D4Sign, em silêncio", () => {
       "2026-09-10 - Padaria do Ze - Padaria do Ze - Contrato - Social Media.pdf",
       "2026-09-20 - Bruno Tintas - Contrato V2.pdf",
     ]);
+  });
+});
+
+// ── 28/10/2026: ligação certa, religação e a esteira de entrada ───────────────────────────────────
+
+describe("ligação ao cadastro: teste e a própria Lone nunca recebem documento", () => {
+  it("cadastro de teste ou com o nome da Lone não pode receber; loja de nome parecido pode", () => {
+    for (const c of [{ name: "test" }, { name: "Teste Loja" }, { name: "🧪 Cliente" }, { name: "Loja (teste)" },
+      { name: "test", nome_fantasia: "Lone Midia" }, { name: "LM ASSESSORIA E MARKETING LTDA" }, { name: "Lone Mídia" }]) {
+      expect(A.podeReceberDocumento(c), JSON.stringify(c)).toBe(false);
+    }
+    for (const c of [{ name: "Testa Materiais" }, { name: "Bazar Ribeiro" }, { name: "Lonestar Pneus" }]) {
+      expect(A.podeReceberDocumento(c), JSON.stringify(c)).toBe(true);
+    }
+  });
+
+  it("o caso de 28/10: 'Serviços Lone Midia - Bike Lagos' vai para a Bike Lagos (que saiu), nunca para o 'test' de fantasia 'Lone Midia'", () => {
+    const clientes = [
+      { id: "cli-teste", name: "test", nome_fantasia: "Lone Midia", email: null, email_corporativo: null, churned_at: null },
+      { id: "cli-bike", name: "Bike Lagos", nome_fantasia: null, email: null, email_corporativo: null, churned_at: "2026-05-01T00:00:00Z" },
+    ];
+    const doc = { nome: "Contrato de prestação de Serviços Lone Midia - Bike Lagos docx  1  pdf", signatarios: [] };
+    expect(A.ligarComPreferencia(doc, clientes)).toMatchObject({ clientId: "cli-bike", vinculo: "nome" });
+  });
+
+  it("o e-mail de quem assina pela Lone não liga a ninguém (está em todo documento)", () => {
+    const clientes = [{ id: "cli-x", name: "Loja X", email: "roberto@lone.exemplo" }];
+    const doc = { nome: "documento.pdf", signatarios: [{ email: "roberto@lone.exemplo", nome: "Roberto", assinou: true, assinadoEm: null, incluidoEm: null, chave: null }] };
+    expect(A.ligarAoCadastro(doc, clientes, ["roberto@lone.exemplo"]).clientId).toBeNull();
+    expect(A.ligarAoCadastro(doc, clientes).clientId).toBe("cli-x"); // sem a lista, o comportamento antigo
+  });
+});
+
+describe("religar (?religar=1): documento com dono inválido ou sem dono ganha o cadastro certo, sem chamar a D4Sign", () => {
+  const religar = (q = "") => consulta(new NextRequest(`https://painel.lonemidia.com/api/system/contratos-d4sign?religar=1${q}`, { method: "POST" }));
+  beforeEach(() => {
+    db.clients.push(
+      { id: "cli-teste", name: "test", nome_fantasia: "Lone Midia", email: null, email_corporativo: null, churned_at: null, contrato_assinado_em: "2026-06-22T15:00:00Z" },
+      { id: "cli-bike", name: "Bike Lagos", nome_fantasia: null, email: null, email_corporativo: null, churned_at: "2026-05-01T00:00:00Z", contrato_assinado_em: null },
+    );
+    db.d4sign_documentos = [
+      { document_uuid: DOC_ANTIGO, nome: "Contrato de prestação de Serviços Lone Midia - Bike Lagos docx pdf", status: "assinado", tipo: "contrato",
+        client_id: "cli-teste", contract_id: null, vinculo: "nome", assinado_em: "2026-01-21T15:00:00Z", signatarios: [] },
+      { document_uuid: DOC_BRUNO, nome: "Bruno Tintas - Contrato.pdf", status: "assinado", tipo: "contrato",
+        client_id: null, contract_id: null, vinculo: null, assinado_em: "2026-10-20T15:00:00Z",
+        signatarios: [{ nome: "Bruno", email: "contato@bruno.exemplo", papel: "cliente", assinou: true, assinadoEm: "2026-10-20T15:00:00Z" }] },
+    ];
+  });
+
+  it("ensaio mostra e não grava", async () => {
+    const r = await (await religar("&dry=1")).json();
+    expect(r.trocas.map((t: { para: string }) => t.para).sort()).toEqual(["cli-bike", "cli-bruno"]);
+    expect(doc(DOC_ANTIGO)!.client_id).toBe("cli-teste");
+    expect(d4.chamadas).toEqual([]);
+  });
+
+  it("religa, refaz a data 'assinado em' dos dois lados e não manda nada", async () => {
+    const r = await (await religar()).json();
+    expect(r).toMatchObject({ ok: true, datasRefeitas: 3 });
+    expect(doc(DOC_ANTIGO)).toMatchObject({ client_id: "cli-bike", vinculo: "nome" });
+    expect(doc(DOC_BRUNO)).toMatchObject({ client_id: "cli-bruno", vinculo: "email" });
+    expect(db.clients.find((c) => c.id === "cli-teste")!.contrato_assinado_em).toBeNull();
+    expect(db.clients.find((c) => c.id === "cli-bike")!.contrato_assinado_em).toBe("2026-01-21T15:00:00Z");
+    expect(db.clients.find((c) => c.id === "cli-bruno")!.contrato_assinado_em).toBe("2026-10-20T15:00:00Z");
+    expect(d4.chamadas).toEqual([]);
+    expect(envio.fn).not.toHaveBeenCalled();
+    // Rodar de novo não troca mais nada.
+    expect((await (await religar()).json()).trocas).toEqual([]);
+  });
+});
+
+describe("esteira de entrada (8h30): contrato, cadastro esperando aprovação e link sem preencher", () => {
+  const dia = (n: number) => new Date(AGORA.getTime() - n * 86_400_000).toISOString();
+  beforeEach(() => {
+    db.clients.push(
+      { id: "cli-boali", name: "Boali Araruama", nome_fantasia: null, draft_status: "awaiting_approval", created_at: dia(14), contrato_assinado_em: dia(0), churned_at: null },
+      { id: "cli-gk", name: "GK Pneus", nome_fantasia: null, draft_status: "pending_invite", created_at: dia(12), contrato_assinado_em: null, churned_at: null },
+      { id: "cli-festas", name: "Armazém das Festas", nome_fantasia: null, draft_status: "pending_invite", created_at: dia(40), contrato_assinado_em: null, churned_at: null },
+      { id: "cli-novo", name: "Loja Recém", nome_fantasia: null, draft_status: "pending_invite", created_at: dia(1), contrato_assinado_em: null, churned_at: null },
+      { id: "cli-teste", name: "test", nome_fantasia: "Lone Midia", draft_status: "pending_invite", created_at: dia(10), contrato_assinado_em: null, churned_at: null },
+    );
+    db.client_onboarding_submissions = [
+      { client_id: "cli-boali", status: "submitted", created_at: dia(14), submitted_at: dia(13) },
+      { client_id: "cli-gk", status: "pending", created_at: dia(12), submitted_at: null },
+    ];
+    db.d4sign_documentos = [];
+  });
+
+  it("só cadastros parados já viram mensagem; teste fica de fora; link esquecido vira uma linha", async () => {
+    const corpo = await (await rodarManha()).json();
+    expect(corpo).toMatchObject({ ok: true, enviado: true });
+    expect(mensagens().at(-1)!.texto).toBe([
+      "⏳ *Entrada de clientes — o que está parado*",
+      "",
+      "*Cadastro esperando aprovação* _(Clientes › Cadastros Pendentes)_",
+      "• *Boali Araruama* — preencheu há 13 dias · contrato já assinado",
+      "",
+      "*Link de cadastro sem preencher*",
+      "• *GK Pneus* — link enviado há 12 dias",
+      "_E mais 1 sem resposta há mais de 30 dias._",
+    ].join("\n"));
+  });
+
+  it("nada parado: nada sai", async () => {
+    db.clients = db.clients.filter((c) => !["cli-boali", "cli-gk", "cli-festas"].includes(c.id as string));
+    const corpo = await (await rodarManha()).json();
+    expect(corpo).toMatchObject({ enviado: false, motivo: expect.stringMatching(/nenhum cadastro parado/) });
+    expect(envio.fn).not.toHaveBeenCalled();
   });
 });

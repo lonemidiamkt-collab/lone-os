@@ -13,11 +13,28 @@ describe("pacote de clientes para o financeiro", () => {
   it("leva só situação: nenhuma chave de valor, contato ou documento", () => {
     const [c] = montarClientesParaFinance([base], []);
     expect(Object.keys(c).sort()).toEqual(
-      ["ativo", "categoriaSaida", "ciclo", "entrouEm", "faixaFaturamento", "id", "leadId", "motivoSaida", "nome", "pausadoAte", "pausadoDesde", "rascunho", "saida", "saiuEm", "servico"].sort(),
+      ["ativo", "cadastroPendente", "categoriaSaida", "ciclo", "contratoAssinadoEm", "contratoEsperando", "entrouEm", "faixaFaturamento", "id", "leadId", "motivoSaida", "nome", "pausadoAte", "pausadoDesde", "rascunho", "saida", "saiuEm", "servico"].sort(),
     );
     expect(JSON.stringify(c)).not.toMatch(/valor|value|budget|phone|telefone|email|cnpj|cpf|porte|capital/i);
     expect(c.nome).toBe("Loja Exemplo");
     expect(c.faixaFaturamento).toBe("50k_100k");
+  });
+
+  it("28/10: o contrato da D4Sign sem valor — assinado em (dia de SP), esperando (quem falta) e o cadastro pendente", () => {
+    const pend = [
+      { client_id: "c1", enviado_em: "2026-10-21T19:35:48Z", signatarios: [{ papel: "lone", assinou: false, email: "x@lone.exemplo" }, { papel: "cliente", assinou: true }] },
+      { client_id: "c1", enviado_em: "2026-08-01T10:00:00Z", signatarios: [{ papel: "cliente", assinou: false }] },
+    ];
+    const [esperando] = montarClientesParaFinance([{ ...base, id: "c1", draft_status: "awaiting_approval" }], [], pend);
+    expect(esperando.contratoEsperando).toEqual({ desde: "2026-10-21", falta: ["lone"] });
+    expect(esperando.cadastroPendente).toBe("aprovacao");
+    expect(JSON.stringify(esperando)).not.toMatch(/lone\.exemplo|email/);
+    const [assinado] = montarClientesParaFinance([{ ...base, id: "c1", contrato_assinado_em: "2026-10-28T19:44:44Z" }], [], pend);
+    expect(assinado.contratoAssinadoEm).toBe("2026-10-28");
+    expect(assinado.contratoEsperando).toBeNull(); // o que esperava era mais velho que a assinatura
+    expect(assinado.cadastroPendente).toBeNull();
+    const [semNada] = montarClientesParaFinance([{ ...base, draft_status: "pending_invite" }], []);
+    expect(semNada).toMatchObject({ contratoAssinadoEm: null, contratoEsperando: null, cadastroPendente: "link" });
   });
 
   it("saída: data em São Paulo, motivo encurtado e rascunho de onboarding marcado", () => {

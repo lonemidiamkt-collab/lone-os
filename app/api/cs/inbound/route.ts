@@ -1714,13 +1714,19 @@ async function processarInbound(req: NextRequest) {
         return NextResponse.json({ ok: true, acao: "contrato_erro_pdf" });
       }
 
+      // Sem o valor na legenda: número financeiro da agência não vai em mensagem de grupo (o valor está no PDF).
       const legenda = `📄 *Contrato — ${montado.cliente}*\n`
-        + `${pedido.valorMensal!.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês · `
         + `${pedido.modalidade === "ciclos" ? "ciclos de 3 meses (renovação automática)" : `${pedido.duracaoMeses} meses, sem renovação`} · `
         + `vencimento dia ${pedido.diaPagamento}\n\n`
-        + `_Confira antes de mandar pro cliente. O .docx oficial pro D4Sign continua saindo em Contratos._`
+        + `_Confira o valor e os dados no PDF antes de mandar pro cliente. O .docx oficial pro D4Sign continua saindo em Contratos._`
         + (await import("@/lib/contracts/validacao")).avisosDaAuditoria(montado.achados);
-      await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), montado.nomeArquivo!, legenda);
+      const envPdf = await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), montado.nomeArquivo!, legenda);
+      if (!envPdf.ok) {
+        // O PDF que não sai não pode sumir calado: quem pediu fica esperando no grupo.
+        await csSendGroupText(msg.groupJid, `Montei o contrato do *${montado.cliente}*, mas o PDF não saiu no WhatsApp (${envPdf.error ?? "erro"}). Pede de novo em alguns minutos ou baixe em Contratos.`,
+          undefined, { origem: "contrato-erro", destino: "interno" });
+        return NextResponse.json({ ok: false, acao: "contrato_pdf_nao_saiu", erro: envPdf.error });
+      }
       return NextResponse.json({ ok: true, acao: "contrato", cliente: alvo.nome });
     }
   }

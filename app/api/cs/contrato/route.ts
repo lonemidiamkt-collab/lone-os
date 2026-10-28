@@ -69,12 +69,12 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // Sem o valor na legenda: número financeiro da agência não vai em mensagem de grupo (o valor está no PDF).
   const legenda =
     `📄 *Contrato — ${montado.cliente}*\n` +
-    `${valorMensal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês · ` +
     `${modalidade === "ciclos" ? "ciclos de 3 meses (renovação automática)" : `${duracaoMeses} meses, sem renovação`} · ` +
     `vencimento dia ${diaPagamento}\n\n` +
-    `_Confira antes de mandar pro cliente. O .docx oficial pro D4Sign continua saindo em Contratos._`
+    `_Confira o valor e os dados no PDF antes de mandar pro cliente. O .docx oficial pro D4Sign continua saindo em Contratos._`
     + avisosDaAuditoria(montado.achados);
 
   const env = await csSendGroupDocument(groupJid, pdf.buffer.toString("base64"), montado.nomeArquivo!, legenda);

@@ -74,3 +74,18 @@ export function montarMensagemGrupoHandoff(lead: LeadHandoff): string {
   );
   return partes.join("\n");
 }
+
+/**
+ * O link de cadastro no grupo de cadastro (28/10/2026). O Roberto descreve o fluxo como "o sistema prepara o
+ * pré-cadastro com o nome, manda o link no grupo de cadastro, eu mando ao cliente" — e o link só ia para a área de
+ * transferência e para o WhatsApp do lead. Agora fica no grupo, para quem for mandar. Pura.
+ */
+export function blocoDoLinkDeCadastro(url: string): string {
+  return `🔗 *Link de cadastro* — mande para o cliente preencher:\n${url}\n_Quando ele terminar, aviso aqui._`;
+}
+
+/** Cadastro aberto fora do Comercial ("Novo cliente"): só o link, com o nome. Pura. */
+export function mensagemLinkDeCadastro(nome: string, url: string): string {
+  return `📝 *Pré-cadastro criado: ${nome.trim() || "cliente"}*\n${blocoDoLinkDeCadastro(url)}`;
+}
+

@@ -19,6 +19,7 @@ import type { OrigemChamada } from "./d4sign-cota";
 import { carregarConfigD4Sign } from "./d4sign-config";
 import { processarDocumento, tipoDoDocumento, nomeDoDocumento, uuidValido } from "./assinatura";
 import { mesDe } from "./arquivo-mes";
+import { religarDocumentos } from "./religar-d4sign";
 
 export { mesDe, nomeDoMes } from "./arquivo-mes";
 
@@ -260,6 +261,12 @@ export async function rodarArquivo(opts: { dry?: boolean; agora?: Date; cfg?: Co
   const cfg = opts.cfg === undefined ? await carregarConfigD4Sign() : opts.cfg;
   if (!cfg) return { ...res, desligado: "D4Sign não configurada (chaves em Configurações › Jurídico, ou no servidor)" };
   if (!cfg.cofres.length) return { ...res, desligado: "nenhum cofre de contrato escolhido (Configurações › Jurídico › D4Sign)" };
+
+  // 0. Documento sem dono (ou com dono inválido) ganha o cadastro certo, com o que já está gravado — sem chamada.
+  if (!dry) {
+    const rl = await religarDocumentos();
+    if (!rl.ok) res.erros.push(...rl.erros.map((e) => `religar: ${e}`));
+  }
 
   // 1. Finalizados novos. O ensaio não fala com a D4Sign (cada página é uma das 10 chamadas da hora).
   if (!dry && !(await listouHaPouco(agora))) {

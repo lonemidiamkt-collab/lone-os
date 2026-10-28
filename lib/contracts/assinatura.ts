@@ -109,6 +109,31 @@ export interface ClienteCadastro {
   nome_fantasia?: string | null;
   email?: string | null;
   email_corporativo?: string | null;
+  churned_at?: string | null;
+}
+
+// Cadastro de teste ("test", "Teste", "🧪", "(teste)") e cadastro com o nome da PRÓPRIA Lone nunca recebem
+// documento. 28/10/2026: o cadastro "test" tinha nome fantasia "Lone Midia" e, como os arquivos antigos se
+// chamam "Contrato de prestação de Serviços Lone Midia - <cliente>", ficou com 8 contratos de outros clientes.
+const RX_TESTE = /^\s*testes?\b|^\s*test\b|🧪|\(teste\)/i;
+const NOMES_DA_CASA = /^(lone( midia)?( assessoria)?( e marketing)?( ltda)?|lm assessoria( e marketing)?( ltda)?)$/;
+
+/** Este cadastro pode receber um documento da D4Sign? Pura. */
+export function podeReceberDocumento(c: Pick<ClienteCadastro, "name" | "nome_fantasia">): boolean {
+  const nomes = [c.name, c.nome_fantasia].filter((n): n is string => !!n?.trim());
+  return !nomes.some((n) => RX_TESTE.test(n) || NOMES_DA_CASA.test(normalizar(n)));
+}
+
+/**
+ * Liga primeiro aos clientes da carteira; sem par entre eles (e sem empate), tenta também os que já saíram — o
+ * contrato antigo do arquivo por mês é de quem saiu (Blocofast, Leo Carros…). Pura.
+ */
+export function ligarComPreferencia(doc: Pick<DocumentoD4Sign, "nome" | "signatarios">, todos: ClienteCadastro[], emailsIgnorar: string[] = []):
+  { clientId: string | null; vinculo: Vinculo | null; motivo: string | null } {
+  const validos = todos.filter(podeReceberDocumento);
+  const r = ligarAoCadastro(doc, validos.filter((c) => !c.churned_at), emailsIgnorar);
+  if (r.clientId || /mais de um/.test(r.motivo ?? "")) return r;
+  return ligarAoCadastro(doc, validos, emailsIgnorar);
 }
 
 export const nomeDoCliente = (c: ClienteCadastro) => (c.nome_fantasia || c.name || "Cliente").trim() || "Cliente";
@@ -118,9 +143,11 @@ export const nomeDoCliente = (c: ClienteCadastro) => (c.nome_fantasia || c.name 
  * depois o nome do arquivo igual ao do cliente; por fim o nome do cliente contido no do arquivo, só se
  * um contém todos os outros candidatos ("Veneza Nova Iguaçu" ganha de "Veneza"). Pura.
  */
-export function ligarAoCadastro(doc: Pick<DocumentoD4Sign, "nome" | "signatarios">, clientes: ClienteCadastro[]):
+export function ligarAoCadastro(doc: Pick<DocumentoD4Sign, "nome" | "signatarios">, clientes: ClienteCadastro[], emailsIgnorar: string[] = []):
   { clientId: string | null; vinculo: Vinculo | null; motivo: string | null } {
-  const emails = new Set(doc.signatarios.map((s) => s.email).filter((e): e is string => !!e));
+  // O e-mail de quem assina pela Lone está em TODO documento: nunca serve para dizer de quem é.
+  const ignorar = new Set(emailsIgnorar.map((e) => e.trim().toLowerCase()));
+  const emails = new Set(doc.signatarios.map((s) => s.email?.trim().toLowerCase()).filter((e): e is string => !!e && !ignorar.has(e)));
   const porEmail = clientes.filter((c) =>
     [c.email, c.email_corporativo].some((e) => !!e && emails.has(e.trim().toLowerCase())));
 
@@ -252,6 +279,40 @@ export function mensagemPendentes(itens: ItemPendente[], parados = 0): string {
   if (ordem.length > 10) linhas.push(`• e mais ${ordem.length - 10}`);
   if (parados) linhas.push(`_E mais ${parados} parado${parados === 1 ? "" : "s"} na D4Sign há mais de 6 meses — vale cancelar lá._`);
   return ["⏳ *Ainda não assinaram o contrato*", ...linhas].join("\n");
+}
+
+/** Um cadastro parado na entrada: o link sem preencher, ou preenchido e esperando a aprovação do time. */
+export interface ItemCadastro { nome: string; dias: number; contratoAssinado?: boolean }
+
+/** Link sem resposta há mais que isso vira uma linha só (cliente que desistiu não repete todo dia). */
+export const DIAS_LINK_ESQUECIDO = 30;
+/** Link enviado há menos que isso ainda não é atraso (o cliente costuma preencher em 1–2 dias). */
+export const DIAS_LINK_SEM_RESPOSTA = 2;
+
+const dias = (n: number) => `${n} dia${n === 1 ? "" : "s"}`;
+
+/**
+ * A esteira de entrada (28/10/2026): UMA mensagem no grupo de cadastro, dia útil de manhã, com cada cliente novo
+ * parado e onde — contrato sem assinatura, cadastro esperando aprovação, link de cadastro sem preencher. "" = nada
+ * parado. Pura.
+ */
+export function mensagemEntrada(p: { contratos: ItemPendente[]; parados: number; aprovacao: ItemCadastro[]; links: ItemCadastro[] }): string {
+  const secoes: string[] = [];
+  const contrato = mensagemPendentes(p.contratos, p.parados);
+  if (contrato) secoes.push(contrato.replace(/^⏳ \*Ainda não assinaram o contrato\*/, "*Contrato esperando assinatura*"));
+  if (p.aprovacao.length) {
+    secoes.push(["*Cadastro esperando aprovação* _(Clientes › Cadastros Pendentes)_",
+      ...[...p.aprovacao].sort((a, b) => b.dias - a.dias).map((i) =>
+        `• *${i.nome}* — preencheu há ${dias(i.dias)}${i.contratoAssinado ? " · contrato já assinado" : ""}`)].join("\n"));
+  }
+  const recentes = p.links.filter((i) => i.dias <= DIAS_LINK_ESQUECIDO).sort((a, b) => b.dias - a.dias);
+  const esquecidos = p.links.length - recentes.length;
+  if (recentes.length || esquecidos) {
+    secoes.push(["*Link de cadastro sem preencher*",
+      ...recentes.map((i) => `• *${i.nome}* — link enviado há ${dias(i.dias)}`),
+      ...(esquecidos ? [`_E mais ${esquecidos} sem resposta há mais de ${DIAS_LINK_ESQUECIDO} dias._`] : [])].join("\n"));
+  }
+  return secoes.length ? ["⏳ *Entrada de clientes — o que está parado*", ...secoes].join("\n\n") : "";
 }
 
 // ── Banco ────────────────────────────────────────────────────────────────────────────────────────
@@ -411,11 +472,11 @@ export async function processarDocumento(uuid: string, opts: OpcoesDocumento): P
       const c = (pelo.data as ContratoCadastro[] | null)?.[0];
       if (c) { clientId = c.client_id; contractId = c.id; vinculo = "documento"; }
     }
-    const cl = await supabaseAdmin.from("clients").select("id, name, nome_fantasia, email, email_corporativo").is("churned_at", null);
+    const cl = await supabaseAdmin.from("clients").select("id, name, nome_fantasia, email, email_corporativo, churned_at");
     if (cl.error) return falha(`não consegui ler os clientes: ${cl.error.message}`);
     const clientes = (cl.data as ClienteCadastro[] | null) ?? [];
     if (!clientId) {
-      const l = ligarAoCadastro(doc, clientes);
+      const l = ligarComPreferencia(doc, clientes, cfg.emailsLone);
       clientId = l.clientId; vinculo = l.vinculo; motivoVinculo = l.motivo;
     }
     if (clientId && !contractId && tipo === "contrato") {
@@ -654,7 +715,39 @@ export async function consultarCofre(opts: { dry?: boolean; agora?: Date; cfg?: 
   };
 }
 
-// ── "Ainda não assinaram" — dia útil de manhã ────────────────────────────────────────────────────
+// ── "Entrada de clientes" — dia útil de manhã ────────────────────────────────────────────────────
+
+/**
+ * Cadastros parados na entrada: link de cadastro sem preencher há DIAS_LINK_SEM_RESPOSTA dias ou mais, e cadastro
+ * preenchido esperando a aprovação do time há 1 dia ou mais. Cadastro de teste e quem saiu ficam de fora.
+ */
+async function cadastrosParados(agora: Date): Promise<{ ok: true; aprovacao: ItemCadastro[]; links: ItemCadastro[] } | { ok: false; erro: string }> {
+  const cl = await supabaseAdmin.from("clients").select("id, name, nome_fantasia, draft_status, created_at, contrato_assinado_em, churned_at")
+    .in("draft_status", ["pending_invite", "awaiting_approval"]);
+  if (cl.error) return { ok: false, erro: `não consegui ler os cadastros: ${cl.error.message}` };
+  type Linha = ClienteCadastro & { draft_status: string; created_at: string; contrato_assinado_em: string | null };
+  const clientes = ((cl.data as Linha[] | null) ?? []).filter((c) => !c.churned_at && podeReceberDocumento(c));
+  if (!clientes.length) return { ok: true, aprovacao: [], links: [] };
+  const sub = await supabaseAdmin.from("client_onboarding_submissions").select("client_id, status, created_at, submitted_at").in("client_id", clientes.map((c) => c.id));
+  if (sub.error) return { ok: false, erro: `não consegui ler os links de cadastro: ${sub.error.message}` };
+  const subs = (sub.data as { client_id: string; status: string | null; created_at: string | null; submitted_at: string | null }[] | null) ?? [];
+  const ultima = (id: string, campo: "created_at" | "submitted_at") =>
+    subs.filter((x) => x.client_id === id && x[campo]).map((x) => x[campo]!).sort().pop() ?? null;
+  const diasDesde = (iso: string) => Math.max(0, Math.floor((agora.getTime() - new Date(iso).getTime()) / DIA));
+  const aprovacao: ItemCadastro[] = [];
+  const links: ItemCadastro[] = [];
+  for (const c of clientes) {
+    const nome = nomeDoCliente(c);
+    if (c.draft_status === "awaiting_approval") {
+      const d = diasDesde(ultima(c.id, "submitted_at") ?? c.created_at);
+      if (d >= 1) aprovacao.push({ nome, dias: d, contratoAssinado: !!c.contrato_assinado_em });
+    } else {
+      const d = diasDesde(ultima(c.id, "created_at") ?? c.created_at);
+      if (d >= DIAS_LINK_SEM_RESPOSTA) links.push({ nome, dias: d });
+    }
+  }
+  return { ok: true, aprovacao, links };
+}
 
 export interface ResultadoPendentes {
   ok: boolean;
@@ -689,14 +782,17 @@ export async function avisarPendentes(opts: { dry?: boolean; agora?: Date; dia: 
     return { vencidos: vencidos.filter((l) => diasDe(l) <= DIAS_PARADO), parados: vencidos.filter((l) => diasDe(l) > DIAS_PARADO).length };
   };
   let { vencidos, parados } = separar((r.data as LinhaDocumento[] | null) ?? []);
-  if (!vencidos.length) return { ...base, ok: true, motivo: `nenhum contrato esperando assinatura há ${DIAS_SEM_ASSINATURA} dias ou mais (fora os parados há mais de ${DIAS_PARADO})` };
+  const cad = await cadastrosParados(agora);
+  if (!cad.ok) return { ...base, ok: false, motivo: cad.erro };
+  const semNada = !vencidos.length && !cad.aprovacao.length && !cad.links.length;
+  if (semNada) return { ...base, ok: true, motivo: `nenhum contrato esperando assinatura há ${DIAS_SEM_ASSINATURA} dias ou mais (fora os parados há mais de ${DIAS_PARADO}) e nenhum cadastro parado` };
 
   // Relê os que vão para a mensagem, começando pelo lido há mais tempo (o que couber na cota): quem assinou de
   // madrugada não aparece como faltando. Em 28/10 ela relia os 3 MAIS ANTIGOS (dois de 2024) e disse que o
   // Matheus ainda não tinha assinado. Ensaio não relê: mostra o que já se sabe.
   let relidos = 0;
   const erros: string[] = [];
-  if (!dry) {
+  if (!dry && vencidos.length) {
     const cfg = opts.cfg === undefined ? await carregarConfigD4Sign() : opts.cfg;
     if (cfg) {
       const ordem = [...vencidos].sort((a, b) => String(a.atualizado_em ?? "").localeCompare(String(b.atualizado_em ?? "")));
@@ -713,7 +809,9 @@ export async function avisarPendentes(opts: { dry?: boolean; agora?: Date; dia: 
       }
     }
   }
-  if (!vencidos.length) return { ...base, ok: erros.length === 0, relidos, erros, motivo: "os pendentes assinaram na releitura" };
+  if (!vencidos.length && !cad.aprovacao.length && !cad.links.length) {
+    return { ...base, ok: erros.length === 0, relidos, erros, motivo: "os pendentes assinaram na releitura" };
+  }
 
   const ids = [...new Set(vencidos.map((l) => l.client_id).filter((x): x is string => !!x))];
   const nomes = new Map<string, string>();
@@ -728,7 +826,7 @@ export async function avisarPendentes(opts: { dry?: boolean; agora?: Date; dia: 
     faltam: lerSignatariosGravados(l.signatarios).filter((s) => !s.assinou),
     dias: diasDe(l),
   }));
-  const texto = mensagemPendentes(itens, parados);
+  const texto = mensagemEntrada({ contratos: itens, parados, aprovacao: cad.aprovacao, links: cad.links });
   const pronto = { ...base, relidos, erros, itens, texto };
   if (dry) return { ...pronto, ok: true, motivo: null };
 

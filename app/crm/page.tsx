@@ -10,9 +10,10 @@ import KanbanBoard, { type KanbanColumn } from "@/components/KanbanBoard";
 import { Button } from "@/components/ui/button";
 import { CRM_ESTAGIOS, type CrmEstagio, type CrmLead, type CrmLeadActivity, type CrmAtividadeTipo } from "@/lib/types";
 import Link from "next/link";
-import { Plus, X, Search, Trophy, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3, Sun, FileText, Download, MapPin, Upload, Target, SkipForward } from "lucide-react";
+import { Plus, X, Search, Trophy, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3, Sun, FileText, Download, MapPin, Upload, Target, SkipForward, FileSignature } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ExtrasLead } from "@/lib/crm/extras";
+import { seloDoContrato } from "@/lib/crm/contrato-do-lead";
 import { proximoToque, rotuloToque, TIPOS_AVANCO, TIPOS_TOQUE, type ProximoToque } from "@/lib/crm/cadencia";
 import type { DesfazerRegistro } from "@/lib/crm/desfazer-registro";
 import { anotarEnvio, textoWhatsappDoHoje, tirarEnvio, TEXTO_WHATSAPP_PAINEL, type EnvioPendente } from "@/lib/crm/enviou";
@@ -1070,6 +1071,15 @@ export default function CrmPage() {
                       <Trophy size={11} className="shrink-0" aria-hidden="true" /> {l.cadastroPendente ? "Cadastro enviado" : "Cadastrado"}
                     </div>
                   )}
+                  {l.clienteId && (() => {
+                    // 28/10/2026: a assinatura da D4Sign aparece no card (antes só no grupo de cadastro).
+                    const selo = seloDoContrato({ contrato: l.contrato ?? null, cadastroAprovacao: !!l.cadastroAprovacao, cadastroPendente: !!l.cadastroPendente });
+                    return selo ? (
+                      <div className={`ml-1 mt-2 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-lone-caption ${selo.tom === "ok" ? "bg-lone-success-bg text-lone-success" : selo.tom === "atencao" ? "bg-lone-warning-bg text-lone-warning" : "bg-muted text-muted-foreground"}`}>
+                        <FileSignature size={11} className="shrink-0" aria-hidden="true" /> {selo.texto}
+                      </div>
+                    ) : null;
+                  })()}
                   <div className="mt-2 flex items-center justify-between gap-2">
                     {l.responsavel ? (
                       <span className="inline-flex min-w-0 items-center gap-1.5 text-[10.5px] text-muted-foreground" title={l.responsavel}>
@@ -1162,7 +1172,10 @@ export default function CrmPage() {
                 <a href={linkDoCliente(l.clienteId!, host)} target={casco ? "_blank" : undefined} rel={casco ? "noreferrer" : undefined}
                   className="inline-flex h-8 items-center rounded-md border border-lone-success-border px-3 text-sm text-lone-success hover:bg-lone-success-bg">Ver no Lone OS</a>
                 <Button size="sm" variant="outline" onClick={() => setDraft({ ...l })}>Abrir</Button>
-              </>, `Ganho em ${fmtData(l.fechadoEm)}`))}
+              </>, `Ganho em ${fmtData(l.fechadoEm)}${(() => {
+                const selo = seloDoContrato({ contrato: l.contrato ?? null, cadastroAprovacao: !!l.cadastroAprovacao, cadastroPendente: !!l.cadastroPendente });
+                return selo ? ` · ${selo.texto}` : "";
+              })()}`))}
             {secao("Perdidos", verTodosFechados ? "todos" : "este mês", f.perdidos,
               verTodosFechados ? "Nenhum negócio perdido." : "Nenhum negócio perdido este mês.",
               (l) => linha(l, <Button size="sm" variant="outline" onClick={() => setDraft({ ...l })}>Abrir</Button>,

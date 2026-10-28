@@ -32,7 +32,12 @@ import {
 function jidCadastro(): string | undefined {
   return process.env.CS_CADASTRO_GROUP_JID || process.env.CS_INTERNAL_GROUP_JID;
 }
-import { montarNotaHandoff, montarMensagemGrupoHandoff } from "@/lib/cs/handoff";
+
+/** Endereço público do painel (o mesmo do link da ficha no aviso de cadastro concluído). */
+function baseDoPainel(): string {
+  return process.env.NEXT_PUBLIC_PORTAL_DOMAIN || process.env.NEXT_PUBLIC_SITE_URL || "https://painel.lonemidia.com";
+}
+import { montarNotaHandoff, montarMensagemGrupoHandoff, blocoDoLinkDeCadastro, mensagemLinkDeCadastro } from "@/lib/cs/handoff";
 import { randomBytes } from "crypto";
 import { PAPEIS_COMERCIAL } from "@/lib/crm/acesso";
 
@@ -196,7 +201,26 @@ export async function POST(req: NextRequest) {
       status: "pending",
     });
 
-    if (subErr) return NextResponse.json({ error: subErr.message }, { status: 500 });
+    if (subErr) {
+      // Sem o link, o rascunho ficaria órfão: a nova tentativa daria "este lead já virou cliente" e nenhum link
+      // sairia nunca (28/10/2026). Desfaz o rascunho que acabou de nascer e pede para tentar de novo.
+      await supabase.from("clients").delete().eq("id", client.id).eq("draft_status", "pending_invite");
+      return NextResponse.json({ error: `Não consegui criar o link de cadastro (${subErr.message}). Nada ficou gravado — tente de novo.` }, { status: 500 });
+    }
+    const urlCadastro = `${baseDoPainel()}/onboarding/${token}`;
+    const nomeDoCadastro = String(body.name || lead?.empresa || lead?.contato_nome || "Cliente");
+    const avisos: string[] = [];
+    /** O envio ao grupo de cadastro que falha vira aviso na tela e sino — nunca some calado. */
+    const conferirEnvio = async (env: { ok: boolean; error?: string } | null, oque: string) => {
+      if (env?.ok) return;
+      const motivo = env ? env.error ?? "o WhatsApp não confirmou" : "o grupo de cadastro não está configurado";
+      avisos.push(`${oque} não foi para o grupo de cadastro (${motivo})`);
+      await supabase.from("notifications").insert({
+        type: "system", title: `${oque} não chegou ao grupo de cadastro`,
+        body: `${nomeDoCadastro}: ${motivo}. O link é ${urlCadastro} — mande ao cliente por outro caminho.`,
+        client_id: client.id,
+      });
+    };
 
     // 3. Handoff comercial→CS (só quando veio de um lead real): semeia a ficha da jornada com a nota do
     // comercial + a 1ª próxima ação (iniciar onboarding), e avisa o time no grupo interno do CS. Assim
@@ -217,16 +241,20 @@ export async function POST(req: NextRequest) {
           updated_at: new Date().toISOString(),
         }, { onConflict: "client_id" });
 
+        // A passagem do comercial e o LINK DE CADASTRO numa mensagem só, no grupo de cadastro.
         const jid = jidCadastro();
-        if (jid) await csSendGroupText(jid, montarMensagemGrupoHandoff(leadHandoff), undefined,
-          { origem: "onboarding-handoff", destino: "interno" });
+        const env = jid
+          ? await csSendGroupText(jid, `${montarMensagemGrupoHandoff(leadHandoff)}\n\n${blocoDoLinkDeCadastro(urlCadastro)}`, undefined,
+            { origem: "onboarding-handoff", destino: "interno", clientId: client.id as string })
+          : null;
+        await conferirEnvio(env, "O link de cadastro");
       } catch (e) {
         console.error("[onboarding] handoff comercial→CS falhou (segue):", e);
+        avisos.push(`a passagem do comercial falhou (${e instanceof Error ? e.message : "erro"})`);
       }
 
       // O cliente nasce com o checklist da frente que contratou e com as tarefas do grupo do WhatsApp
       // (nenhum fluxo cria grupo sozinho: vira tarefa do CS). Best-effort, como o handoff.
-      const avisos: string[] = [];
       try {
         const { data: existentes } = await supabase.from("onboarding_items").select("id").eq("client_id", client.id).limit(1);
         if (!existentes?.length) {
@@ -255,7 +283,14 @@ export async function POST(req: NextRequest) {
 
     // Cadastro aberto fora do Comercial (23/10/2026): liga ao lead de mesmo nome, se for único, e avisa no sino.
     await ligarCadastroNovo(client.id as string);
-    return NextResponse.json({ token, url: `/onboarding/${token}`, clientId: client.id });
+    // E o link vai para o grupo de cadastro também (28/10/2026), como no caminho do Comercial.
+    const jid = jidCadastro();
+    const env = jid
+      ? await csSendGroupText(jid, mensagemLinkDeCadastro(nomeDoCadastro, urlCadastro), undefined,
+        { origem: "onboarding-link", destino: "interno", clientId: client.id as string })
+      : null;
+    await conferirEnvio(env, "O link de cadastro");
+    return NextResponse.json({ token, url: `/onboarding/${token}`, clientId: client.id, ...(avisos.length ? { avisos } : {}) });
   }
 
   // ─── Generate link for an existing client ───
@@ -560,8 +595,18 @@ export async function POST(req: NextRequest) {
             + `_Vigência é a padrão: ciclos de 3 meses com renovação automática. Se for teste de prazo fechado, diga "teste de 1 mês"._`;
           // Fire-and-forget: não segura a resposta ao cliente (Evolution pode levar até ~21s no pior
           // caso). O servidor Node é persistente (VPS), então o envio completa em background.
+          // O envio que volta "não saiu" (sem exceção) também vira sino — antes só a exceção era vista.
+          const sinoSeFalhar = async (motivo: string) => {
+            console.error("[onboarding submit] aviso no grupo falhou:", motivo);
+            await supabase.from("notifications").insert({
+              type: "system", title: "Cadastro concluído sem aviso no grupo",
+              body: `${clientName} concluiu o cadastro, mas o aviso não chegou ao grupo de cadastro (${motivo}). Revise em Cadastros Pendentes.`,
+              client_id: clientId,
+            });
+          };
           void csSendGroupText(jid, msg, undefined, { origem: "contrato-oferta-aviso", destino: "interno", clientId: clientId })
-            .catch((e) => console.error("[onboarding submit] aviso no grupo falhou:", e));
+            .then((env) => (env.ok || env.incerto ? undefined : sinoSeFalhar(env.error ?? "o WhatsApp recusou")))
+            .catch((e) => sinoSeFalhar(e instanceof Error ? e.message : "erro"));
           // Registra DE QUEM é a oferta. Sem isso, responder "1797, dia 10" não tem cliente:
           // quem responde uma pergunta não repete o assunto, e o agente ficava mudo.
           void import("@/lib/contracts/oferta")

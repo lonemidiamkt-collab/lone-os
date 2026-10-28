@@ -123,7 +123,7 @@
 | todo dia, de hora em hora das 7h10 às 20h10 | `10 10-23 * * *` | Feed de prioridades | `POST /api/system/priority-recalcular` | — |
 | domingo, 8h | `0 11 * * 0` | Releitura do ciclo | `POST /api/system/cs-releitura` | Releitura do ciclo |
 | todo dia, de hora em hora das 8h15 às 20h15 (relê até 3 contratos por vez: a D4Sign responde a 10 chamadas por hora) | `15 11-23 * * *` | Contrato assinado (D4Sign) | `POST /api/system/contratos-d4sign` | — |
-| seg a sex, 8h30 | `30 11 * * 1-5` | Contratos sem assinatura (D4Sign) | `POST /api/system/contratos-d4sign-pendentes` | — |
+| seg a sex, 8h30 | `30 11 * * 1-5` | Entrada de clientes (o que está parado) | `POST /api/system/contratos-d4sign-pendentes` | — |
 | dia 2 de cada mês, 10h | `0 13 2 * *` | Vigia de CNPJ na Receita | `POST /api/system/receita-vigia` | — |
 
 ## Infra

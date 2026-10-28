@@ -424,7 +424,7 @@ export const AUTOMACOES: Automacao[] = [
     familia: "Dados e sync", destino: "grupo de cadastro", cron: "15 11-23 * * *", agendaBRT: "todo dia, de hora em hora das 8h15 às 20h15 (relê até 3 contratos por vez: a D4Sign responde a 10 chamadas por hora)", maxSilencioHoras: 14, ensaio: "dry=1",
   }),
   ep("contratos-d4sign-pendentes", {
-    nome: "Contratos sem assinatura (D4Sign)", descricao: "Dia útil de manhã, UMA mensagem no grupo de cadastro com cada contrato enviado há 3 dias ou mais sem todas as assinaturas: quem falta e há quantos dias. Sem pendência, nada sai. Relê na D4Sign os mais antigos antes de escrever.",
+    nome: "Entrada de clientes (o que está parado)", descricao: "Dia útil de manhã, UMA mensagem no grupo de cadastro com cada cliente novo parado e onde: contrato enviado há 3 dias ou mais sem todas as assinaturas (quem falta e há quantos dias), cadastro preenchido esperando aprovação e link de cadastro sem preencher. Sem nada parado, nada sai. Relê na D4Sign os contratos antes de escrever.",
     familia: "Dados e sync", destino: "grupo de cadastro", cron: "30 11 * * 1-5", agendaBRT: "seg a sex, 8h30", maxSilencioHoras: 74, ensaio: "dry=1",
   }),
   ep("contratos-d4sign-arquivo", {

@@ -6,11 +6,18 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { TIPOS_AVANCO, TIPOS_TOQUE } from "./cadencia";
 import type { Classe } from "@/lib/prospeccao/tipos";
+import { contratoDoLead, type ContratoDoLead } from "./contrato-do-lead";
+
+export { contratoDoLead, seloDoContrato, type ContratoDoLead } from "./contrato-do-lead";
 
 export interface ExtrasLead {
   clienteId: string | null;
   /** O cadastro ligado ainda é rascunho: o link foi enviado e o cliente não preencheu (23/10/2026). */
   cadastroPendente: boolean;
+  /** O cliente preencheu e o time ainda não aprovou (Clientes › Cadastros Pendentes). */
+  cadastroAprovacao: boolean;
+  /** Contrato na D4Sign: assinado (quando) ou esperando (quem falta). null = nenhum documento ligado ainda. */
+  contrato: ContratoDoLead | null;
   nota: Classe | null;
   notaScore: number | null;
   /** De onde veio a nota: a leitura completa da prospecção ou a qualificação à mão. */
@@ -26,7 +33,7 @@ export interface ExtrasLead {
 }
 
 export const EXTRAS_VAZIOS: ExtrasLead = {
-  clienteId: null, cadastroPendente: false, nota: null, notaScore: null, notaOrigem: null, qualificacao: null, cadenciaInicio: null, prospectId: null, toques: [], avancos: [],
+  clienteId: null, cadastroPendente: false, cadastroAprovacao: false, contrato: null, nota: null, notaScore: null, notaOrigem: null, qualificacao: null, cadenciaInicio: null, prospectId: null, toques: [], avancos: [],
 };
 
 export async function carregarExtras(leadIds: string[]): Promise<Map<string, ExtrasLead>> {
@@ -35,7 +42,7 @@ export async function carregarExtras(leadIds: string[]): Promise<Map<string, Ext
 
   const [colsQ, cliQ, atvQ] = await Promise.all([
     supabaseAdmin.from("crm_leads").select("id, nota, nota_score, qualificacao, cadencia_inicio, prospect_id").in("id", leadIds),
-    supabaseAdmin.from("clients").select("id, source_lead_id, draft_status").in("source_lead_id", leadIds),
+    supabaseAdmin.from("clients").select("id, source_lead_id, draft_status, contrato_assinado_em").in("source_lead_id", leadIds),
     supabaseAdmin.from("crm_lead_activities").select("lead_id, tipo, created_at").in("lead_id", leadIds).in("tipo", [...TIPOS_AVANCO]).limit(10000),
   ]);
 
@@ -65,9 +72,22 @@ export async function carregarExtras(leadIds: string[]): Promise<Map<string, Ext
       e.nota = c.nota as Classe; e.notaScore = (c.nota_score as number) ?? null; e.notaOrigem = "qualificacao";
     }
   }
+  // Contratos esperando assinatura dos clientes ligados (sem a tabela da D4Sign, segue sem — nunca derruba o funil).
+  const clienteIds = (cliQ.data ?? []).map((c) => c.id as string);
+  const pend = clienteIds.length
+    ? await supabaseAdmin.from("d4sign_documentos").select("client_id, enviado_em, signatarios").in("client_id", clienteIds).eq("status", "pendente").eq("tipo", "contrato")
+    : { data: [], error: null };
+  const pendPorCliente = new Map<string, { enviado_em: string | null; signatarios: unknown }[]>();
+  for (const d of (pend.error ? [] : pend.data ?? []) as { client_id: string; enviado_em: string | null; signatarios: unknown }[]) {
+    pendPorCliente.set(d.client_id, [...(pendPorCliente.get(d.client_id) ?? []), d]);
+  }
   for (const c of cliQ.data ?? []) {
     const e = out.get(c.source_lead_id as string);
-    if (e) { e.clienteId = c.id as string; e.cadastroPendente = c.draft_status === "pending_invite"; }
+    if (!e) continue;
+    e.clienteId = c.id as string;
+    e.cadastroPendente = c.draft_status === "pending_invite";
+    e.cadastroAprovacao = c.draft_status === "awaiting_approval";
+    e.contrato = contratoDoLead((c as { contrato_assinado_em?: string | null }).contrato_assinado_em ?? null, pendPorCliente.get(c.id as string) ?? []);
   }
   for (const a of atvQ.data ?? []) {
     const e = out.get(a.lead_id as string);

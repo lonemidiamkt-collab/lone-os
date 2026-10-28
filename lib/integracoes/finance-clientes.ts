@@ -27,6 +27,15 @@ export interface LinhaCliente {
   churn_reason: string | null;
   source_lead_id: string | null;
   faturamento_faixa: string | null;
+  /** Quando TODAS as assinaturas do contrato mais recente fecharam na D4Sign (lib/contracts/assinatura.ts). */
+  contrato_assinado_em?: string | null;
+}
+
+/** Documento de contrato esperando assinatura na D4Sign (d4sign_documentos, status pendente). */
+export interface LinhaContratoPendente {
+  client_id: string | null;
+  enviado_em: string | null;
+  signatarios: unknown;
 }
 
 export interface LinhaSaida {
@@ -62,6 +71,12 @@ export interface ClienteParaFinance {
   /** Faixa de faturamento MENSAL declarada pelo cliente (ate_30k … acima_500k, nao_informado) — lib/empresa/receita.ts.
    *  É dado do negócio do cliente, não da Lone; o porte da Receita fica de fora de propósito (é teto legal, não faturamento). */
   faixaFaturamento: string | null;
+  /** 28/10/2026 — o contrato visto da D4Sign, sem valor: quando todas as assinaturas fecharam (AAAA-MM-DD)… */
+  contratoAssinadoEm: string | null;
+  /** …e o contrato enviado que ainda espera assinatura: desde quando e de quem (cliente e/ou a Lone). */
+  contratoEsperando: { desde: string | null; falta: ("cliente" | "lone")[] } | null;
+  /** "link" = não preencheu o link de cadastro; "aprovacao" = preencheu e o time ainda não aprovou. */
+  cadastroPendente: "link" | "aprovacao" | null;
 }
 
 /** Data AAAA-MM-DD no fuso de São Paulo (timestamptz) ou a própria data (coluna date). */
@@ -77,7 +92,23 @@ const curto = (v: string | null, max = 200) => {
   return t ? t.slice(0, max) : null;
 };
 
-export function montarClientesParaFinance(clientes: LinhaCliente[], saidas: LinhaSaida[]): ClienteParaFinance[] {
+/** O contrato esperando assinatura de cada cliente: o enviado mais recente e quem falta. Pura. */
+function esperandoPorCliente(pendentes: LinhaContratoPendente[]): Map<string, { desde: string | null; falta: ("cliente" | "lone")[] }> {
+  const r = new Map<string, { desde: string | null; falta: ("cliente" | "lone")[]; enviado: string }>();
+  for (const p of pendentes) {
+    if (!p.client_id) continue;
+    const enviado = p.enviado_em ?? "";
+    const atual = r.get(p.client_id);
+    if (atual && atual.enviado >= enviado) continue;
+    const lista = Array.isArray(p.signatarios) ? (p.signatarios as { papel?: string; assinou?: boolean }[]) : [];
+    const falta = [...new Set(lista.filter((s) => !s.assinou).map((s) => (s.papel === "lone" ? "lone" : "cliente") as "cliente" | "lone"))];
+    r.set(p.client_id, { desde: diaSP(p.enviado_em), falta, enviado });
+  }
+  return new Map([...r].map(([k, v]) => [k, { desde: v.desde, falta: v.falta }]));
+}
+
+export function montarClientesParaFinance(clientes: LinhaCliente[], saidas: LinhaSaida[], pendentes: LinhaContratoPendente[] = []): ClienteParaFinance[] {
+  const esperando = esperandoPorCliente(pendentes);
   const saidaPorCliente = new Map<string, LinhaSaida>();
   for (const s of saidas) {
     if (s.cancelado_em) continue;
@@ -102,6 +133,14 @@ export function montarClientesParaFinance(clientes: LinhaCliente[], saidas: Linh
       saida: s ? { estado: s.estado ?? "rascunho", iniciativa: s.iniciativa, motivo: curto(s.motivo), solicitadoEm: diaSP(s.solicitado_em), encerraEm: diaSP(s.encerra_em) } : null,
       leadId: c.source_lead_id ?? null,
       faixaFaturamento: c.faturamento_faixa ?? null,
+      contratoAssinadoEm: diaSP(c.contrato_assinado_em ?? null),
+      // Uma renovação enviada depois do assinado volta a "esperando"; o que é mais velho que a assinatura já fechou.
+      contratoEsperando: (() => {
+        const e = esperando.get(c.id);
+        const assinado = diaSP(c.contrato_assinado_em ?? null);
+        return e && (!assinado || (e.desde ?? "") > assinado) ? e : null;
+      })(),
+      cadastroPendente: c.draft_status === "pending_invite" ? "link" : c.draft_status === "awaiting_approval" ? "aprovacao" : null,
     };
   });
 }
