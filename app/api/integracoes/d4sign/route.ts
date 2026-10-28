@@ -64,6 +64,9 @@ export async function POST(req: NextRequest) {
     if (!conf.ok) {
       conferido = false;
       console.error(`[d4sign/webhook] código do aviso não confere com o segredo do painel (documento ${evento.uuid}, chegou ${conf.recebido}) — relendo na D4Sign mesmo assim`);
+      // 28/10: o Content-Hmac chegou AUSENTE. Os NOMES dos cabeçalhos (nunca os valores) dizem se a D4Sign manda o
+      // código com outro nome ou não manda nenhum.
+      if (conf.recebido === "ausente") console.error(`[d4sign/webhook] cabeçalhos recebidos: ${[...req.headers.keys()].sort().join(", ")}`);
       // A D4Sign manda um evento por assinatura e repete os que falham: o mesmo documento relido há menos de 1 min
       // não gasta outra chamada.
       if (await lidoHaPouco(evento.uuid)) {

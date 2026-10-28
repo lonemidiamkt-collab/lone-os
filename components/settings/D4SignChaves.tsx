@@ -135,9 +135,15 @@ export default function D4SignChaves() {
 
       {sit?.aviso?.segredoErrado && (
         <p role="alert" className="mb-4 rounded-lg border border-lone-warning-border bg-lone-warning-bg px-3 py-2 text-xs text-lone-warning">
-          O último aviso da D4Sign ({quando(sit.aviso.falhouEm)}) chegou com um código que não bate com o segredo colado aqui.
-          O Lone OS relê o contrato na D4Sign mesmo assim (até 4 por hora), mas cole de novo o <strong>Segredo do webhook</strong>:
-          copie o que aparece hoje na D4Sign (Gerenciar conta › Webhooks) — se gerar um novo lá, cole o novo aqui.
+          {sit.aviso.recebido === "ausente" ? (
+            <>O último aviso da D4Sign ({quando(sit.aviso.falhouEm)}) chegou <strong>sem o código de segurança</strong>. Nada se
+            perde: o Lone OS relê o contrato na D4Sign (até 4 por hora). Para a D4Sign mandar o código: Gerenciar conta ›
+            Webhooks › Configurações de webhooks › &quot;Gerar Secret Key HMAC&quot;, e cole a chave gerada em <strong>Segredo do webhook</strong>.</>
+          ) : (
+            <>O último aviso da D4Sign ({quando(sit.aviso.falhouEm)}) chegou com um código que não bate com o segredo colado aqui.
+            Nada se perde: o Lone OS relê o contrato na D4Sign (até 4 por hora). Cole de novo o <strong>Segredo do webhook</strong>:
+            o que aparece hoje na D4Sign (Gerenciar conta › Webhooks) — se gerar um novo lá, cole o novo aqui.</>
+          )}
         </p>
       )}
       {sit?.aviso && !sit.aviso.segredoErrado && sit.aviso.conferiuEm && (
