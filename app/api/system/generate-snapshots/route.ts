@@ -5,7 +5,8 @@ import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { buildSnapshot } from "@/lib/portal/buildSnapshot";
+import { gerarParaCache } from "@/lib/portal/snapshotCache";
+import type { PeriodKind } from "@/lib/portal/types";
 
 export async function POST(req: NextRequest) {
   const denied = requireCron(req);
@@ -23,68 +24,21 @@ export async function POST(req: NextRequest) {
 
   const now = new Date();
   const isFirstOfMonth = now.getDate() === 1;
+  const periodos: PeriodKind[] = isFirstOfMonth ? ["last_week", "last_month"] : ["last_week"];
 
-  let generated = 0;
-  const errors: string[] = [];
-  const indisponiveis: string[] = [];
+  // A Meta não respondeu: NÃO grava. Antes o zero era gravado por cima do dado bom do dia anterior —
+  // em 19/07 e 10/08 isso apagou o painel dos 22/25 clientes de uma vez, e o cron ainda respondeu
+  // "errors: 0". Painel pela metade também não apaga um completo (29/10/2026). As regras moram em
+  // gerarParaCache, as mesmas da visita e do warmup-snapshots.
+  Sentry.setTag("cron_endpoint", "true");
+  const lista = (clients as Array<{ id: string; nome_fantasia?: string; name: string }>).map((c) => ({ id: c.id, nome: c.nome_fantasia || c.name }));
+  const itens = await gerarParaCache(lista, () => periodos, now);
 
-  for (const c of clients as Array<{ id: string; nome_fantasia?: string; name: string }>) {
-    const clientName = c.nome_fantasia || c.name;
-    try {
-      Sentry.setContext("snapshot_client", { client_id: c.id, client_name: clientName });
-      Sentry.setTag("cron_endpoint", "true");
-      const snap = await buildSnapshot({ clientId: c.id, periodKind: "last_week", now });
-
-      // A Meta não respondeu: PULA a gravação. Antes o zero era gravado por cima do dado bom do
-      // dia anterior — em 19/07 e 10/08 isso apagou o painel dos 22/25 clientes de uma vez, e o
-      // cron ainda respondeu "errors: 0". Preservar o dado velho é sempre melhor que zerar.
-      if (snap.ads_status === "indisponivel") {
-        indisponiveis.push(clientName);
-        continue;
-      }
-
-      await supabaseAdmin
-        .from("client_report_snapshots")
-        .upsert(
-          {
-            client_id: c.id,
-            period_kind: "last_week",
-            period_start: snap.period.start,
-            period_end: snap.period.end,
-            data: snap,
-            generated_at: now.toISOString(),
-          },
-          { onConflict: "client_id,period_kind,period_start" },
-        );
-      generated++;
-
-      if (isFirstOfMonth) {
-        const snapMonth = await buildSnapshot({ clientId: c.id, periodKind: "last_month", now });
-        if (snapMonth.ads_status === "indisponivel") {
-          indisponiveis.push(`${clientName} (mês passado)`);
-          continue;
-        }
-        await supabaseAdmin
-          .from("client_report_snapshots")
-          .upsert(
-            {
-              client_id: c.id,
-              period_kind: "last_month",
-              period_start: snapMonth.period.start,
-              period_end: snapMonth.period.end,
-              data: snapMonth,
-              generated_at: now.toISOString(),
-            },
-            { onConflict: "client_id,period_kind,period_start" },
-          );
-        generated++;
-      }
-    } catch (err) {
-      const msg = `${clientName}: ${String(err)}`;
-      errors.push(msg);
-      console.error("[generate-snapshots]", msg);
-    }
-  }
+  const generated = itens.filter((i) => i.gravado).length;
+  const rotulo = (i: { cliente: string; periodo: PeriodKind }) => (i.periodo === "last_month" ? `${i.cliente} (mês passado)` : i.cliente);
+  const indisponiveis = itens.filter((i) => i.resultado === "indisponivel").map(rotulo);
+  const errors = itens.filter((i) => i.resultado === "erro").map((i) => `${rotulo(i)}: ${i.erro}`);
+  for (const e of errors) console.error("[generate-snapshots]", e);
 
   // Avisa o time. Sem isto a falha era invisível: o cron respondia HTTP 200 / "errors: 0" mesmo
   // tendo zerado todo mundo, e a gente só descobria quando um cliente reclamava do link.
@@ -116,6 +70,7 @@ export async function POST(req: NextRequest) {
     generated,
     errors: errors.length,
     unavailable: indisponiveis.length,
+    incompletos: itens.filter((i) => i.resultado === "incompleto").length,
     details: [...errors, ...indisponiveis.map((n) => `${n}: Meta indisponível`)],
   });
 }

@@ -9,7 +9,7 @@
 // mesmo desenho do painel comparativo do topo, "Ver todos os anúncios ativos", público com
 // percentuais, conteúdo que respeita o período e seletores sem o anel de foco "preso".
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
   BarChart3, ChevronDown, ClipboardList, Pause, Pin, Palette, RefreshCw, Star, Trophy, TrendingUp, Wallet, Zap,
@@ -137,6 +137,25 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
 
   const genAt = data?.generated_at && !atualizando ? fmtDataHora(data.generated_at) : null;
   const periodoDado: PeriodKind = data?.period?.kind ?? period;
+
+  // Painel pela metade: a Meta recusou os criativos ou a lista de anúncios (29/10/2026, 18 painéis
+  // de manhã). Antes a seção sumia calada. Agora avisa e busca de novo sozinha, em silêncio, até 2
+  // vezes — o servidor já está completando por trás (lib/portal/snapshotCache.ts).
+  const incompleto = !!data && !atualizando && !loading && data.ads_status !== "sem_conta"
+    && (data.ads_status === "parcial" || data.active_ads === null);
+  const periodoRef = useRef(period);
+  periodoRef.current = period;
+  const tentativasCompletar = useRef(0);
+  useEffect(() => { tentativasCompletar.current = 0; }, [periodoDado]);
+  useEffect(() => {
+    if (!incompleto || tentativasCompletar.current >= 2) return;
+    const t = setTimeout(async () => {
+      tentativasCompletar.current++;
+      const r = await chamar<SnapshotData>(`/api/portal/${token}/snapshot`, { period_kind: periodoDado });
+      if (r.ok && r.data && r.data.period?.kind === periodoRef.current) setData(r.data);
+    }, 20_000);
+    return () => clearTimeout(t);
+  }, [incompleto, periodoDado, token, data]);
   // O resultado segue o objetivo da campanha (N4): conversas, leads ou compras. Snapshot antigo = conversas.
   const tipoResultado = data?.result_kind ?? null;
   const palavras = palavrasDoResultado(tipoResultado);
@@ -169,7 +188,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   const datasPeriodo = per ? `${rotuloDia(per.start)} a ${rotuloDia(per.end)}, comparado com ${rotuloDia(per.previous_start)} a ${rotuloDia(per.previous_end)}.` : undefined;
 
   const mostraPublico = loading || !!demo?.gender || (demo?.age_ranges?.length ?? 0) > 0;
-  const mostraCriativos = loading || top.length > 0 || (ativos?.total ?? 0) > 0;
+  const mostraCriativos = loading || top.length > 0 || (ativos?.total ?? 0) > 0 || incompleto;
   const mostraTimeline = loading || actions.length > 0;
 
   return (
@@ -386,6 +405,16 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                       </div>
                       {!loading && ativos && ativos.total > 0 && per && (
                         <AnunciosAtivos lista={ativos} periodo={per.kind} tipoResultado={tipoResultado} />
+                      )}
+                      {incompleto && (
+                        <Aviso tom="neutro" role="status" acao={
+                          <button onClick={() => fetchPeriod(period)}
+                            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-xs font-medium text-foreground hover:bg-accent">
+                            <RefreshCw size={13} aria-hidden /> Tentar de novo
+                          </button>
+                        }>
+                          Alguns anúncios não carregaram agora. Já estamos buscando de novo — os números acima estão certos.
+                        </Aviso>
                       )}
                     </motion.section>
                   )}

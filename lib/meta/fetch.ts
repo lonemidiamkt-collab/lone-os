@@ -71,12 +71,19 @@ export async function metaJson<T = Record<string, unknown>>(
       if (res.ok) return (await res.json()) as T;
 
       const corpo = await res.json().catch(() => ({}) as Record<string, unknown>);
-      const erroMeta = (corpo as { error?: { code?: number; message?: string } }).error;
+      const erroMeta = (corpo as { error?: { code?: number; message?: string; error_subcode?: number; error_user_msg?: string; fbtrace_id?: string } }).error;
       const code = typeof erroMeta?.code === "number" ? erroMeta.code : null;
       const retryable = ehTemporario(res.status, code);
+      // Subcódigo, frase da Meta e fbtrace no texto (29/10/2026): "code 100 — Invalid parameter"
+      // sozinho não dizia qual parâmetro nem se era a Meta oscilando.
+      const detalhe = [
+        erroMeta?.error_subcode ? `subcode ${erroMeta.error_subcode}` : null,
+        erroMeta?.error_user_msg ? erroMeta.error_user_msg.slice(0, 200) : null,
+        erroMeta?.fbtrace_id ? `fbtrace ${erroMeta.fbtrace_id}` : null,
+      ].filter(Boolean).join(" · ");
 
       ultimoErro = new MetaApiError(
-        `${opts.label}: HTTP ${res.status}${code ? ` code ${code}` : ""} — ${erroMeta?.message ?? "sem detalhe"}`,
+        `${opts.label}: HTTP ${res.status}${code ? ` code ${code}` : ""} — ${erroMeta?.message ?? "sem detalhe"}${detalhe ? ` (${detalhe})` : ""}`,
         { status: res.status, code, retryable },
       );
 

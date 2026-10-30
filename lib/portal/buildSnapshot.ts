@@ -407,8 +407,8 @@ export async function buildSnapshot(params: {
   });
 
   // ── Anúncios ativos (todos, limitado) ─────────────────────────────────────
-  // Falhou → null ("lista indisponível agora"), sem mexer no ads_status: é um extra, e contaminar o
-  // status impediria o cache do snapshot inteiro por causa dele.
+  // Falhou → null ("lista indisponível agora"), sem mexer no ads_status: é um extra. Mas o snapshot
+  // conta como incompleto (snapshotCompleto, em ./snapshotCache) e se completa sozinho na visita.
   let active_ads: ActiveAdsList | null = null;
   if (activeAdsR.status === "fulfilled") {
     const thumbPaths = new Map(top_creatives.map((c) => [c.id, c.thumbnail_path]));

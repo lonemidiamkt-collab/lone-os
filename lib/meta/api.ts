@@ -152,9 +152,11 @@ export async function getAccountInsights(
     limit: "100",
   });
 
-  const res = await fetch(`${url}?${params}`);
-  if (!res.ok) throw new Error(`Failed to fetch account insights for ${accountId}`);
-  const data = await res.json();
+  // metaJson (timeout, nova tentativa no erro temporário) em vez de fetch cru: a vigilância de 15 em
+  // 15 min (defense-scan) perdia contas inteiras por um soluço de rede ou um 503 da Meta (29/10/2026).
+  const data = await metaJson<{ data?: MetaInsight[] }>(`${url}?${params}`, {
+    label: `insights da conta ${accountId} ${sinceStr}→${untilStr}`,
+  });
   return data.data ?? [];
 }
 

@@ -2,6 +2,7 @@
 // (a janela dele termina ontem). Sem isso a Defesa comparava ontem com o ritmo de hoje.
 
 import { getGraphUrl } from "@/lib/meta/config";
+import { metaJson } from "@/lib/meta/fetch";
 import type { getAccountInsights } from "@/lib/meta/api";
 
 export type MetaInsight = Awaited<ReturnType<typeof getAccountInsights>>[number];
@@ -19,8 +20,9 @@ export async function buscarInsightHoje(
     action_attribution_windows: '["7d_click"]',
     time_increment: "1",
   });
-  const res = await fetch(`${getGraphUrl(`/${accountId}/insights`)}?${params}`);
-  if (!res.ok) throw new Error(`Meta insights de hoje: HTTP ${res.status}`);
-  const data = (await res.json()) as { data?: MetaInsight[] };
+  // Timeout e nova tentativa no erro temporário (503 e "fetch failed" derrubavam a conta da rodada).
+  const data = await metaJson<{ data?: MetaInsight[] }>(`${getGraphUrl(`/${accountId}/insights`)}?${params}`, {
+    label: `Meta insights de hoje ${accountId}`,
+  });
   return (data.data ?? []).find((r) => r.date_start === hoje) ?? null;
 }

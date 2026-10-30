@@ -70,8 +70,13 @@ export function podeRodar(c: Pick<ConfigJob, "enabled" | "paused_until"> | null 
  * - sem-registro: roda direto pelo crontab (script) e nunca reportou execução;
  * - falhou: a última execução de verdade (não pulada, não ensaio) deu erro;
  * - parado: nenhum sucesso há mais de maxSilencioHoras, contando a partir do mais recente entre o
- *   último sucesso, a retomada (religar/fim da pausa) e o início do monitoramento — para a Central
- *   recém-instalada não acusar tudo de "parado" na primeira hora.
+ *   último sucesso, a retomada (religar/fim da pausa), o início do monitoramento — para a Central
+ *   recém-instalada não acusar tudo de "parado" na primeira hora — e o dia em que a Central viu o
+ *   job pela primeira vez (`vistoEm`).
+ *
+ * `vistoEm` (29/10/2026): rotina nova contava o silêncio desde o início do monitoramento (agosto).
+ * As 4 criadas entre 19 e 26/10 — mensais e semanal, sem a primeira data ainda — viraram "parado"
+ * no dia em que entraram, e o vigia avisou o grupo administrativo de um erro que não existia.
  */
 export function calcularSaude(
   a: Automacao,
@@ -79,13 +84,30 @@ export function calcularSaude(
   c: ConfigJob | null | undefined,
   agora: Date,
   inicioMonitoramento: string | null,
+  vistoEm: string | null = null,
 ): Saude {
   if (a.controlavel && c && (c.enabled === false || estaPausado(c, agora))) return "desligado";
   if (!r && !a.controlavel) return "sem-registro";
   if (r?.ultima_real_ok === false) return "falhou";
-  const refs = [ms(r?.ultimo_sucesso_em), ms(c?.paused_until), ms(inicioMonitoramento)].filter((n) => !Number.isNaN(n));
+  const refs = [ms(r?.ultimo_sucesso_em), ms(c?.paused_until), ms(inicioMonitoramento), ms(vistoEm)].filter((n) => !Number.isNaN(n));
   const ref = refs.length ? Math.max(...refs) : agora.getTime();
   return agora.getTime() - ref > a.maxSilencioHoras * 3600_000 ? "parado" : "ok";
+}
+
+/**
+ * Os jobs do registro que ainda não tiveram sucesso e a Central nunca viu ganham a data de hoje.
+ * Devolve o mapa novo, ou null se nada mudou (aí não precisa gravar). Pura (testada).
+ */
+export function marcarVistos(
+  registro: Pick<Automacao, "id">[],
+  resumos: Pick<ResumoJob, "job" | "ultimo_sucesso_em">[],
+  vistos: Record<string, string>,
+  agora: Date,
+): Record<string, string> | null {
+  const comSucesso = new Set(resumos.filter((r) => r.ultimo_sucesso_em).map((r) => r.job));
+  const novos = registro.filter((a) => !comSucesso.has(a.id) && !vistos[a.id]);
+  if (!novos.length) return null;
+  return { ...vistos, ...Object.fromEntries(novos.map((a) => [a.id, agora.toISOString()])) };
 }
 
 export function montarLinhas(
@@ -94,6 +116,7 @@ export function montarLinhas(
   agora: Date,
   inicioMonitoramento: string | null,
   registro: Automacao[] = AUTOMACOES,
+  vistos: Record<string, string> = {},
 ): LinhaPainel[] {
   const porJob = new Map(resumos.map((r) => [r.job, r]));
   const cfgPorJob = new Map(configs.map((c) => [c.job, c]));
@@ -104,7 +127,7 @@ export function montarLinhas(
     try { proxima = proximaDeVarias(cronsDe(a), agora).toISOString(); } catch { proxima = null; }
     return {
       ...a,
-      saude: calcularSaude(a, r, c, agora, inicioMonitoramento),
+      saude: calcularSaude(a, r, c, agora, inicioMonitoramento, vistos[a.id] ?? null),
       proxima,
       ultima: r?.ultima_em
         ? { em: r.ultima_em, ok: r.ultima_ok, pulado: !!r.ultima_skipped, status: r.ultima_status, duracaoMs: r.ultima_duracao_ms }

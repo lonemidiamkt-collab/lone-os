@@ -1,7 +1,8 @@
 // lib/automacoes/painel.ts — lê o banco e monta a Central (usado pela rota e pelo vigia). Só servidor.
 
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { montarLinhas, podeRodar, type ConfigJob, type LinhaPainel, type ResumoJob } from "./saude";
+import { marcarVistos, montarLinhas, podeRodar, type ConfigJob, type LinhaPainel, type ResumoJob } from "./saude";
+import { AUTOMACOES } from "./registro";
 import { ErroDaCentral, MIGRACAO_PENDENTE } from "./execucao";
 import { execucoesEmAndamento } from "./trava-execucao";
 
@@ -44,6 +45,24 @@ async function motivosDosPulos(jobs: string[]): Promise<Record<string, string>> 
   return out;
 }
 
+// Quando a Central viu cada job sem sucesso pela primeira vez — a rotina nova conta o silêncio daí,
+// não do início do monitoramento (ver calcularSaude). Mapa {job: ISO} em agency_settings.
+const CHAVE_VISTOS = "automacoes_vistas_em";
+
+/** Lê o mapa e grava os jobs novos. Best-effort: sem ele a Central volta à regra antiga, não quebra. */
+async function vistosAtualizados(resumos: ResumoJob[], agora: Date): Promise<Record<string, string>> {
+  let vistos: Record<string, string> = {};
+  const { data, error } = await supabaseAdmin.from("agency_settings").select("value").eq("key", CHAVE_VISTOS).maybeSingle();
+  if (error) { console.error("[automacoes] não li a data em que cada rotina apareceu:", error.message); return vistos; }
+  try { vistos = data?.value ? (JSON.parse(data.value as string) as Record<string, string>) : {}; } catch { vistos = {}; }
+  const novo = marcarVistos(AUTOMACOES, resumos, vistos, agora);
+  if (!novo) return vistos;
+  const { error: errGrava } = await supabaseAdmin.from("agency_settings")
+    .upsert({ key: CHAVE_VISTOS, value: JSON.stringify(novo), updated_by: "sistema", updated_at: agora.toISOString() }, { onConflict: "key" });
+  if (errGrava) console.error("[automacoes] não gravei a data das rotinas novas:", errGrava.message);
+  return novo;
+}
+
 export async function montarPainel(agora = new Date()): Promise<{ linhas: LinhaPainel[]; configs: ConfigJob[]; inicioMonitoramento: string | null }> {
   const [resumo, configs, primeira, rodando] = await Promise.all([
     supabaseAdmin.rpc("automation_resumo"),
@@ -54,7 +73,9 @@ export async function montarPainel(agora = new Date()): Promise<{ linhas: LinhaP
   if (resumo.error) throw erroDoBanco(resumo.error);
   if (primeira.error) throw erroDoBanco(primeira.error);
   const inicio = (primeira.data?.[0]?.finished_at as string | undefined) ?? null;
-  const linhas = montarLinhas((resumo.data ?? []) as ResumoJob[], configs, agora, inicio);
+  const resumos = (resumo.data ?? []) as ResumoJob[];
+  const vistos = await vistosAtualizados(resumos, agora);
+  const linhas = montarLinhas(resumos, configs, agora, inicio, AUTOMACOES, vistos);
   const motivos = await motivosDosPulos(linhas.filter((l) => l.ultima?.pulado).map((l) => l.id));
   return {
     linhas: linhas.map((l) => ({ ...l, rodandoDesde: rodando[l.id] ?? null, ultimaMotivo: l.ultima?.pulado ? motivos[l.id] ?? null : null })),

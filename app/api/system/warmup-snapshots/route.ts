@@ -4,77 +4,46 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { buildSnapshot } from "@/lib/portal/buildSnapshot";
+import { gerarParaCache } from "@/lib/portal/snapshotCache";
 import type { PeriodKind } from "@/lib/portal/types";
 
 const PERIODS: PeriodKind[] = ["last_week", "last_2_weeks", "this_month", "last_month"];
-const SLEEP_MS = 500;
 
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
+// Mesmas regras da visita (lib/portal/snapshotCache.ts → gerarParaCache): o que sai pela metade é
+// tentado de novo e não apaga um painel completo. Antes daqui saía gravado tudo que não fosse
+// "indisponível" — em 29/10/2026, 18 painéis pela metade valeram o dia inteiro.
 export async function POST(req: NextRequest) {
   const denied = requireCron(req);
   if (denied) return denied;
 
-  const { data: clients } = await supabaseAdmin
+  const { data: clients, error } = await supabaseAdmin
     .from("clients")
     .select("id, nome_fantasia, name")
     .eq("public_report_enabled", true)
     .is("public_report_token_revoked_at", null);
+  if (error) return NextResponse.json({ ok: false, error: `Não consegui ler os clientes (${error.message}).` }, { status: 500 });
 
   if (!clients || clients.length === 0) {
     return NextResponse.json({ clients_processed: 0, snapshots_generated: 0, errors: [] });
   }
 
-  const now = new Date();
-  const log: { client: string; period: PeriodKind; status: "ok" | "error"; error?: string }[] = [];
+  const lista = (clients as Array<{ id: string; nome_fantasia?: string; name: string }>).map((c) => ({ id: c.id, nome: c.nome_fantasia || c.name }));
+  const itens = await gerarParaCache(lista, () => PERIODS, new Date());
 
-  for (const c of clients as Array<{ id: string; nome_fantasia?: string; name: string }>) {
-    const clientName = c.nome_fantasia || c.name;
-
-    for (const period of PERIODS) {
-      try {
-        const snap = await buildSnapshot({ clientId: c.id, periodKind: period, now });
-
-        // Mesma regra do generate-snapshots: zero por falha da Meta não vira cache.
-        if (snap.ads_status === "indisponivel") {
-          log.push({ client: clientName, period, status: "error", error: "Meta indisponível" });
-          continue;
-        }
-
-        await supabaseAdmin
-          .from("client_report_snapshots")
-          .upsert(
-            {
-              client_id: c.id,
-              period_kind: period,
-              period_start: snap.period.start,
-              period_end: snap.period.end,
-              data: snap,
-              generated_at: now.toISOString(),
-            },
-            { onConflict: "client_id,period_kind,period_start" },
-          );
-        log.push({ client: clientName, period, status: "ok" });
-      } catch (err) {
-        const error = String(err);
-        log.push({ client: clientName, period, status: "error", error });
-        console.error(`[warmup-snapshots] ${clientName} / ${period}: ${error}`);
-      }
-    }
-
-    await sleep(SLEEP_MS);
+  for (const i of itens) {
+    if (i.resultado === "erro") console.error(`[warmup-snapshots] ${i.cliente} / ${i.periodo}: ${i.erro}`);
   }
-
-  const success = log.filter((l) => l.status === "ok").length;
-  const failed = log.filter((l) => l.status === "error").length;
+  const conta = (r: string) => itens.filter((i) => i.resultado === r).length;
 
   return NextResponse.json({
-    clients_processed: clients.length,
-    snapshots_generated: success,
-    snapshots_failed: failed,
-    log,
+    clients_processed: lista.length,
+    snapshots_generated: itens.filter((i) => i.gravado).length,
+    snapshots_failed: conta("indisponivel") + conta("erro"),
+    completos: conta("completo"),
+    incompletos: conta("incompleto"),
+    repetidos: itens.filter((i) => i.tentativas > 1).length,
+    log: itens.filter((i) => i.resultado !== "completo").map((i) => ({
+      client: i.cliente, period: i.periodo, status: i.resultado, tentativas: i.tentativas, gravado: i.gravado, error: i.erro,
+    })),
   });
 }
