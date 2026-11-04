@@ -216,5 +216,25 @@ export async function POST(
   // vez). Link revogado de propósito continua revogado. Desfazer não é "voltar": o cliente nunca saiu.
   if (d.action === "reactivate" && !desfazer) dispararLinkDoPortal(id, "reativacao");
 
-  return NextResponse.json({ success: true, client: data });
+  // Lone Academy (04/11/2026): encerrar fecha o acesso do time do cliente; reativar reabre.
+  // A Academy só existe para quem foi liberado lá — "não tem" (404) não é erro. Falha aparece no
+  // retorno (e no log), mas não desfaz o arquivamento (ver lib/academy/cliente.ts).
+  const academy = await sincronizarAcademy(id, d.action === "archive" ? "closed" : "active");
+
+  return NextResponse.json({ success: true, client: data, academy });
+}
+
+async function sincronizarAcademy(id: string, situacao: "closed" | "active"): Promise<{ ok: boolean; erro?: string } | null> {
+  const { academyConfigurada, situacaoNaAcademy, statusNaAcademy } = await import("@/lib/academy/cliente");
+  if (!academyConfigurada()) return null;
+  if (situacao === "active") {
+    // Reativar só reabre o que o encerramento fechou: pausa feita à mão na Academy fica como está.
+    const st = await statusNaAcademy(id);
+    if (!st.ok) { console.error("[lifecycle] academy status:", st.erro); return { ok: false, erro: st.erro ?? undefined }; }
+    if (!st.data?.existe || st.data.situacao !== "closed") return null;
+  }
+  const r = await situacaoNaAcademy(id, situacao);
+  if (r.ok || r.status === 404) return r.ok ? { ok: true } : null;
+  console.error("[lifecycle] academy situação:", r.erro);
+  return { ok: false, erro: r.erro ?? undefined };
 }

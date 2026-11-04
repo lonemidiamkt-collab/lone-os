@@ -56,6 +56,7 @@ export const SECAO = {
   contrato: "contrato",
   onboarding: "onboarding",
   cicloDeVida: "ciclo-de-vida",
+  academy: "lone-academy",
 } as const;
 
 export interface Destino { aba: AbaFicha; secao?: string }

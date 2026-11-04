@@ -12,6 +12,7 @@ import type { ClientPatch } from "@/stores/useClientsStore";
 import type { OnboardingItem } from "@/lib/types";
 import CicloDeVida from "./CicloDeVida";
 import ContaMetaAds from "./ContaMetaAds";
+import LoneAcademy from "./LoneAcademy";
 import OnboardingChecklist from "./OnboardingChecklist";
 import ObservacaoDoCadastro from "./ObservacaoDoCadastro";
 import RadarRenovacao from "@/components/client/RadarRenovacao";
@@ -82,6 +83,12 @@ export default function AbaAdmin({ ctx, onboarding, dadosCompletos, updateClient
       <Secao id={SECAO.onboarding} titulo="Onboarding" descricao="O setup do cliente novo, por frente.">
         <OnboardingChecklist client={c} itens={onboarding} currentUser={currentUser} />
       </Secao>
+
+      {isAdmin && (
+        <Secao id={SECAO.academy} titulo="Lone Academy" descricao="Treinamento do time do cliente. A gestão libera por cliente; o dono recebe o acesso por e-mail.">
+          <LoneAcademy client={c} />
+        </Secao>
+      )}
 
       {isAdmin && (
         <Secao id={SECAO.cicloDeVida} titulo="Ciclo de vida">
