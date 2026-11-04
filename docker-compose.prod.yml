@@ -90,6 +90,10 @@ services:
       # Limite de chamadas por hora da conta (padrão 10) e os e-mails com que os sócios assinam na D4Sign.
       D4SIGN_LIMITE_HORA: ${D4SIGN_LIMITE_HORA:-}
       D4SIGN_EMAILS_LONE: ${D4SIGN_EMAILS_LONE:-}
+      # Lone Academy (04/11/2026): liberar a Academy na ficha do cliente (lib/academy/cliente.ts). O segredo é o
+      # LONE_OS_SHARED_SECRET da Academy (/opt/lone-academy/deploy/.env). Vazio = a ficha diz "integração desligada".
+      ACADEMY_URL: ${ACADEMY_URL:-}
+      ACADEMY_SHARED_SECRET: ${ACADEMY_SHARED_SECRET:-}
       # E-mails PESSOAIS da equipe que o filtro de lixo trata como "teste da equipe" (não moram no código).
       CRM_EMAILS_EQUIPE: ${CRM_EMAILS_EQUIPE:-}
       # Grupos SANDBOX de teste: ali o agente trata msg da equipe como pedido e classifica mesmo
