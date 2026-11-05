@@ -9,6 +9,7 @@
 // mantém autenticado (escopos instagram_basic + pages_read_engagement). Testada em perfis reais do
 // mercado: portobello (663k seguidores), leroymerlinbrasil (1,9M), telhanorte (193k),
 // votorantimcimentos (148k) e cec_casaeconstrucao (4k) responderam todos.
+import { GRAPH_URL } from "@/lib/meta/config";
 
 export interface PerfilPublico {
   username: string;
@@ -48,7 +49,7 @@ export class PerfilInacessivel extends Error {
   }
 }
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+const GRAPH = GRAPH_URL;
 
 export function metaProvider(token: string, igUserIdDaAgencia: string): InstagramProvider {
   return {

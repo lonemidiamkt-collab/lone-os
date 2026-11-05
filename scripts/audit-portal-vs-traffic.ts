@@ -7,13 +7,14 @@
 // Requer: SUPABASE_SERVICE_ROLE_KEY e META_TOKEN (ou meta_token no banco) no .env.local
 
 import { createClient } from "@supabase/supabase-js";
+import { GRAPH_URL } from "../lib/meta/config";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
-const GRAPH = "https://graph.facebook.com/v20.0";
+const GRAPH = GRAPH_URL;
 const DAYS = 30;
 const THRESHOLD_PCT = 5;
 

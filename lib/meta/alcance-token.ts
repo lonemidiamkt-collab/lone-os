@@ -1,8 +1,9 @@
 // lib/meta/alcance-token.ts — lê na Meta o que um token alcança (perfil, permissões, contas). Só servidor.
 // Usado pela troca de token (app/api/meta/reconectar) ANTES de gravar — auditoria 9.5, 25/10/2026.
 // (A conferência diária do token mora em lib/meta/conferir-token.ts.)
+import { GRAPH_URL } from "./config";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+const GRAPH = GRAPH_URL;
 
 export type Resultado<T> = { ok: true; valor: T } | { ok: false; erro: string };
 

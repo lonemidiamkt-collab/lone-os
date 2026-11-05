@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { GRAPH_URL } from "@/lib/meta/config";
 
 export async function POST(req: NextRequest) {
   // SEGURANÇA: só admin logado pode trocar token (usa META_APP_SECRET p/ estender p/ 60d).
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
   });
 
   const res = await fetch(
-    `https://graph.facebook.com/v21.0/oauth/access_token?${params}`
+    `${GRAPH_URL}/oauth/access_token?${params}`
   );
 
   const data = await res.json();

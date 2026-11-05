@@ -1,10 +1,19 @@
 // Meta Ads API configuration
 
+/**
+ * Versão da Graph API usada pelo projeto inteiro (Marketing API, Instagram, Páginas, OAuth). UM lugar só:
+ * antes cada arquivo tinha a própria `const GRAPH` (17 em v21.0, 2 em v20.0). A v21.0 da Graph API para
+ * de responder em 21/01/2027 (changelog da Meta, conferido em 04/11/2026). tests/meta-versao.test.ts
+ * trava versão escrita à mão fora daqui.
+ */
+export const META_GRAPH_VERSION = "v25.0";
+export const GRAPH_URL = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
+
 export const META_CONFIG = {
   appId: process.env.META_APP_ID ?? process.env.NEXT_PUBLIC_META_APP_ID ?? "",
   appSecret: process.env.META_APP_SECRET ?? "",
   redirectUri: process.env.META_REDIRECT_URI ?? "http://localhost:3000/api/meta/callback",
-  graphApiVersion: "v21.0",
+  graphApiVersion: META_GRAPH_VERSION,
   graphApiBase: "https://graph.facebook.com",
   scopes: [
     "ads_read",

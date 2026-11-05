@@ -7,6 +7,7 @@ import { fetchAccountBalances, detectAccountType } from "@/lib/meta/account-bala
 import { requireCronOrUser } from "@/lib/api/cron-guard";
 import { descreverDono, type DonoConta } from "@/lib/clients/conta-meta";
 import { donosDaConta } from "@/lib/clients/conta-meta-server";
+import { GRAPH_URL } from "@/lib/meta/config";
 
 async function getMetaToken(): Promise<string | null> {
   const { data } = await supabaseAdmin
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch Business accounts accessible by the token
-    const meUrl = `https://graph.facebook.com/v21.0/me/adaccounts?fields=id,name,account_status,currency,amount_spent,balance,spend_cap,funding_source_details&limit=200&access_token=${token}`;
+    const meUrl = `${GRAPH_URL}/me/adaccounts?fields=id,name,account_status,currency,amount_spent,balance,spend_cap,funding_source_details&limit=200&access_token=${token}`;
     const meRes = await fetch(meUrl);
     const meJson = await meRes.json();
 

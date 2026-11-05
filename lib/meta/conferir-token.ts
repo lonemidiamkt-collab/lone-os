@@ -4,8 +4,9 @@
 // ("Token OK", "Token sem data de expiração registrada"), e a Central mostrava verde com a sincronização parada.
 // Agora ela pergunta à própria Graph API se o token funciona e decide aqui (puro, testado): `ok` só com o token
 // funcionando; vencido, recusado pela Meta ou não conferido = `ok: false` com o motivo.
+import { GRAPH_URL } from "./config";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+const GRAPH = GRAPH_URL;
 
 export type RespostaGraph =
   | { tipo: "valido" }

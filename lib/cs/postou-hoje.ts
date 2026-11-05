@@ -14,8 +14,9 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
+import { GRAPH_URL } from "@/lib/meta/config";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+const GRAPH = GRAPH_URL;
 
 export interface StatusPostagem {
   cliente: string;

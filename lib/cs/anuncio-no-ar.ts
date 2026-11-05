@@ -14,8 +14,9 @@
 // NÃO CONFUNDIR "SEM ANÚNCIO" COM "NÃO SEI". Conta sem acesso, token vencido ou API fora do ar
 // devolvem `indefinido` — nunca "não está anunciando". Acusar o Julio de não subir campanha por
 // causa de um 403 da Meta destrói a confiança no aviso inteiro.
+import { GRAPH_URL } from "@/lib/meta/config";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+const GRAPH = GRAPH_URL;
 
 export type EstadoAnuncio = "no_ar" | "sem_anuncio" | "indefinido";
 

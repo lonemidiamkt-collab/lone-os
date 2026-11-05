@@ -22,6 +22,7 @@ import { getServerUser } from "@/lib/supabase/auth-server";
 import { getMetaToken } from "@/lib/traffic/sync-core";
 import { contasDoToken, escoposConcedidos, perfilDoToken } from "@/lib/meta/alcance-token";
 import { compararAlcance, escoposFaltando, trocaArriscada, avisosDaTroca, type PreviaTroca } from "@/lib/meta/troca-token";
+import { GRAPH_URL } from "@/lib/meta/config";
 
 async function estender(curto: string): Promise<{ ok: true; token: string; expiresIn: number } | { ok: false; erro: string }> {
   const appId = process.env.NEXT_PUBLIC_META_APP_ID ?? process.env.META_APP_ID;
@@ -29,7 +30,7 @@ async function estender(curto: string): Promise<{ ok: true; token: string; expir
   if (!appId || !secret) return { ok: false, erro: "META_APP_SECRET não configurado no servidor" };
   const p = new URLSearchParams({ grant_type: "fb_exchange_token", client_id: appId, client_secret: secret, fb_exchange_token: curto });
   try {
-    const res = await fetch(`https://graph.facebook.com/v21.0/oauth/access_token?${p}`, { signal: AbortSignal.timeout(20_000) });
+    const res = await fetch(`${GRAPH_URL}/oauth/access_token?${p}`, { signal: AbortSignal.timeout(20_000) });
     const d = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error?: { message?: string } };
     if (!res.ok || !d.access_token) return { ok: false, erro: d.error?.message ?? `HTTP ${res.status}` };
     return { ok: true, token: d.access_token, expiresIn: d.expires_in ?? 60 * 86400 };

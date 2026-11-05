@@ -11,8 +11,9 @@
 // todos. O limite de 10 é da Meta.
 
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { GRAPH_URL } from "./config";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+const GRAPH = GRAPH_URL;
 const MAX_CARROSSEL = 10;
 /** Limites de proporção do feed do Instagram: retrato 4:5 até paisagem 1.91:1. */
 const RAZAO_MIN = 0.8;

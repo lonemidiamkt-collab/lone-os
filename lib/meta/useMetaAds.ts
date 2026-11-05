@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { ROTA_CONEXAO_META } from "@/lib/trafego/anuncios";
+import { GRAPH_URL, META_GRAPH_VERSION } from "./config";
 
 export class TokenExpiredError extends Error {
   constructor(message: string) {
@@ -207,7 +208,7 @@ export function useMetaConnection() {
       scope: SCOPES,
       response_type: "token",
     });
-    window.location.href = `https://www.facebook.com/v21.0/dialog/oauth?${params}`;
+    window.location.href = `https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth?${params}`;
   }, []);
 
   // Desconectar que falha NÃO finge que desconectou (antes o erro só ia ao console).
@@ -261,7 +262,7 @@ export async function fetchAdAccounts(token: string) {
     fields: "id,name,account_id,currency,account_status",
     limit: "100",
   });
-  const personalRes = await fetch(`https://graph.facebook.com/v21.0/me/adaccounts?${personalParams}`);
+  const personalRes = await fetch(`${GRAPH_URL}/me/adaccounts?${personalParams}`);
   if (!personalRes.ok) {
     const err = await personalRes.json().catch(() => ({}));
     if (isMetaAuthError(personalRes.status, err)) {
@@ -285,7 +286,7 @@ export async function fetchAdAccounts(token: string) {
       fields: "id,name",
       limit: "100",
     });
-    const bizRes = await fetch(`https://graph.facebook.com/v21.0/me/businesses?${bizParams}`);
+    const bizRes = await fetch(`${GRAPH_URL}/me/businesses?${bizParams}`);
     if (bizRes.ok) {
       const bizData = await bizRes.json();
       const businesses = bizData.data ?? [];
@@ -298,7 +299,7 @@ export async function fetchAdAccounts(token: string) {
               fields: "id,name,account_id,currency,account_status",
               limit: "100",
             });
-            const accRes = await fetch(`https://graph.facebook.com/v21.0/${biz.id}/owned_ad_accounts?${accParams}`);
+            const accRes = await fetch(`${GRAPH_URL}/${biz.id}/owned_ad_accounts?${accParams}`);
             if (accRes.ok) {
               const accData = await accRes.json();
               for (const acc of accData.data ?? []) {
@@ -313,7 +314,7 @@ export async function fetchAdAccounts(token: string) {
               fields: "id,name,account_id,currency,account_status",
               limit: "100",
             });
-            const clientRes = await fetch(`https://graph.facebook.com/v21.0/${biz.id}/client_ad_accounts?${clientParams}`);
+            const clientRes = await fetch(`${GRAPH_URL}/${biz.id}/client_ad_accounts?${clientParams}`);
             if (clientRes.ok) {
               const clientData = await clientRes.json();
               for (const acc of clientData.data ?? []) {

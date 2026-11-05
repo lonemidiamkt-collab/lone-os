@@ -4,8 +4,9 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { GRAPH_URL } from "@/lib/meta/config";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+const GRAPH = GRAPH_URL;
 const FIELDS = "id,name,instagram_business_account%7Bid,username,followers_count%7D";
 
 async function requireAdmin(req: NextRequest) {

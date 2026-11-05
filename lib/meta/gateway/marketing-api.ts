@@ -3,8 +3,9 @@
 
 import { resultadoDaCampanha } from "@/lib/meta/resultado";
 import type { CapacidadeMeta, CriativoAnuncio, InsightEntidade, NivelEntidade, ProviderMeta } from "./index";
+import { GRAPH_URL } from "@/lib/meta/config";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+const GRAPH = GRAPH_URL;
 
 interface LinhaGraph {
   campaign_id?: string; campaign_name?: string;

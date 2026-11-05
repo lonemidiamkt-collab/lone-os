@@ -8,8 +8,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getDateRangeBRT } from "@/lib/meta/timezone";
+import { GRAPH_URL } from "@/lib/meta/config";
 
-const GRAPH = "https://graph.facebook.com/v20.0";
+const GRAPH = GRAPH_URL;
 const THRESHOLD_PCT = 5;
 
 async function accountSpend(accountId: string, token: string, since: string, until: string): Promise<number> {

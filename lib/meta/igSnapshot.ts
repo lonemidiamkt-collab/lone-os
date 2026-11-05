@@ -5,8 +5,9 @@
 
 import { after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { GRAPH_URL } from "./config";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+const GRAPH = GRAPH_URL;
 // Conta da agência (@lonemidia) que faz o business_discovery de perfis públicos que NÃO estão no
 // nosso Business Manager (ex.: cliente com IG comercial mas Página fora do BM da agência).
 const AGENCY_IG_ID = process.env.META_AGENCY_IG_ID || "17841413649646681";

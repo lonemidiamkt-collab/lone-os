@@ -15,6 +15,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { GRAPH_URL } from "../lib/meta/config";
 
 function loadEnv(path: string): Record<string, string> {
   if (!existsSync(path)) return {};
@@ -143,7 +144,7 @@ async function main() {
   // 2. Fetch ad accounts
   interface AdAccount { id: string; name: string; account_id: string; account_status: number }
   const adAccounts: AdAccount[] = [];
-  let next: string | null = `https://graph.facebook.com/v21.0/me/adaccounts?fields=id,name,account_id,account_status&limit=100&access_token=${token}`;
+  let next: string | null = `${GRAPH_URL}/me/adaccounts?fields=id,name,account_id,account_status&limit=100&access_token=${token}`;
   while (next) {
     const r: Response = await fetch(next);
     if (!r.ok) {

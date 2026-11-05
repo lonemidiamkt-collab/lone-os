@@ -16,6 +16,7 @@
 // deixa o cliente sem entrega.
 
 import { metaJson } from "@/lib/meta/fetch";
+import { GRAPH_URL } from "@/lib/meta/config";
 
 export interface ProvasCliente {
   /** Artes com entrega registrada. As "3 fixadas" precisam de 3. */
@@ -49,7 +50,7 @@ export async function contaAcessivel(adAccountId: string, token: string): Promis
   const id = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
   try {
     await metaJson(
-      `https://graph.facebook.com/v21.0/${id}?fields=id,account_status&access_token=${encodeURIComponent(token)}`,
+      `${GRAPH_URL}/${id}?fields=id,account_status&access_token=${encodeURIComponent(token)}`,
       { label: `setup:acesso:${id}`, tentativas: 2 },
     );
     return true;

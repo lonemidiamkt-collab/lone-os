@@ -7,6 +7,7 @@
 import { countMessagesFromActions } from "@/lib/meta/messages";
 import { metaJson } from "@/lib/meta/fetch";
 import { lerPublico, type LinhaDemografia } from "@/lib/meta/publico";
+import { GRAPH_URL } from "./config";
 
 export class TokenExpiredError extends Error {
   constructor(message: string) {
@@ -76,7 +77,7 @@ export async function fetchActiveCampaignCount(
 ): Promise<{ active: number; total: number } | null> {
   try {
     const params = new URLSearchParams({ access_token: token, fields: "effective_status", limit: "200" });
-    const res = await fetch(`https://graph.facebook.com/v21.0/${accountId}/campaigns?${params}`);
+    const res = await fetch(`${GRAPH_URL}/${accountId}/campaigns?${params}`);
     if (!res.ok) return null;
     const data = await res.json();
     const camps = (data.data ?? []) as Array<{ effective_status?: string }>;
@@ -112,7 +113,7 @@ export async function fetchAccountReach(
     });
     // Segue devolvendo null em falha (o chamador tem fallback), mas agora com timeout e retry:
     // sem timeout, uma engasgada da Meta segurava a página do cliente até o socket morrer.
-    const data = await metaJson<any>(`https://graph.facebook.com/v21.0/${accountId}/insights?${params}`, {
+    const data = await metaJson<any>(`${GRAPH_URL}/${accountId}/insights?${params}`, {
       label: `alcance ${accountId}`,
     });
     const reach = safeInt(data.data?.[0]?.reach);
@@ -138,7 +139,7 @@ export async function fetchCampaignInsights(
   // dados (gasto/impressões/cliques/mensagens). Agora busca todas as páginas.
   const campaigns: any[] = [];
   let campUrl: string | null =
-    `https://graph.facebook.com/v21.0/${accountId}/campaigns?` +
+    `${GRAPH_URL}/${accountId}/campaigns?` +
     new URLSearchParams({
       access_token: token,
       fields: "id,name,objective,status,daily_budget,lifetime_budget,start_time,stop_time",
@@ -212,9 +213,9 @@ export async function fetchCampaignInsights(
         });
 
         const [dailyRes, totalRes, adsetRes] = await Promise.all([
-          fetch(`https://graph.facebook.com/v21.0/${campaign.id}/insights?${dailyParams}`),
-          fetch(`https://graph.facebook.com/v21.0/${campaign.id}/insights?${totalParams}`),
-          fetch(`https://graph.facebook.com/v21.0/${campaign.id}/insights?${adsetParams}`),
+          fetch(`${GRAPH_URL}/${campaign.id}/insights?${dailyParams}`),
+          fetch(`${GRAPH_URL}/${campaign.id}/insights?${totalParams}`),
+          fetch(`${GRAPH_URL}/${campaign.id}/insights?${adsetParams}`),
         ]);
 
         // Falha no insight NÃO é "gastou zero": marca pra quem mostra dizer "sem dados", nunca R$0.
@@ -397,7 +398,7 @@ export async function fetchAccountDemographics(
       limit: "200",
     });
     const rows: LinhaDemografia[] = [];
-    let url: string | null = `https://graph.facebook.com/v21.0/${accountId}/insights?${params}`;
+    let url: string | null = `${GRAPH_URL}/${accountId}/insights?${params}`;
     for (let pagina = 0; url && pagina < 3; pagina++) {
       const res: Response = await fetch(url);
       if (!res.ok) {

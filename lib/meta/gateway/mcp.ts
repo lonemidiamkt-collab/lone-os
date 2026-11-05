@@ -24,6 +24,7 @@
 // não existia.
 
 import type { CapacidadeMeta, CriativoAnuncio, InsightEntidade, NivelEntidade, ProviderMeta } from "./index";
+import { GRAPH_URL } from "@/lib/meta/config";
 
 const MCP_URL = process.env.META_MCP_URL || "https://mcp.facebook.com/ads";
 const PROTOCOLO = "2025-06-18";
@@ -132,7 +133,7 @@ export async function scopesDoToken(token: string): Promise<string[]> {
   const secret = process.env.META_APP_SECRET ?? "";
   if (!appId || !secret) return [];
   try {
-    const url = `https://graph.facebook.com/v21.0/debug_token?input_token=${encodeURIComponent(token)}`
+    const url = `${GRAPH_URL}/debug_token?input_token=${encodeURIComponent(token)}`
       + `&access_token=${encodeURIComponent(`${appId}|${secret}`)}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     const j = (await res.json()) as { data?: { scopes?: string[] } };
