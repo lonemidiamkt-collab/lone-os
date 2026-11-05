@@ -258,6 +258,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Conta ligada, trocada ou desligada: o painel do cliente (e o de quem perdeu a conta) busca de novo
+    // na próxima visita, em vez de mostrar o retrato da conta antiga — ou o "sem conta" — por até 24h.
+    if (contaParaEspelhar || row.meta_ad_account_id === null) {
+      const { esquecerSnapshots } = await import("@/lib/portal/snapshotCache");
+      for (const cid of [id, ...transferidaDe.map((d) => d.clientId)]) {
+        const e = await esquecerSnapshots(cid);
+        if (e) console.error(`[clients/update] painel do cliente ${cid} não foi zerado do cache: ${e}`);
+      }
+    }
+
     if (transferidaDe.length && contaParaEspelhar) {
       const para = ((updated?.nome_fantasia as string) || (updated?.name as string) || "outro cliente");
       const ator = user.email ?? "alguém";

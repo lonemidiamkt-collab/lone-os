@@ -5,6 +5,7 @@
 import { after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { buildSnapshot } from "./buildSnapshot";
+import { contaDoCliente } from "./conta";
 import type { PeriodKind, SnapshotData } from "./types";
 
 export const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -106,6 +107,15 @@ export async function obterSnapshot(clientId: string, periodKind: PeriodKind, no
   const geradoEm = (cached?.generated_at as string | undefined) ?? null;
   const guardado = (cached?.data as SnapshotData | undefined) ?? null;
   const decisao = cached ? decidirCache(geradoEm, now.getTime(), snapshotCompleto(guardado)) : "buscar";
+
+  // 04/11/2026 (JJ e Casa das Telhas): o painel aberto ANTES de a conta ser ligada ficava guardado como
+  // "sem conta" e valia 24h — o cliente via R$ 0 com a campanha rodando. "Sem conta" guardado só vale
+  // enquanto o cliente continuar sem conta; ligou, busca agora (sem cair de volta no zero guardado).
+  if (guardado?.ads_status === "sem_conta" && decisao !== "buscar") {
+    const { conta } = await contaDoCliente(clientId);
+    if (conta) return reconstruir(clientId, periodKind, now, null, null);
+  }
+
   if (decisao === "fresco") return guardado!;
 
   if (decisao === "do-dia") {
@@ -122,6 +132,15 @@ export async function obterSnapshot(clientId: string, periodKind: PeriodKind, no
   }
 
   return reconstruir(clientId, periodKind, now, guardado, geradoEm);
+}
+
+/**
+ * Esquece os painéis guardados do cliente (todos os períodos). Chamado quando a conta de anúncio muda:
+ * o próximo acesso já busca na Meta com a conta nova. Devolve o erro, se houver (quem chama registra).
+ */
+export async function esquecerSnapshots(clientId: string): Promise<string | null> {
+  const { error } = await supabaseAdmin.from("client_report_snapshots").delete().eq("client_id", clientId);
+  return error?.message ?? null;
 }
 
 /** Busca na Meta e grava o cache. `cached`/`geradoEm` = o que está guardado (último dado bom, quando a Meta não responde). */

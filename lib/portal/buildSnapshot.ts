@@ -11,6 +11,7 @@ import { contarPorTipo, resultadoSemObjetivo, type TipoResultado } from "@/lib/m
 import { fetchAccountReach } from "@/lib/meta/insights-server";
 import { hojeSP } from "@/lib/clients/pausa";
 import { montarAnunciosAtivos } from "./anunciosAtivos";
+import { contaDoCliente } from "./conta";
 import type { PeriodKind, SnapshotData, CreativeItem, DemographicRow, AdsStatus, ActiveAdsList } from "./types";
 
 const THUMBNAIL_BUCKET = "meta-thumbnails";
@@ -165,25 +166,6 @@ async function getMetaToken(): Promise<{ token: string | null; erro: boolean }> 
   if (!token) return { token: null, erro: false };
   if (expiresAt && expiresAt < Date.now()) return { token: null, erro: false };
   return { token, erro: false };
-}
-
-/**
- * Conta de anúncio do cliente. `indefinida` = existe conta, mas não dá pra afirmar qual/ler agora
- * (consulta falhou, ou duas contas sem a principal marcada). Isso NÃO é "sem conta".
- */
-async function contaDoCliente(clientId: string): Promise<{ conta: string | null; indefinida: string | null }> {
-  const [{ data: linhas, error }, { data: cli, error: errCli }] = await Promise.all([
-    supabaseAdmin.from("ad_accounts").select("meta_account_id").eq("client_id", clientId),
-    supabaseAdmin.from("clients").select("meta_ad_account_id").eq("id", clientId).maybeSingle(),
-  ]);
-  if (error || errCli) return { conta: null, indefinida: `consulta: ${(error ?? errCli)?.message}` };
-  const principal = (cli?.meta_ad_account_id as string | null) || null;
-  const contas = [...new Set((linhas ?? []).map((l) => l.meta_account_id as string).filter(Boolean))];
-  if (contas.length === 1) return { conta: contas[0], indefinida: null };
-  if (contas.length === 0) return { conta: principal, indefinida: null };
-  // Duas contas: a do cadastro do cliente é a principal (é ela que o /clients mantém em ad_accounts).
-  if (principal && contas.includes(principal)) return { conta: principal, indefinida: null };
-  return { conta: null, indefinida: `${contas.length} contas sem principal` };
 }
 
 /** Snapshot "não sei agora": números null (nunca 0) para nenhuma tela ler como "não rodou nada". */
