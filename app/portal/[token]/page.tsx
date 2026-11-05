@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { obterSnapshot } from "@/lib/portal/snapshotCache";
+import { lerIgDoCache, paraOPortal } from "@/lib/meta/igSnapshot";
 import type { SnapshotData } from "@/lib/portal/types";
 import { WHATSAPP_EQUIPE } from "@/lib/portal/contato";
 import PortalDashboard from "@/components/portal/PortalDashboard";
@@ -25,7 +26,7 @@ export default async function PortalPage({
   // "página não encontrada" em links que funcionam — e o time ouviu "o link do painel não funciona".
   // Agora a falha de leitura mostra "não consegui abrir agora, tente de novo" (lib/portal/token.ts).
   const lido = await lerLinkDoPortal<LinhaDeAcesso & Record<string, unknown> & { id: string }>(token,
-    "id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, service_type, meta_ad_account_id, ig_business_account_id, status, join_date");
+    "id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, status, join_date");
   if (lido.estado === "indisponivel") return <PortalIndisponivel />;
   if (lido.estado === "invalido") notFound();
   const client = lido.linha;
@@ -75,6 +76,20 @@ export default async function PortalPage({
     }
   }
 
+  // Instagram de 7 dias já no HTML, SÓ do que está guardado (04/11/2026): a aba "Crescimento nas redes"
+  // abria em branco e esperava a Meta ao vivo. Sem cache, a geração começa por trás agora mesmo e o
+  // navegador pega o resultado quando o cliente clicar na aba.
+  let initialIg: ReturnType<typeof paraOPortal> | null = null;
+  const temIg = !!client.ig_business_account_id || !!client.ig_public_username;
+  if (hasSocial && temIg) {
+    try {
+      const ig = await lerIgDoCache(client.id as string, "7d");
+      initialIg = ig ? paraOPortal(ig) : null;
+    } catch (err) {
+      console.error("[portal] falhou o Instagram inicial:", client.id, String(err));
+    }
+  }
+
   // Data do rodapé calculada aqui, em SP: `new Date()` no render divergia entre servidor (UTC) e celular.
   const mesRelatorio = new Date().toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo" });
 
@@ -88,10 +103,11 @@ export default async function PortalPage({
         whatsappPhone={(client.whatsapp_team_phone as string) || WHATSAPP_EQUIPE}
         welcomeMessage={(client.portal_welcome_message as string) || null}
         initialData={initialData}
+        initialIg={initialIg}
         hasAds={hasAds}
         hasSocial={hasSocial}
         hasIg={!!client.ig_business_account_id}
-        comecando={!hasAds && !client.ig_business_account_id}
+        comecando={!hasAds && !temIg}
         desde={(client.join_date as string) ?? null}
         aprovacaoLigada={process.env.PORTAL_APROVACAO_CLIENTE === "on"}
         mesRelatorio={mesRelatorio}

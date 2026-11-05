@@ -50,6 +50,8 @@ vi.mock("@/lib/supabase/server", () => ({ supabaseAdmin: { from: (t: string) => 
 vi.mock("@/lib/supabase/auth-server", () => ({ getServerUser: async () => ({ id: "u1", email: "julio@lone", isAdmin: false }) }));
 vi.mock("@/lib/portal/link-automatico", () => ({ dispararLinkDoPortal: vi.fn() }));
 vi.mock("@/lib/clients/historico", () => ({ registrarHistorico: historico.fn }));
+const vincularIg = vi.hoisted(() => ({ fn: vi.fn(async (_id: string) => ({ vinculado: null as string | null, motivo: "sem Instagram na conta" })) }));
+vi.mock("@/lib/meta/igSnapshot", () => ({ vincularIgPelaConta: vincularIg.fn }));
 
 const { POST } = await import("@/app/api/clients/update/route");
 
@@ -63,6 +65,7 @@ beforeEach(() => {
   for (const k of Object.keys(db)) delete db[k];
   updatesEmClients.length = 0;
   historico.fn.mockClear();
+  vincularIg.fn.mockClear();
   db.clients = [
     { id: A, name: "Bazar Ribeiro", nome_fantasia: null, active: true, churned_at: null, meta_ad_account_id: "act_123", meta_ad_account_name: "CA Bazar" },
     { id: B, name: "Veneza", nome_fantasia: null, active: true, churned_at: null, meta_ad_account_id: null, meta_ad_account_name: null },
@@ -100,12 +103,20 @@ describe("/api/clients/update — conta Meta de outro cliente", () => {
     expect(db.ad_accounts).toContainEqual({ client_id: B, meta_account_id: "act_777" });
   });
 
+  it("conta ligada: procura o Instagram do cliente na hora e registra quando acha (04/11/2026, Casa das Telhas)", async () => {
+    vincularIg.fn.mockResolvedValueOnce({ vinculado: "@veneza", motivo: undefined as unknown as string });
+    await pedir({ id: B, metaAdAccountId: "777" });
+    await vi.waitFor(() => expect(vincularIg.fn).toHaveBeenCalledWith(B));
+    await vi.waitFor(() => expect(historico.fn).toHaveBeenCalledWith(expect.objectContaining({ clientId: B, descricao: "Instagram @veneza ligado pela conta de anúncio" })));
+  });
+
   it("salvar o cadastro com a mesma conta: a coluna não vai no UPDATE e a conta não muda de lugar", async () => {
     // Dado legado: B também aponta para a conta de A (sem act_). Editar o nome de B não pode puxar a conta.
     cliente(B).meta_ad_account_id = "123";
     const r = await pedir({ id: B, name: "Veneza Matriz", metaAdAccountId: "act_123" });
     expect(r.status).toBe(200);
     expect(updatesEmClients).toEqual([{ name: "Veneza Matriz" }]);
+    expect(vincularIg.fn).not.toHaveBeenCalled();
     expect(db.ad_accounts).toEqual([{ client_id: A, meta_account_id: "act_123", is_prepaid: true }]);
   });
 });

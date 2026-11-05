@@ -404,7 +404,7 @@ export const AUTOMACOES: Automacao[] = [
   }),
   ep("ig-snapshots", {
     nome: "Relatórios de Instagram", descricao: "Pré-gera os relatórios de Instagram (semana e mês) de cada cliente para o portal não bater na Meta ao vivo.",
-    familia: "Dados e sync", destino: "sistema", cron: "0 6 * * *", agendaBRT: "todo dia, 3h", maxSilencioHoras: 26,
+    familia: "Dados e sync", destino: "sistema", cron: "0 6,15 * * *", agendaBRT: "todo dia, 3h e 12h", maxSilencioHoras: 26,
   }),
   ep("sync-posts", {
     nome: "Postagens do mês + No ar", descricao: "Recalcula posts do mês e último post de cada cliente a partir do Instagram real, e fecha como \"No ar\" o card planejado que casou com um post real (mesmo cliente, ±1 dia, mesmo formato primeiro).",

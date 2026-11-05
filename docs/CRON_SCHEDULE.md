@@ -109,7 +109,7 @@
 |---|---|---|---|---|
 | de hora em hora | `0 * * * *` | Histórico operacional | `POST /api/system/historico-cliente` | — |
 | todo dia, de hora em hora das 0h45 às 6h45 (fora do horário da consulta, por causa do limite da D4Sign) | `45 3-9 * * *` | Arquivo de contratos (D4Sign) | `POST /api/system/contratos-d4sign-arquivo` | — |
-| todo dia, 3h | `0 6 * * *` | Relatórios de Instagram | `POST /api/system/ig-snapshots` | — |
+| todo dia, 3h e 12h | `0 6,15 * * *` | Relatórios de Instagram | `POST /api/system/ig-snapshots` | — |
 | domingo, 5h | `0 8 * * 0` | Ramo de cada cliente | `POST /api/system/cs-nichos` | Ramo do cliente |
 | todo dia, 6h | `0 9 * * *` | Renovação de contratos | `POST /api/system/contract-renewal` | — |
 | todo dia, 6h | `0 9 * * *` | Snapshots do portal · só crontab | `generate-snapshots-cron.sh` | — |

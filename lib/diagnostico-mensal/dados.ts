@@ -164,7 +164,8 @@ export async function coletar(c: ClienteDiagnostico, periodo: { de: string; ate:
   if (c.ig_business_account_id || c.ig_public_username) {
     try {
       const snap = await getIgSnapshotCached(c.id, "30d");
-      if (snap.mapped && !snap.error && snap.conta) {
+      // Posts que a Meta não deixou ler (postsNoPeriodo null) não viram "0 posts, perfil parado" no diagnóstico.
+      if (snap.mapped && !snap.error && snap.conta && snap.resumo?.postsNoPeriodo !== null) {
         const { count } = await supabaseAdmin.from("client_ig_posts").select("media_id", { count: "exact", head: true })
           .eq("client_id", c.id).gte("posted_at", `${anterior.de}T00:00:00-03:00`).lte("posted_at", `${anterior.ate}T23:59:59-03:00`);
         ig = {
@@ -175,7 +176,7 @@ export async function coletar(c: ClienteDiagnostico, periodo: { de: string; ate:
           postsNoPeriodo: snap.resumo?.postsNoPeriodo ?? snap.posts?.length ?? 0,
           postsNoAnterior: count && count > 0 ? count : null,
           posts: (snap.posts ?? []).map((p) => ({ tipo: p.tipo, alcance: p.alcance, engajamento: p.engajamento, data: p.data, permalink: p.permalink })),
-          parcial: snap.fonte === "publico",
+          parcial: snap.fonte === "publico" || snap.fonte === "parcial",
         };
       }
     } catch { /* Instagram fora do ar não derruba o diagnóstico dos anúncios */ }

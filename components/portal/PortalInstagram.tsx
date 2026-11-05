@@ -4,7 +4,7 @@
 // taxa de engajamento e posts do PERÍODO (7/14/30 dias, escolhido no topo da aba) + público do
 // perfil e os melhores posts. Lê do cache (rota /api/meta/instagram/[clientId]?token=&period=).
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Camera, Heart, MessageCircle, Play, RefreshCw } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
@@ -19,9 +19,23 @@ import PublicoCard from "./PublicoCard";
 import { Cartao, CabecalhoSecao, entrada } from "./ui";
 
 interface Post { id: string; tipo: string; thumb: string | null; permalink: string | null; curtidas: number | null; comentarios: number | null; views: number | null; alcance: number | null; engajamento: number }
-interface Resumo { alcance: number | null; alcanceJanelaDias?: number | null; seguidoresGanhos: number | null; curtidas: number; comentarios: number; engajamento: number; postsNoPeriodo: number }
+interface Resumo { alcance: number | null; alcanceJanelaDias?: number | null; seguidoresGanhos: number | null; curtidas: number; comentarios: number; engajamento: number; postsNoPeriodo: number | null }
 interface Audiencia { generoMascPct: number | null; generoFemPct: number | null; idades: { faixa: string; pct: number }[]; cidades: { nome: string; pct: number }[] }
-interface Snap { conta?: { username: string; seguidores: number | null; posts: number | null }; resumo?: Resumo; audiencia?: Audiencia; posts?: Post[]; fonte?: "owned" | "publico" }
+interface Snap {
+  conta?: { username: string; seguidores: number | null; posts: number | null }; resumo?: Resumo; audiencia?: Audiencia; posts?: Post[];
+  fonte?: "owned" | "publico" | "parcial";
+  /** A Meta recusou parte da leitura (o detalhe fica com o time). */
+  parcial?: boolean;
+  /** Quando os números foram buscados (ISO). */
+  geradoEm?: string;
+  /** "ok" | "falha" | "reconectar" — falha volta 200 com isto (o 502 virava página do Cloudflare). */
+  estado?: string;
+}
+export type IgSnapPortal = Snap;
+
+function fmtAtualizado(iso: string): string {
+  return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+}
 
 export type IgPeriodo = "7d" | "14d" | "30d";
 export const IG_PERIODOS: readonly { valor: IgPeriodo; rotulo: string; dias: number }[] = [
@@ -39,21 +53,27 @@ type Problema = "nao_conectado" | "reconectar" | "falha" | null;
 
 interface Kpi { rotulo: string; valor: string; detalhe?: string; detalheBom?: boolean }
 
-export default function PortalInstagram({ token, clientId, period }: { token: string; clientId: string; period: IgPeriodo }) {
-  const [data, setData] = useState<Snap | null>(null);
+export default function PortalInstagram({ token, clientId, period, inicial = null }: { token: string; clientId: string; period: IgPeriodo; inicial?: Snap | null }) {
+  // 7 dias já vem pronto no HTML (lido do cache no servidor): a aba abre com número, sem esperar.
+  const usarInicial = period === "7d" && !!inicial?.conta;
+  const [data, setData] = useState<Snap | null>(usarInicial ? inicial : null);
   const [problema, setProblema] = useState<Problema>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!usarInicial);
   const [tentativa, setTentativa] = useState(0);
+  const pularPrimeira = useRef(usarInicial);
 
   useEffect(() => {
+    if (pularPrimeira.current) { pularPrimeira.current = false; return; }
     let alive = true; setLoading(true); setProblema(null);
     chamar<Snap>(`/api/meta/instagram/${clientId}?token=${encodeURIComponent(token)}&period=${period}`).then((r) => {
       if (!alive) return;
-      if (r.ok && r.data?.conta) { setData(r.data); }
+      const estado = r.data?.estado;
+      if (r.ok && r.data?.conta && (!estado || estado === "ok")) { setData(r.data); }
       else {
         // Nunca deixar os números do período anterior sob o rótulo do novo.
         setData(null);
-        setProblema(r.status === 404 ? "nao_conectado" : r.status === 409 ? "reconectar" : "falha");
+        setProblema(r.status === 404 ? "nao_conectado"
+          : estado === "reconectar" || r.status === 409 ? "reconectar" : "falha");
       }
       setLoading(false);
     });
@@ -88,14 +108,19 @@ export default function PortalInstagram({ token, clientId, period }: { token: st
     return (
       <Cartao className="p-6 text-center">
         <span className="mx-auto grid h-10 w-10 place-items-center rounded-full bg-muted text-muted-foreground"><Camera size={18} aria-hidden /></span>
-        <p className="mt-3 text-sm font-medium text-foreground">Instagram ainda não conectado</p>
+        <p className="mt-3 text-sm font-medium text-foreground">Seu Instagram ainda não está ligado a este painel</p>
+        {/* Sem pedir ao cliente que resolva (04/11/2026): ligar o perfil é tarefa nossa. */}
         <p className="mx-auto mt-1 max-w-prose text-lone-caption text-muted-foreground">
-          Assim que a gente conectar o perfil, esta aba passa a mostrar seguidores, alcance,
-          engajamento e os posts que mais performaram. Fala com a nossa equipe que a gente conecta rapidinho.
+          Assim que a nossa equipe ligar o perfil, esta aba passa a mostrar seguidores, alcance,
+          engajamento e os posts que mais renderam.
         </p>
       </Cartao>
     );
   }
+
+  // Carregando sem nada na tela: a aba inteira em esqueleto (antes eram só 4 caixinhas e o resto
+  // sumia — parecia vazio, e o cliente recarregava).
+  if (loading && !data) return <EsqueletoInstagram />;
 
   const r = data?.resumo;
   const a = data?.audiencia;
@@ -110,7 +135,8 @@ export default function PortalInstagram({ token, clientId, period }: { token: st
     {
       rotulo: "Seguidores",
       valor: nf(data?.conta?.seguidores ?? null),
-      detalhe: !isPublico && r?.seguidoresGanhos != null ? `${nfSinal(r.seguidoresGanhos)} no período` : undefined,
+      // A Meta conta quem COMEÇOU a seguir (não desconta quem saiu): "novos", não saldo.
+      detalhe: !isPublico && r?.seguidoresGanhos != null ? `${nfSinal(r.seguidoresGanhos)} ${r.seguidoresGanhos === 1 ? "novo" : "novos"} no período` : undefined,
       detalheBom: !isPublico && (r?.seguidoresGanhos ?? 0) > 0,
     },
     // A Meta só entrega alcance sem repetir pessoa em janela de 7 ou 28 dias. Escolher "14 dias" no
@@ -144,6 +170,11 @@ export default function PortalInstagram({ token, clientId, period }: { token: st
           titulo={<>Instagram{data?.conta?.username && <span className="text-lone-body font-normal text-muted-foreground">@{data.conta.username}</span>}</>}
           descricao="Números do perfil no período escolhido"
         />
+        {!loading && data?.geradoEm && (
+          <p className="inline-flex items-center gap-1.5 text-lone-caption text-muted-foreground">
+            <RefreshCw size={12} aria-hidden /> Atualizado em {fmtAtualizado(data.geradoEm)}
+          </p>
+        )}
 
         {!loading && frase && (
           <Cartao className="px-4 py-3.5">
@@ -187,8 +218,14 @@ export default function PortalInstagram({ token, clientId, period }: { token: st
             O alcance do perfil inclui quem chegou pelos anúncios — não some com o alcance do tráfego pago.
           </p>
         )}
-        {/* Sem post no período, os números da conta sozinhos dão a impressão de que houve trabalho. */}
-        {!loading && data && (r?.postsNoPeriodo ?? 0) === 0 && (
+        {!loading && (data?.parcial || data?.fonte === "parcial") && (
+          <p className="text-lone-caption text-muted-foreground">
+            Parte dos números deste perfil não veio da Meta nesta atualização. Nossa equipe já foi avisada para ajustar o acesso.
+          </p>
+        )}
+        {/* Sem post no período, os números da conta sozinhos dão a impressão de que houve trabalho.
+            null = a Meta não deixou ler os posts: isso não é "nenhum post". */}
+        {!loading && data && r?.postsNoPeriodo === 0 && (
           <p className="text-lone-caption text-muted-foreground">
             <strong className="font-medium text-foreground">Nenhum post publicado neste período.</strong> Os números acima são do perfil como um todo.
           </p>
@@ -240,6 +277,25 @@ export default function PortalInstagram({ token, clientId, period }: { token: st
           </div>
         </motion.section>
       )}
+    </div>
+  );
+}
+
+/** Esqueleto da aba inteira, no desenho do conteúdo final (frase, 4 números, público, posts). */
+function EsqueletoInstagram() {
+  return (
+    <div className="space-y-5" aria-busy="true" aria-label="Carregando os números do Instagram">
+      <div className="space-y-3">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-16 rounded-xl" />
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[104px] rounded-xl" />)}
+        </div>
+      </div>
+      <Skeleton className="h-40 rounded-xl" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="aspect-square rounded-xl" />)}
+      </div>
     </div>
   );
 }

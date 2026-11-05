@@ -32,7 +32,9 @@ export default function InstagramOrganico({ clientId }: { clientId: string }) {
     authedFetch(`/api/meta/instagram/${clientId}`)
       .then(async (r) => {
         const d = await r.json().catch(() => ({}));
-        if (r.ok) setData(d);
+        // Falha da Meta volta 200 com `estado` (o 502 era trocado pela página do Cloudflare).
+        if (r.ok && d.estado && d.estado !== "ok") setErro({ msg: d.error || "Falha ao buscar", needsReconnect: d.needsReconnect });
+        else if (r.ok) setData(d);
         else if (r.status === 404 && d.mapped === false) setData({ mapped: false });
         else setErro({ msg: d.error || "Falha ao buscar", needsReconnect: d.needsReconnect });
       })

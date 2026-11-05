@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { normalizarEmail, mensagemDadosInvalidos } from "@/lib/clients/email";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
@@ -266,6 +266,23 @@ export async function POST(req: NextRequest) {
         const e = await esquecerSnapshots(cid);
         if (e) console.error(`[clients/update] painel do cliente ${cid} não foi zerado do cache: ${e}`);
       }
+    }
+
+    // Conta nova ligada: procura o Instagram do cliente pela conta (e pela Página dela) AGORA, depois de
+    // responder — antes só o cron da madrugada fazia isso, e às vezes nem ele (Casa das Telhas, 04/11/2026:
+    // conta ligada e o painel dizendo "Instagram ainda não conectado").
+    if (contaParaEspelhar) {
+      const cid = id;
+      const tarefa = async () => {
+        const { vincularIgPelaConta } = await import("@/lib/meta/igSnapshot");
+        const r = await vincularIgPelaConta(cid);
+        if (r.vinculado) {
+          await registrarHistorico({ clientId: cid, tipo: "manual", ator: "sistema", descricao: `Instagram ${r.vinculado} ligado pela conta de anúncio` });
+        } else if (r.motivo !== "já tem Instagram cadastrado") {
+          console.warn(`[clients/update] Instagram do cliente ${cid} não foi achado pela conta: ${r.motivo}`);
+        }
+      };
+      try { after(tarefa); } catch { void tarefa(); }
     }
 
     if (transferidaDe.length && contaParaEspelhar) {

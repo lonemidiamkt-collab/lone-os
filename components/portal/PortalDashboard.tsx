@@ -18,7 +18,7 @@ import {
 import type { SnapshotData, PeriodKind, CreativeItem } from "@/lib/portal/types";
 import MobileFAB from "./MobileFAB";
 import PortalContent from "./PortalContent";
-import PortalInstagram, { IG_PERIODOS, type IgPeriodo } from "./PortalInstagram";
+import PortalInstagram, { IG_PERIODOS, type IgPeriodo, type IgSnapPortal } from "./PortalInstagram";
 import PortalUpload from "@/components/portal/PortalUpload";
 import PortalAgenda from "./PortalAgenda";
 import PortalMateriais from "./PortalMateriais";
@@ -71,6 +71,8 @@ interface Props {
   whatsappPhone: string;
   welcomeMessage: string | null;
   initialData: SnapshotData | null;
+  /** Instagram de 7 dias já lido do cache no servidor (null = sem cache; a aba busca). */
+  initialIg?: IgSnapPortal | null;
   hasAds?: boolean;    // pacote inclui anúncios → mostra tráfego
   hasSocial?: boolean; // pacote inclui social/design → mostra artes entregues + Instagram orgânico
   hasIg?: boolean;     // Instagram vinculado de verdade (informativo; a seção continua avisando "não conectado" quando há anúncios)
@@ -80,7 +82,7 @@ interface Props {
   mesRelatorio?: string;
 }
 
-export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, hasAds = true, hasSocial = false, comecando = false, desde = null, aprovacaoLigada = false, mesRelatorio = "" }: Props) {
+export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, initialIg = null, hasAds = true, hasSocial = false, comecando = false, desde = null, aprovacaoLigada = false, mesRelatorio = "" }: Props) {
   const [period, setPeriod]   = useState<PeriodKind>("last_week");
   const [data, setData]       = useState<SnapshotData | null>(initialData);
   const [loading, setLoading] = useState(false);
@@ -287,7 +289,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                   <p className="mt-3 text-sm text-muted-foreground">Enquanto isso, o que mais ajuda é mandar o material da loja aqui embaixo — logo, fotos, tabela de preço, vídeo.</p>
                 </Cartao>
               ) : (
-                <PortalInstagram token={token} clientId={clientId} period={igPeriod} />
+                <PortalInstagram token={token} clientId={clientId} period={igPeriod} inicial={initialIg} />
               )}
               {/* Próximos posts e calendário do mês (N36): só Agendado, No ar e aprovado pelo cliente. */}
               <PortalAgenda token={token} />

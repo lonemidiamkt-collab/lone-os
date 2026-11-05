@@ -41,7 +41,7 @@
 0 3 * * * /opt/backups/backup-postgres.sh
 0 3 * * 0 /opt/loneos/scripts/cleanup-storage.sh
 0 4 * * 0 /usr/bin/docker builder prune -af --filter "until=168h" > /var/log/docker-prune.log 2>&1
-0 6 * * * /opt/loneos/scripts/cron-call.sh ig-snapshots POST >> /var/log/loneos-ig-snapshots.log 2>&1
+0 6,15 * * * /opt/loneos/scripts/cron-call.sh ig-snapshots POST >> /var/log/loneos-ig-snapshots.log 2>&1
 0 7 1 * * /opt/loneos/scripts/cron-call.sh radar-descoberta POST >> /var/log/loneos-radar-deep.log 2>&1
 0 8 * * * /opt/loneos/scripts/cron-call.sh followup GET > /dev/null 2>&1
 0 8 * * 0 /opt/loneos/scripts/cron-call.sh cs-nichos POST >> /var/log/loneos-cs-nichos.log 2>&1

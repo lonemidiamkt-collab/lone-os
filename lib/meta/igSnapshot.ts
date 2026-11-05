@@ -3,6 +3,7 @@
 // engajamento, e os posts do período ORDENADOS por engajamento (curtidas+comentários). Cacheado em
 // client_ig_snapshots pra NÃO bater na Meta a cada visita do portal (o que causava rate limit).
 
+import { after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -30,6 +31,8 @@ export interface IgPost {
   id: string; tipo: string; thumb: string | null; permalink: string | null;
   curtidas: number | null; comentarios: number | null; views: number | null;
   alcance: number | null; engajamento: number; data: string | null;
+  /** Salvamentos e compartilhamentos (null = a Meta não entregou para este post). */
+  salvos?: number | null; compartilhamentos?: number | null;
 }
 export interface IgAudiencia {
   generoMascPct: number | null;
@@ -43,7 +46,13 @@ export interface IgSnapshot {
   needsReconnect?: boolean;
   periodo: IgPeriod;
   periodoLabel?: string;
-  fonte?: "owned" | "publico"; // owned = conta no nosso BM (métricas completas); publico = business_discovery (só seguidores + posts)
+  // owned = conta no nosso BM (métricas completas); publico = business_discovery (só seguidores + posts);
+  // parcial = conta ligada, mas a Meta recusou parte do que pedimos (insights e/ou posts) — ver `avisos`.
+  fonte?: "owned" | "publico" | "parcial";
+  /** O que a Meta recusou nesta leitura, em frase pronta para o time (nunca vai para o cliente cru). */
+  avisos?: string[];
+  /** Quando estes números foram buscados na Meta (ISO). Vem do cache; o portal mostra "Atualizado em". */
+  geradoEm?: string;
   conta?: { username: string; seguidores: number | null; posts: number | null };
   resumo?: {
     alcance: number | null;
@@ -55,7 +64,8 @@ export interface IgSnapshot {
     curtidas: number;
     comentarios: number;
     engajamento: number;
-    postsNoPeriodo: number;
+    /** null = não deu para ler os posts (a Meta recusou) — NUNCA é "não postou". */
+    postsNoPeriodo: number | null;
   };
   audiencia?: IgAudiencia;
   posts?: IgPost[];
@@ -125,10 +135,23 @@ async function somaInsightDiario(igId: string, metric: string, since: string, un
 // obrigado a usar essa janela no rótulo — era daí que saía o "alcance dos últimos 14 dias" que na
 // verdade eram 28.
 async function reachDedup(igId: string, dias: number, token: string): Promise<{ valor: number | null; janelaDias: number | null }> {
+  // 1) Caminho documentado hoje (pesquisa de 04/11/2026 na doc da Meta): `period=day` +
+  //    `metric_type=total_value` + since/until devolve pessoas ÚNICAS da janela EXATA — inclusive 14
+  //    dias, que antes não existia. `week`/`days_28` sumiram da documentação e podem parar a qualquer hora.
+  try {
+    const ate = Math.floor(Date.now() / 1000);
+    const desde = ate - dias * 86400;
+    const r = await fetch(`${GRAPH}/${igId}/insights?metric=reach&period=day&metric_type=total_value&since=${desde}&until=${ate}&access_token=${token}`, { signal: AbortSignal.timeout(15_000) });
+    const j = await r.json().catch(() => ({}));
+    const v = j?.data?.[0]?.total_value?.value;
+    if (!j?.error && typeof v === "number") return { valor: v, janelaDias: dias };
+  } catch { /* cai no caminho antigo */ }
+
+  // 2) Caminho antigo (janela rolante de 7 ou 28 dias) enquanto ainda responder.
   const janelaDias = dias <= 7 ? 7 : 28;
   const period = dias <= 7 ? "week" : "days_28";
   try {
-    const r = await fetch(`${GRAPH}/${igId}/insights?metric=reach&period=${period}&access_token=${token}`);
+    const r = await fetch(`${GRAPH}/${igId}/insights?metric=reach&period=${period}&access_token=${token}`, { signal: AbortSignal.timeout(15_000) });
     const j = await r.json().catch(() => ({}));
     if (!j?.error) {
       const vals = (j.data?.[0]?.values ?? []) as { value: number }[];
@@ -141,14 +164,20 @@ async function reachDedup(igId: string, dias: number, token: string): Promise<{ 
 
 // Busca os posts do período PAGINANDO. Antes era um `limit=50` único filtrado no cliente: quem posta
 // muito (ou pede 30 dias) perdia post silenciosamente, e a contagem saía menor que a real.
-async function fetchMediaDoPeriodo(igId: string, desdeIso: string, token: string): Promise<Array<Record<string, unknown>>> {
-  const campos = "id,media_type,thumbnail_url,media_url,permalink,timestamp,like_count,comments_count";
+async function fetchMediaDoPeriodo(igId: string, desdeIso: string, token: string): Promise<{ media: Array<Record<string, unknown>>; erro: string | null }> {
+  const campos = "id,media_type,media_product_type,thumbnail_url,media_url,permalink,timestamp,like_count,comments_count";
   let url: string | null = `${GRAPH}/${igId}/media?fields=${campos}&limit=50&access_token=${token}`;
   const out: Array<Record<string, unknown>> = [];
   for (let pagina = 0; pagina < 6 && url; pagina++) { // teto de 300 posts — trava de segurança
-    const r: Response = await fetch(url);
-    const j = await r.json().catch(() => ({}));
-    if (j?.error) break;
+    let j: { data?: unknown[]; paging?: { next?: string }; error?: { message?: string } };
+    try {
+      const r: Response = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+      j = await r.json().catch(() => ({}));
+    } catch (e) {
+      return { media: out, erro: `posts: a Meta não respondeu (${e instanceof Error ? e.message : String(e)})` };
+    }
+    // Recusa da Meta NÃO é "não postou": devolve o erro para quem chamou decidir (04/11/2026).
+    if (j?.error) return { media: out, erro: `posts: ${j.error.message ?? "recusado pela Meta"}` };
     const lote = (j.data ?? []) as Array<Record<string, unknown>>;
     if (!lote.length) break;
     let passouDoPeriodo = false;
@@ -160,7 +189,45 @@ async function fetchMediaDoPeriodo(igId: string, desdeIso: string, token: string
     if (passouDoPeriodo) break;
     url = (j.paging?.next as string) || null;
   }
+  return { media: out, erro: null };
+}
+
+// Métricas de cada post (04/11/2026). Pedíamos `reach,video_views` para vídeo: a Meta desligou
+// `video_views` (trocou por `views`) e a chamada INTEIRA passou a falhar — todo Reels aparecia sem
+// visualização e sem alcance. Agora: `views` em todo tipo, mais salvos e compartilhamentos, e se a
+// Meta recusar uma métrica a busca refaz com menos, para nunca perder o alcance por causa de um extra.
+export const METRICAS_POST_TENTATIVAS: readonly string[][] = [
+  ["reach", "views", "saved", "shares", "total_interactions"],
+  ["reach", "views"],
+  ["reach"],
+];
+
+export interface InsightsDoPost { alcance: number | null; views: number | null; salvos: number | null; compartilhamentos: number | null }
+
+/** Lê `data` do /insights de um post. Pura (testada). */
+export function lerInsightsDoPost(data: unknown): InsightsDoPost {
+  const out: InsightsDoPost = { alcance: null, views: null, salvos: null, compartilhamentos: null };
+  for (const row of (Array.isArray(data) ? data : []) as Array<{ name?: string; values?: { value?: number }[]; total_value?: { value?: number } }>) {
+    const v = row.values?.[0]?.value ?? row.total_value?.value ?? null;
+    const n = typeof v === "number" ? v : null;
+    if (row.name === "reach") out.alcance = n;
+    else if (row.name === "views") out.views = n;
+    else if (row.name === "saved") out.salvos = n;
+    else if (row.name === "shares") out.compartilhamentos = n;
+  }
   return out;
+}
+
+async function insightsDoPost(mediaId: string, token: string): Promise<InsightsDoPost> {
+  for (const metricas of METRICAS_POST_TENTATIVAS) {
+    try {
+      const r = await fetch(`${GRAPH}/${mediaId}/insights?metric=${metricas.join(",")}&access_token=${token}`, { signal: AbortSignal.timeout(15_000) });
+      const j = await r.json().catch(() => ({}));
+      if (j?.error) continue; // métrica recusada para este tipo de post: tenta com menos
+      return lerInsightsDoPost(j.data);
+    } catch { /* rede: tenta a próxima (mais leve) */ }
+  }
+  return { alcance: null, views: null, salvos: null, compartilhamentos: null };
 }
 
 // business_discovery: dados PÚBLICOS de um perfil comercial pelo @, via a conta @lonemidia — pra
@@ -263,7 +330,8 @@ export async function reconcileIgFromAdAccounts(): Promise<string[]> {
     .from("clients").select("id, name, nome_fantasia, meta_ad_account_id")
     .not("meta_ad_account_id", "is", null)
     .is("ig_business_account_id", null).is("ig_public_username", null)
-    .in("status", ["good", "average", "onboarding"]).is("draft_status", null)
+    // at_risk também: cliente em risco é o que MAIS precisa do painel completo (Casa das Telhas, 04/11/2026).
+    .in("status", ["good", "average", "onboarding", "at_risk"]).is("draft_status", null)
     .or("active.is.null,active.eq.true");
   const mapeados: string[] = [];
   for (const c of clients ?? []) {
@@ -279,6 +347,20 @@ export async function reconcileIgFromAdAccounts(): Promise<string[]> {
     await new Promise((res) => setTimeout(res, 300)); // respiro pra não estourar a cota
   }
   return mapeados;
+}
+
+/**
+ * Conta ligada, mas a Meta recusou parte da leitura? Pura (testada). Alcance, seguidores novos e público
+ * TODOS vazios juntos é a assinatura de permissão pela metade (nunca acontece com acesso de dono e
+ * perfil ativo). Erro ao ler os posts também entra. Cada aviso é uma frase para o time resolver.
+ */
+export function avisosDeAcesso(x: { alcance: number | null; seguidoresGanhos: number | null; audiencia: boolean; erroPosts: string | null }): string[] {
+  const avisos: string[] = [];
+  if (x.alcance == null && x.seguidoresGanhos == null && !x.audiencia) {
+    avisos.push("a Meta recusou os números da conta (alcance, seguidores novos e público): falta permissão de insights no Business Manager");
+  }
+  if (x.erroPosts) avisos.push(`não deu para ler os posts — ${x.erroPosts}`);
+  return avisos;
 }
 
 export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Promise<IgSnapshot> {
@@ -315,7 +397,8 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
   ]);
 
   // Posts do período (paginado — ver fetchMediaDoPeriodo).
-  let media = await fetchMediaDoPeriodo(igId, desde.toISOString(), token);
+  const lidos = await fetchMediaDoPeriodo(igId, desde.toISOString(), token);
+  const media = lidos.media;
 
   // ── FALLBACK PÚBLICO QUANDO A META RECUSA A LISTAGEM ────────────────────
   //
@@ -330,36 +413,34 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
   // FUNCIONA, logo acima. Antes, o fallback existia mas só era alcançado por quem NÃO tinha
   // `ig_business_account_id`; quem tinha o ID caía no caminho quebrado e ficava sem saída.
   const contaTemPosts = Number(acct?.media_count ?? 0) > 0;
-  if (!media.length && contaTemPosts && acct?.username) {
+  if ((lidos.erro || !media.length) && contaTemPosts && acct?.username) {
     const publico = await buildIgSnapshotPublico(String(acct.username), periodo);
-    if (publico.posts?.length) {
-      console.log(`[igSnapshot] ${acct.username}: /media recusado, usei business_discovery (${publico.posts.length} posts)`);
-      // A conta é nossa no cadastro, mas o dado veio pelo caminho público: métricas de alcance e
-      // seguidores ganhos NÃO existem aqui, e marcar como "owned" faria o relatório prometer o
-      // que não tem.
-      return { ...publico, mapped: true, fonte: "publico" };
+    // Leitura pública que FUNCIONOU vale também com zero posts: aí "não postou" é verdade, lida por
+    // outro caminho (antes só se aproveitava quando vinha post, e a recusa virava zero calado).
+    if (!publico.error && (publico.posts?.length || lidos.erro)) {
+      console.log(`[igSnapshot] ${acct.username}: /media ${lidos.erro ? "recusado" : "vazio"}, usei business_discovery (${publico.posts?.length ?? 0} posts)`);
+      // A conta é nossa no cadastro, mas os posts vieram pelo caminho público. Os números da conta
+      // (alcance, seguidores novos, público), quando a Meta entregou, continuam valendo.
+      const contaRecusada = alcance.valor == null && seguidoresGanhos == null && !audiencia;
+      if (contaRecusada) return { ...publico, mapped: true, fonte: "publico" };
+      return {
+        ...publico, mapped: true, fonte: "owned", audiencia,
+        resumo: { ...publico.resumo!, alcance: alcance.valor, alcanceJanelaDias: alcance.janelaDias, seguidoresGanhos },
+      };
     }
   }
 
   const posts: IgPost[] = await Promise.all(media.map(async (m) => {
-    const tipo = (m.media_type as string) || "";
-    const metricas = tipo === "VIDEO" || tipo === "REELS" ? "reach,video_views" : "reach";
-    let reach: number | null = null, views: number | null = null;
-    try {
-      const ir = await fetch(`${GRAPH}/${m.id}/insights?metric=${metricas}&access_token=${token}`);
-      const ij = await ir.json().catch(() => ({}));
-      for (const row of (ij.data ?? []) as Array<{ name: string; values: { value: number }[] }>) {
-        const v = row.values?.[0]?.value ?? null;
-        if (row.name === "reach") reach = v; else if (row.name === "video_views") views = v;
-      }
-    } catch { /* ok */ }
+    const tipo = (m.media_product_type as string) === "REELS" ? "REELS" : (m.media_type as string) || "";
+    const ins = await insightsDoPost(m.id as string, token);
     const curtidas = (m.like_count as number) ?? null;
     const comentarios = (m.comments_count as number) ?? null;
     return {
       id: m.id as string, tipo,
       thumb: (m.thumbnail_url as string) || (m.media_url as string) || null,
       permalink: (m.permalink as string) || null,
-      curtidas, comentarios, views, alcance: reach,
+      curtidas, comentarios, views: ins.views, alcance: ins.alcance,
+      salvos: ins.salvos, compartilhamentos: ins.compartilhamentos,
       engajamento: (curtidas || 0) + (comentarios || 0),
       data: (m.timestamp as string) || null,
     };
@@ -375,35 +456,155 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
     curtidas: posts.reduce((s, p) => s + (p.curtidas || 0), 0),
     comentarios: posts.reduce((s, p) => s + (p.comentarios || 0), 0),
     engajamento: posts.reduce((s, p) => s + p.engajamento, 0),
-    postsNoPeriodo: posts.length,
+    // Posts que a Meta não deixou ler ≠ zero posts (Celmapel, Armazém dos Fios, Bazar Ribeiro e Varejão
+    // apareciam como "0 posts em 30 dias" com o perfil ativo — 04/11/2026).
+    postsNoPeriodo: lidos.erro ? null : posts.length,
   };
+  const avisos = avisosDeAcesso({ alcance: alcance.valor, seguidoresGanhos, audiencia: !!audiencia, erroPosts: lidos.erro });
 
   return {
-    mapped: true, periodo, periodoLabel: IG_PERIOD_LABEL[periodo], fonte: "owned",
+    mapped: true, periodo, periodoLabel: IG_PERIOD_LABEL[periodo], fonte: avisos.length ? "parcial" : "owned",
+    ...(avisos.length ? { avisos } : {}),
     conta: { username: acct.username as string, seguidores: (acct.followers_count as number) ?? null, posts: (acct.media_count as number) ?? null },
     resumo, audiencia, posts,
   };
 }
 
 const TTL_MS = 6 * 60 * 60 * 1000; // 6h
+/** Até quando um relatório guardado ainda é entregue na hora (atualizando por trás). */
+export const IG_STALE_MAX_MS = 48 * 60 * 60 * 1000;
+
+export type DecisaoCacheIg = "fresco" | "do-dia" | "buscar";
+
+/**
+ * O que fazer com o relatório guardado. Pura (testada). Mesmo desenho do snapshot de anúncios
+ * (lib/portal/snapshotCache.ts → decidirCache), com janela de 48h: o Instagram muda devagar.
+ *
+ * POR QUE (04/11/2026). O cron gera às 3h e o cache valia 6h: das 9h em diante toda primeira abertura
+ * da aba "Crescimento nas redes" esperava a Meta ao vivo — 36 de 51 leituras medidas levaram de 3,5 a
+ * 7,5 s. O cliente via caixinhas cinza, recarregava, e "aí funcionava" (a primeira busca já tinha gravado).
+ */
+export function decidirCacheIg(geradoEm: string | null | undefined, agora: number): DecisaoCacheIg {
+  if (!geradoEm) return "buscar";
+  const t = Date.parse(geradoEm);
+  if (!Number.isFinite(t)) return "buscar";
+  const idade = agora - t;
+  if (idade < 0) return "buscar";
+  if (idade < TTL_MS) return "fresco";
+  if (idade < IG_STALE_MAX_MS) return "do-dia";
+  return "buscar";
+}
+
+// Uma atualização por trás por cliente+período de cada vez — dez abas abertas não viram dez buscas.
+const EM_ATUALIZACAO = new Set<string>();
+
+function depoisDaResposta(tarefa: () => Promise<unknown>) {
+  try { after(tarefa); } catch { void tarefa(); }
+}
+
+async function gerarEGravar(clientId: string, periodo: IgPeriod): Promise<IgSnapshot> {
+  const snap = await buildIgSnapshot(clientId, periodo);
+  const geradoEm = new Date().toISOString();
+  // Só cacheia resultado útil (mapeado, sem erro) pra não gravar erro transitório (ex: rate limit).
+  if (snap.mapped && !snap.error) {
+    await supabaseAdmin.from("client_ig_snapshots").upsert(
+      { client_id: clientId, period_kind: periodo, data: snap as unknown as Record<string, unknown>, generated_at: geradoEm },
+      { onConflict: "client_id,period_kind" },
+    );
+  } else if (!snap.mapped) {
+    // Instagram desligado do cliente: o relatório velho não pode continuar aparecendo.
+    await esquecerIgSnapshots(clientId);
+  }
+  return { ...snap, geradoEm };
+}
+
+export interface OpcoesIgCache {
+  /** Portal: relatório de 6h–48h é entregue na hora e atualiza por trás. Padrão: busca ao vivo depois de 6h. */
+  servirVelho?: boolean;
+}
 
 // Lê do cache (client_ig_snapshots); se velho/ausente, monta fresco e grava. force=true ignora o cache.
-export async function getIgSnapshotCached(clientId: string, periodo: IgPeriod, force = false): Promise<IgSnapshot> {
+export async function getIgSnapshotCached(clientId: string, periodo: IgPeriod, force = false, opcoes: OpcoesIgCache = {}): Promise<IgSnapshot> {
   if (!force) {
     const { data: cached } = await supabaseAdmin
       .from("client_ig_snapshots").select("data, generated_at")
       .eq("client_id", clientId).eq("period_kind", periodo).maybeSingle();
-    if (cached && Date.now() - new Date(cached.generated_at as string).getTime() < TTL_MS) {
-      return cached.data as unknown as IgSnapshot;
+    const geradoEm = (cached?.generated_at as string | undefined) ?? null;
+    const decisao = cached ? decidirCacheIg(geradoEm, Date.now()) : "buscar";
+    if (cached && decisao === "fresco") return { ...(cached.data as unknown as IgSnapshot), geradoEm: geradoEm ?? undefined };
+    if (cached && decisao === "do-dia" && opcoes.servirVelho) {
+      const chave = `${clientId}:${periodo}`;
+      if (!EM_ATUALIZACAO.has(chave)) {
+        EM_ATUALIZACAO.add(chave);
+        depoisDaResposta(() => gerarEGravar(clientId, periodo)
+          .catch((e) => console.error(`[igSnapshot] atualização por trás falhou ${chave}:`, e))
+          .finally(() => EM_ATUALIZACAO.delete(chave)));
+      }
+      return { ...(cached.data as unknown as IgSnapshot), geradoEm: geradoEm ?? undefined };
     }
   }
-  const snap = await buildIgSnapshot(clientId, periodo);
-  // Só cacheia resultado útil (mapeado, sem erro) pra não gravar erro transitório (ex: rate limit).
-  if (snap.mapped && !snap.error) {
-    await supabaseAdmin.from("client_ig_snapshots").upsert(
-      { client_id: clientId, period_kind: periodo, data: snap as unknown as Record<string, unknown>, generated_at: new Date().toISOString() },
-      { onConflict: "client_id,period_kind" },
-    );
+  return gerarEGravar(clientId, periodo);
+}
+
+/**
+ * Só o que está guardado, sem esperar a Meta (página do portal: o HTML não pode ficar 7 s parado).
+ * Sem cache, ou com cache velho, pede a geração por trás — a aba já abre pronta na visita seguinte,
+ * e o navegador que pedir em seguida encontra o relatório.
+ */
+export async function lerIgDoCache(clientId: string, periodo: IgPeriod): Promise<IgSnapshot | null> {
+  const { data: cached } = await supabaseAdmin
+    .from("client_ig_snapshots").select("data, generated_at")
+    .eq("client_id", clientId).eq("period_kind", periodo).maybeSingle();
+  const geradoEm = (cached?.generated_at as string | undefined) ?? null;
+  const decisao = cached ? decidirCacheIg(geradoEm, Date.now()) : "buscar";
+  if (decisao !== "fresco") {
+    const chave = `${clientId}:${periodo}`;
+    if (!EM_ATUALIZACAO.has(chave)) {
+      EM_ATUALIZACAO.add(chave);
+      depoisDaResposta(() => gerarEGravar(clientId, periodo)
+        .catch((e) => console.error(`[igSnapshot] geração por trás falhou ${chave}:`, e))
+        .finally(() => EM_ATUALIZACAO.delete(chave)));
+    }
   }
-  return snap;
+  if (!cached || decisao === "buscar") return null;
+  return { ...(cached.data as unknown as IgSnapshot), geradoEm: geradoEm ?? undefined };
+}
+
+/** Versão que vai para o navegador do cliente: sem os avisos internos (são frases para o time). Pura. */
+export function paraOPortal<T extends IgSnapshot>(snap: T): Omit<T, "avisos"> & { parcial?: boolean } {
+  const { avisos, ...resto } = snap;
+  return { ...resto, ...(avisos?.length ? { parcial: true } : {}) };
+}
+
+/** Apaga o relatório guardado do cliente (Instagram ligado, trocado ou desligado). Devolve o erro, se houver. */
+export async function esquecerIgSnapshots(clientId: string): Promise<string | null> {
+  const { error } = await supabaseAdmin.from("client_ig_snapshots").delete().eq("client_id", clientId);
+  return error ? error.message : null;
+}
+
+/**
+ * Conta de anúncio ligada na ficha → procura o Instagram do cliente NA HORA (04/11/2026, Casa das Telhas:
+ * conta ligada e "Instagram ainda não conectado", porque a busca só rodava no cron da madrugada).
+ * Não mexe em cliente que já tem Instagram (ou @ público) cadastrado. Nunca lança.
+ */
+export async function vincularIgPelaConta(clientId: string): Promise<{ vinculado: string | null; motivo?: string }> {
+  try {
+    const { data: c, error } = await supabaseAdmin.from("clients")
+      .select("meta_ad_account_id, ig_business_account_id, ig_public_username").eq("id", clientId).maybeSingle();
+    if (error || !c) return { vinculado: null, motivo: error?.message ?? "cliente não encontrado" };
+    if (c.ig_business_account_id || c.ig_public_username) return { vinculado: null, motivo: "já tem Instagram cadastrado" };
+    const act = ((c.meta_ad_account_id as string) || "").replace(/^act_/, "");
+    if (!act) return { vinculado: null, motivo: "sem conta de anúncio" };
+    const token = await getMetaToken();
+    if (!token) return { vinculado: null, motivo: "token da Meta ausente ou vencido" };
+    const ig = await descobrirIg(act, token);
+    if (!ig?.id) return { vinculado: null, motivo: "a conta de anúncio não mostra Instagram (nem pela Página)" };
+    const { error: e2 } = await supabaseAdmin.from("clients")
+      .update({ ig_business_account_id: ig.id, ig_username_cache: ig.username ?? null }).eq("id", clientId);
+    if (e2) return { vinculado: null, motivo: e2.message };
+    await esquecerIgSnapshots(clientId);
+    return { vinculado: ig.username ? `@${ig.username}` : ig.id };
+  } catch (e) {
+    return { vinculado: null, motivo: e instanceof Error ? e.message : String(e) };
+  }
 }

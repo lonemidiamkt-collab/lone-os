@@ -37,7 +37,8 @@ export async function POST(req: NextRequest) {
   // Só cliente que a gente atende de verdade — antes rodava em churned/rascunho e queimava cota.
   let q = supabaseAdmin.from("clients").select("id, name, nome_fantasia")
     .or("ig_business_account_id.not.is.null,ig_public_username.not.is.null")
-    .in("status", ["good", "average", "onboarding"]).is("draft_status", null)
+    // at_risk também (04/11/2026): cliente em risco é o que mais precisa do painel em dia.
+    .in("status", ["good", "average", "onboarding", "at_risk"]).is("draft_status", null)
     .or("active.is.null,active.eq.true");
   if (onlyClient) q = supabaseAdmin.from("clients").select("id, name, nome_fantasia").eq("id", onlyClient);
   const { data: clients, error: cliErr } = await q;
@@ -45,6 +46,8 @@ export async function POST(req: NextRequest) {
   if (cliErr) return NextResponse.json({ ok: false, erro: `não consegui ler os clientes: ${cliErr.message}` }, { status: 500 });
 
   const feitos: string[] = [];
+  // Conta ligada, mas a Meta recusou parte da leitura (permissão pela metade) — 04/11/2026.
+  const parciais = new Map<string, string>();
   // FALHA TEM QUE APARECER. Antes só o sucesso entrava na resposta: o @ do Dumar deixou de existir
   // no Instagram e o relatório dele sumiu por 11 dias sem uma linha de log em lugar nenhum.
   const falhas: { cliente: string; periodo: string; motivo: string }[] = [];
@@ -58,6 +61,7 @@ export async function POST(req: NextRequest) {
         // A janela de 30d alimenta o histórico post a post (client_ig_posts), que é a fonte
         // de "postou ou não" — o board tinha 3 cards publicados contra 307 posts reais.
         if (periodo === "30d" && snap.posts?.length) await guardarPosts(c.id as string, snap.posts);
+        if (periodo === "30d" && snap.avisos?.length) parciais.set(nome, snap.avisos.join("; "));
       }
       else falhas.push({ cliente: nome, periodo, motivo: snap.error || (snap.mapped ? "sem dados" : "Instagram não vinculado") });
       // pequeno respiro entre chamadas pra não estourar a cota da Meta
@@ -72,12 +76,21 @@ export async function POST(req: NextRequest) {
   const mortos = [...porCliente.entries()].filter(([cli]) => falhas.filter((f) => f.cliente === cli).length >= IG_PERIODS.length);
   const internalJid = process.env.CS_INTERNAL_GROUP_JID;
   let avisoErro: string | null = null;
-  if (mortos.length && internalJid && !onlyClient) {
+  // Roda 2x por dia (3h e 12h): o grupo só recebe os avisos da rodada da madrugada, para não repetir.
+  const rodadaDoAviso = new Date().getUTCHours() < 12;
+  if (mortos.length && internalJid && !onlyClient && rodadaDoAviso) {
     const linhas = mortos.map(([cli, motivo]) => `• *${cli}* — ${motivo}`).join("\n");
     const aviso = await csSendGroupText(internalJid,
       `📉 *Instagram sem dados* — ${mortos.length} cliente(s) não vão ter a parte de Instagram no relatório:\n\n${linhas}\n\n` +
       `_Geralmente é o @ que mudou ou a conta saiu de Comercial. Vale conferir com o cliente._`);
     if (!aviso.ok) avisoErro = `o aviso "Instagram sem dados" não saiu no grupo interno (${aviso.error ?? "falhou"})`;
+  }
+  if (parciais.size && internalJid && !onlyClient && rodadaDoAviso) {
+    const linhas = [...parciais.entries()].map(([cli, motivo]) => `• *${cli}* — ${motivo}`).join("\n");
+    const aviso = await csSendGroupText(internalJid,
+      `🔒 *Instagram com acesso incompleto* — ${parciais.size} cliente(s) com parte dos números faltando no painel:\n\n${linhas}\n\n` +
+      `_Conferir no Business Manager se o perfil está ligado à Página com permissão de insights._`);
+    if (!aviso.ok) avisoErro = avisoErro ?? `o aviso "Instagram com acesso incompleto" não saiu no grupo interno (${aviso.error ?? "falhou"})`;
   }
 
   // `ok` (auditoria 10.4): antes era sempre true — 0 gerados com clientes para gerar ficava verde na
@@ -87,5 +100,5 @@ export async function POST(req: NextRequest) {
   const erro = nadaGerado
     ? `nenhum relatório de Instagram foi gerado para ${total} cliente(s) (${falhas[0]?.motivo ?? "sem motivo"})`
     : avisoErro;
-  return NextResponse.json({ ok: !erro, ...(erro ? { erro } : {}), gerados: feitos.length, detalhe: feitos, falhas, clientes_sem_ig: mortos.map(([c]) => c), auto_vinculados: autoMapeados });
+  return NextResponse.json({ ok: !erro, ...(erro ? { erro } : {}), gerados: feitos.length, detalhe: feitos, falhas, clientes_sem_ig: mortos.map(([c]) => c), acesso_incompleto: [...parciais.keys()], auto_vinculados: autoMapeados });
 }

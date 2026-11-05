@@ -1,10 +1,11 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
-import { getIgSnapshotCached, normalizeIgPeriod } from "@/lib/meta/igSnapshot";
+import { getIgSnapshotCached, normalizeIgPeriod, paraOPortal } from "@/lib/meta/igSnapshot";
 import { estaPausado } from "@/lib/clients/pausa";
 import { criarLimite } from "@/lib/portal/limite";
 
@@ -35,9 +36,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ clie
   }
   if (!ok) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const snap = await getIgSnapshotCached(clientId, period, force);
-  if (!snap.mapped) return NextResponse.json({ mapped: false, error: "Instagram não mapeado pra este cliente" }, { status: 404 });
-  // 409 = a conexão com o perfil precisa ser refeita (ação do time); 502 = a Meta falhou agora.
-  if (snap.error) return NextResponse.json({ error: snap.error, needsReconnect: snap.needsReconnect }, { status: snap.needsReconnect ? 409 : 502 });
-  return NextResponse.json(snap);
+  // Portal: relatório de até 48h sai na hora e atualiza por trás (o cliente nunca espera a Meta).
+  const snap = await getIgSnapshotCached(clientId, period, force, { servirVelho: !!portalToken });
+  if (!snap.mapped) return NextResponse.json({ mapped: false, estado: "nao_conectado", error: "Instagram não mapeado pra este cliente" }, { status: 404 });
+  // FALHA VOLTA 200 COM `estado` (04/11/2026). Era 409/502: o Cloudflare troca o corpo de um 502 pela
+  // página de erro dele, e o motivo da Meta sumia no caminho (ACM, Dumar e Veneza só viam "não consegui").
+  if (snap.error) {
+    Sentry.captureMessage("Instagram: relatório indisponível", { level: "warning", extra: { clientId, period, motivo: snap.error } });
+    return NextResponse.json({ mapped: true, estado: snap.needsReconnect ? "reconectar" : "falha", error: snap.error, needsReconnect: !!snap.needsReconnect });
+  }
+  return NextResponse.json({ ...(portalToken ? paraOPortal(snap) : snap), estado: "ok" });
 }
