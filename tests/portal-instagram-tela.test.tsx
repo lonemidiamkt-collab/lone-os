@@ -77,7 +77,9 @@ describe("PortalInstagram — leva 1 do Painel v2", () => {
     expect(screen.getAllByText("↑ 30%")).toHaveLength(2); // visualizações 5.200 × 4.000 e toques 13 × 10
     expect(screen.getByText("↑ 50%")).toBeInTheDocument(); // interações 90 × 60
     expect(screen.getByText("Mensagem / WhatsApp")).toBeInTheDocument();
-    expect(screen.getByText("62% de quem viu ainda não segue o perfil")).toBeInTheDocument();
+    expect(screen.getByText("62% de quem viu o perfil (anúncios incluídos) ainda não segue")).toBeInTheDocument();
+    // A frase usa os números dos cartões (40 entraram), não o follower_count antigo (7).
+    expect(screen.getByText(/40 seguidores novos/)).toBeInTheDocument();
     expect(screen.queryByText(/Taxa de engajamento/)).toBeNull();
     expect(screen.queryByText("Anúncios")).toBeNull(); // alcance por anúncio fica fora do orgânico
     expect(screen.getByText("5 no período anterior")).toBeInTheDocument();

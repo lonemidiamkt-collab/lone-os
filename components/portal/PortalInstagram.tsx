@@ -188,7 +188,10 @@ export default function PortalInstagram({ token, clientId, period, inicial = nul
       detalhe: ant?.posts != null ? `${formatarNumero(ant.posts)} no período anterior` : undefined },
   ].filter((k) => k.valor !== "—" || k.rotulo === "Posts no período");
 
-  const frase = resumoInstagram(dias, isPublico ? { postsNoPeriodo: r?.postsNoPeriodo } : r);
+  // A frase usa os MESMOS números dos cartões: "seguidores novos" = quem entrou (não o follower_count antigo,
+  // que dava 36 na frase e 26 no cartão — visto na Araruama Tintas, 05/11/2026).
+  const frase = resumoInstagram(dias, isPublico ? { postsNoPeriodo: r?.postsNoPeriodo }
+    : r ? { ...r, alcance, alcanceJanelaDias: atual?.alcance != null ? dias : r.alcanceJanelaDias, seguidoresGanhos: atual?.entraram ?? r.seguidoresGanhos } : r);
   const temAudiencia = !!a && (a.generoMascPct != null || a.idades.length > 0 || a.cidades.length > 0);
   const melhores = posts.slice(0, MELHORES_POSTS);
   const botoes = m?.toquesPorBotao ?? [];
@@ -253,7 +256,7 @@ export default function PortalInstagram({ token, clientId, period, inicial = nul
               icone={Eye}
               titulo="De onde veio o alcance"
               descricao={m?.pctNaoSeguidores != null
-                ? `${m.pctNaoSeguidores}% de quem viu ainda não segue o perfil`
+                ? `${m.pctNaoSeguidores}% de quem viu o perfil (anúncios incluídos) ainda não segue`
                 : "Pessoas alcançadas por formato"}
               itens={formatos.map((f) => ({ rotulo: ROTULO_FORMATO[f.formato] ?? f.formato, valor: f.valor }))}
               formato="pct"
