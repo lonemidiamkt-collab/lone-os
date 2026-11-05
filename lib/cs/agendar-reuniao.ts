@@ -9,7 +9,9 @@
 //   • CONFIRMAR ou PERGUNTAR. Um horário mal lido coloca alguém sozinho numa chamada, então: só
 //     agenda com data E hora explícitas; qualquer vaguidão vira pergunta.
 
-import { lerHorario, lerHora, horarioPlausivel, porExtenso } from "./parse-horario";
+import { lerHorario, lerHora, horarioPlausivel, porExtenso, semAcento } from "./parse-horario";
+import { componentesSP, dataSP, isoSP, somarDias } from "@/lib/prospeccao/tempo";
+import { tempoQueFalta } from "./reuniao-mensal";
 
 /** Fala sobre a reunião de acompanhamento — não sobre uma data qualquer. */
 const RX_REUNIAO = /\b(reuni[ãa]o|reuniao|call|meet|alinhamento|conversar|bate[- ]?papo|videochamada|v[ií]deo\s*chamada)\b/i;
@@ -43,7 +45,7 @@ const PERTO = 60;
 const RX_DIAS = /\b(hoje|amanh[ãa]|depois de amanh[ãa]|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo|dia\s+\d{1,2}|\d{1,2}\/\d{1,2})\b/gi;
 
 /** Referências a HORA: "14:00", "10h30", "às 9", "16h". */
-const RX_HORAS = /\b(\d{1,2}\s*[:h]\s*\d{2}|\d{1,2}\s*h\b|(?:as|às)\s+\d{1,2}\b)/gi;
+const RX_HORAS = /\b(\d{1,2}\s*[:h]\s*\d{2}|\d{1,2}\s*(?:hrs?|hs|h|horas?)\b|(?:as|às)\s+\d{1,2}\b)/gi;
 
 /**
  * A mensagem oferece MAIS DE UMA opção de dia ou de hora?
@@ -94,7 +96,7 @@ function marcarPertoDeReuniao(t: string): boolean {
 const RX_PASSADO = /\b(foi|teve|tivemos|aconteceu|ontem|semana passada|m[êe]s passado|na [úu]ltima)\b/i;
 
 /** Recusa/adiamento: precisa de tratamento diferente de uma proposta. */
-const RX_RECUSA = /\b(n[ãa]o (posso|consigo|d[áa]|vai dar|rola)|imposs[íi]vel|remarcar|adiar|outro dia|outra hora|desmarcar|cancelar)\b/i;
+const RX_RECUSA = /\b(n[ãa]o (posso|consigo|d[áa]|vai dar|rola|vou conseguir|vou poder)|imposs[íi]vel|remarcar|adiar|outro dia|outra hora|desmarcar|cancelar)\b/i;
 
 export type IntencaoReuniao =
   | { tipo: "agendar"; iso: string; trecho: string; confirmar: false }
@@ -394,20 +396,16 @@ export function textoOferta(cliente: string, opcoes: string[]): string {
  */
 export function sugerirHorarios(agora: Date, quantos = 2, ateIso?: string): { iso: string; texto: string }[] {
   const out: { iso: string; texto: string }[] = [];
-  const limite = ateIso ? new Date(`${ateIso}T23:59:59-03:00`) : null;
   const horas = [10, 15];
 
+  // Dias e horas de São Paulo, em qualquer fuso de servidor. Com `setHours` no container em UTC, o
+  // "10h" e o "15h" saíam para o cliente como 07:00 e 12:00.
   const varrer = (respeitarLimite: boolean) => {
-    const d = new Date(agora);
-    d.setHours(0, 0, 0, 0);
-    for (let i = 0; i < 21 && out.length < quantos; i++) {
-      d.setDate(d.getDate() + 1);
-      const semana = d.getDay();
-      if (semana === 0 || semana === 6) continue;          // reunião é em dia útil
-      if (respeitarLimite && limite && d > limite) break;   // não passa da janela nesta passada
-      const alvo = new Date(d);
-      alvo.setHours(horas[out.length % horas.length], 0, 0, 0);
-      const iso = alvo.toISOString();
+    for (let i = 1; i <= 21 && out.length < quantos; i++) {
+      const d = componentesSP(somarDias(agora, i));
+      if (d.diaSemana === 0 || d.diaSemana === 6) continue;   // reunião é em dia útil
+      if (respeitarLimite && ateIso && d.ymd > ateIso) break;  // não passa da janela nesta passada
+      const iso = isoSP(dataSP(d.ano, d.mes, d.dia, horas[out.length % horas.length]));
       if (out.some((o) => o.iso === iso)) continue;
       out.push({ iso, texto: porExtenso(iso) });
     }
@@ -417,6 +415,65 @@ export function sugerirHorarios(agora: Date, quantos = 2, ateIso?: string): { is
   // Janela apertada demais para caber as opções: sai dela, mas só depois de tentar caber dentro.
   if (out.length < quantos) varrer(false);
   return out;
+}
+
+// ── A RESPOSTA À OFERTA ──────────────────────────────────────────────────
+//
+// O agente oferece "terça às 10:00 ou quarta às 15:00" e o cliente responde "pode ser terça às
+// 15h" ou "o primeiro". Nada disso tem a palavra "reunião", e a oferta não contava como pergunta:
+// o agente ficava mudo com quem tinha acabado de responder a ele. É o mesmo "perguntou e esqueceu"
+// do Império dos Pisos (08/09), que só tinha sido corrigido para a pergunta de horário.
+//
+// A oferta fica aberta por dias, não por horas. Por isso a mensagem precisa ser só a resposta:
+// "a promoção começa dia 18 às 8h" é curta e tem data, e não pode virar reunião.
+
+/** O que pode estar numa resposta de horário além da própria data e hora. */
+const PALAVRAS_DE_RESPOSTA = new Set((
+  "a o as os e de do da no na pra para pro por mim me eu pode ser sim ok fica ficaria bom boa otimo otima "
+  + "melhor perfeito esta ta funciona consigo posso prefiro entao que se puder dia hoje amanha depois manha "
+  + "tarde noite semana vem proxima proximo feira segunda terca quarta quinta sexta sabado horas hora hs hrs "
+  + "meio meia opcao primeiro primeira segundo nessa nesse essa esse fechado combinado beleza blz show"
+).split(" "));
+
+/** A mensagem é só uma resposta de horário, sem outro assunto junto? */
+export function pareceRespostaDeHorario(texto: string): boolean {
+  const t = semAcento(texto || "").trim();
+  if (!t || t.length > RESPOSTA_CURTA) return false;
+  const palavras = t.replace(/[^a-z0-9:/\s-]/g, " ").split(/[\s-]+/).filter(Boolean);
+  return palavras.filter((p) => !/^\d/.test(p) && !PALAVRAS_DE_RESPOSTA.has(p)).length <= 1;
+}
+
+const NOME_DO_DIA = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
+
+/**
+ * O cliente escolheu uma das opções oferecidas, sem dizer a hora?
+ *
+ * Devolve null quando não é o caso (inclusive quando a mensagem traz hora: aí quem lê é o parser).
+ * "Pode ser" não diz qual das duas, então pergunta, mas só quando o cliente citou a oferta: solto
+ * no grupo, "pode ser" responde a qualquer outra coisa.
+ */
+export function lerRespostaOferta(texto: string, opcoes: { iso: string }[], citouOferta = false): IntencaoReuniao | null {
+  const t = semAcento(texto || "").trim();
+  if (!opcoes.length || !t || RX_RECUSA.test(t) || lerHora(t)?.explicita) return null;
+  const escolhe = (o: { iso: string }): IntencaoReuniao => ({ tipo: "agendar", iso: o.iso, trecho: t.slice(0, 60), confirmar: false });
+
+  if (/\b(?:qualquer\s+(?:um|uma|horario)|tanto\s+faz)\b/.test(t) && t.length <= 40) return escolhe(opcoes[0]);
+  if (!pareceRespostaDeHorario(t)) return null;
+
+  if (/\bopcao\s*1\b|\bprimeira\s+opcao\b/.test(t)) return escolhe(opcoes[0]);
+  if (opcoes[1] && /\bopcao\s*2\b|\bsegunda\s+opcao\b/.test(t)) return escolhe(opcoes[1]);
+
+  // O dia vem antes do ordinal: "a segunda" é a segunda-feira quando uma das opções cai nela.
+  const noDia = opcoes.filter((o) => new RegExp(`\\b${NOME_DO_DIA[componentesSP(new Date(o.iso)).diaSemana]}\\b`).test(t));
+  if (noDia.length === 1) return escolhe(noDia[0]);
+
+  if (/\bprimeir[oa]\b/.test(t)) return escolhe(opcoes[0]);
+  if (opcoes[1] && /\bsegundo\b|\ba\s+segunda\b/.test(t)) return escolhe(opcoes[1]);
+
+  if (citouOferta && /^(?:pode(?:\s+(?:ser|sim))?|sim,?\s+pode|funciona)[\s.!]*$/.test(t)) {
+    return { tipo: "perguntar_horario", motivo: "aceitou sem dizer qual das opções" };
+  }
+  return null;
 }
 
 /** A oferta, agora com o número da tentativa. A segunda tenta de outro jeito, não repete a mesma. */
@@ -455,13 +512,157 @@ export function textoCobrarSocial(cliente: string, quandoExtenso: string, dias: 
 }
 
 /** Lembretes NO GRUPO DO CLIENTE — o que faz a reunião acontecer, não só existir na agenda. */
-export function textoLembreteCliente(quandoExtenso: string, tipo: "vespera" | "uma_hora"): string {
+export function textoLembreteCliente(
+  quandoExtenso: string,
+  tipo: "vespera" | "uma_hora",
+  quanto: { faltamMin?: number; diaVespera?: string } = {},
+): string {
   // A confirmação já termina com "Até lá! 👋". Repetir a mesma despedida no lembrete faz as duas
   // mensagens parecerem a mesma coisa reenviada — e mensagem que parece repetida é ignorada.
   return tipo === "vespera"
-    ? `📅 Lembrete: amanhã temos nossa reunião de acompanhamento — *${quandoExtenso}*.\n`
+    ? `📅 Lembrete: ${quanto.diaVespera ?? "amanhã"} temos nossa reunião de acompanhamento — *${quandoExtenso}*.\n`
       + `Se precisar remarcar, é só falar aqui que eu ajusto.`
-    : `⏰ Nossa reunião começa daqui a uma hora (${quandoExtenso}). Te espero!`;
+    : `⏰ Nossa reunião começa daqui a ${tempoQueFalta(quanto.faltamMin ?? 60)} (${quandoExtenso}). Te espero!`;
+}
+
+// ── O CLIENTE FALANDO DA REUNIÃO QUE JÁ EXISTE ───────────────────────────────
+
+const NEGA_REUNIAO = "n[ãa]o\\s+(?:posso|consigo|vou\\s+conseguir|vou\\s+poder|vai\\s+dar|d[áa])";
+const MUDA_REUNIAO = "remarcar|desmarcar|cancelar|adiar";
+const A_REUNIAO = "(?:reuni[ãa]o|call|meet)";
+const RX_PEDE_REMARCAR = new RegExp(
+  `\\b(?:${NEGA_REUNIAO}|${MUDA_REUNIAO})\\b[^.!?\\n]{0,30}\\b${A_REUNIAO}\\b|\\b${A_REUNIAO}\\b[^.!?\\n]{0,30}\\b(?:${NEGA_REUNIAO}|${MUDA_REUNIAO})\\b`,
+  "i",
+);
+const RX_ANTES_DEPOIS_DA_REUNIAO = new RegExp(`\\b(?:depois|antes)\\s+d[ao]\\s+(?:nossa\\s+)?${A_REUNIAO}\\b`, "i");
+
+/**
+ * O cliente está pedindo para mudar a reunião marcada?
+ *
+ * O lembrete promete "se precisar remarcar, é só falar aqui que eu ajusto" e a recusa não tinha
+ * tratamento nenhum: o pedido caía na classificação geral, a reunião seguia marcada e, na hora,
+ * saía "Te espero!" para quem já tinha dito que não ia.
+ *
+ * Aqui a régua é alta porque a saída tira a reunião dos lembretes: "não posso postar hoje, depois
+ * da reunião te falo" não pede nada. "Vamos remarcar" sem dizer o quê só conta com reunião perto.
+ */
+export function pedeRemarcar(texto: string, faltamHoras: number): boolean {
+  const t = (texto || "").trim();
+  if (!t || RX_ANTES_DEPOIS_DA_REUNIAO.test(t)) return false;
+  if (RX_PEDE_REMARCAR.test(t)) return true;
+  return /\b(?:remarcar|desmarcar)\b/i.test(t) && faltamHoras <= 72;
+}
+
+/** O que o agente está esperando deste cliente, e a reunião que ele já tem. */
+export interface ContextoDaConversa {
+  /** A proposta na mesa: do agente ("terça às 15h?") ou a contraproposta do social. */
+  pendente?: { id: string; horario_proposto: string; proposto_lado: string | null } | null;
+  /** A proposta pendente ainda está na validade (`propostaValida`). */
+  propostaVale: boolean;
+  /** O agente perguntou o horário há pouco. */
+  perguntou: boolean;
+  /** A oferta aberta e as opções que ela trouxe. */
+  oferta?: { id: string; opcoes: { iso: string }[] } | null;
+  /** O cliente respondeu citando uma mensagem sobre a reunião. */
+  citouReuniao: boolean;
+}
+
+/** O que a mensagem do cliente diz, dado o que o agente está esperando dele. */
+export function lerMensagemDoCliente(texto: string, agora: Date, ctx: ContextoDaConversa): IntencaoReuniao {
+  const escolheu = ctx.oferta ? lerRespostaOferta(texto, ctx.oferta.opcoes, ctx.citouReuniao) : null;
+  if (escolheu) return escolheu;
+  // A OFERTA TAMBÉM É PERGUNTA, mas fica aberta por dias: só vale a mensagem que é só a resposta.
+  const respondeOferta = !!ctx.oferta && (ctx.citouReuniao || pareceRespostaDeHorario(texto));
+  return lerIntencaoReuniao(
+    texto, agora,
+    ctx.propostaVale ? (ctx.pendente?.horario_proposto || undefined) : undefined,
+    ctx.perguntou || respondeOferta,
+  );
+}
+
+export type DecisaoDaConversa =
+  /** Não é sobre reunião: a mensagem segue o fluxo normal. */
+  | { tipo: "seguir" }
+  /** O cliente aceitou a contraproposta do social: os dois lados disseram sim. */
+  | { tipo: "fechar"; iso: string; reuniaoId: string }
+  /** Citou o horário que já está marcado: confirma, não reabre. */
+  | { tipo: "ja_marcada"; iso: string }
+  /** Repetiu o horário que já levou ao social: a pergunta está feita. */
+  | { tipo: "ja_proposta"; iso: string }
+  /** Pediu para mudar: sai dos lembretes, o social fica sabendo e o cliente é perguntado. */
+  | { tipo: "pedir_outro_horario"; reuniaoId: string; iso: string; responsavel: string | null }
+  /** Deu o dia e o turno: o agente propõe a hora. */
+  | { tipo: "propor"; iso: string; agendadaId: string | null; alvoId: string | null }
+  /** Deu dia e hora: anota e pergunta ao social. */
+  | { tipo: "levar_ao_social"; iso: string; agendadaId: string | null; alvoId: string | null }
+  | { tipo: "perguntar"; motivo: string };
+
+/**
+ * A decisão, numa função só, sem banco e sem WhatsApp. A rota executa o que sai daqui.
+ *
+ * `ativa` é a próxima reunião do cliente que já tem horário (`reuniaoAtivaDoCliente`).
+ */
+export function decidirNaConversa(
+  intencao: IntencaoReuniao,
+  texto: string,
+  agora: Date,
+  ctx: ContextoDaConversa,
+  ativa?: { id: string; estado: string; start_at: string; responsavel: string | null; horario_proposto: string | null; proposto_lado: string | null } | null,
+): DecisaoDaConversa {
+  if (intencao.tipo === "nenhuma") return { tipo: "seguir" };
+  if (intencao.tipo === "perguntar_horario") return { tipo: "perguntar", motivo: intencao.motivo };
+
+  const propostaNaMesa = ctx.propostaVale ? ctx.pendente : null;
+
+  if (intencao.tipo === "recusa") {
+    const emJogo = ativa
+      ? { id: ativa.id, iso: ativa.start_at, responsavel: ativa.responsavel }
+      : propostaNaMesa ? { id: propostaNaMesa.id, iso: propostaNaMesa.horario_proposto, responsavel: null } : null;
+    if (!emJogo) return { tipo: "seguir" };
+    const faltamHoras = (new Date(emJogo.iso).getTime() - agora.getTime()) / 3600_000;
+    return propostaNaMesa || ctx.perguntou || pedeRemarcar(texto, faltamHoras)
+      ? { tipo: "pedir_outro_horario", reuniaoId: emJogo.id, iso: emJogo.iso, responsavel: emJogo.responsavel }
+      : { tipo: "seguir" };
+  }
+
+  const igual = (iso?: string | null) => !!iso && new Date(iso).getTime() === new Date(intencao.iso).getTime();
+
+  // O CLIENTE ACEITOU A CONTRAPROPOSTA DO SOCIAL: perguntar de novo ao social o horário que ele
+  // mesmo mandou seria a terceira volta do mesmo assunto.
+  if (intencao.tipo === "agendar" && propostaNaMesa?.proposto_lado === "social" && igual(propostaNaMesa.horario_proposto)) {
+    return { tipo: "fechar", iso: intencao.iso, reuniaoId: propostaNaMesa.id };
+  }
+
+  const agendada = ativa?.estado === "agendada" ? ativa : null;
+  if (agendada) {
+    // "Nossa reunião é amanhã às 10h, né?" não é proposta. Tratada como proposta, ela tirava a
+    // reunião do estado `agendada`, os lembretes paravam e o social era perguntado de novo. Com o
+    // turno ("amanhã de manhã") basta ser no mesmo dia: o agente diz a hora certa.
+    const mesmoDia = componentesSP(new Date(agendada.start_at)).ymd === componentesSP(new Date(intencao.iso)).ymd;
+    if (igual(agendada.start_at) || (intencao.tipo === "propor" && mesmoDia)) {
+      return { tipo: "ja_marcada", iso: agendada.start_at };
+    }
+  } else if (ativa?.proposto_lado === "cliente" && igual(ativa.horario_proposto)) {
+    return { tipo: "ja_proposta", iso: intencao.iso };
+  }
+
+  // Quem recebe o horário novo: a reunião que ele já tem, senão a linha que esta mensagem responde.
+  const alvoId = ativa?.id ?? propostaNaMesa?.id ?? ctx.oferta?.id ?? null;
+  return { tipo: intencao.tipo === "propor" ? "propor" : "levar_ao_social", iso: intencao.iso, agendadaId: agendada?.id ?? null, alvoId };
+}
+
+export function textoRemarcarCliente(): string {
+  return `📅 Sem problema! Me diz o melhor dia e horário pra você que eu vejo com o time. 👍`;
+}
+
+export function textoRemarcarEquipe(cliente: string, quandoExtenso: string, trecho: string, mencao: string): string {
+  return `🔁 ${mencao || ""} a *${cliente}* pediu pra mudar a reunião de *${quandoExtenso}*:\n“${trecho}”\n\n`.trimStart()
+    + `Tirei essa reunião dos lembretes e já pedi outro horário no grupo. Quando a resposta vier, eu te chamo.`;
+}
+
+/** O cliente citou o horário que já está marcado: confirma, não reabre a negociação. */
+export function textoReuniaoJaMarcada(quandoExtenso: string): string {
+  return `📅 Nossa reunião já está marcada: *${quandoExtenso}*. Se precisar mudar, é só falar aqui.`;
 }
 
 // ── A RESPOSTA DO SOCIAL ─────────────────────────────────────────────────
@@ -491,8 +692,13 @@ export function lerRespostaSocial(texto: string, agora = new Date(), propostoIso
   const t = (texto || "").trim();
   if (!t) return { tipo: "nenhuma" };
 
+  // Compara o INSTANTE. O proposto vem do banco em UTC ("13:00:00+00:00") e o lido vem em SP
+  // ("10:00:00-03:00"): comparando o texto, "ok, 10h" para uma reunião às 10h virava contraproposta,
+  // e o cliente recebia "nesse horário ficou complicado, consegue às 10:00?".
+  const mesmoDoProposto = (iso: string) => !!propostoIso && new Date(iso).getTime() === new Date(propostoIso).getTime();
+
   const horario = lerHorario(t, agora);
-  if (horario?.horaExplicita && horarioPlausivel(horario.iso, agora).ok) {
+  if (horario?.horaExplicita && horarioPlausivel(horario.iso, agora).ok && !mesmoDoProposto(horario.iso)) {
     return { tipo: "contraproposta", iso: horario.iso };
   }
 
@@ -507,7 +713,7 @@ export function lerRespostaSocial(texto: string, agora = new Date(), propostoIso
       // Reconstrói no fuso de SP para não escorregar 3 horas.
       const dia = base.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
       const iso = `${dia}T${p2(h.hora)}:${p2(h.minuto)}:00-03:00`;
-      if (iso !== propostoIso && horarioPlausivel(iso, agora).ok) {
+      if (!mesmoDoProposto(iso) && horarioPlausivel(iso, agora).ok) {
         return { tipo: "contraproposta", iso };
       }
     }

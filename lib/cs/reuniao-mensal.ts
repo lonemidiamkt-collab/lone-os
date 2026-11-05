@@ -18,6 +18,13 @@
 //
 // A janela de agendamento (15 a 22) é sobre MARCAR, não sobre reunir: a reunião pode acontecer
 // depois do dia 22. Confundir as duas coisas faria o sistema cobrar quem já marcou para o dia 25.
+//
+// DOIS RELÓGIOS (05/11/2026). `janelaDoMes` lê o calendário, então recebe o `spNow()`. Todo o resto
+// faz conta com instantes (`decidirAcao`, `montarCobranca`, `lembretesDevidos`, `diasUteisEntre`) e
+// recebe o relógio REAL, o `new Date()`. O `spNow()` é deslocado 3 horas no container em UTC: passado
+// para `lembretesDevidos`, ele fez o lembrete de 1h da reunião das 10:00 sair às 12:00.
+
+import { componentesSP, TZ } from "@/lib/prospeccao/tempo";
 
 // Os estados. `ofertada` e `aguardando_social` existem por causa da negociação em três vias que o
 // Roberto desenhou: nada entra na agenda de alguém sem essa pessoa ter dito sim.
@@ -131,6 +138,8 @@ export interface ClienteCiclo {
   ofertadoEm?: string | null;
   /** Quando o horário do cliente foi levado ao social — conta o prazo dele. */
   perguntadoAoSocialEm?: string | null;
+  /** Quem deu o último horário. "social" = a contraproposta está com o CLIENTE. */
+  propostoLado?: string | null;
 }
 
 // ── O QUE FAZER COM CADA CLIENTE, AGORA ──────────────────────────────────
@@ -142,14 +151,21 @@ export type Acao =
   | { tipo: "cobrar_social"; diasEsperando: number }
   | { tipo: "nada" };
 
-/** Dias ÚTEIS entre duas datas. Fim de semana não conta contra ninguém. */
+/** O dia de SP de um instante, como número de dias: a diferença entre dois é o calendário. */
+const diaSP = (d: Date) => {
+  const c = componentesSP(d);
+  return Date.UTC(c.ano, c.mes - 1, c.dia) / 86400000;
+};
+
+/** Dias de calendário entre dois instantes, em SP. */
+export const diasCorridosEntre = (de: Date, ate: Date) => diaSP(ate) - diaSP(de);
+
+/** Dias ÚTEIS entre dois instantes, no calendário de SP. Fim de semana não conta contra ninguém. */
 export function diasUteisEntre(de: Date, ate: Date): number {
   let n = 0;
-  const d = new Date(de.getFullYear(), de.getMonth(), de.getDate());
-  const fim = new Date(ate.getFullYear(), ate.getMonth(), ate.getDate());
-  while (d < fim) {
-    d.setDate(d.getDate() + 1);
-    if (!ehFimDeSemana(d)) n++;
+  for (let d = diaSP(de) + 1; d <= diaSP(ate); d++) {
+    const semana = new Date(d * 86400000).getUTCDay();
+    if (semana !== 0 && semana !== 6) n++;
   }
   return n;
 }
@@ -164,6 +180,7 @@ export function diasUteisEntre(de: Date, ate: Date): number {
  *   • o social tem 1 dia útil para confirmar o horário que o cliente pediu.
  *
  * Só devolve ação em dia útil e dentro da janela — fora disso, o agente não fala com cliente.
+ * `agora` é o instante real.
  */
 export function decidirAcao(c: ClienteCiclo, janela: JanelaCiclo, agora: Date): Acao {
   if (!janela.aberta) return { tipo: "nada" };
@@ -176,7 +193,9 @@ export function decidirAcao(c: ClienteCiclo, janela: JanelaCiclo, agora: Date): 
 
     case "ofertada": {
       if (!c.ofertadoEm) return { tipo: "nada" };
-      const dias = Math.floor((agora.getTime() - new Date(c.ofertadoEm).getTime()) / 86400000);
+      // Dias de calendário, não períodos de 24h: a oferta sai às 8h e pouco e a rodada de dois dias
+      // depois às 8h em ponto, que dá 47h59. Contando horas, o "2 dias" do Roberto virava 3.
+      const dias = diasCorridosEntre(new Date(c.ofertadoEm), agora);
       if (dias < ESPERA_CLIENTE_DIAS) return { tipo: "nada" };
       // Silêncio depois de duas ofertas não é problema de mensagem — é conversa que precisa de
       // gente. O agente sai do meio em vez de insistir numa terceira.
@@ -190,6 +209,9 @@ export function decidirAcao(c: ClienteCiclo, janela: JanelaCiclo, agora: Date): 
     case "aguardando_social": {
       // O cliente já disse um horário; falta o social confirmar. Aqui a espera é em dias ÚTEIS:
       // cobrar segunda por algo pedido na sexta seria contar o fim de semana contra a pessoa.
+      // Com a contraproposta na mesa quem deve resposta é o cliente. Cobrar o social aqui faria ele
+      // responder "ok" e fechar um horário que o cliente ainda não aceitou.
+      if (c.propostoLado === "social") return { tipo: "nada" };
       const desde = c.perguntadoAoSocialEm ?? c.propostoEm;
       if (!desde) return { tipo: "nada" };
       const uteis = diasUteisEntre(new Date(desde), agora);
@@ -293,14 +315,33 @@ export interface Lembrete {
   cliente: string;
   responsavel: string | null;
   quando: string;
+  /** Quanto falta, em minutos, na rodada que disparou. */
+  faltamMin: number;
+  /** Como dizer o dia na véspera: "amanhã", ou "segunda" quando a véspera útil é a sexta. */
+  diaVespera: string;
 }
 
+/** Quanto falta, do jeito que se fala. O cron é de hora em hora, e nem toda reunião é em hora cheia. */
+export function tempoQueFalta(faltamMin: number): string {
+  const m = Math.round(faltamMin / 5) * 5;
+  if (m >= 55 && m <= 65) return "uma hora";
+  if (m > 65) return `1h${String(m - 60).padStart(2, "0")}`;
+  return `${m} minutos`;
+}
+
+const diaDaSemana = (iso: string) =>
+  new Date(iso).toLocaleDateString("pt-BR", { weekday: "long", timeZone: TZ }).replace("-feira", "");
+
 /**
- * Quais reuniões merecem lembrete AGORA.
+ * Quais reuniões merecem lembrete AGORA. `agora` é o instante REAL, nunca o `spNow()`.
  *
  * As janelas são estreitas de propósito e o cron roda de hora em hora: um "um dia antes" disparado
  * com 30h de antecedência não é lembrete, é ruído; e disparado com 2h já perdeu a função de dar
  * tempo de se preparar.
+ *
+ * A janela de 1h tem 60 minutos de largura porque o cron é de hora em hora. Com menos que isso
+ * sobra buraco: de 45 a 90, a reunião das 10:40 tinha 100 min na rodada das 9h e 40 na das 10h, e
+ * ninguém era lembrado. O limite de baixo garante que lembrete nenhum sai depois do início.
  */
 export function lembretesDevidos(
   reunioes: { clientId: string; cliente: string; responsavel: string | null; quando: string; lembrouVespera: boolean; lembrouUmaHora: boolean }[],
@@ -310,14 +351,21 @@ export function lembretesDevidos(
   for (const r of reunioes) {
     const t = new Date(r.quando).getTime();
     const faltamMin = (t - agora.getTime()) / 60000;
-    const base = { clientId: r.clientId, cliente: r.cliente, responsavel: r.responsavel, quando: r.quando };
+    // O cron não roda no fim de semana: a véspera da reunião de segunda é a sexta. Sem este ajuste,
+    // reunião de segunda nunca recebia o lembrete da véspera.
+    const sextaParaSegunda = componentesSP(agora).diaSemana === 5 && componentesSP(new Date(r.quando)).diaSemana === 1;
+    const faltamUteis = sextaParaSegunda ? faltamMin - 48 * 60 : faltamMin;
+    const base = {
+      clientId: r.clientId, cliente: r.cliente, responsavel: r.responsavel, quando: r.quando,
+      faltamMin, diaVespera: sextaParaSegunda ? diaDaSemana(r.quando) : "amanhã",
+    };
 
     // Véspera: entre 20h e 28h antes — pega a rodada do dia anterior no mesmo horário.
-    if (!r.lembrouVespera && faltamMin >= 20 * 60 && faltamMin <= 28 * 60) {
+    if (!r.lembrouVespera && faltamUteis >= 20 * 60 && faltamUteis <= 28 * 60) {
       out.push({ ...base, tipo: "vespera" });
     }
-    // Uma hora antes: entre 45 e 90 minutos.
-    if (!r.lembrouUmaHora && faltamMin >= 45 && faltamMin <= 90) {
+    // Uma hora antes: entre 30 e 90 minutos.
+    if (!r.lembrouUmaHora && faltamMin >= 30 && faltamMin <= 90) {
       out.push({ ...base, tipo: "uma_hora" });
     }
   }
@@ -327,6 +375,6 @@ export function lembretesDevidos(
 export function textoLembrete(l: Lembrete, quandoExtenso: string, mencao: string): string {
   const quem = mencao || l.responsavel || "";
   return l.tipo === "vespera"
-    ? `📅 ${quem} amanhã tem reunião com *${l.cliente}* — ${quandoExtenso}.\n_Quer que eu prepare o briefing? Manda “Lone, prepara a reunião do ${l.cliente}”._`
-    : `⏰ ${quem} reunião com *${l.cliente}* em uma hora (${quandoExtenso}).`;
+    ? `📅 ${quem} ${l.diaVespera} tem reunião com *${l.cliente}* — ${quandoExtenso}.\n_Quer que eu prepare o briefing? Manda “Lone, prepara a reunião do ${l.cliente}”._`
+    : `⏰ ${quem} reunião com *${l.cliente}* em ${tempoQueFalta(l.faltamMin)} (${quandoExtenso}).`;
 }

@@ -99,6 +99,7 @@ import { montarPrepReuniao, pontosPraReuniao, resumirReuniao, formatResumoReunia
 import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
+import type { ContextoDaConversa } from "@/lib/cs/agendar-reuniao";
 import { loadBriefingForClient, loadRoteiroPrefs, loadBriefingCombinado } from "@/lib/cs/load-briefing";
 import { ehComandoAusencia, parseAusencia, escolherMembroAusente, type MembroEquipe } from "@/lib/cs/ausencia";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
@@ -559,6 +560,90 @@ async function autoAvancarPorArteNoGrupo(groupJid: string, autorNome?: string | 
 async function guardarIdPerguntaReuniao(meetingId: string, msgId: string): Promise<void> {
   const { error } = await supabaseAdmin.from("meetings").update({ msg_id_pergunta_social: msgId }).eq("id", meetingId);
   if (error) console.warn("[CS/inbound] msg_id_pergunta_social não gravado (migration 20261021130000?):", error.message);
+}
+
+/**
+ * Os dois lados concordaram: a reunião entra na agenda e nos lembretes.
+ *
+ * Fecha por dois caminhos: o social dá "ok" no horário do cliente, ou o cliente aceita a
+ * contraproposta do social. Confere a agenda de novo antes, e só diz "fechado" se gravou.
+ */
+async function fecharReuniaoCombinada(p: {
+  reu: Record<string, unknown>; cliente: string; iso: string; confirmadoPor: string;
+  grupoEquipe: string; respondeA?: string;
+}): Promise<{ fechou: boolean; conflito?: string }> {
+  const { reu, cliente: nomeCli, iso, confirmadoPor, grupoEquipe, respondeA } = p;
+  const { textoFechado, textoPedeLink } = await import("@/lib/cs/agendar-reuniao");
+  const { porExtenso } = await import("@/lib/cs/parse-horario");
+  const { mencionar } = await import("@/lib/cs/mencao");
+  const fimIso = new Date(new Date(iso).getTime() + 3600_000).toISOString();
+
+  // ── CONFERE DE NOVO ANTES DE FECHAR ────────────────────────────────
+  //
+  // Entre o agente propor e o social responder passaram horas ou dias, e nesse intervalo a
+  // própria pessoa pode ter marcado outra coisa pela tela. Confirmar sem reconferir é como
+  // se cria reunião dupla — o tipo de erro que só aparece na hora da chamada.
+  const { conflitoDoResponsavel, textoConflito } = await import("@/lib/cs/conflito-reuniao");
+  const conf = await conflitoDoResponsavel((reu.responsavel as string) || null, iso, fimIso, reu.id as string);
+  if (conf) {
+    const mc = await mencionar((reu.responsavel as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
+    const rConf = await csSendGroupText(grupoEquipe, textoConflito(nomeCli, porExtenso(iso), conf, mc.trecho), respondeA,
+      { origem: "cs-reuniao-conflito", destino: "interno" }, mc.jids);
+    // O aviso de conflito pede outro horário: a resposta a ELE também vale (5.1).
+    if (rConf.ok && rConf.id) await guardarIdPerguntaReuniao(reu.id as string, rConf.id);
+    console.log(`[CS/inbound] conflito: ${nomeCli} ${iso} choca com ${conf.cliente}`);
+    return { fechou: false, conflito: conf.cliente };
+  }
+
+  const { atualizarReuniao, SEM_LEMBRETES } = await import("@/lib/cs/reuniao-ciclo-server");
+  const gravou = await atualizarReuniao(reu.id as string, {
+    estado: "agendada", start_at: iso, end_at: fimIso,
+    confirmado_em: new Date().toISOString(),
+    confirmado_por: confirmadoPor,
+    // Lembrete de outro horário não vale para este: sem limpar, reunião remarcada ficava sem aviso.
+    ...SEM_LEMBRETES,
+  });
+  if (!gravou.id) {
+    // O cliente NÃO recebe "Confirmado!" de uma reunião que não entrou na agenda.
+    console.error("[CS/inbound] fechar reunião:", gravou.erro);
+    await csSendGroupText(grupoEquipe,
+      `⚠️ Não consegui gravar a reunião da *${nomeCli}* em *${porExtenso(iso)}* (${gravou.erro}). Não mandei nada pro cliente. Marca pela aba Reuniões?`,
+      respondeA, { origem: "cs-reuniao-falha", destino: "interno" });
+    return { fechou: false };
+  }
+
+  // A FICHA DO CLIENTE PRECISA SABER. `client_journey.proxima_reuniao` existia e só era
+  // preenchida pelo RESUMO — depois da reunião ter acontecido. Ou seja: a ficha sabia da
+  // última reunião e nunca da próxima, que é justamente a informação que serve para
+  // preparar. Quem lê a jornada (/jornada, raio-x, preparo) passa a ver o compromisso.
+  await supabaseAdmin.from("client_journey")
+    .upsert({ client_id: reu.client_id as string, proxima_reuniao: iso }, { onConflict: "client_id" })
+    .then(() => {}, (e) => console.error("[CS/inbound] jornada proxima_reuniao:", e));
+
+  const quandoTxt = porExtenso(iso);
+  // Sem link gravado, o "fechado" já vem com o pedido: é a única mensagem que a equipe lê
+  // sobre esta reunião hoje, e pedir depois seria uma notificação a mais pelo mesmo assunto.
+  const linkJa = (reu.link_reuniao as string) || null;
+  let fechado = textoFechado(nomeCli, quandoTxt);
+  if (!linkJa) {
+    const mm = await mencionar((reu.responsavel as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
+    fechado += textoPedeLink(mm.trecho);
+  }
+  const rFechado = await csSendGroupText(grupoEquipe, fechado, respondeA,
+    { origem: "cs-reuniao-fechada", destino: "interno" });
+  // O link colado depois precisa CITAR este pedido (5.1) — guarda o id para casar.
+  if (!linkJa && rFechado.ok && rFechado.id) {
+    void supabaseAdmin.from("meetings").update({ msg_id_pedido_link: rFechado.id }).eq("id", reu.id as string)
+      .then(({ error }) => { if (error) console.warn("[CS/inbound] msg_id_pedido_link (migration 20261021130000?):", error.message); });
+  }
+  // E o cliente precisa saber que está confirmado — ele ficou esperando desde a proposta.
+  if (reu.group_jid) {
+    await csSendGroupText(reu.group_jid as string,
+      `📅 Confirmado! Nossa reunião fica *${quandoTxt}* — online, uns 30 minutinhos.${linkJa ? `\n🔗 ${linkJa}` : ""} Até lá! 👋`, undefined,
+      { origem: "cs-reuniao-fechada", destino: "cliente", clientId: reu.client_id as string });
+  }
+  console.log(`[CS/inbound] reunião ${nomeCli} confirmada → ${iso}`);
+  return { fechou: true };
 }
 
 // Processa o papo (após o debounce): responde UMA vez, com memória curta do grupo. Roda fora do
@@ -1265,7 +1350,8 @@ async function processarInbound(req: NextRequest) {
       .from("meetings")
       .select("*, clients(name, nome_fantasia)")
       .eq("estado", "aguardando_social")
-      .eq("meeting_type", "mensal")
+      // Sem filtrar por tipo: a reunião marcada à mão pela tela também chega aqui quando o cliente
+      // pede para mudar o horário.
       .order("perguntado_social_em", { ascending: false })
       .limit(20);
     const candidatas = (esperando ?? []).map((r) => {
@@ -1295,70 +1381,13 @@ async function processarInbound(req: NextRequest) {
 
       if (resp.tipo === "aceita" && reu.horario_proposto) {
         const iso = reu.horario_proposto as string;
-        const fimIso = new Date(new Date(iso).getTime() + 3600_000).toISOString();
-
-        // ── CONFERE DE NOVO ANTES DE FECHAR ────────────────────────────────
-        //
-        // Entre o agente propor e o social responder passaram horas ou dias, e nesse intervalo a
-        // própria pessoa pode ter marcado outra coisa pela tela. Confirmar sem reconferir é como
-        // se cria reunião dupla — o tipo de erro que só aparece na hora da chamada.
-        const { conflitoDoResponsavel, textoConflito } = await import("@/lib/cs/conflito-reuniao");
-        const conf = await conflitoDoResponsavel(
-          (reu.responsavel as string) || null, iso, fimIso, reu.id as string);
-        if (conf) {
-          const { porExtenso: pe } = await import("@/lib/cs/parse-horario");
-          const { mencionar: men } = await import("@/lib/cs/mencao");
-          const mc = await men((reu.responsavel as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
-          const rConf = await csSendGroupText(msg.groupJid,
-            textoConflito(nomeCli, pe(iso), conf, mc.trecho), msg.messageId,
-            { origem: "cs-reuniao-conflito", destino: "interno" }, mc.jids);
-          // O aviso de conflito pede outro horário: a resposta a ELE também vale (5.1).
-          if (rConf.ok && rConf.id) await guardarIdPerguntaReuniao(reu.id as string, rConf.id);
-          console.log(`[CS/inbound] conflito: ${nomeCli} ${iso} choca com ${conf.cliente}`);
-          return NextResponse.json({ ok: true, reuniao_conflito: conf.cliente, cliente: nomeCli });
-        }
-
-        await supabaseAdmin.from("meetings").update({
-          estado: "agendada", start_at: iso,
-          end_at: new Date(new Date(iso).getTime() + 3600_000).toISOString(),
-          confirmado_em: new Date().toISOString(),
-          confirmado_por: autoridade.autor?.nome || msg.authorName || "social",
-        }).eq("id", reu.id as string);
-
-        // A FICHA DO CLIENTE PRECISA SABER. `client_journey.proxima_reuniao` existia e só era
-        // preenchida pelo RESUMO — depois da reunião ter acontecido. Ou seja: a ficha sabia da
-        // última reunião e nunca da próxima, que é justamente a informação que serve para
-        // preparar. Quem lê a jornada (/jornada, raio-x, preparo) passa a ver o compromisso.
-        await supabaseAdmin.from("client_journey")
-          .upsert({ client_id: reu.client_id as string, proxima_reuniao: iso }, { onConflict: "client_id" })
-          .then(() => {}, (e) => console.error("[CS/inbound] jornada proxima_reuniao:", e));
-
-        const quandoTxt = porExtenso(iso);
-        // Sem link gravado, o "fechado" já vem com o pedido: é a única mensagem que a equipe lê
-        // sobre esta reunião hoje, e pedir depois seria uma notificação a mais pelo mesmo assunto.
-        const linkJa = (reu.link_reuniao as string) || null;
-        let fechado = textoFechado(nomeCli, quandoTxt);
-        if (!linkJa) {
-          const { textoPedeLink } = await import("@/lib/cs/agendar-reuniao");
-          const { mencionar } = await import("@/lib/cs/mencao");
-          const mm = await mencionar((reu.responsavel as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
-          fechado += textoPedeLink(mm.trecho);
-        }
-        const rFechado = await csSendGroupText(msg.groupJid, fechado, msg.messageId,
-          { origem: "cs-reuniao-fechada", destino: "interno" });
-        // O link colado depois precisa CITAR este pedido (5.1) — guarda o id para casar.
-        if (!linkJa && rFechado.ok && rFechado.id) {
-          void supabaseAdmin.from("meetings").update({ msg_id_pedido_link: rFechado.id }).eq("id", reu.id as string)
-            .then(({ error }) => { if (error) console.warn("[CS/inbound] msg_id_pedido_link (migration 20261021130000?):", error.message); });
-        }
-        // E o cliente precisa saber que está confirmado — ele ficou esperando desde a proposta.
-        if (reu.group_jid) {
-          await csSendGroupText(reu.group_jid as string,
-            `📅 Confirmado! Nossa reunião fica *${quandoTxt}* — online, uns 30 minutinhos.${linkJa ? `\n🔗 ${linkJa}` : ""} Até lá! 👋`, undefined,
-            { origem: "cs-reuniao-fechada", destino: "cliente", clientId: reu.client_id as string });
-        }
-        console.log(`[CS/inbound] reunião ${nomeCli} confirmada pelo social → ${iso}`);
-        return NextResponse.json({ ok: true, reuniao_confirmada: iso, cliente: nomeCli });
+        const f = await fecharReuniaoCombinada({
+          reu, cliente: nomeCli, iso,
+          confirmadoPor: autoridade.autor?.nome || msg.authorName || "social",
+          grupoEquipe: msg.groupJid, respondeA: msg.messageId,
+        });
+        if (f.conflito) return NextResponse.json({ ok: true, reuniao_conflito: f.conflito, cliente: nomeCli });
+        return NextResponse.json({ ok: true, reuniao_confirmada: f.fechou ? iso : null, cliente: nomeCli });
       }
 
       if (resp.tipo === "contraproposta") {
@@ -1375,7 +1404,7 @@ async function processarInbound(req: NextRequest) {
         }
 
         await supabaseAdmin.from("meetings").update({
-          horario_proposto: resp.iso, proposto_lado: "social",
+          horario_proposto: resp.iso, proposto_lado: "social", proposto_em: new Date().toISOString(),
           rodadas_negociacao: rodadas, perguntado_social_em: new Date().toISOString(),
         }).eq("id", reu.id as string);
 
@@ -3469,19 +3498,23 @@ async function processarInbound(req: NextRequest) {
   // horas depois sobre o horário da reunião confunde mais do que ajuda. O pedido vira sugestão abaixo.
   if (c?.id && msg.text && !releitura) {
     const {
-      lerIntencaoReuniao, textoConfirmacao, textoPergunta, textoPropoeHorario,
-      propostaValida, ehConfirmacaoCurta, textoPropostaExpirada,
+      textoPergunta, textoPropoeHorario, propostaValida, ehConfirmacaoCurta, textoPropostaExpirada,
+      sugerirHorarios, lerMensagemDoCliente, decidirNaConversa,
+      textoRemarcarCliente, textoRemarcarEquipe, textoReuniaoJaMarcada,
     } = await import("@/lib/cs/agendar-reuniao");
+    const { janelaDoMes, ESPERA_CLIENTE_DIAS } = await import("@/lib/cs/reuniao-mensal");
+    const { gravarProposta, reuniaoAtivaDoCliente, atualizarReuniao, SEM_LEMBRETES } = await import("@/lib/cs/reuniao-ciclo-server");
 
     // Proposta PENDENTE deste cliente, feita pelo agente. É o que permite entender um "isso,
     // pode confirmar" — resposta sem data, sem hora e sem a palavra "reunião", que antes caía no
     // vazio e deixava o cliente falando sozinho depois de já ter concordado (caso Contele, 04/09).
     const { data: pendente } = await supabaseAdmin
       .from("meetings")
-      .select("id, horario_proposto, mes_referencia, proposto_em")
+      .select("*")
       .eq("client_id", c.id as string)
-      .eq("estado", "ofertada")
-      .eq("proposto_lado", "agente")
+      // A contraproposta do social também espera o "pode" do cliente. Sem ela aqui, o cliente
+      // aceitava, ninguém lia, e o social ficava sem resposta.
+      .or("and(estado.eq.ofertada,proposto_lado.eq.agente),and(estado.eq.aguardando_social,proposto_lado.eq.social)")
       .not("horario_proposto", "is", null)
       .order("proposto_em", { ascending: false })
       .limit(1).maybeSingle();
@@ -3532,46 +3565,116 @@ async function processarInbound(req: NextRequest) {
       return NextResponse.json({ ok: true, reuniao_proposta_expirada: true, cliente: clienteNome });
     }
 
-    const intencao = lerIntencaoReuniao(
-      msg.text, new Date(),
-      propValida ? ((pendente?.horario_proposto as string) || undefined) : undefined,
-      !!perguntou,
-    );
+    // A oferta aberta: o agente ofereceu dois horários e está esperando a resposta. As opções não são
+    // gravadas: são as que `sugerirHorarios` dá para o dia da oferta, como no cron.
+    const { data: oferta } = await supabaseAdmin
+      .from("meetings")
+      .select("id, ofertado_em")
+      .eq("client_id", c.id as string)
+      .eq("estado", "ofertada")
+      .is("horario_proposto", null)
+      .gte("ofertado_em", new Date(Date.now() - (ESPERA_CLIENTE_DIAS + 1) * 86400_000).toISOString())
+      .order("ofertado_em", { ascending: false })
+      .limit(1).maybeSingle();
+    const ofertadoEm = oferta?.ofertado_em ? new Date(oferta.ofertado_em as string) : null;
 
-    // ── O CLIENTE DEU O TURNO: o agente propõe a hora ────────────────────
-    if (intencao.tipo === "propor") {
-      const quando = new Date(intencao.iso);
-      const mesRef = `${quando.getFullYear()}-${String(quando.getMonth() + 1).padStart(2, "0")}`;
-      const { error: errProp } = await supabaseAdmin.from("meetings").upsert({
-        client_id: c.id as string,
-        title: `Reunião mensal — ${clienteNome}`,
-        meeting_type: "mensal",
-        mes_referencia: mesRef,
-        // `ofertada` + `proposto_lado: agente` é o estado que faz a próxima resposta curta do
-        // cliente ser lida como aceite desta proposta, e não como conversa solta.
-        estado: "ofertada",
-        proposto_lado: "agente",
-        horario_proposto: intencao.iso,
-        proposto_em: new Date().toISOString(),
-        responsavel: (c.assigned_social as string) || null,
-        group_jid: msg.groupJid,
-        trecho_origem: msg.text.slice(0, 300),
-        start_at: intencao.iso,
-        end_at: new Date(quando.getTime() + 3600_000).toISOString(),
-        status: "scheduled",
-        created_by: "agente-cs",
-      }, { onConflict: "client_id,mes_referencia" });
+    const contexto: ContextoDaConversa = {
+      pendente: pendente ? {
+        id: pendente.id as string, horario_proposto: pendente.horario_proposto as string,
+        proposto_lado: (pendente.proposto_lado as string) || null,
+      } : null,
+      propostaVale: propValida,
+      perguntou: !!perguntou,
+      oferta: oferta && ofertadoEm
+        ? { id: oferta.id as string, opcoes: sugerirHorarios(ofertadoEm, 2, janelaDoMes(spNow(ofertadoEm)).fecha) }
+        : null,
+      citouReuniao: /reuni[ãa]o/i.test(msg.quotedText ?? ""),
+    };
+    const agoraReal = new Date();
+    const intencao = lerMensagemDoCliente(msg.text, agoraReal, contexto);
+    // A reunião que este cliente já tem com horário. É ela que uma proposta nova muda, em vez de
+    // criar uma segunda reunião com a primeira ainda gerando lembrete.
+    const ativa = intencao.tipo !== "nenhuma" ? await reuniaoAtivaDoCliente(c.id as string) : null;
+    const decisao = decidirNaConversa(intencao, msg.text, agoraReal, contexto, ativa);
 
-      if (!errProp) {
-        await csSendGroupText(msg.groupJid, textoPropoeHorario(intencao.iso), msg.messageId,
-          { origem: "cs-reuniao-propoe", clientId: c.id as string });
-        console.log(`[CS/inbound] propus ${intencao.iso} p/ ${clienteNome} (turno informado)`);
-        return NextResponse.json({ ok: true, reuniao_proposta_agente: intencao.iso, cliente: clienteNome });
-      }
-      console.error("[CS/inbound] propor reunião:", errProp.message);
+    // Gravar falhou: o cliente falou com o agente e não pode ficar sem resposta só no log.
+    const avisarFalhaAoGravar = async (iso: string, erro: string | null) => {
+      console.error("[CS/inbound] gravar reunião:", erro);
+      const jid = internalGroupJid();
+      if (!jid) return;
+      const { porExtenso } = await import("@/lib/cs/parse-horario");
+      await csSendGroupText(jid,
+        `⚠️ A *${clienteNome}* falou em reunião para *${porExtenso(iso)}* e não consegui gravar (${erro}). Responde lá no grupo e marca pela aba Reuniões?`,
+        undefined, { origem: "cs-reuniao-falha", destino: "interno", clientId: c.id as string });
+    };
+
+    const jidEquipe = internalGroupJid();
+    if (decisao.tipo === "fechar" && pendente && jidEquipe) {
+      const f = await fecharReuniaoCombinada({
+        reu: pendente, cliente: clienteNome, iso: decisao.iso,
+        confirmadoPor: msg.authorName || "cliente", grupoEquipe: jidEquipe,
+      });
+      return NextResponse.json({ ok: true, reuniao_confirmada: f.fechou ? decisao.iso : null, reuniao_conflito: f.conflito, cliente: clienteNome });
     }
 
-    if (intencao.tipo === "agendar") {
+    if (decisao.tipo === "ja_marcada") {
+      const { porExtenso } = await import("@/lib/cs/parse-horario");
+      await csSendGroupText(msg.groupJid, textoReuniaoJaMarcada(porExtenso(decisao.iso)), msg.messageId,
+        { origem: "cs-reuniao-ja-marcada", clientId: c.id as string });
+      return NextResponse.json({ ok: true, reuniao_ja_marcada: decisao.iso, cliente: clienteNome });
+    }
+
+    if (decisao.tipo === "ja_proposta") {
+      return NextResponse.json({ ok: true, reuniao_ja_proposta: decisao.iso, cliente: clienteNome });
+    }
+
+    // ── O CLIENTE PEDIU PARA MUDAR ───────────────────────────────────────
+    //
+    // O lembrete promete "se precisar remarcar, é só falar aqui que eu ajusto", e este pedido não
+    // tinha caminho: caía na classificação geral e, na hora, saía "Te espero!" para quem já tinha
+    // dito que não ia.
+    if (decisao.tipo === "pedir_outro_horario") {
+      const gravou = await atualizarReuniao(decisao.reuniaoId, { estado: "pendente", horario_proposto: null, proposto_lado: null, ...SEM_LEMBRETES });
+      if (!gravou.id) {
+        await avisarFalhaAoGravar(decisao.iso, gravou.erro);
+        return NextResponse.json({ ok: true, reuniao_falha: gravou.erro, cliente: clienteNome });
+      }
+      const { porExtenso } = await import("@/lib/cs/parse-horario");
+      const { mencionar } = await import("@/lib/cs/mencao");
+      // Vai na origem `cs-reuniao-pergunta`: é ela que faz a próxima resposta ser lida.
+      await csSendGroupText(msg.groupJid, textoRemarcarCliente(), msg.messageId,
+        { origem: "cs-reuniao-pergunta", clientId: c.id as string });
+      if (jidEquipe) {
+        const dono = decisao.responsavel || (c.assigned_social as string) || null;
+        const mm = await mencionar(dono).catch(() => ({ trecho: "", jids: [] as string[] }));
+        await csSendGroupText(jidEquipe, textoRemarcarEquipe(clienteNome, porExtenso(decisao.iso), msg.text.slice(0, 200), mm.trecho),
+          undefined, { origem: "cs-reuniao-remarcar", destino: "interno", clientId: c.id as string }, mm.jids);
+      }
+      console.log(`[CS/inbound] ${clienteNome} pediu para mudar a reunião de ${decisao.iso}`);
+      return NextResponse.json({ ok: true, reuniao_remarcar: decisao.reuniaoId, cliente: clienteNome });
+    }
+
+    // ── O CLIENTE DEU O TURNO: o agente propõe a hora ────────────────────
+    if (decisao.tipo === "propor") {
+      // `ofertada` + `proposto_lado: agente` é o estado que faz a próxima resposta curta do
+      // cliente ser lida como aceite desta proposta, e não como conversa solta.
+      const gravou = await gravarProposta({
+        clientId: c.id as string, cliente: clienteNome, iso: decisao.iso,
+        responsavel: (c.assigned_social as string) || null, groupJid: msg.groupJid, trecho: msg.text,
+        estado: "ofertada", lado: "agente", agendadaId: decisao.agendadaId, alvoId: decisao.alvoId,
+      });
+
+      if (gravou.id) {
+        await csSendGroupText(msg.groupJid, textoPropoeHorario(decisao.iso), msg.messageId,
+          { origem: "cs-reuniao-propoe", clientId: c.id as string });
+        console.log(`[CS/inbound] propus ${decisao.iso} p/ ${clienteNome} (turno informado)`);
+        return NextResponse.json({ ok: true, reuniao_proposta_agente: decisao.iso, cliente: clienteNome });
+      }
+      await avisarFalhaAoGravar(decisao.iso, gravou.erro);
+      return NextResponse.json({ ok: true, reuniao_falha: gravou.erro, cliente: clienteNome });
+    }
+
+    if (decisao.tipo === "levar_ao_social") {
       // ── O CLIENTE PROPÔS. NÃO AGENDA AINDA. ─────────────────────────────
       //
       // Roberto (03/09): "assim que o cliente responder, ele vai entender a data e o horário que o
@@ -3582,67 +3685,42 @@ async function processarInbound(req: NextRequest) {
       // sem essa pessoa saber. Agora o horário fica em `horario_proposto` e `start_at` só é
       // preenchido quando os dois concordam: uma reunião com `start_at` é uma reunião que vai
       // acontecer, e é isso que a agenda e os lembretes leem.
-      const quando = new Date(intencao.iso);
-      const mesRef = `${quando.getFullYear()}-${String(quando.getMonth() + 1).padStart(2, "0")}`;
-      const agoraIso = new Date().toISOString();
-      const { error: errReu } = await supabaseAdmin.from("meetings").upsert({
-        client_id: c.id as string,
-        title: `Reunião mensal — ${clienteNome}`,
-        meeting_type: "mensal",
-        mes_referencia: mesRef,
-        estado: "aguardando_social",
-        horario_proposto: intencao.iso,
-        proposto_lado: "cliente",
-        proposto_em: agoraIso,
-        perguntado_social_em: agoraIso,
-        responsavel: (c.assigned_social as string) || null,
-        group_jid: msg.groupJid,
-        trecho_origem: msg.text.slice(0, 300),
-        // start_at é NOT NULL: guarda o horário proposto como provisório. Quem manda é o `estado`.
-        start_at: intencao.iso,
-        end_at: new Date(quando.getTime() + 3600_000).toISOString(),
-        status: "scheduled",
-        created_by: "agente-cs",
-        // Horário novo invalida lembrete antigo, dos dois lados.
-        lembrete_vespera_em: null, lembrete_hora_em: null,
-        lembrete_cliente_vespera_em: null, lembrete_cliente_hora_em: null,
-      }, { onConflict: "client_id,mes_referencia" });
+      const gravou = await gravarProposta({
+        clientId: c.id as string, cliente: clienteNome, iso: decisao.iso,
+        responsavel: (c.assigned_social as string) || null, groupJid: msg.groupJid, trecho: msg.text,
+        estado: "aguardando_social", lado: "cliente", agendadaId: decisao.agendadaId, alvoId: decisao.alvoId,
+      });
 
-      if (!errReu) {
+      if (gravou.id) {
         const { porExtenso } = await import("@/lib/cs/parse-horario");
         const { textoPerguntaAoSocial } = await import("@/lib/cs/agendar-reuniao");
         // Ao cliente: recebido, não confirmado. Prometer o que ainda depende de terceiro é o
         // caminho mais curto para desmarcar depois.
         await csSendGroupText(msg.groupJid,
-          `📅 Anotei: *${porExtenso(intencao.iso)}*. Vou confirmar com o time e já te falo! 👍`,
+          `📅 Anotei: *${porExtenso(decisao.iso)}*. Vou confirmar com o time e já te falo! 👍`,
           msg.messageId, { origem: "cs-reuniao-proposta", clientId: c.id as string });
         // Ao social: a pergunta, com o horário e as duas saídas possíveis.
-        const jidInterno = internalGroupJid();
-        if (jidInterno) {
+        if (jidEquipe) {
           const { mencionar } = await import("@/lib/cs/mencao");
           const m = await mencionar((c.assigned_social as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
-          const rPerg = await csSendGroupText(jidInterno, textoPerguntaAoSocial(clienteNome, porExtenso(intencao.iso), m.trecho),
+          const rPerg = await csSendGroupText(jidEquipe, textoPerguntaAoSocial(clienteNome, porExtenso(decisao.iso), m.trecho),
             undefined, { origem: "cs-reuniao-pergunta-social", destino: "interno", clientId: c.id as string }, m.jids);
-          // Só a resposta que CITA esta pergunta confirma (auditoria 5.1). O upsert não devolve o id
-          // da reunião: acha pelo par cliente+mês, o mesmo da chave do upsert.
-          if (rPerg.ok && rPerg.id) {
-            const { data: reuP } = await supabaseAdmin.from("meetings").select("id")
-              .eq("client_id", c.id as string).eq("mes_referencia", mesRef).maybeSingle();
-            if (reuP?.id) await guardarIdPerguntaReuniao(reuP.id as string, rPerg.id);
-          }
+          // Só a resposta que CITA esta pergunta confirma (auditoria 5.1).
+          if (rPerg.ok && rPerg.id) await guardarIdPerguntaReuniao(gravou.id, rPerg.id);
         }
-        console.log(`[CS/inbound] ${clienteNome} propôs ${intencao.iso} → aguardando social`);
-        return NextResponse.json({ ok: true, reuniao_proposta: intencao.iso, cliente: clienteNome });
+        console.log(`[CS/inbound] ${clienteNome} propôs ${decisao.iso} → aguardando social`);
+        return NextResponse.json({ ok: true, reuniao_proposta: decisao.iso, cliente: clienteNome });
       }
-      console.error("[CS/inbound] gravar reunião:", errReu.message);
+      await avisarFalhaAoGravar(decisao.iso, gravou.erro);
+      return NextResponse.json({ ok: true, reuniao_falha: gravou.erro, cliente: clienteNome });
     }
 
-    if (intencao.tipo === "perguntar_horario") {
+    if (decisao.tipo === "perguntar") {
       // Pergunta em vez de chutar. Reunião marcada no horário errado deixa alguém sozinho na
       // chamada — perguntar custa uma mensagem, errar custa a confiança do cliente.
-      await csSendGroupText(msg.groupJid, textoPergunta(intencao.motivo), msg.messageId,
+      await csSendGroupText(msg.groupJid, textoPergunta(decisao.motivo), msg.messageId,
         { origem: "cs-reuniao-pergunta", clientId: c.id as string });
-      return NextResponse.json({ ok: true, reuniao_perguntou: intencao.motivo, cliente: clienteNome });
+      return NextResponse.json({ ok: true, reuniao_perguntou: decisao.motivo, cliente: clienteNome });
     }
   }
 

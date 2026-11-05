@@ -20,6 +20,7 @@ import {
 } from "@/lib/cs/agendar-reuniao";
 import { porExtenso as extenso } from "@/lib/cs/parse-horario";
 import { resultadoDosEnvios, SEM_GRUPO_INTERNO, type FalhaEnvio } from "@/lib/automacoes/envios";
+import { atualizarReuniao, gravarReuniaoDoCiclo } from "@/lib/cs/reuniao-ciclo-server";
 
 // POST /api/system/cs-reuniao-mensal — o ciclo mensal de reuniões com o cliente.
 //
@@ -38,7 +39,12 @@ export async function POST(req: NextRequest) {
   const dry = req.nextUrl.searchParams.get("dry") !== null;
   const forcar = req.nextUrl.searchParams.get("forcar") === "1";
 
+  // DOIS RELÓGIOS, e trocar um pelo outro é o bug do lembrete atrasado (05/11/2026). `agora` é o
+  // spNow(): serve para perguntar que dia e que hora são em SP (getHours, janelaDoMes), mas no
+  // container em UTC está 3 horas atrás do instante real. Qualquer conta com reunião, oferta ou
+  // proposta usa o `instante`. Com o `agora`, a reunião das 10:00 era lembrada às 12:00.
   const agora = spNow();
+  const instante = new Date();
   const janela = janelaDoMes(agora);
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   // `ok` só quando tudo o que devia sair saiu (24/10/2026, auditoria 5.12): lembrete, oferta, entrega ao social e
@@ -52,22 +58,27 @@ export async function POST(req: NextRequest) {
     .from("meetings")
     .select("id, client_id, title, start_at, responsavel, attendees, link_reuniao, lembrete_vespera_em, lembrete_hora_em, lembrete_cliente_vespera_em, lembrete_cliente_hora_em, clients(name, nome_fantasia, whatsapp_group_jid)")
     .eq("estado", "agendada")
-    .gte("start_at", new Date(agora.getTime() - 2 * 3600_000).toISOString())
-    .lte("start_at", new Date(agora.getTime() + 3 * 86400_000).toISOString());
+    .is("deleted_at", null)
+    .gte("start_at", instante.toISOString())
+    // 4 dias: na sexta, a véspera da reunião de segunda ainda precisa estar na lista.
+    .lte("start_at", new Date(instante.getTime() + 4 * 86400_000).toISOString());
 
   const lembretes = lembretesDevidos(
     (agendadas ?? []).map((m) => {
-      const c = m.clients as unknown as { name?: string; nome_fantasia?: string } | null;
+      const c = m.clients as unknown as { name?: string; nome_fantasia?: string; whatsapp_group_jid?: string } | null;
+      // Só está lembrado quando saiu para TODOS. Se o WhatsApp recusou o do cliente, a próxima
+      // rodada ainda tenta; a da equipe não repete (ver `jaLembrouEquipe`).
+      const semGrupo = !c?.whatsapp_group_jid;
       return {
         clientId: m.id as string,   // aqui o id é o da REUNIÃO: é ela que marcamos como lembrada
         cliente: c?.nome_fantasia || c?.name || (m.title as string) || "Cliente",
         responsavel: (m.responsavel as string) || null,
         quando: m.start_at as string,
-        lembrouVespera: !!m.lembrete_vespera_em,
-        lembrouUmaHora: !!m.lembrete_hora_em,
+        lembrouVespera: !!m.lembrete_vespera_em && (semGrupo || !!m.lembrete_cliente_vespera_em),
+        lembrouUmaHora: !!m.lembrete_hora_em && (semGrupo || !!m.lembrete_cliente_hora_em),
       };
     }),
-    agora,
+    instante,
   );
 
   // Mapa id-da-reunião → grupo do cliente, para lembrar os dois lados.
@@ -91,6 +102,12 @@ export async function POST(req: NextRequest) {
     }]),
   );
 
+  const jaLembrouEquipe = new Map<string, { vespera: boolean; hora: boolean }>(
+    (agendadas ?? []).map((m) => [m.id as string, {
+      vespera: !!m.lembrete_vespera_em, hora: !!m.lembrete_hora_em,
+    }]),
+  );
+
   const lembretesEnviados: string[] = [];
   for (const l of lembretes) {
     const quandoTxt = porExtenso(l.quando);
@@ -109,7 +126,11 @@ export async function POST(req: NextRequest) {
     const comLink = ext.link ? `${textoLembrete(l, quandoTxt, m.trecho)}\n🔗 ${ext.link}` : textoLembrete(l, quandoTxt, m.trecho);
 
     // ── 1a. EQUIPE ────────────────────────────────────────────────────────
-    if (!dry && !internalJid) {
+    const feitoEquipe = jaLembrouEquipe.get(l.clientId);
+    const equipeJaSabe = l.tipo === "vespera" ? feitoEquipe?.vespera : feitoEquipe?.hora;
+    if (equipeJaSabe) {
+      // Saiu numa rodada anterior e esta só está tentando de novo o do cliente.
+    } else if (!dry && !internalJid) {
       falhas.push({ alvo: `lembrete da equipe (${l.cliente})`, erro: SEM_GRUPO_INTERNO });
     } else if (!dry && internalJid) {
       const r = await csSendGroupText(internalJid, comLink, undefined,
@@ -136,9 +157,8 @@ export async function POST(req: NextRequest) {
     const jaMandou = l.tipo === "vespera" ? feito?.vespera : feito?.hora;
     if (grupoCli && !jaMandou) {
       if (!dry) {
-        const textoCli = ext.link
-          ? `${textoLembreteCliente(quandoTxt, l.tipo)}\n🔗 ${ext.link}`
-          : textoLembreteCliente(quandoTxt, l.tipo);
+        const baseCli = textoLembreteCliente(quandoTxt, l.tipo, { faltamMin: l.faltamMin, diaVespera: l.diaVespera });
+        const textoCli = ext.link ? `${baseCli}\n🔗 ${ext.link}` : baseCli;
         const rc = await csSendGroupText(grupoCli, textoCli, undefined,
           { origem: "cs-reuniao-lembrete-cliente", destino: "cliente" });
         if (!rc.ok) falhas.push({ alvo: `lembrete do cliente (${l.cliente})`, erro: rc.error ?? "o WhatsApp recusou" });
@@ -202,7 +222,7 @@ export async function POST(req: NextRequest) {
 
   const { data: doMes } = await supabaseAdmin
     .from("meetings")
-    .select("id, client_id, estado, start_at, proposto_em, tentativas, ofertado_em, perguntado_social_em, horario_proposto")
+    .select("id, client_id, estado, start_at, proposto_em, proposto_lado, tentativas, ofertado_em, perguntado_social_em, horario_proposto")
     .eq("mes_referencia", janela.mes)
     .eq("meeting_type", "mensal");
   const porCliente = new Map((doMes ?? []).map((m) => [m.client_id as string, m]));
@@ -219,6 +239,7 @@ export async function POST(req: NextRequest) {
       tentativas: Number(m?.tentativas ?? 0),
       ofertadoEm: (m?.ofertado_em as string) ?? null,
       perguntadoAoSocialEm: (m?.perguntado_social_em as string) ?? null,
+      propostoLado: (m?.proposto_lado as string) ?? null,
     };
   });
 
@@ -235,7 +256,7 @@ export async function POST(req: NextRequest) {
   const acoes: string[] = [];
 
   for (const c of ciclo) {
-    const acao = decidirAcao(c, janela, agora);
+    const acao = decidirAcao(c, janela, instante);
     if (acao.tipo === "nada") continue;
 
     const grupoCli = grupoDoCliente.get(c.clientId);
@@ -252,20 +273,18 @@ export async function POST(req: NextRequest) {
         continue;
       }
       // Sugere dentro da janela: a reunião deve caber no próprio ciclo sempre que der.
-      const opcoes = sugerirHorarios(agora, 2, janela.fecha);
+      const opcoes = sugerirHorarios(instante, 2, janela.fecha);
       const texto = textoOfertaTentativa(c.cliente, opcoes.map((o) => o.texto), acao.tentativa);
       if (dry) { acoes.push(`(dry) ofertar#${acao.tentativa} ${c.cliente}`); continue; }
 
-      const r = await csSendGroupText(grupoCli, texto, undefined,
-        { origem: "cs-reuniao-oferta", destino: "cliente", clientId: c.clientId });
-      if (!r.ok) { acoes.push(`FALHA ofertar ${c.cliente}: ${r.error}`); falhas.push({ alvo: `oferta ao cliente (${c.cliente})`, erro: r.error ?? "o WhatsApp recusou" }); continue; }
-
-      await supabaseAdmin.from("meetings").upsert({
-        client_id: c.clientId,
+      // GRAVA ANTES DE MANDAR. Sem o registro, amanhã o cliente ainda é "pendente" e leva a mesma
+      // oferta de novo. Oferta que não sai é recuperável; a repetida todo dia, no grupo dele, não.
+      const gravou = await gravarReuniaoDoCiclo(c.clientId, janela.mes, {
         title: `Reunião mensal — ${c.cliente}`,
-        meeting_type: "mensal",
-        mes_referencia: janela.mes,
         estado: "ofertada",
+        // Oferta nova apaga a proposta velha: é o que faz a resposta do cliente ser lida contra ela.
+        horario_proposto: null,
+        proposto_lado: null,
         responsavel: c.responsavel,
         tentativas: acao.tentativa,
         ofertado_em: agoraIso,
@@ -274,9 +293,22 @@ export async function POST(req: NextRequest) {
         // provisório. O que diz se a reunião existe é o `estado`, não esta data.
         start_at: `${janela.fecha}T12:00:00-03:00`,
         end_at: `${janela.fecha}T13:00:00-03:00`,
-        status: "scheduled",
-        created_by: "agente-cs",
-      }, { onConflict: "client_id,mes_referencia" });
+      });
+      if (!gravou.id) {
+        acoes.push(`FALHA gravar oferta ${c.cliente}: ${gravou.erro}`);
+        falhas.push({ alvo: `oferta ao cliente (${c.cliente})`, erro: `não gravou, então não mandei: ${gravou.erro}` });
+        continue;
+      }
+
+      const r = await csSendGroupText(grupoCli, texto, undefined,
+        { origem: "cs-reuniao-oferta", destino: "cliente", clientId: c.clientId });
+      if (!r.ok) {
+        // Não saiu: desfaz, para a contagem de tentativas não gastar uma oferta que ninguém leu.
+        await atualizarReuniao(gravou.id, { estado: c.estado, tentativas: c.tentativas ?? 0, ofertado_em: c.ofertadoEm ?? null });
+        acoes.push(`FALHA ofertar ${c.cliente}: ${r.error}`);
+        falhas.push({ alvo: `oferta ao cliente (${c.cliente})`, erro: r.error ?? "o WhatsApp recusou" });
+        continue;
+      }
       acoes.push(`ofertou#${acao.tentativa} ${c.cliente}`);
       await new Promise((r2) => setTimeout(r2, 1500));
       continue;
@@ -321,7 +353,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const cobrancas = montarCobranca(ciclo, janela, agora);
+  const cobrancas = montarCobranca(ciclo, janela, instante);
   const postadas: string[] = [];
   for (const c of cobrancas) {
     const m = c.pessoa === "sem responsável"

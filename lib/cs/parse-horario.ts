@@ -11,6 +11,8 @@
 // que uma reunião não marcada — o cliente fica esperando sozinho numa chamada, e a agência
 // aparenta descaso. Quem chama este parser deve perguntar quando vier null, nunca chutar.
 
+import { componentesSP, somarDias } from "@/lib/prospeccao/tempo";
+
 /** Tudo em horário de São Paulo — o parser não trabalha em UTC para não errar por 3h. */
 const TZ_OFFSET = "-03:00";
 
@@ -23,7 +25,7 @@ const MESES: Record<string, number> = {
   julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
 };
 
-const semAcento = (s: string) =>
+export const semAcento = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 export interface HorarioLido {
@@ -48,16 +50,22 @@ function iso(ano: number, mes: number, dia: number, hora: number, minuto: number
  */
 export function lerHora(texto: string): { hora: number; minuto: number; explicita: boolean } | null {
   const t = semAcento(texto);
+  // "3h" num contexto de tarde vira 15h — o time não marca reunião às 3 da manhã.
+  const noTurno = (h: number) => (/\b(?:tarde|noite)\b/.test(t) && h < 12 ? h + 12 : h);
 
-  // "15h30", "15:30", "15h", "15 h"
-  const m1 = /\b([01]?\d|2[0-3])\s*(?:h|:)\s*([0-5]\d)?\b/.exec(t);
+  // "15h30", "15:30", "15h", "15 h", "15hs", "15hrs"
+  const m1 = /\b([01]?\d|2[0-3])\s*(?:hrs?|hs|h|:)\s*([0-5]\d)?\b/.exec(t);
   if (m1) {
-    let h = parseInt(m1[1], 10);
     const min = m1[2] ? parseInt(m1[2], 10) : 0;
-    // "3h" num contexto de tarde vira 15h — o time não marca reunião às 3 da manhã.
-    if (/\btarde\b/.test(t) && h < 12) h += 12;
-    if (/\bnoite\b/.test(t) && h < 12) h += 12;
-    return { hora: h, minuto: min, explicita: true };
+    return { hora: noTurno(parseInt(m1[1], 10)), minuto: min, explicita: true };
+  }
+
+  // "15 horas", mas não "em 2 horas" nem "reunião de 2 horas": aí é duração, não horário. O
+  // lookbehind fica colado no dígito pelo mesmo motivo do `(?<!dia\s)` logo abaixo.
+  const mHoras = /(?<!\b(?:em|de|por|ha|uns|umas|durante|a)\s)\b([01]?\d|2[0-3])\s*horas?\b(?:\s*e\s*([0-5]\d)\b)?/.exec(t);
+  if (mHoras) {
+    const min = mHoras[2] ? parseInt(mHoras[2], 10) : 0;
+    return { hora: noTurno(parseInt(mHoras[1], 10)), minuto: min, explicita: true };
   }
 
   // "às 9 da manhã", "2 da tarde"
@@ -74,6 +82,17 @@ export function lerHora(texto: string): { hora: number; minuto: number; explicit
     return { hora: h, minuto: 0, explicita: true };
   }
 
+  // "10 e meia", "meio-dia", "meio dia e meia"
+  const mMeia = /\b([01]?\d|2[0-3])\s+e\s+meia\b/.exec(t);
+  if (mMeia) return { hora: noTurno(parseInt(mMeia[1], 10)), minuto: 30, explicita: true };
+  const mMeioDia = /\bmeio[\s-]?dia(\s+e\s+meia)?\b/.exec(t);
+  if (mMeioDia) return { hora: 12, minuto: mMeioDia[1] ? 30 : 0, explicita: true };
+
+  // "às 10". O "as" sem acento também é artigo ("as 10 artes"), então só vale no fim da frase ou
+  // antes do que costuma vir depois de um horário.
+  const mAs = /\bas\s+([01]?\d|2[0-3])(?![\d/:])(?=[ \t]*(?:$|[,.;!?)]|(?:fica|pode|seria|esta|ta|ok|entao|por|pra|para|ou|e|se|mesmo|certo|blz|beleza|confirmad[ao]|combinad[ao]|marcad[ao]|fechad[ao]|na|no|com)\b))/m.exec(t);
+  if (mAs) return { hora: noTurno(parseInt(mAs[1], 10)), minuto: 0, explicita: true };
+
   // Só o período: assume um horário comercial padrão, mas marca como NÃO explícito para quem
   // chamou pedir confirmação. "De manhã" não é um horário — é uma faixa de quatro horas.
   if (/\bde\s*manha\b/.test(t)) return { hora: 10, minuto: 0, explicita: false };
@@ -87,6 +106,10 @@ export function lerHora(texto: string): { hora: number; minuto: number; explicit
  *
  * Formatos suportados, do mais específico ao mais vago:
  *   "dia 18/09 às 14h" · "18/09" · "dia 18 às 10h" · "quinta que vem 15h" · "amanhã 14h" · "hoje 16h"
+ *
+ * `agora` é o instante REAL (`new Date()`), nunca o `spNow()`. O calendário é o de São Paulo em
+ * qualquer fuso de servidor: o container roda em UTC, e das 21h em diante `agora.getDate()` já era
+ * amanhã. "Amanhã 10h" dito na quarta à noite virava sexta, e "quinta 10h" virava a semana que vem.
  */
 export function lerHorario(texto: string, agora = new Date()): HorarioLido | null {
   const t = semAcento(texto);
@@ -94,9 +117,14 @@ export function lerHorario(texto: string, agora = new Date()): HorarioLido | nul
   // Sem hora nenhuma, uma data solta não vira reunião — vira intenção. Quem chama deve perguntar.
   if (!hora) return null;
 
-  const ano = agora.getFullYear();
-  const mesAtual = agora.getMonth() + 1;
-  const diaAtual = agora.getDate();
+  const hoje = componentesSP(agora);
+  const ano = hoje.ano;
+  const mesAtual = hoje.mes;
+  const diaAtual = hoje.dia;
+  const daquiA = (dias: number, trecho: string, nome = trecho): HorarioLido => {
+    const d = componentesSP(somarDias(agora, dias));
+    return { iso: iso(d.ano, d.mes, d.dia, hora.hora, hora.minuto), trecho: nome, horaExplicita: hora.explicita };
+  };
 
   // ── 1. "18/09" ou "18/09/2026" ──────────────────────────────────────────
   const mData = /\b(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*(\d{2,4}))?\b/.exec(t);
@@ -125,30 +153,20 @@ export function lerHorario(texto: string, agora = new Date()): HorarioLido | nul
   }
 
   // ── 3. "hoje" / "amanhã" ────────────────────────────────────────────────
-  if (/\bhoje\b/.test(t)) {
-    const d = new Date(agora);
-    return { iso: iso(d.getFullYear(), d.getMonth() + 1, d.getDate(), hora.hora, hora.minuto), trecho: "hoje", horaExplicita: hora.explicita };
-  }
-  if (/\bamanha\b/.test(t)) {
-    const d = new Date(agora.getTime() + 86400000);
-    return { iso: iso(d.getFullYear(), d.getMonth() + 1, d.getDate(), hora.hora, hora.minuto), trecho: "amanhã", horaExplicita: hora.explicita };
-  }
+  if (/\bhoje\b/.test(t)) return daquiA(0, "hoje");
+  if (/\bdepois\s+de\s+amanha\b/.test(t)) return daquiA(2, "depois de amanhã");
+  if (/\bamanha\b/.test(t)) return daquiA(1, "amanhã");
 
   // ── 4. Dia da semana: "quinta", "terça que vem", "próxima segunda" ──────
   for (const [nome, alvo] of Object.entries(DIAS_SEMANA)) {
     const rx = new RegExp(`\\b${semAcento(nome)}(?:-?feira)?\\b`);
     if (!rx.test(t)) continue;
-    const hojeSemana = agora.getDay();
-    let delta = (alvo - hojeSemana + 7) % 7;
+    let delta = (alvo - hoje.diaSemana + 7) % 7;
     // "quinta" dita numa quinta significa a PRÓXIMA quinta, não hoje.
     if (delta === 0) delta = 7;
     // "que vem" / "próxima" empurra uma semana — mas só se já não tivermos pulado a semana.
     if (/\b(que\s+vem|proxima|proximo)\b/.test(t) && delta < 7) delta += 7;
-    const d = new Date(agora.getTime() + delta * 86400000);
-    return {
-      iso: iso(d.getFullYear(), d.getMonth() + 1, d.getDate(), hora.hora, hora.minuto),
-      trecho: nome, horaExplicita: hora.explicita,
-    };
+    return daquiA(delta, nome);
   }
 
   return null;

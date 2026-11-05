@@ -186,10 +186,13 @@ export async function GET(req: NextRequest) {
   // exatamente o que a reunião mensal existe para evitar.
   //
   // Últimos 6 meses, das que aconteceram, pelo mesmo critério de quem vê o quê.
-  const desde = new Date(agora.getTime() - 183 * 86400_000).toISOString();
+  // O relógio real: com o `agora` (spNow, 3h atrás no container em UTC), a reunião das 10:00 só
+  // entrava no histórico às 13:00.
+  const instante = new Date();
+  const desde = new Date(instante.getTime() - 183 * 86400_000).toISOString();
   const { data: passadas } = await supabaseAdmin.from("meetings")
     .select("id, client_id, title, start_at, responsavel, attendees, estado, resumo, transcricao_em, pdf_path")
-    .lt("start_at", agora.toISOString())
+    .lt("start_at", instante.toISOString())
     .gte("start_at", desde)
     .neq("estado", "cancelada")
     .order("start_at", { ascending: false })
