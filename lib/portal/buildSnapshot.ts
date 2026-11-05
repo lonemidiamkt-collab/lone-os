@@ -2,6 +2,8 @@ import * as Sentry from "@sentry/nextjs";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import {
   getInsightsByDateRange,
+  getHourlyInsights,
+  type MetaHourlyInsight,
   getTopAdInsights,
   getAdThumbnail,
   getDemographicBreakdown,
@@ -75,6 +77,7 @@ function diasNoIntervalo(inicio: string, fim: string): number {
 }
 
 const LABELS: Record<PeriodKind, string> = {
+  today: "Hoje",
   last_week: "Últimos 7 dias",
   last_2_weeks: "Últimas 2 semanas",
   this_month: "Este mês",
@@ -88,7 +91,11 @@ export function calcPeriod(kind: PeriodKind, now: Date) {
 
   let start: string, end: string, prevStart: string, prevEnd: string;
 
-  if (kind === "last_week" || kind === "last_2_weeks") {
+  if (kind === "today") {
+    // Hoje (até agora) × ontem — a comparação "até a mesma hora" é feita no buildSnapshot, por hora.
+    start = hoje; end = hoje;
+    prevStart = ontem; prevEnd = ontem;
+  } else if (kind === "last_week" || kind === "last_2_weeks") {
     const dias = kind === "last_week" ? 7 : 14;
     end = ontem;
     start = somaDias(ontem, -(dias - 1));
@@ -188,6 +195,33 @@ function snapshotIndisponivel(
   };
 }
 
+/** Hora cheia de agora em São Paulo (0–23). Pura (testada). */
+export function horaSP(now: Date): number {
+  const h = Number(new Intl.DateTimeFormat("en-US", { hour: "2-digit", hourCycle: "h23", timeZone: "America/Sao_Paulo" }).format(now));
+  return Number.isFinite(h) ? h % 24 : 0;
+}
+
+/**
+ * Linhas por hora da Meta → uma linha por hora de 0h até `ateHora`, no formato das linhas diárias, com
+ * `date_start` = "YYYY-MM-DDTHH". A Meta omite hora sem veiculação: ali entra zero (é verdade, não falha).
+ * Pura (testada).
+ */
+export function porHora(linhas: readonly MetaHourlyInsight[], dia: string, ateHora: number) {
+  const mapa = new Map<number, MetaHourlyInsight>();
+  for (const l of linhas) {
+    const h = parseInt(String(l.hourly_stats_aggregated_by_advertiser_time_zone ?? "").slice(0, 2), 10);
+    if (Number.isFinite(h)) mapa.set(h, l);
+  }
+  return Array.from({ length: ateHora + 1 }, (_, h) => {
+    const l = mapa.get(h);
+    return {
+      date_start: `${dia}T${String(h).padStart(2, "0")}`, date_stop: dia,
+      spend: l?.spend ?? "0", clicks: l?.clicks ?? "0", actions: l?.actions ?? [],
+      impressions: "0", reach: "0", ctr: "0", cpc: "0", cpm: "0",
+    };
+  });
+}
+
 export async function buildSnapshot(params: {
   clientId: string;
   periodKind: PeriodKind;
@@ -254,15 +288,24 @@ export async function buildSnapshot(params: {
   }
 
   // ── Fetch insights em paralelo (período atual + anterior) ─────────────────
+  // Hoje (05/11/2026): por hora, e ontem só ATÉ A MESMA HORA — comparar a manhã de hoje com o dia inteiro
+  // de ontem diria todo dia "caiu 70%".
+  const ehHoje = params.periodKind === "today";
+  const ateHora = ehHoje ? horaSP(now) : 23;
   const [currentInsights, prevInsights, adInsights, demographics, curReachR, prevReachR, activeAdsR] = await Promise.allSettled([
-    getInsightsByDateRange(metaAccountId, metaToken, period.start, period.end),
-    getInsightsByDateRange(metaAccountId, metaToken, period.previous_start, period.previous_end),
+    ehHoje
+      ? getHourlyInsights(metaAccountId, metaToken, period.start).then((l) => porHora(l, period.start, ateHora))
+      : getInsightsByDateRange(metaAccountId, metaToken, period.start, period.end),
+    ehHoje
+      ? getHourlyInsights(metaAccountId, metaToken, period.previous_start).then((l) => porHora(l, period.previous_start, ateHora))
+      : getInsightsByDateRange(metaAccountId, metaToken, period.previous_start, period.previous_end),
     getTopAdInsights(metaAccountId, metaToken, period.start, period.end, 10),
     getDemographicBreakdown(metaAccountId, metaToken, period.start, period.end),
     // Alcance DEDUPLICADO no nível da conta (Meta dedup numa chamada só). Somar o reach diário
     // super-conta (mesma pessoa atingida em 2 dias = 2). Usa a janela exata do período.
     fetchAccountReach(metaToken, metaAccountId, 7, period.start, period.end),
-    fetchAccountReach(metaToken, metaAccountId, 7, period.previous_start, period.previous_end),
+    // Ontem "até esta hora" não tem alcance sem repetir pessoa (a Meta não deduplica por hora): sem comparação.
+    ehHoje ? Promise.resolve(null) : fetchAccountReach(metaToken, metaAccountId, 7, period.previous_start, period.previous_end),
     // Todos os anúncios ativos + números do período ("Ver todos os anúncios ativos"). Dentro de um
     // .then pra que qualquer falha, até síncrona, vire rejeição aqui e não derrube o snapshot.
     Promise.resolve().then(() => getActiveAdsWithInsights(metaAccountId, metaToken, period.start, period.end)),
@@ -313,8 +356,9 @@ export async function buildSnapshot(params: {
 
   const curMessages = cur.reduce((acc, r) => acc + contarResultado(r.actions), 0);
   const curSpend    = sumNum(cur, "spend");
-  // Alcance: usa o dedup da conta; só cai na soma diária (super-conta) se a API falhar.
-  const curReach    = curReachDedup ?? sumNum(cur, "reach");
+  // Alcance: usa o dedup da conta; só cai na soma diária (super-conta) se a API falhar. Hoje não tem
+  // soma de reserva (por hora a Meta manda zero): falhou, fica sem número — nunca um zero falso.
+  const curReach: number | null = ehHoje ? curReachDedup : (curReachDedup ?? sumNum(cur, "reach"));
   const curCpa: number | null  = curMessages > 0 ? curSpend / curMessages : null;
 
   const prevMessages = prev.reduce((acc, r) => acc + contarResultado(r.actions), 0);
@@ -331,7 +375,8 @@ export async function buildSnapshot(params: {
   // vem inteiro na mesma chamada — as outras abas (cliques, investido, alcance) saem de graça.
   const prevPorDataIso = new Map(prev.map((r) => [r.date_start, r]));
   const alinharAnterior = (valor: (r: (typeof prev)[number]) => number) => days.map((d) => {
-    const par = somaDias(period.previous_start, diasNoIntervalo(period.start, d) - 1);
+    const par = ehHoje ? `${period.previous_start}${d.slice(10)}` : somaDias(period.previous_start, diasNoIntervalo(period.start, d) - 1);
+    if (ehHoje) { const linha = prevPorDataIso.get(par); return linha ? valor(linha) : 0; }
     if (par > period.previous_end) return null;
     const linha = prevPorDataIso.get(par);
     return linha ? valor(linha) : 0;
@@ -342,7 +387,7 @@ export async function buildSnapshot(params: {
     ? {
         clicks: alinharAnterior((r) => parseFloat(r.clicks) || 0),
         spend:  alinharAnterior((r) => parseFloat(r.spend)  || 0),
-        reach:  alinharAnterior((r) => parseFloat(r.reach)  || 0),
+        reach:  ehHoje ? days.map(() => null) : alinharAnterior((r) => parseFloat(r.reach)  || 0),
       }
     : null;
   const peakIdx    = msgSeries.indexOf(Math.max(...msgSeries));
@@ -444,9 +489,10 @@ export async function buildSnapshot(params: {
       cpa: curCpa !== null
         ? { value: Math.round(curCpa * 100) / 100, ...delta(curCpa, prevCpa ?? 0) }
         : { value: null, delta_pct: null, direction: "neutral" as const },
-      reach:    { value: curReach, ...delta(curReach, prevReach) },
+      reach:    curReach != null ? { value: curReach, ...delta(curReach, ehHoje ? 0 : prevReach) } : { value: null, delta_pct: null, direction: "neutral" as const },
     },
     chart: {
+      granularidade: ehHoje ? "hora" : "dia",
       days,
       series: {
         messages: msgSeries,

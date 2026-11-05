@@ -100,8 +100,13 @@ export function formatarEixo(metrica: MetricaDiaria, n: number): string {
 
 const meioDia = (ymd: string) => new Date(`${ymd.slice(0, 10)}T12:00:00Z`);
 
-/** "22 set" */
+/** "YYYY-MM-DDTHH" (gráfico por hora do "Hoje") → hora, ou null se for dia. */
+const horaDe = (v: string): number | null => (/^\d{4}-\d{2}-\d{2}T\d{2}$/.test(v) ? Number(v.slice(11, 13)) : null);
+
+/** "22 set" — ou "14h" quando o ponto é uma hora do "Hoje". */
 export function rotuloDia(ymd: string): string {
+  const h = horaDe(ymd);
+  if (h != null) return `${h}h`;
   return meioDia(ymd)
     .toLocaleDateString("pt-BR", { day: "numeric", month: "short", timeZone: "UTC" })
     .replace(/\./g, "").replace(/ de /g, " ");
@@ -109,6 +114,8 @@ export function rotuloDia(ymd: string): string {
 
 /** "seg, 22 set" */
 export function rotuloDiaLongo(ymd: string): string {
+  const h = horaDe(ymd);
+  if (h != null) return `das ${h}h às ${h}h59`;
   const semana = meioDia(ymd).toLocaleDateString("pt-BR", { weekday: "short", timeZone: "UTC" }).replace(/\./g, "");
   return `${semana}, ${rotuloDia(ymd)}`;
 }

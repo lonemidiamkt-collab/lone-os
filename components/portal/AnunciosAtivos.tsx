@@ -29,6 +29,7 @@ function selo(situacao: SituacaoAnuncio, p: PalavrasResultado): { texto: string;
 
 // "com os números dos últimos 7 dias" — o rótulo do período ("Últimos 7 dias") não encaixa na frase.
 const DO_PERIODO: Record<PeriodKind, string> = {
+  today: "de hoje",
   last_week: "dos últimos 7 dias",
   last_2_weeks: "das últimas 2 semanas",
   this_month: "deste mês",

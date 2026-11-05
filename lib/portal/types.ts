@@ -1,4 +1,5 @@
-export type PeriodKind = "last_week" | "last_2_weeks" | "this_month" | "last_month";
+/** "today" (05/11/2026): só no portal, gráfico por hora, cache em memória de 15 min (não vai ao banco). */
+export type PeriodKind = "today" | "last_week" | "last_2_weeks" | "this_month" | "last_month";
 
 export interface KpiValue {
   value: number | null;
@@ -91,6 +92,8 @@ export interface SnapshotData {
     reach: KpiValue;
   };
   chart: {
+    /** "dia" (padrão, snapshot antigo) ou "hora" (Hoje: `days` vem como "YYYY-MM-DDTHH"). */
+    granularidade?: "dia" | "hora";
     days: string[];
     series: {
       messages: number[];

@@ -7,6 +7,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { buildSnapshot } from "./buildSnapshot";
 import { contaDoCliente } from "./conta";
 import type { PeriodKind, SnapshotData } from "./types";
+import { hojeSP } from "@/lib/clients/pausa";
 
 export const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 // Quando a Meta não responde, mostrar o último dado bom (avisando) só se ele for recente.
@@ -94,7 +95,38 @@ function depoisDaResposta(tarefa: () => Promise<unknown>) {
   }
 }
 
+// ── "Hoje" (05/11/2026) ─────────────────────────────────────────────────────────────────────────
+// Número de hoje muda a cada minuto: vale 15 min, fica na memória do servidor (não no banco — a tabela
+// só aceita os 4 períodos fechados) e NUNCA atravessa a meia-noite: "hoje" de ontem não é hoje.
+export const HOJE_TTL_MS = 15 * 60 * 1000;
+export const HOJE_STALE_MAX_MS = 60 * 60 * 1000;
+const MEMORIA_HOJE = new Map<string, { data: SnapshotData; em: number }>();
+
+/** O "Hoje" guardado ainda serve? Pura (testada). */
+export function decidirHoje(guardado: { data: SnapshotData; em: number } | undefined, agora: Date): "fresco" | "reserva" | "buscar" {
+  if (!guardado || guardado.data.period?.start !== hojeSP(agora)) return "buscar";
+  const idade = agora.getTime() - guardado.em;
+  if (idade >= 0 && idade < HOJE_TTL_MS) return "fresco";
+  if (idade >= 0 && idade < HOJE_STALE_MAX_MS) return "reserva";
+  return "buscar";
+}
+
+async function obterHoje(clientId: string, now: Date): Promise<SnapshotData> {
+  const guardado = MEMORIA_HOJE.get(clientId);
+  const decisao = decidirHoje(guardado, now);
+  if (decisao === "fresco") return guardado!.data;
+  const data = await buildSnapshot({ clientId, periodKind: "today", now });
+  if (data.ads_status === "indisponivel") {
+    // A Meta não respondeu: o último "hoje" de até 1h, avisando de quando é; senão "atualizando".
+    if (decisao === "reserva") return { ...guardado!.data, stale_since: new Date(guardado!.em).toISOString() };
+    return data;
+  }
+  MEMORIA_HOJE.set(clientId, { data, em: now.getTime() });
+  return data;
+}
+
 export async function obterSnapshot(clientId: string, periodKind: PeriodKind, now = new Date()): Promise<SnapshotData> {
+  if (periodKind === "today") return obterHoje(clientId, now);
   const { data: cached } = await supabaseAdmin
     .from("client_report_snapshots")
     .select("data, generated_at")
@@ -139,6 +171,7 @@ export async function obterSnapshot(clientId: string, periodKind: PeriodKind, no
  * o próximo acesso já busca na Meta com a conta nova. Devolve o erro, se houver (quem chama registra).
  */
 export async function esquecerSnapshots(clientId: string): Promise<string | null> {
+  MEMORIA_HOJE.delete(clientId);
   const { error } = await supabaseAdmin.from("client_report_snapshots").delete().eq("client_id", clientId);
   return error?.message ?? null;
 }

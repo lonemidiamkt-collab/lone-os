@@ -10,6 +10,7 @@ export interface DeltaDisplay {
 
 // "que a semana passada", "que as 2 semanas anteriores", etc.
 const QUE: Record<PeriodKind, string> = {
+  today:        "que ontem até esta hora",
   last_week:    "que a semana passada",
   last_2_weeks: "que as 2 semanas anteriores",
   this_month:   "que o mesmo período do mês passado",
@@ -18,6 +19,7 @@ const QUE: Record<PeriodKind, string> = {
 
 // "à semana passada", "às 2 semanas anteriores", etc. (para "Similar a…")
 const A: Record<PeriodKind, string> = {
+  today:        "a ontem até esta hora",
   last_week:    "à semana passada",
   last_2_weeks: "às 2 semanas anteriores",
   this_month:   "ao mesmo período do mês passado",
@@ -81,6 +83,7 @@ export function periodoAnterior(period: PeriodKind): string {
 }
 
 const ABERTURA: Record<PeriodKind, string> = {
+  today:        "Hoje",
   last_week:    "Nos últimos 7 dias",
   last_2_weeks: "Nas últimas 2 semanas",
   this_month:   "Este mês",
@@ -88,6 +91,7 @@ const ABERTURA: Record<PeriodKind, string> = {
 };
 
 const ANTERIOR: Record<PeriodKind, string> = {
+  today:        "ontem até a mesma hora",
   last_week:    "a semana anterior",
   last_2_weeks: "as 2 semanas anteriores",
   this_month:   "o mesmo período do mês passado",

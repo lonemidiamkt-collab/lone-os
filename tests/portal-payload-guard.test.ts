@@ -56,7 +56,7 @@ const PERMITIDOS = new Set([
   // kpis
   "messages", "spend", "cpa", "reach", "value", "delta_pct", "direction",
   // gráfico
-  "days", "series", "clicks", "previous_messages", "previous_series", "peak", "metric", "day",
+  "days", "granularidade", "series", "clicks", "previous_messages", "previous_series", "peak", "metric", "day",
   // criativos e anúncios ativos
   "id", "name", "thumbnail_url", "thumbnail_path", "ctr", "frequency", "is_winner", "items", "total", "with_messages",
   // público

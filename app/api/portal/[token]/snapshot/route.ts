@@ -9,7 +9,7 @@ import { obterSnapshot } from "@/lib/portal/snapshotCache";
 import type { PeriodKind } from "@/lib/portal/types";
 import { criarLimite } from "@/lib/portal/limite";
 
-const VALID_PERIODS: PeriodKind[] = ["last_week", "last_2_weeks", "this_month", "last_month"];
+const VALID_PERIODS: PeriodKind[] = ["today", "last_week", "last_2_weeks", "this_month", "last_month"];
 const LIMITE = criarLimite(30, 60_000); // 30 buscas/min por cliente
 
 export async function POST(

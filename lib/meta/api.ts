@@ -202,6 +202,33 @@ export async function getInsightsByDateRange(
   return data.data ?? [];
 }
 
+export interface MetaHourlyInsight {
+  date_start: string;
+  hourly_stats_aggregated_by_advertiser_time_zone: string;
+  spend: string;
+  clicks: string;
+  actions?: { action_type: string; value: string }[];
+}
+
+/**
+ * Insights da conta HORA a HORA de um dia (para o "Hoje" do portal, 05/11/2026). A doc da Meta avisa:
+ * neste breakdown alcance e frequência vêm ZERADOS e unique_* não existe — por isso só investimento,
+ * cliques e ações. O alcance de hoje sai de uma chamada separada, sem breakdown.
+ */
+export async function getHourlyInsights(accountId: string, accessToken: string, day: string): Promise<MetaHourlyInsight[]> {
+  const url = getGraphUrl(`/${accountId}/insights`);
+  const params = new URLSearchParams({
+    access_token: accessToken,
+    fields: "spend,clicks,actions",
+    time_range: JSON.stringify({ since: day, until: day }),
+    breakdowns: "hourly_stats_aggregated_by_advertiser_time_zone",
+    action_attribution_windows: '["7d_click"]',
+    limit: "100",
+  });
+  const data = await metaJson<{ data?: MetaHourlyInsight[] }>(`${url}?${params}`, { label: `insights por hora ${accountId} ${day}` });
+  return data.data ?? [];
+}
+
 export async function getTopAdInsights(
   accountId: string,
   accessToken: string,

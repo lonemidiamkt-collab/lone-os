@@ -39,6 +39,7 @@ import { PainelComparativo, type KpiComparativo } from "@/components/ui/painel-c
 import { tomDaVariacao } from "@/components/ui/painel-comparativo-utils";
 
 const PERIODS: { valor: PeriodKind; rotulo: string }[] = [
+  { valor: "today",        rotulo: "Hoje"        },
   { valor: "last_week",    rotulo: "7 dias"      },
   { valor: "last_2_weeks", rotulo: "14 dias"     },
   { valor: "this_month",   rotulo: "Este mês"    },
@@ -187,7 +188,12 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
     dica: fraseDelta(key, val?.delta_pct ?? null, periodoDado) ?? undefined,
   }));
   const per = data?.period;
-  const datasPeriodo = per ? `${rotuloDia(per.start)} a ${rotuloDia(per.end)}, comparado com ${rotuloDia(per.previous_start)} a ${rotuloDia(per.previous_end)}.` : undefined;
+  // Hoje (05/11/2026): gráfico por hora e comparação com ontem ATÉ A MESMA HORA.
+  const porHora = chart?.granularidade === "hora";
+  const ultimaHora = porHora && dias.length ? rotuloDia(dias[dias.length - 1]) : null;
+  const datasPeriodo = !per ? undefined
+    : porHora ? `Hoje até as ${ultimaHora ?? "0h"}, comparado com ontem até a mesma hora.`
+    : `${rotuloDia(per.start)} a ${rotuloDia(per.end)}, comparado com ${rotuloDia(per.previous_start)} a ${rotuloDia(per.previous_end)}.`;
 
   const mostraPublico = loading || !!demo?.gender || (demo?.age_ranges?.length ?? 0) > 0;
   const mostraCriativos = loading || top.length > 0 || (ativos?.total ?? 0) > 0 || incompleto;
@@ -338,15 +344,22 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                 </Aviso>
               )}
 
+              {/* Hoje: o número ainda está entrando — dito uma vez, sem esconder nada. */}
+              {!erro && !loading && period === "today" && kpis && (
+                <Aviso tom="neutro" role="status">
+                  Números de hoje até agora. A Meta ainda consolida o dia — eles podem mudar um pouco até a meia-noite.
+                </Aviso>
+              )}
+
               {/* Resumo: conversas × período anterior, frase do período (N34) e os 4 números.
                   Some com erro ou "números sendo atualizados" — nunca pinta zero no lugar. */}
               {(loading || (!erro && !atualizando && kpis)) && (
                 <PainelComparativo
                   carregando={loading}
-                  titulo={`${palavras.Varios} por dia`}
+                  titulo={`${palavras.Varios} por ${porHora ? "hora" : "dia"}`}
                   subtitulo={per ? `${per.label}, comparado com ${periodoAnterior(periodoDado)}` : undefined}
-                  rotuloAtual="Este período"
-                  rotuloAnterior="Período anterior"
+                  rotuloAtual={porHora ? "Hoje" : "Este período"}
+                  rotuloAnterior={porHora ? "Ontem" : "Período anterior"}
                   serie={serieConversas}
                   formatarValor={(v) => v.toLocaleString("pt-BR")}
                   destaque={resumo ? { texto: resumo, tom: tomDaVariacao(kpis?.messages.delta_pct, "direta", 5), detalhe: datasPeriodo } : null}
@@ -362,6 +375,9 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                   `contents` no celular pra ordem valer entre as colunas. */}
               <div className="flex flex-col gap-5 lg:grid lg:grid-cols-5 lg:items-start lg:gap-6">
                 <div className="contents lg:col-span-3 lg:flex lg:flex-col lg:gap-6">
+                  {/* Hoje já mostra a hora a hora no resumo do topo; a evolução diária é para períodos de vários dias
+                      (e por hora a Meta devolve alcance zerado). */}
+                  {!porHora && period !== "today" && (
                   <motion.div variants={entrada} initial="oculto" animate="visivel" className="order-1 min-w-0">
                     <EvolucaoDiaria
                       dias={dias}
@@ -382,6 +398,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                       vazio={!data || atualizando ? "Aguardando os números…" : "Sem dados para o período."}
                     />
                   </motion.div>
+                  )}
 
                   {mostraPublico && (
                     <motion.div variants={entrada} initial="oculto" animate="visivel" custom={2} className="order-3 min-w-0">
