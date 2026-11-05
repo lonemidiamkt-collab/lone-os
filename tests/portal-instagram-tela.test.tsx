@@ -3,7 +3,7 @@
 // agora chega com 200 + estado, e não chama de "nenhum post" o que a Meta não deixou ler.
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 const chamar = vi.hoisted(() => ({ fn: vi.fn() }));
 vi.mock("@/lib/api/chamar", () => ({ chamar: chamar.fn }));
@@ -58,5 +58,35 @@ describe("PortalInstagram", () => {
     render(<PortalInstagram token="t" clientId="c" period="7d" />);
     expect(await screen.findByText("Seu Instagram ainda não está ligado a este painel")).toBeInTheDocument();
     expect(screen.queryByText(/Fala com a nossa equipe/)).toBeNull();
+  });
+});
+
+describe("PortalInstagram — leva 1 do Painel v2", () => {
+  const metricas = {
+    atual: { views: 5200, alcance: 4321, interacoes: 90, toques: 13, entraram: 40, sairam: 12, posts: 3 },
+    anterior: { views: 4000, alcance: 4500, interacoes: 60, toques: 10, entraram: 20, sairam: 5, posts: 5 },
+    toquesPorBotao: [{ tipo: "TEXT", valor: 9 }, { tipo: "CALL", valor: 4 }],
+    alcancePorFormato: [{ formato: "REELS", valor: 3000 }, { formato: "FEED", valor: 1000 }, { formato: "AD", valor: 50 }],
+    pctNaoSeguidores: 62,
+  };
+
+  it("saldo real de seguidores, toques nos botões e comparação com o período anterior; sem taxa de engajamento", () => {
+    render(<PortalInstagram token="t" clientId="c" period="7d" inicial={snap({}, { metricas } as Partial<IgSnapPortal>)} />);
+    expect(screen.getByText("+28 no período · 40 entraram, 12 saíram")).toBeInTheDocument();
+    expect(screen.getByText("Toques nos botões")).toBeInTheDocument();
+    expect(screen.getAllByText("↑ 30%")).toHaveLength(2); // visualizações 5.200 × 4.000 e toques 13 × 10
+    expect(screen.getByText("↑ 50%")).toBeInTheDocument(); // interações 90 × 60
+    expect(screen.getByText("Mensagem / WhatsApp")).toBeInTheDocument();
+    expect(screen.getByText("62% de quem viu ainda não segue o perfil")).toBeInTheDocument();
+    expect(screen.queryByText(/Taxa de engajamento/)).toBeNull();
+    expect(screen.queryByText("Anúncios")).toBeNull(); // alcance por anúncio fica fora do orgânico
+    expect(screen.getByText("5 no período anterior")).toBeInTheDocument();
+  });
+
+  it("explicação fica no '?' (abre ao tocar), não solta embaixo dos números", () => {
+    render(<PortalInstagram token="t" clientId="c" period="7d" inicial={snap({}, { metricas } as Partial<IgSnapPortal>)} />);
+    expect(screen.queryByText(/não some com o alcance do tráfego pago/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "O que é Pessoas alcançadas?" }));
+    expect(screen.getByText(/não some com o alcance do tráfego pago/)).toBeInTheDocument();
   });
 });

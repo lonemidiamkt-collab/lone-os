@@ -69,7 +69,35 @@ export interface IgSnapshot {
     postsNoPeriodo: number | null;
   };
   audiencia?: IgAudiencia;
+  /** Números da CONTA no período e no anterior (05/11/2026, doc atual da Meta). Ausente = snapshot antigo. */
+  metricas?: IgMetricasConta;
   posts?: IgPost[];
+}
+
+export interface IgNumerosPeriodo {
+  /** Visualizações de tudo (posts, Reels, Stories). */
+  views: number | null;
+  alcance: number | null;
+  /** Curtidas + comentários + salvamentos + compartilhamentos + respostas. */
+  interacoes: number | null;
+  /** Toques nos botões do perfil (ligar, WhatsApp, rota, e-mail…). */
+  toques: number | null;
+  /** Começaram a seguir / deixaram de seguir no período. */
+  entraram: number | null;
+  sairam: number | null;
+  posts: number | null;
+}
+
+export interface IgMetricasConta {
+  atual: IgNumerosPeriodo;
+  /** Mesma duração, logo antes. null = a Meta não entregou. */
+  anterior: IgNumerosPeriodo | null;
+  /** Toques por botão do perfil, do maior para o menor (tipo = CALL, TEXT, DIRECTION, EMAIL, BOOK_NOW…). */
+  toquesPorBotao: { tipo: string; valor: number }[];
+  /** Alcance por formato (REELS, FEED, STORY, AD…), do maior para o menor. */
+  alcancePorFormato: { formato: string; valor: number }[];
+  /** Parte do alcance que ainda NÃO segue o perfil (0–100). null = a Meta não entregou. */
+  pctNaoSeguidores: number | null;
 }
 
 // Demografia dos seguidores por breakdown (city | age | gender). follower_demographics é lifetime,
@@ -350,6 +378,97 @@ export async function reconcileIgFromAdAccounts(): Promise<string[]> {
   return mapeados;
 }
 
+// ── Métricas da conta pelo caminho documentado hoje (05/11/2026) ─────────────────────────────────
+// `period=day&metric_type=total_value&since&until` devolve o TOTAL da janela (pessoas únicas no alcance).
+// Cada busca é best-effort: a Meta exige 100 seguidores para algumas e recusa outras em conta nova — o que
+// faltar vira null (a tela esconde), nunca zero.
+
+type TotalValue = { total: number | null; por: Record<string, number> };
+
+/** Lê a resposta de /insights com total_value (com ou sem breakdown). Pura (testada). */
+export function lerTotalValue(data: unknown): Record<string, TotalValue> {
+  const out: Record<string, TotalValue> = {};
+  for (const row of (Array.isArray(data) ? data : []) as Array<{ name?: string; total_value?: { value?: number; breakdowns?: { results?: { dimension_values?: string[]; value?: number }[] }[] } }>) {
+    if (!row?.name) continue;
+    const por: Record<string, number> = {};
+    for (const r of row.total_value?.breakdowns?.[0]?.results ?? []) {
+      const k = r.dimension_values?.[0];
+      if (k && typeof r.value === "number") por[k] = (por[k] ?? 0) + r.value;
+    }
+    const v = row.total_value?.value;
+    out[row.name] = { total: typeof v === "number" ? v : (Object.keys(por).length ? Object.values(por).reduce((a, b) => a + b, 0) : null), por };
+  }
+  return out;
+}
+
+async function totalValue(igId: string, metricas: string[], desde: number, ate: number, token: string, breakdown?: string): Promise<Record<string, TotalValue>> {
+  const pedir = async (m: string[]) => {
+    try {
+      const url = `${GRAPH}/${igId}/insights?metric=${m.join(",")}&period=day&metric_type=total_value&since=${desde}&until=${ate}${breakdown ? `&breakdown=${breakdown}` : ""}&access_token=${token}`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      const j = await r.json().catch(() => ({}));
+      return j?.error ? null : lerTotalValue(j?.data);
+    } catch { return null; }
+  };
+  const junto = await pedir(metricas);
+  if (junto || metricas.length === 1) return junto ?? {};
+  // Uma métrica recusada derruba a chamada inteira: pede uma a uma para não perder as outras.
+  const separadas = await Promise.all(metricas.map((m) => pedir([m])));
+  return Object.assign({}, ...separadas.filter(Boolean));
+}
+
+const ORDEM_DESC = <T extends { valor: number }>(a: T, b: T) => b.valor - a.valor;
+
+/** Junta as buscas da conta num objeto só. Pura (testada). */
+export function montarMetricas(x: {
+  atual: Record<string, TotalValue>; anterior: Record<string, TotalValue>;
+  segAtual: Record<string, TotalValue>; segAnterior: Record<string, TotalValue>;
+  botoes: Record<string, TotalValue>; formatos: Record<string, TotalValue>; seguidorOuNao: Record<string, TotalValue>;
+  postsAtual: number | null; postsAnterior: number | null;
+}): IgMetricasConta {
+  const num = (r: Record<string, TotalValue>, m: string) => r[m]?.total ?? null;
+  // follows_and_unfollows por follow_type: FOLLOWER = começou a seguir, NON_FOLLOWER = deixou de seguir.
+  const seg = (r: Record<string, TotalValue>) => {
+    const p = r.follows_and_unfollows?.por;
+    return p && Object.keys(p).length ? { entraram: p.FOLLOWER ?? 0, sairam: p.NON_FOLLOWER ?? 0 } : { entraram: null, sairam: null };
+  };
+  const periodo = (r: Record<string, TotalValue>, sg: Record<string, TotalValue>, posts: number | null): IgNumerosPeriodo => ({
+    views: num(r, "views"), alcance: num(r, "reach"), interacoes: num(r, "total_interactions"), toques: num(r, "profile_links_taps"),
+    ...seg(sg), posts,
+  });
+  const temAnterior = Object.keys(x.anterior).length > 0 || Object.keys(x.segAnterior).length > 0;
+  const fs = x.seguidorOuNao.reach?.por ?? {};
+  const totalFs = (fs.FOLLOWER ?? 0) + (fs.NON_FOLLOWER ?? 0);
+  return {
+    atual: periodo(x.atual, x.segAtual, x.postsAtual),
+    anterior: temAnterior ? periodo(x.anterior, x.segAnterior, x.postsAnterior) : null,
+    toquesPorBotao: Object.entries(x.botoes.profile_links_taps?.por ?? {}).map(([tipo, valor]) => ({ tipo, valor })).filter((b) => b.valor > 0).sort(ORDEM_DESC),
+    alcancePorFormato: Object.entries(x.formatos.reach?.por ?? {}).map(([formato, valor]) => ({ formato, valor })).filter((f) => f.valor > 0).sort(ORDEM_DESC),
+    pctNaoSeguidores: totalFs > 0 ? Math.round(((fs.NON_FOLLOWER ?? 0) / totalFs) * 100) : null,
+  };
+}
+
+async function buscarMetricasConta(igId: string, dias: number, token: string, postsAtual: number | null, postsAnterior: number | null): Promise<IgMetricasConta> {
+  const ate = Math.floor(Date.now() / 1000);
+  const meio = ate - dias * 86400;
+  const inicio = meio - dias * 86400;
+  const TOTAIS = ["views", "reach", "total_interactions", "profile_links_taps"];
+  const [atual, anterior, segAtual, segAnterior, botoes, formatos, seguidorOuNao] = await Promise.all([
+    totalValue(igId, TOTAIS, meio, ate, token),
+    totalValue(igId, TOTAIS, inicio, meio, token),
+    totalValue(igId, ["follows_and_unfollows"], meio, ate, token, "follow_type"),
+    totalValue(igId, ["follows_and_unfollows"], inicio, meio, token, "follow_type"),
+    totalValue(igId, ["profile_links_taps"], meio, ate, token, "contact_button_type"),
+    totalValue(igId, ["reach"], meio, ate, token, "media_product_type"),
+    totalValue(igId, ["reach"], meio, ate, token, "follow_type"),
+  ]);
+  return montarMetricas({ atual, anterior, segAtual, segAnterior, botoes, formatos, seguidorOuNao, postsAtual, postsAnterior });
+}
+
+/** Interações de um post (o que pesa para o ranking "melhores posts"). Pura. */
+export const interacoesDoPost = (p: Pick<IgPost, "curtidas" | "comentarios" | "salvos" | "compartilhamentos">) =>
+  (p.curtidas || 0) + (p.comentarios || 0) + (p.salvos || 0) + (p.compartilhamentos || 0);
+
 /**
  * Conta ligada, mas a Meta recusou parte da leitura? Pura (testada). Alcance, seguidores novos e público
  * TODOS vazios juntos é a assinatura de permissão pela metade (nunca acontece com acesso de dono e
@@ -397,9 +516,12 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
     buildAudiencia(igId, token),
   ]);
 
-  // Posts do período (paginado — ver fetchMediaDoPeriodo).
-  const lidos = await fetchMediaDoPeriodo(igId, desde.toISOString(), token);
-  const media = lidos.media;
+  // Posts do período E do anterior (paginado — ver fetchMediaDoPeriodo): o anterior só conta, para a
+  // comparação "posts no período" (sem buscar métricas de post antigo).
+  const desdeAnterior = new Date(Date.now() - 2 * dias * 86400000);
+  const lidos = await fetchMediaDoPeriodo(igId, desdeAnterior.toISOString(), token);
+  const media = lidos.media.filter((m) => ((m.timestamp as string) || "") >= desde.toISOString());
+  const postsAnteriores = lidos.erro ? null : lidos.media.length - media.length;
 
   // ── FALLBACK PÚBLICO QUANDO A META RECUSA A LISTAGEM ────────────────────
   //
@@ -442,13 +564,16 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
       permalink: (m.permalink as string) || null,
       curtidas, comentarios, views: ins.views, alcance: ins.alcance,
       salvos: ins.salvos, compartilhamentos: ins.compartilhamentos,
-      engajamento: (curtidas || 0) + (comentarios || 0),
+      // Ranking pelo que mais pesa hoje no Instagram: salvar e compartilhar contam junto com curtir e comentar.
+      engajamento: interacoesDoPost({ curtidas, comentarios, salvos: ins.salvos, compartilhamentos: ins.compartilhamentos }),
       data: (m.timestamp as string) || null,
     };
   }));
 
-  // Ordena por engajamento (mais engajados primeiro) — o relatório mostra os destaques do período.
-  posts.sort((a, b) => b.engajamento - a.engajamento);
+  // Ordena por interações (com visualizações desempatando, que é o que diferencia Reels).
+  posts.sort((a, b) => b.engajamento - a.engajamento || (b.views ?? 0) - (a.views ?? 0));
+
+  const metricas = await buscarMetricasConta(igId, dias, token, lidos.erro ? null : posts.length, postsAnteriores);
 
   const resumo = {
     alcance: alcance.valor,
@@ -467,7 +592,7 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
     mapped: true, periodo, periodoLabel: IG_PERIOD_LABEL[periodo], fonte: avisos.length ? "parcial" : "owned",
     ...(avisos.length ? { avisos } : {}),
     conta: { username: acct.username as string, seguidores: (acct.followers_count as number) ?? null, posts: (acct.media_count as number) ?? null },
-    resumo, audiencia, posts,
+    resumo, audiencia, metricas, posts,
   };
 }
 

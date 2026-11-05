@@ -22,7 +22,6 @@ import PortalInstagram, { IG_PERIODOS, type IgPeriodo, type IgSnapPortal } from 
 import PortalUpload from "@/components/portal/PortalUpload";
 import PortalAgenda from "./PortalAgenda";
 import PortalMateriais from "./PortalMateriais";
-import EvolucaoDiaria from "./EvolucaoDiaria";
 import PublicoCard from "./PublicoCard";
 import AnunciosAtivos from "./AnunciosAtivos";
 import VendasDoCliente from "@/components/trafego/vendas/VendasDoCliente";
@@ -100,8 +99,14 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
 
   // Cliente escolhe o que ver: Anúncios (tráfego) ou Crescimento nas redes (Instagram orgânico).
   // Só mostra o seletor quando o pacote tem os dois; senão abre direto no que existe.
-  const showToggle = hasAds && hasSocial;
-  const [view, setView] = useState<"ads" | "social">(hasAds ? "ads" : "social");
+  // 05/11/2026: "Conteúdo e envios" saiu de dentro de "Crescimento nas redes" — a aba misturava o
+  // relatório do Instagram com agenda, artes entregues e envio de material.
+  const showToggle = hasSocial; // com Instagram há sempre 2+ abas; só anúncios = sem seletor
+  const [view, setView] = useState<"ads" | "social" | "conteudo">(hasAds ? "ads" : "social");
+  // Gráfico do topo (05/11/2026): um gráfico só, com a escolha da métrica — a "Evolução diária" de baixo
+  // repetia o mesmo desenho.
+  const [metricaGrafico, setMetricaGrafico] = useState<"messages" | "spend" | "clicks">("messages");
+  const [comoContamos, setComoContamos] = useState(false);
 
   const phone = whatsappPhone || WHATSAPP_EQUIPE;
 
@@ -178,7 +183,10 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   // Resumo do topo: resultado por dia × mesmo dia do período anterior + os 4 números principais.
   const dias = chart?.days ?? [];
   const prevConversas = chart?.previous_messages ?? null;
-  const serieConversas = dias.map((d, i) => ({ rotulo: rotuloDia(d), atual: chart?.series.messages[i] ?? 0, anterior: prevConversas?.[i] ?? null }));
+  const serieAtual = chart?.series[metricaGrafico] ?? [];
+  const serieAnterior = metricaGrafico === "messages" ? prevConversas : chart?.previous_series?.[metricaGrafico] ?? null;
+  const serieConversas = dias.map((d, i) => ({ rotulo: rotuloDia(d), atual: serieAtual[i] ?? 0, anterior: serieAnterior?.[i] ?? null }));
+  const nomeMetrica = metricaGrafico === "messages" ? palavras.Varios : metricaGrafico === "spend" ? "Investido" : "Cliques";
   const kpisResumo: KpiComparativo[] = kpiItems.map(({ key, label, val, format }) => ({
     rotulo: label,
     valor: val?.value != null ? format(val.value) : "—",
@@ -252,8 +260,11 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
             cheio
             destaque
             opcoes={[
-              { valor: "ads", rotulo: "Anúncios", icone: BarChart3 },
-              { valor: "social", rotulo: "Crescimento nas redes", icone: TrendingUp },
+              ...(hasAds ? [{ valor: "ads" as const, rotulo: "Anúncios", icone: BarChart3 }] : []),
+              ...(hasSocial ? [
+                { valor: "social" as const, rotulo: "Crescimento nas redes", icone: TrendingUp },
+                { valor: "conteudo" as const, rotulo: "Conteúdo e envios", icone: Palette },
+              ] : []),
             ]}
             valor={view}
             onChange={setView}
@@ -292,11 +303,17 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                     <li><span className="font-medium text-foreground">Instagram</span> — seguidores, alcance e os posts que mais renderam</li>
                     <li><span className="font-medium text-foreground">Conteúdo</span> — as artes que a equipe entregou para você</li>
                   </ul>
-                  <p className="mt-3 text-sm text-muted-foreground">Enquanto isso, o que mais ajuda é mandar o material da loja aqui embaixo — logo, fotos, tabela de preço, vídeo.</p>
+                  <p className="mt-3 text-sm text-muted-foreground">Enquanto isso, o que mais ajuda é mandar o material da loja na aba <button type="button" onClick={() => setView("conteudo")} className="font-medium text-foreground underline underline-offset-2">Conteúdo e envios</button> — logo, fotos, tabela de preço, vídeo.</p>
                 </Cartao>
               ) : (
                 <PortalInstagram token={token} clientId={clientId} period={igPeriod} inicial={initialIg} />
               )}
+            </div>
+          )}
+
+          {/* ── Conteúdo e envios: agenda, artes entregues, enviar material e o histórico de envios ── */}
+          {hasSocial && view === "conteudo" && (
+            <div className="space-y-6">
               {/* Próximos posts e calendário do mês (N36): só Agendado, No ar e aprovado pelo cliente. */}
               <PortalAgenda token={token} />
               <PortalContent token={token} aprovacaoLigada={aprovacaoLigada}
@@ -354,20 +371,33 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
               {/* Resumo: conversas × período anterior, frase do período (N34) e os 4 números.
                   Some com erro ou "números sendo atualizados" — nunca pinta zero no lugar. */}
               {(loading || (!erro && !atualizando && kpis)) && (
+                <div className="space-y-3">
+                <Segmentado
+                  rotulo="Ver no gráfico"
+                  tamanho="sm"
+                  opcoes={[
+                    { valor: "messages", rotulo: palavras.Varios },
+                    { valor: "spend", rotulo: "Investido" },
+                    { valor: "clicks", rotulo: "Cliques" },
+                  ]}
+                  valor={metricaGrafico}
+                  onChange={setMetricaGrafico}
+                />
                 <PainelComparativo
                   carregando={loading}
-                  titulo={`${palavras.Varios} por ${porHora ? "hora" : "dia"}`}
+                  titulo={`${nomeMetrica} por ${porHora ? "hora" : "dia"}`}
                   subtitulo={per ? `${per.label}, comparado com ${periodoAnterior(periodoDado)}` : undefined}
                   rotuloAtual={porHora ? "Hoje" : "Este período"}
                   rotuloAnterior={porHora ? "Ontem" : "Período anterior"}
                   serie={serieConversas}
-                  formatarValor={(v) => v.toLocaleString("pt-BR")}
+                  formatarValor={(v) => metricaGrafico === "spend" ? formatarBRL(v) : v.toLocaleString("pt-BR")}
                   destaque={resumo ? { texto: resumo, tom: tomDaVariacao(kpis?.messages.delta_pct, "direta", 5), detalhe: datasPeriodo } : null}
                   kpis={kpisResumo}
                   limiarNeutroPct={5}
                   tomRuim="atencao"
                   vazio={`Ainda não houve ${palavras.varios} neste período.`}
                 />
+                </div>
               )}
 
               {/* Celular: um bloco embaixo do outro, na ordem de interesse do cliente (gráfico,
@@ -375,31 +405,6 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                   `contents` no celular pra ordem valer entre as colunas. */}
               <div className="flex flex-col gap-5 lg:grid lg:grid-cols-5 lg:items-start lg:gap-6">
                 <div className="contents lg:col-span-3 lg:flex lg:flex-col lg:gap-6">
-                  {/* Hoje já mostra a hora a hora no resumo do topo; a evolução diária é para períodos de vários dias
-                      (e por hora a Meta devolve alcance zerado). */}
-                  {!porHora && period !== "today" && (
-                  <motion.div variants={entrada} initial="oculto" animate="visivel" className="order-1 min-w-0">
-                    <EvolucaoDiaria
-                      dias={dias}
-                      series={{
-                        messages: chart?.series.messages ?? [],
-                        clicks: chart?.series.clicks ?? [],
-                        spend: chart?.series.spend ?? [],
-                        reach: chart?.series.reach ?? [],
-                      }}
-                      anteriores={{
-                        messages: chart?.previous_messages,
-                        clicks: chart?.previous_series?.clicks,
-                        spend: chart?.previous_series?.spend,
-                        reach: chart?.previous_series?.reach,
-                      }}
-                      carregando={loading}
-                      tipoResultado={tipoResultado}
-                      vazio={!data || atualizando ? "Aguardando os números…" : "Sem dados para o período."}
-                    />
-                  </motion.div>
-                  )}
-
                   {mostraPublico && (
                     <motion.div variants={entrada} initial="oculto" animate="visivel" custom={2} className="order-3 min-w-0">
                       <PublicoCard
@@ -487,9 +492,20 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           <p className="text-lone-caption text-muted-foreground">
             Relatório exclusivo{mesRelatorio ? ` · ${mesRelatorio}` : ""}
           </p>
-          <p className="mx-auto max-w-prose text-lone-caption text-muted-foreground">
-            Atribuição: 7 dias de clique + 1 dia de visualização · Valores podem divergir em até 5% do Gerenciador por atribuição diferida
-          </p>
+          {view === "ads" && hasAds && (
+            <div className="mx-auto max-w-prose">
+              <button type="button" aria-expanded={comoContamos} onClick={() => setComoContamos((v) => !v)}
+                className="text-lone-caption text-muted-foreground underline-offset-2 hover:underline">
+                Como contamos os números
+              </button>
+              {comoContamos && (
+                <p className="mt-1 text-lone-caption text-muted-foreground">
+                  Conversas e cliques contam quem agiu até 7 dias depois de clicar no anúncio, ou no dia em que o viu.
+                  Os números podem ficar até 5% diferentes do Gerenciador de Anúncios, porque a Meta ainda ajusta os dias recentes.
+                </p>
+              )}
+            </div>
+          )}
         </footer>
       </div>
     </div>

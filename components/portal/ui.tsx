@@ -4,7 +4,7 @@
 // seletor segmentado). Uma família só, pra "Anúncios" e "Crescimento nas redes" parecerem a mesma
 // página — antes cada bloco tinha o próprio título, raio e peso de fonte.
 
-import { useId, type HTMLAttributes, type ReactNode } from "react";
+import { useId, useState, type HTMLAttributes, type ReactNode } from "react";
 import { motion, type Variants } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -144,3 +144,32 @@ export function Aviso({ tom, children, acao, role }: {
     </div>
   );
 }
+
+/**
+ * "?" ao lado de um número: abre a explicação embaixo, em vez de notas soltas sob os cartões
+ * (05/11/2026 — a aba do Instagram tinha 4 notas de rodapé seguidas). Toque abre e fecha.
+ */
+export function Dica({ rotulo, children }: { rotulo: string; children: ReactNode }) {
+  const [aberta, setAberta] = useState(false);
+  const id = useId();
+  return (
+    <span className="inline-flex flex-col">
+      <button
+        type="button"
+        aria-expanded={aberta}
+        aria-controls={id}
+        aria-label={`O que é ${rotulo}?`}
+        onClick={() => setAberta((v) => !v)}
+        className="inline-grid h-4 w-4 place-items-center rounded-full border border-border text-[10px] font-medium leading-none text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
+        ?
+      </button>
+      {aberta && (
+        <span id={id} role="note" className="mt-1.5 block max-w-xs text-lone-caption font-normal text-muted-foreground">
+          {children}
+        </span>
+      )}
+    </span>
+  );
+}
+

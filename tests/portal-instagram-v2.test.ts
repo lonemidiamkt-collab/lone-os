@@ -230,3 +230,48 @@ describe("ligar a conta de anúncio acha o Instagram na hora", () => {
     expect(banco.db.clients[0].ig_business_account_id).toBe("igOriginal");
   });
 });
+
+describe("métricas da conta (Painel v2, leva 1)", () => {
+  it("lê total_value com e sem breakdown", () => {
+    const r = ig.lerTotalValue([
+      { name: "views", total_value: { value: 900 } },
+      { name: "profile_links_taps", total_value: { breakdowns: [{ results: [{ dimension_values: ["CALL"], value: 4 }, { dimension_values: ["TEXT"], value: 9 }] }] } },
+    ]);
+    expect(r.views).toEqual({ total: 900, por: {} });
+    expect(r.profile_links_taps).toEqual({ total: 13, por: { CALL: 4, TEXT: 9 } });
+    expect(ig.lerTotalValue(undefined)).toEqual({});
+  });
+
+  it("saldo de seguidores, botões e formatos em ordem, % de quem ainda não segue", () => {
+    const tv = (total: number | null, por: Record<string, number> = {}) => ({ total, por });
+    const m = ig.montarMetricas({
+      atual: { views: tv(1000), reach: tv(400), total_interactions: tv(50), profile_links_taps: tv(13) },
+      anterior: { views: tv(800), reach: tv(500) },
+      segAtual: { follows_and_unfollows: tv(52, { FOLLOWER: 40, NON_FOLLOWER: 12 }) },
+      segAnterior: {},
+      botoes: { profile_links_taps: tv(13, { CALL: 4, TEXT: 9, EMAIL: 0 }) },
+      formatos: { reach: tv(400, { FEED: 100, REELS: 300 }) },
+      seguidorOuNao: { reach: tv(400, { FOLLOWER: 100, NON_FOLLOWER: 300 }) },
+      postsAtual: 3, postsAnterior: 5,
+    });
+    expect(m.atual).toEqual({ views: 1000, alcance: 400, interacoes: 50, toques: 13, entraram: 40, sairam: 12, posts: 3 });
+    expect(m.anterior).toMatchObject({ views: 800, alcance: 500, entraram: null, posts: 5 });
+    expect(m.toquesPorBotao).toEqual([{ tipo: "TEXT", valor: 9 }, { tipo: "CALL", valor: 4 }]);
+    expect(m.alcancePorFormato[0]).toEqual({ formato: "REELS", valor: 300 });
+    expect(m.pctNaoSeguidores).toBe(75);
+  });
+
+  it("Meta recusou tudo: tudo null (a tela esconde), nunca zero", () => {
+    const m = ig.montarMetricas({ atual: {}, anterior: {}, segAtual: {}, segAnterior: {}, botoes: {}, formatos: {}, seguidorOuNao: {}, postsAtual: null, postsAnterior: null });
+    expect(m.atual).toEqual({ views: null, alcance: null, interacoes: null, toques: null, entraram: null, sairam: null, posts: null });
+    expect(m.anterior).toBeNull();
+    expect(m.pctNaoSeguidores).toBeNull();
+  });
+
+  it("melhores posts contam salvamentos e compartilhamentos", async () => {
+    const snap = await ig.buildIgSnapshot(CLI, "7d");
+    // Reels: 30 curtidas + 2 comentários + 12 salvos + 7 compartilhamentos.
+    expect(snap.posts![0]).toMatchObject({ id: "m1", engajamento: 51 });
+    expect(snap.metricas).toBeDefined();
+  });
+});
