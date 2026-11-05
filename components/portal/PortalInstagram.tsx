@@ -72,7 +72,7 @@ export const ROTULO_BOTAO: Record<string, string> = {
 };
 /** Formato de onde veio o alcance. */
 export const ROTULO_FORMATO: Record<string, string> = {
-  REELS: "Reels", FEED: "Posts", STORY: "Stories", AD: "Anúncios", CAROUSEL_CONTAINER: "Carrossel", POST: "Posts",
+  REELS: "Reels", REEL: "Reels", FEED: "Posts", POST: "Posts", STORY: "Stories", AD: "Anúncios", CAROUSEL_CONTAINER: "Carrossel",
 };
 
 /** Variação % entre dois números (null quando não dá para comparar). Pura (testada). */
