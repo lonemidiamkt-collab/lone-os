@@ -2,6 +2,8 @@
 
 > Cole este arquivo inteiro numa sessão do Claude Code aberta em `~/dev/lone-os`.
 > Diagnóstico feito em 04/11/2026 com dados de produção: 26 clientes com Instagram e 51 leituras medidas.
+> Revisado no mesmo dia com pesquisa na documentação atual da Meta e nos concorrentes (seção "Mercado e Meta" no fim).
+> **Etapa 1 já executada** (04/11/2026) — começar pela Etapa 0.
 
 ---
 
@@ -28,7 +30,22 @@ Trabalhe em etapas, na ordem abaixo. Ao fim de cada etapa:
 
 ---
 
-## Etapa 1 — Bugs (prioridade máxima)
+## Etapa 0 — Versão da API da Meta (prazo: antes de 21/01/2027)
+
+O projeto chama a Graph API em **v21.0** em 17 arquivos (e um em v20.0: `app/api/system/audit-spend`).
+- A v21.0 da Graph API (Instagram, Páginas, OAuth) **para de funcionar em 21/01/2027**.
+- Na Marketing API ela já expirou; a Meta faz auto-upgrade desde 29/07/2026. Por isso os números de anúncio hoje rodam numa versão que não escolhemos.
+
+**Fazer:**
+- Uma constante só (`lib/meta/config.ts → graphApiVersion`) usada por todos os arquivos. Hoje cada arquivo tem a própria `const GRAPH`.
+- Subir para **v25.0**: a v26 é de 29/07/2026, mas a v25 está estável e ainda sem data de fim.
+- Ler o changelog v22→v25 contra cada campo que o projeto pede.
+- **Teste que trava:** nenhum arquivo com `graph.facebook.com/v2` fora da constante.
+- Rodar o warmup e o ig-snapshots em produção e comparar com o dia anterior antes de anunciar.
+
+---
+
+## Etapa 1 — Bugs (prioridade máxima) — ✅ FEITA em 04/11/2026
 
 ### 1.1 Aba "Crescimento nas redes" abre vazia na primeira vez
 
@@ -102,7 +119,7 @@ A Casa das Telhas tem conta de anúncio e aparece "Instagram ainda não conectad
 - `PeriodKind` ganha `"today"`, como primeira opção do seletor ("Hoje").
 - Mudar em: `lib/portal/types.ts`, `calcPeriod` (de hoje a hoje em SP), `VALID_PERIODS` da rota, `PERIODS` do `PortalDashboard`, `formatDelta` (frases e `periodoAnterior`), `LABELS` e testes de `calcPeriod`.
 - **Comparação:** com ontem *até a mesma hora*. Para isso, usar insights com `breakdowns=hourly_stats_aggregated_by_advertiser_time_zone` em hoje e ontem e cortar ontem na hora atual. Se ficar caro, comparar com o dia inteiro de ontem e dizer isso na legenda.
-- **Gráfico:** por hora (0h–23h), não por dia.
+- **Gráfico:** por hora (0h–23h), não por dia. Só investimento, cliques e resultados: no breakdown por hora a Meta devolve **alcance e frequência zerados** (doc de breakdowns). O alcance de "hoje" sai de uma chamada sem breakdown.
 - **Cache:** fresco por 15 min. Do-dia vale só até 1h. Nunca mostrar "hoje" de ontem depois da meia-noite. O warmup não aquece "hoje".
 - **Aviso fixo:** "Números de hoje ainda estão entrando — a Meta consolida até o fim do dia."
 - **Instagram:** avaliar "Hoje" com `period=day`. Se a Meta não entregar alcance do dia de forma confiável, deixar sem "Hoje" e explicar.
@@ -140,7 +157,11 @@ A Casa das Telhas tem conta de anúncio e aparece "Instagram ainda não conectad
   - ordenar por interações totais (curtidas + comentários + salvamentos + compartilhamentos), com visualizações como desempate em Reels;
   - mostrar views, alcance e salvamentos no card;
   - filtro Reels / Carrossel / Imagem.
-- "Seguidores ganhos" passa a se chamar **"Seguidores novos"**. `follower_count` conta só quem seguiu, não desconta quem deixou de seguir.
+- Saldo real de seguidores com `follows_and_unfollows` (breakdown `follow_type`): "+40 novos, −12 saíram = +28". O rótulo "novos" já foi corrigido na etapa 1.
+- Toques nos botões do perfil por tipo (`profile_links_taps` com breakdown `contact_button_type`: ligar, rota, WhatsApp, e-mail). Para loja física é o número que mais vale. As métricas antigas `website_clicks`, `phone_call_clicks` e `get_directions_clicks` foram desligadas pela Meta em 08/01/2025.
+- Alcance e visualizações separados por formato (`media_product_type`: Reels, feed, Stories) e por seguidor/não seguidor (`follow_type`). Isso responde "o Reels está trazendo gente nova?".
+- Stories: a Meta só guarda as métricas por 24 horas. É preciso um cron que leia os Stories do dia antes de sumirem e guarde em tabela própria.
+- Público com `engaged_audience_demographics` (quem interage, não só quem segue), quando a conta tiver 100+ engajamentos. O público só aceita janela `this_week`/`this_month`.
 - **14 dias:** o alcance vem da janela de 28. Esconder o alcance nesse período ou usar só o alcance somado dos posts, com rótulo claro. Nunca mostrar número de 28 dias numa tela de 14.
 
 ---
@@ -160,7 +181,10 @@ Tudo gerado no servidor, guardado junto do snapshot e nunca ao vivo na visita. S
    - custo por conversa subiu mais de 40% contra a média de 4 semanas;
    - anúncio reprovado;
    - Instagram sem post há 7 dias com pacote de social.
-4. **Relatório mensal em PDF**, gerado dia 1º com o mesmo conteúdo do painel (skill `lone-os:documentos`), com link no portal "Baixar relatório de outubro".
+4. **Relatório mensal em PDF**, gerado dia 1º com o mesmo conteúdo do painel (skill `lone-os:documentos`), com link no portal "Baixar relatório de outubro". Enviar o link e o resumo **no WhatsApp do cliente**, que é padrão no Reportei e no mLabs.
+5. **Metas por cliente** (custo por conversa alvo, conversas/mês, seguidores/mês), com barra de progresso no painel e alerta ao time quando sair da meta. Reportei ("Controle") e AgencyAnalytics têm; o cliente entende "estamos em 80% da meta" melhor que "+12%".
+6. **Formato da leitura por IA** no padrão DashThis: Resumo · Vitórias · O que precisa de atenção · Próximo passo.
+7. **Diferencial que ninguém tem: comparação com lojas do mesmo nicho** ("seu custo por conversa está entre os 25% melhores das lojas de tinta que atendemos"). Anônimo, só com 5+ clientes no nicho, mediana e quartis. Os concorrentes pesquisados não oferecem.
 
 Modelo e custo:
 - usar o cliente de IA que o projeto já tem (procurar em `lib/`);
@@ -187,3 +211,29 @@ Modelo e custo:
   - os Reels mostram visualizações;
   - "Hoje" bate com o Gerenciador de Anúncios (com margem de atraso da Meta).
 - Rodar `vitest run` e `tsc --noEmit` e colar a saída crua.
+
+---
+
+## Mercado e Meta — pesquisa de 04/11/2026
+
+**Meta (documentação oficial atual):**
+
+| Antigo | Agora | Desde |
+|---|---|---|
+| `video_views` (post) | `views` | 08/01/2025 — **era o bug dos Reels (corrigido na etapa 1)** |
+| `impressions`, `plays` | `views` | 21/04/2025 |
+| `profile_views`, `website_clicks`, `phone_call_clicks`, `get_directions_clicks` | `profile_links_taps` + `contact_button_type` | 08/01/2025 |
+| `reach` com `period=week/days_28` | `reach` com `period=day&metric_type=total_value&since&until` | sumiu da doc. A etapa 1 já usa o novo, com o antigo de reserva |
+| Atribuição `7d_view` / `28d_view` (anúncios) | 1d_view, 1d_ev, 7d_click… | 12/01/2026. O rodapé "7 dias de clique + 1 dia de visualização" continua certo |
+
+Métricas por post: `views`, `reach`, `saved`, `shares`, `total_interactions`, `profile_visits`, `follows`, e para Reels `ig_reels_avg_watch_time`. Dados de post podem atrasar até 48h.
+
+**Concorrentes:**
+- O comum no mercado (Reportei, mLabs, AgencyAnalytics, DashThis, Whatagraph, Metricool): resumo por IA, comparação de períodos, PDF/link automático, metas de KPI, white-label.
+- Diferenciais:
+  - detecção de anomalia anotada no gráfico (AgencyAnalytics);
+  - chat com os dados (AgencyAnalytics, Whatagraph);
+  - análise de concorrentes (mLabs, Metricool);
+  - envio por WhatsApp (Reportei, mLabs).
+- O que a Lone já tem e quase ninguém tem: vendas registradas pelo cliente × investimento, e a linha do tempo do que a equipe fez. Vale destacar mais.
+- Ninguém oferece comparação com o nicho: é a oportunidade.
