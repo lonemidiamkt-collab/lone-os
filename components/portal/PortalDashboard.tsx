@@ -271,12 +271,13 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           />
         )}
 
-        <AnimatePresence mode="wait" initial={false}>
+        {/* Troca de aba SEM esperar a anterior sair (05/11/2026): com AnimatePresence mode="wait" a saída
+            da aba "Anúncios" travava em opacidade 0 e a aba nova nunca entrava — tela vazia em produção.
+            Agora a aba nova só aparece com um fade curto; não existe saída para travar. */}
           <motion.div
             key={view}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
           {/* ── Crescimento nas redes (Instagram orgânico + Conteúdo entregue + Enviar material) ── */}
@@ -483,7 +484,6 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
             </div>
           )}
           </motion.div>
-        </AnimatePresence>
 
         {/* ── Rodapé ───────────────────────────────────────────────────── */}
         <footer className="mt-12 space-y-2 border-t border-border pb-20 pt-6 text-center lg:pb-10">
