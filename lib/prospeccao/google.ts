@@ -19,12 +19,15 @@ import { lerTesteNoGoogle } from "@/lib/google/credencial";
 
 const CHAVE_OAUTH = "google_oauth";
 const CHAVE_CLIENTE = "google_client";
-// Só agenda + e-mail (out/2026): o espelho em planilha era do piloto SDR, desligado. Pedir planilha e Drive
-// deixava a tela de autorização mais assustadora sem uso nenhum.
+// Agenda + e-mail (out/2026) e, desde 09/11/2026, `drive.file` para a PASTA DO CLIENTE no Drive
+// (lib/drive/): com ele o Lone OS só enxerga o que ele mesmo criou no Drive da Lone, nunca o Drive todo.
+// A planilha (espelho do piloto SDR, desligado) continua fora.
+export const ESCOPO_DRIVE = "https://www.googleapis.com/auth/drive.file";
 const ESCOPOS = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/userinfo.email",
+  ESCOPO_DRIVE,
 ].join(" ");
 
 /** Client ID + segredo do app do Google: do ambiente, ou colados na tela do Comercial (cifrados). */
@@ -84,7 +87,8 @@ export async function urlDeAutorizacao(state: string): Promise<string | null> {
   return `https://accounts.google.com/o/oauth2/v2/auth?${q.toString()}`;
 }
 
-interface Tokens { refresh_token: string; email?: string | null; conectado_em: string }
+/** `escopos`: o que a conta aceitou no consentimento (desde 09/11/2026; conexão anterior não tem o campo). */
+interface Tokens { refresh_token: string; email?: string | null; conectado_em: string; escopos?: string | null }
 
 export async function trocarCodigoPorTokens(code: string): Promise<{ ok: boolean; email?: string | null; error?: string }> {
   const c = await credenciais();
@@ -94,23 +98,31 @@ export async function trocarCodigoPorTokens(code: string): Promise<{ ok: boolean
     redirect_uri: `${appUrl()}/api/auth/google/callback`, grant_type: "authorization_code",
   });
   const res = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body, signal: AbortSignal.timeout(15_000) });
-  const j = await res.json().catch(() => null) as { refresh_token?: string; access_token?: string; error_description?: string; error?: string } | null;
+  const j = await res.json().catch(() => null) as { refresh_token?: string; access_token?: string; scope?: string; error_description?: string; error?: string } | null;
   if (!res.ok || !j?.refresh_token) return { ok: false, error: j?.error_description || j?.error || `HTTP ${res.status} (sem refresh_token — revogue o acesso em myaccount.google.com e conecte de novo)` };
   let email: string | null = null;
   try {
     const me = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", { headers: { Authorization: `Bearer ${j.access_token}` }, signal: AbortSignal.timeout(8_000) });
     email = ((await me.json().catch(() => null)) as { email?: string } | null)?.email ?? null;
   } catch { /* e-mail é só informativo */ }
-  const t: Tokens = { refresh_token: j.refresh_token, email, conectado_em: new Date().toISOString() };
+  const t: Tokens = { refresh_token: j.refresh_token, email, conectado_em: new Date().toISOString(), escopos: j.scope ?? null };
   await gravarSetting(CHAVE_OAUTH, encryptVault(JSON.stringify(t)));
+  // O token de acesso em memória é da conexão ANTERIOR (sem o Drive, por exemplo): sem zerar, ele seguia
+  // valendo por até 1 h e a pasta do cliente falhava com "falta liberar o Drive" logo depois de liberar.
+  cacheAccess = null;
   return { ok: true, email };
 }
 
-export async function desconectarGoogle(): Promise<void> { await gravarSetting(CHAVE_OAUTH, null); }
+export async function desconectarGoogle(): Promise<void> { await gravarSetting(CHAVE_OAUTH, null); cacheAccess = null; }
 
-export async function estadoGoogle(): Promise<{ configurado: boolean; conectado: boolean; email?: string | null; conectado_em?: string | null }> {
+/**
+ * `drive`: a conexão liberou o Drive? true/false pelo que a conta aceitou; null = conexão antiga, de antes
+ * de o Lone OS guardar os escopos (a primeira chamada ao Drive é que responde).
+ */
+export async function estadoGoogle(): Promise<{ configurado: boolean; conectado: boolean; email?: string | null; conectado_em?: string | null; drive: boolean | null }> {
   const t = await lerTokens();
-  return { configurado: await googleConfigurado(), conectado: !!t, email: t?.email ?? null, conectado_em: t?.conectado_em ?? null };
+  const drive = !t ? false : t.escopos == null ? null : t.escopos.split(/\s+/).includes(ESCOPO_DRIVE);
+  return { configurado: await googleConfigurado(), conectado: !!t, email: t?.email ?? null, conectado_em: t?.conectado_em ?? null, drive };
 }
 
 async function lerTokens(): Promise<Tokens | null> {

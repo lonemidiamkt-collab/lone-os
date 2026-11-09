@@ -7,6 +7,7 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { dispararLinkDoPortal } from "@/lib/portal/link-automatico";
+import { dispararPastaDoCliente, dispararSincroniaSeTemPasta } from "@/lib/drive/sincronizar-pasta";
 import { decidirVinculo, normalizarContaMeta, type DonoConta } from "@/lib/clients/conta-meta";
 import { devolverConta, donosDaConta, espelharConta, soltarConta } from "@/lib/clients/conta-meta-server";
 import { registrarHistorico } from "@/lib/clients/historico";
@@ -212,6 +213,16 @@ export async function POST(req: NextRequest) {
     if (Object.keys(row).length === 0) return NextResponse.json({ success: true, semMudanca: true });
   }
 
+  // Pasta do Drive (lib/drive/): social/designer ou documento que MUDOU põe a pasta em dia (acesso e
+  // Documentos). Lê o antes só quando uma dessas colunas veio — salvar a ficha sem mexer nelas não toca o Drive.
+  const COLS_DRIVE = ["assigned_social", "assigned_designer", "doc_contrato_social", "doc_identidade", "doc_logo"] as const;
+  const colsDriveNoPedido = COLS_DRIVE.filter((k) => k in row);
+  let antesDrive: Record<string, unknown> | null = null;
+  if (colsDriveNoPedido.length) {
+    const { data: a } = await supabaseAdmin.from("clients").select(colsDriveNoPedido.join(", ")).eq("id", id).maybeSingle();
+    antesDrive = (a as unknown as Record<string, unknown> | null) ?? null;
+  }
+
   try {
     if (transferidaDe.length && contaParaEspelhar) {
       const erroSoltar = await soltarConta(contaParaEspelhar, transferidaDe);
@@ -303,7 +314,15 @@ export async function POST(req: NextRequest) {
 
     // Rascunho saindo (draft_status apagado) = o cliente virou cliente: link do portal + aviso no grupo
     // de cadastro. A função manda uma vez só por cliente — cliente que já era ativo não recebe de novo.
-    if ("draft_status" in row && row.draft_status === null) dispararLinkDoPortal(id, "aprovacao");
+    if ("draft_status" in row && row.draft_status === null) {
+      dispararLinkDoPortal(id, "aprovacao");
+      dispararPastaDoCliente(id, "aprovacao");
+    } else if (antesDrive) {
+      const mudou = (k: string) => (antesDrive?.[k] ?? null) !== ((updated as Record<string, unknown> | null)?.[k] ?? null);
+      const equipe = mudou("assigned_social") || mudou("assigned_designer");
+      const documento = mudou("doc_contrato_social") || mudou("doc_identidade") || mudou("doc_logo");
+      if (equipe || documento) dispararSincroniaSeTemPasta(id, equipe ? "equipe" : "documento");
+    }
 
     return NextResponse.json({
       success: true, client: updated,

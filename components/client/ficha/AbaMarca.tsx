@@ -19,6 +19,7 @@ import type { ClientPatch } from "@/stores/useClientsStore";
 import type { Client } from "@/lib/types";
 import CreativeWallet from "./CreativeWallet";
 import FichaUmaPagina from "./FichaUmaPagina";
+import PastaDoDrive from "./PastaDoDrive";
 import { Secao, Vazio } from "./Secao";
 import { SECAO } from "./abas";
 import type { FichaCtx } from "./tipos";
@@ -52,6 +53,11 @@ export default function AbaMarca({ ctx, dadosCompletos, updateClientData, onNavi
           updateClientData={updateClientData} onNavigateTab={onNavigateTab}
           generateOnboardingLink={() => toast.info("O link de onboarding fica no topo da ficha.")}
           generatingLink={false} onboardingLink={null} dadosCompletos={dadosCompletos} />
+      </Secao>
+
+      <Secao id={SECAO.drive} titulo="Pasta do Drive"
+        descricao="Documentos do cadastro e a pasta de Fotos e Vídeos do cliente, no Drive da Lone.">
+        <PastaDoDrive clientId={c.id} />
       </Secao>
 
       {/* Os dois componentes trazem o próprio título. */}

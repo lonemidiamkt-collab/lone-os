@@ -14,6 +14,7 @@ import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { dispararLinkDoPortal } from "@/lib/portal/link-automatico";
+import { dispararPastaDoCliente, dispararSincroniaSeTemPasta } from "@/lib/drive/sincronizar-pasta";
 import { espelharCadastroNoCofre } from "@/lib/onboarding/espelho-server";
 import { COLUNAS_RASCUNHO_ESPELHO } from "@/lib/onboarding/espelho";
 import { enviarBoasVindas, type ResultadoBoasVindas } from "@/lib/email/boas-vindas";
@@ -365,6 +366,8 @@ export async function POST(req: NextRequest) {
       const atual = (cli as unknown as Record<string, unknown> | null)?.[campo];
       if (listaDocs(atual as string | null).includes(url)) {
         await supabase.from("clients").update({ [campo]: tirar(atual) }).eq("id", subDoc.client_id as string);
+        // Já tem pasta no Drive: o arquivo removido sai de Documentos também (vai para a lixeira do Drive).
+        dispararSincroniaSeTemPasta(subDoc.client_id as string, "documento");
       }
     }
     return NextResponse.json({ ok: true, valor });
@@ -540,6 +543,10 @@ export async function POST(req: NextRequest) {
       // Cadastro preenchido: liga ao lead do Comercial (se ainda não) e avisa se sobrou rascunho duplicado.
       if (clientId) await aoConcluirCadastro(clientId);
 
+      // Cadastro completo: a pasta do cliente no Drive da Lone (Documentos + Fotos e Vídeos) nasce agora,
+      // depois de responder. O grupo de cadastro recebe os dois links — ou a falha (lib/drive/sincronizar-pasta.ts).
+      if (clientId) dispararPastaDoCliente(clientId, "cadastro");
+
       // Send notification to admins
       await supabase.from("notifications").insert({
         type: "system",
@@ -659,6 +666,8 @@ export async function POST(req: NextRequest) {
 
     // Virou cliente: link do portal + aviso no grupo de cadastro (uma vez só, mesmo se aprovar de novo).
     dispararLinkDoPortal(clientId, "aprovacao");
+    // E a pasta do Drive, se o fim do cadastro não conseguiu criar (já existindo, só põe em dia).
+    dispararPastaDoCliente(clientId, "aprovacao");
 
     // ESPELHA A SENHA NO COFRE DO SOCIAL. Aqui era o vazamento: a ativação gravava a senha só em
     // `clients` (criptografada, só admin lê) e o social/gestor ficavam sem — "é como se não
@@ -726,6 +735,7 @@ export async function POST(req: NextRequest) {
     // A tela de Pendentes já tirou o draft_status: é aqui que o cliente vira cliente. Link do portal +
     // aviso no grupo de cadastro (a função confere se o rascunho saiu mesmo e manda uma vez só).
     dispararLinkDoPortal(clientId, "aprovacao");
+    dispararPastaDoCliente(clientId, "aprovacao");
 
     const { data: clientRow } = await supabase
       .from("clients")

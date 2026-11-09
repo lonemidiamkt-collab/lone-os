@@ -5,6 +5,7 @@ import { LIMITE_UPLOAD, ESPERA_SUGERIDA_S } from "@/lib/onboarding/upload";
 import { criarLimite, ipDe } from "@/lib/portal/limite";
 import { createClient } from "@supabase/supabase-js";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { dispararSincroniaSeTemPasta } from "@/lib/drive/sincronizar-pasta";
 
 const supabaseUrl = process.env.SUPABASE_INTERNAL_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://supabase-kong-1:8000";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
@@ -138,6 +139,7 @@ export async function POST(req: NextRequest) {
     // Persist URL to clients table server-side (service role bypasses RLS, no client-side auth needed)
     if (dbColumn) {
       await supabase.from("clients").update({ [dbColumn]: publicUrl }).eq("id", clientId);
+      dispararSincroniaSeTemPasta(clientId, "documento");
     }
     return NextResponse.json({ url: publicUrl, path, bucket });
   }
@@ -156,6 +158,8 @@ export async function POST(req: NextRequest) {
       const valor = valorAposUpload(dbColumn, (atual as unknown as Record<string, unknown> | null)?.[dbColumn] as string | null, privateRef);
       const { error: dbErr } = await supabase.from("clients").update({ [dbColumn]: valor }).eq("id", clientId);
       if (dbErr) console.error("[Upload] DB update failed:", dbErr);
+      // Cliente que já tem pasta no Drive: o documento novo vai para Documentos (no cadastro ainda não há pasta).
+      else dispararSincroniaSeTemPasta(clientId, "documento");
     }
   }
   return NextResponse.json({ url: privateRef, path, bucket });

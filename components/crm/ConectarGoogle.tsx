@@ -3,14 +3,15 @@
 // Conexão do GOOGLE AGENDA da Lone no Comercial (out/2026). Dois passos, uma vez só:
 //   1) a credencial do app do Google (Client ID + segredo) — o Roberto cola aqui; fica cifrada no servidor;
 //   2) "Conectar" — consentimento com a conta Google da Lone; o Google devolve para a Agenda do Comercial.
-// Conectado: mostra a conta e permite desconectar.
+// Conectado: mostra a conta e permite desconectar. Desde 09/11/2026 a mesma conexão cria a PASTA DO CLIENTE
+// no Drive (lib/drive/): conexão de antes disso não liberou o Drive e aparece aqui o "Reconectar Google".
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { CalendarCheck, KeyRound, Link2Off } from "lucide-react";
+import { CalendarCheck, FolderOpen, KeyRound, Link2Off } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 
-interface Estado { configurado: boolean; conectado: boolean; email: string | null; origem: "ambiente" | "tela" | null; redirect_uri: string }
+interface Estado { configurado: boolean; conectado: boolean; email: string | null; origem: "ambiente" | "tela" | null; redirect_uri: string; drive?: boolean | null }
 
 export default function ConectarGoogle({ compacto = false, onMudou }: { compacto?: boolean; onMudou?: () => void }) {
   const [e, setE] = useState<Estado | null>(null);
@@ -49,10 +50,31 @@ export default function ConectarGoogle({ compacto = false, onMudou }: { compacto
 
   if (!e) return null;
   if (e.conectado) {
-    return compacto ? null : (
-      <div className="flex flex-wrap items-center gap-2 text-lone-caption text-muted-foreground">
-        <CalendarCheck size={14} className="text-lone-success" aria-hidden="true" /> Google Agenda conectado{e.email ? ` (${e.email})` : ""}
-        <button onClick={desconectar} className="inline-flex items-center gap-1 text-muted-foreground hover:text-lone-danger"><Link2Off size={12} /> desconectar</button>
+    // Conectado sem o Drive (conexão anterior a 09/11/2026): a agenda segue funcionando, mas a pasta do
+    // cliente não nasce. Aparece mesmo no modo compacto — é a única tela onde se resolve.
+    const faltaDrive = e.drive !== true;
+    const avisoDrive = faltaDrive && (
+      <section className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="max-w-xl text-lone-caption text-muted-foreground">
+            <span className="flex items-center gap-1.5 text-lone-body font-medium text-foreground"><FolderOpen size={14} className="text-primary" aria-hidden="true" /> Liberar o Drive para a pasta dos clientes</span>
+            O Lone OS cria a pasta de cada cliente (Documentos e Fotos e Vídeos) no Drive desta conta. Reconecte e aceite o Drive:
+            o Lone OS só enxerga as pastas que ele mesmo cria, nunca o resto do Drive. A agenda continua igual.
+          </p>
+          <button disabled={ocupado} onClick={conectar} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+            {ocupado ? "Abrindo o Google…" : "Reconectar Google"}
+          </button>
+        </div>
+      </section>
+    );
+    if (compacto) return avisoDrive || null;
+    return (
+      <div className="space-y-3">
+        {avisoDrive}
+        <div className="flex flex-wrap items-center gap-2 text-lone-caption text-muted-foreground">
+          <CalendarCheck size={14} className="text-lone-success" aria-hidden="true" /> Google Agenda{faltaDrive ? "" : " e Drive"} conectado{e.email ? ` (${e.email})` : ""}
+          <button onClick={desconectar} className="inline-flex items-center gap-1 text-muted-foreground hover:text-lone-danger"><Link2Off size={12} /> desconectar</button>
+        </div>
       </div>
     );
   }

@@ -142,7 +142,7 @@ async function lerCliente(clientId: string): Promise<{ c: ClienteLinkPortal | nu
 }
 
 /** O JID configurado é o grupo de algum cliente? Na dúvida (consulta falhou), trata como se fosse. */
-async function ehGrupoDeCliente(jid: string): Promise<boolean> {
+export async function ehGrupoDeCliente(jid: string): Promise<boolean> {
   const { data, error } = await supabaseAdmin.from("clients").select("id").eq("whatsapp_group_jid", jid).limit(1);
   if (error) return true;
   return (data?.length ?? 0) > 0;

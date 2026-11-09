@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { paraUrlPublica } from "@/lib/supabase/url-publica";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { resolveRef } from "@/lib/storage/ref";
 
 const SIGNED_URL_TTL_SECONDS = 300; // 5 min
 
@@ -11,21 +12,7 @@ const SIGNED_URL_TTL_SECONDS = 300; // 5 min
 // Mantém a porta fechada — só estes podem virar URL assinada.
 const ALLOWED_BUCKETS = new Set(["legal-docs", "contracts", "onboarding-docs", "reports"]);
 
-/**
- * Resolve a ref salva → { bucket, path }. Aceita:
- *   - "legal://<path>"                                   → legal-docs
- *   - ".../storage/v1/object/public|sign/<bucket>/<p>"   → <bucket> (URLs legadas)
- *   - "<bucket>://<path>"                                → <bucket>
- *   - "<path>" cru (sem prefixo)                         → bucketHint ou legal-docs (compat)
- */
-function resolveRef(raw: string, bucketHint?: string): { bucket: string; path: string } {
-  if (raw.startsWith("legal://")) return { bucket: "legal-docs", path: raw.slice("legal://".length) };
-  const urlMatch = raw.match(/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/(.+)$/);
-  if (urlMatch) return { bucket: urlMatch[1], path: decodeURIComponent(urlMatch[2]) };
-  const protoMatch = raw.match(/^([a-z0-9][a-z0-9-]*):\/\/(.+)$/i);
-  if (protoMatch) return { bucket: protoMatch[1] === "legal" ? "legal-docs" : protoMatch[1], path: protoMatch[2] };
-  return { bucket: bucketHint || "legal-docs", path: raw };
-}
+// A ref salva → { bucket, path }: lib/storage/ref.ts (a mesma regra da pasta do Drive do cliente).
 
 // Admin-only: gera URL assinada de curta duração pros buckets do cofre.
 // Body: { path: string (ref/url), bucket?: string, download?: boolean }

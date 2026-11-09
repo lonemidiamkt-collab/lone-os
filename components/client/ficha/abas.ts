@@ -29,6 +29,7 @@ export const SECAO = {
   umaPagina: "ficha-uma-pagina",
   identidade: "identidade-visual",
   materiais: "materiais",
+  drive: "pasta-do-drive",
   briefing: "briefing",
   wallet: "creative-wallet",
   fichaViva: "ficha-viva",

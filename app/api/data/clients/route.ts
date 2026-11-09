@@ -7,6 +7,7 @@ import { getServerUser } from "@/lib/supabase/auth-server";
 import * as db from "@/lib/supabase/queries";
 import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { dispararLinkDoPortal } from "@/lib/portal/link-automatico";
+import { dispararPastaDoCliente } from "@/lib/drive/sincronizar-pasta";
 import { descreverDono, normalizarContaMeta, type DonoConta } from "@/lib/clients/conta-meta";
 import { donosDaConta } from "@/lib/clients/conta-meta-server";
 
@@ -64,7 +65,10 @@ export async function POST(req: NextRequest) {
     const msg = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "erro desconhecido";
     return NextResponse.json({ error: `O cliente não foi cadastrado: ${msg}` }, { status: 500 });
   }
-  // Cliente novo já nasce com o link do portal, e o grupo de cadastro recebe (uma vez).
-  if (!body?.draftStatus) dispararLinkDoPortal(id, "cadastro");
+  // Cliente novo já nasce com o link do portal, e o grupo de cadastro recebe (uma vez). E com a pasta no Drive.
+  if (!body?.draftStatus) {
+    dispararLinkDoPortal(id, "cadastro");
+    dispararPastaDoCliente(id, "cadastro_manual");
+  }
   return NextResponse.json({ id }, { status: 201 });
 }
