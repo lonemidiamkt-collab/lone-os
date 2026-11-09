@@ -18,6 +18,7 @@
 
 import { createHash } from "node:crypto";
 import { listaDocs } from "@/lib/onboarding/docs";
+import { linkAtivarDriveApi } from "@/lib/integracoes/catalogo";
 
 export const NOME_RAIZ = "Clientes Lone Mídia";
 export const SUBPASTA = { documentos: "Documentos", fotos: "Fotos e Vídeos" } as const;
@@ -205,8 +206,8 @@ export function concedidosDepois(
 
 export interface ErroGoogle { status?: number | null; motivo?: string | null; mensagem?: string | null }
 
-/** Onde se conecta o Google da Lone (só sócios veem a Agenda do Comercial). */
-export const ONDE_CONECTAR = "Comercial › Agenda";
+/** Onde se conecta o Google da Lone: Sistema › Integrações (saiu do Comercial em 09/11/2026). */
+export const ONDE_CONECTAR = "Sistema › Integrações";
 
 export function fraseDoErroDoGoogle(e: ErroGoogle): string {
   const m = `${e.motivo ?? ""} ${e.mensagem ?? ""}`;
@@ -215,7 +216,7 @@ export function fraseDoErroDoGoogle(e: ErroGoogle): string {
     return `Falta liberar o Drive no Google da Lone: em ${ONDE_CONECTAR}, clique em "Reconectar Google" e aceite o Drive.`;
   }
   if (/SERVICE_DISABLED|accessNotConfigured|has not been used in project|it is disabled/i.test(m)) {
-    return "A API do Google Drive está desligada no projeto do Google Cloud da Lone. Ative em console.cloud.google.com › APIs e serviços › Google Drive API e tente de novo.";
+    return `A Google Drive API está desligada no projeto do Google Cloud da Lone. Ative (uma vez só) em ${linkAtivarDriveApi(e.mensagem)} e tente de novo.`;
   }
   if (/storageQuotaExceeded/i.test(m)) return "O Drive da Lone está sem espaço. Libere espaço e tente de novo.";
   if (e.status === 429 || /rateLimitExceeded|userRateLimitExceeded/i.test(m)) {

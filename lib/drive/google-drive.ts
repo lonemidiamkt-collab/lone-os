@@ -176,3 +176,8 @@ export async function compartilhar(id: string, email: string, papel: "writer" | 
 export function tirarPermissao(id: string, permissaoId: string): Promise<RespDrive<never>> {
   return pedir<never>(`${API}/files/${encodeURIComponent(id)}/permissions/${encodeURIComponent(permissaoId)}`, { method: "DELETE" });
 }
+
+/** O Drive responde a esta conexão? (Sistema › Integrações.) Lê só o e-mail da conta — não toca em arquivo. */
+export function testarDrive(): Promise<RespDrive<{ user?: { emailAddress?: string } }>> {
+  return pedir<{ user?: { emailAddress?: string } }>(`${API}/about?fields=user(emailAddress)`, { timeoutMs: 10_000 });
+}

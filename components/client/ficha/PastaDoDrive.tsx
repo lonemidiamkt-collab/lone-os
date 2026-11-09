@@ -28,7 +28,8 @@ interface Estado {
   google: { conectado: boolean; drive: boolean | null; email: string | null };
 }
 
-const AGENDA_COMERCIAL = "https://comercial.lonemidia.com/crm?aba=agenda";
+/** Onde se conecta o Google da Lone (desde 09/11/2026; antes era a Agenda do Comercial). */
+const INTEGRACOES = "/integracoes";
 
 const chip = "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-lone-caption hover:bg-accent";
 const botao = "inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-sm font-medium disabled:opacity-50";
@@ -142,7 +143,7 @@ export default function PastaDoDrive({ clientId }: { clientId: string }) {
         <p className="text-lone-caption text-muted-foreground">
           {!e.google.conectado ? "O Google da Lone não está conectado." : "O Google da Lone ainda não liberou o Drive."}{" "}
           Um sócio resolve em{" "}
-          <a href={AGENDA_COMERCIAL} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Comercial › Agenda</a>
+          <a href={INTEGRACOES} className="text-primary hover:underline">Sistema › Integrações</a>
           {e.google.conectado ? ' (botão "Reconectar Google").' : "."}
         </p>
       )}

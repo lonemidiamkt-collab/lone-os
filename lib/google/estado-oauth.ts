@@ -1,12 +1,14 @@
 // lib/google/estado-oauth.ts — o `state` do consentimento do Google: assinado (HMAC) e com o DESTINO de
 // volta. O callback (/api/auth/google/callback) é público no middleware — o navegador volta do Google sem
 // sessão —, então é o state assinado que prova que o fluxo começou dentro do Lone OS. Vale 10 minutos.
-// Destinos: "prospeccao" (piloto antigo) e "comercial" (Agenda do comercial.lonemidia.com, out/2026).
+// Destinos: "prospeccao" (piloto antigo), "comercial" (Agenda do comercial.lonemidia.com, out/2026) e, desde
+// 09/11/2026, "painel" — Sistema › Integrações do Lone OS, que é onde o Google se conecta agora. "comercial" segue
+// aceito para quem estava no meio do consentimento quando a tela mudou de lugar.
 
 import { createHmac, timingSafeEqual } from "crypto";
 
-export type DestinoGoogle = "prospeccao" | "comercial";
-const DESTINOS: DestinoGoogle[] = ["prospeccao", "comercial"];
+export type DestinoGoogle = "prospeccao" | "comercial" | "painel";
+const DESTINOS: DestinoGoogle[] = ["prospeccao", "comercial", "painel"];
 const segredo = () => process.env.CRON_SECRET || process.env.VAULT_KEY || "lone";
 const mac = (ts: string, destino: string) => createHmac("sha256", segredo()).update(`${ts}.${destino}`).digest("hex").slice(0, 32);
 

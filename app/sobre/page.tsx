@@ -10,7 +10,7 @@ import NewPlatformUpdateModal from "@/components/NewPlatformUpdateModal";
 import {
   Brain, Users, TrendingUp, Instagram, Palette, FileText, Megaphone, Zap, Lock,
   Settings, Printer, Sparkles, ChevronDown, ChevronUp, Rocket, Package,
-  GitBranch, Lightbulb, HelpCircle, PlayCircle, Plus, RefreshCw, ClipboardCheck, Radar, BrainCircuit,
+  GitBranch, Lightbulb, HelpCircle, PlayCircle, Plus, RefreshCw, ClipboardCheck, Radar, BrainCircuit, Blocks,
 } from "lucide-react";
 
 interface PlatformUpdate {
@@ -549,7 +549,7 @@ const MODULES: Module[] = [
       },
       {
         q: "A pasta do Drive do cliente não apareceu. E agora?",
-        a: "Abra a ficha › Marca & Briefing › Pasta do Drive: o motivo aparece ali (e foi para o grupo de cadastro). O mais comum é o Google da Lone sem o Drive liberado — um sócio resolve em Comercial › Agenda › Reconectar Google — e depois é só clicar em Tentar de novo. O Lone OS só enxerga as pastas que ele mesmo cria, nunca o resto do Drive.",
+        a: "Abra a ficha › Marca & Briefing › Pasta do Drive: o motivo aparece ali (e foi para o grupo de cadastro). O mais comum é o Google da Lone sem o Drive liberado — um sócio resolve em Sistema › Integrações › Reconectar Google (e, na primeira vez, Ativar a Google Drive API pelo link do cartão) — e depois é só clicar em Tentar de novo. O Lone OS só enxerga as pastas que ele mesmo cria, nunca o resto do Drive.",
       },
       {
         q: "Quem pode editar o briefing do cliente?",
@@ -1016,6 +1016,38 @@ const MODULES: Module[] = [
       { q: "Desliguei o Loninho e chegou mensagem no grupo. Ela é lida quando eu religar?", a: "Não. Desligado, ele não guarda nada para ler depois. Confira à mão os grupos do intervalo — o aviso de religar lembra disso." },
       { q: "Qual a diferença para a Central de Automações?", a: "Lá estão as rotinas agendadas do servidor, com ou sem IA. Aqui estão os agentes de IA, rodem eles por agenda, por mensagem no WhatsApp ou por botão. O agente que roda por agenda aponta para a rotina dele lá, e é lá que ela liga e desliga." },
       { q: "Vou criar um agente novo. O que muda?", a: "Ele entra no catálogo (lib/agentes/catalogo.ts) com uma etiqueta própria, e toda chamada de IA dele usa essa etiqueta. Sem isso o código não compila e o teste de etiqueta quebra." },
+    ],
+  },
+  {
+    id: "integracoes",
+    icon: Blocks,
+    title: "Integrações",
+    shortDesc: "Os aplicativos que o Lone OS usa — Google, Meta, WhatsApp, IA, D4Sign e os de apoio —, conferidos na hora, com o que depende de cada um e onde se resolve",
+    whoUses: "Admin e Gerente (conectar o Google é só admin)",
+    context: "Em 09/11/2026 o Roberto perguntou por que a conexão do Google estava no Lone Comercial: 'isso deveria estar no Lone OS… para ter controle lá dessas automações e aplicativos que a gente está utilizando no sistema no geral'. A tela Sistema › Integrações junta num lugar só cada aplicativo de fora que o sistema usa de verdade. A antiga /integrations tinha 11 cartões e 10 eram de mentira; aqui só entra o que o código usa, e o estado é testado na hora de abrir.",
+    howItWorks: [
+      "PRINCIPAIS: Google (Agenda e Drive), Meta (Facebook e Instagram), WhatsApp (as duas linhas da Evolution: a da automação e a do Loninho), IA (OpenAI) e D4Sign. Quando uma delas para, parte do trabalho do time para junto. DE APOIO: e-mail (Resend), gerador de PDF (Browserless), Lone Academy, Lone Finance e o site da Lone.",
+      "CADA CARTÃO: o que depende dele, o estado — Funcionando, Precisa de atenção, Com problema ou Desligada —, a frase do que fazer e o atalho para onde se resolve. O que precisa de alguém aparece primeiro. 'Conferir de novo' testa tudo outra vez.",
+      "GOOGLE: a conexão (credencial do app, Conectar, Reconectar, Desconectar) saiu da Agenda do Comercial e mora aqui. É a mesma conta Google da Lone, para a reunião com Meet e para a pasta do cliente no Drive. O cartão diz se falta liberar o Drive (Reconectar) ou ativar a Google Drive API no Google Cloud (com o link direto do botão Ativar). O Comercial só mostra se está conectado e o link para cá.",
+      "META: o estado do token e quando vence (atenção a 15 dias do vencimento). Reconectar continua na tela Conexão Meta, que o tráfego também usa.",
+      "WHATSAPP: pergunta à Evolution se cada linha está conectada e, na do Loninho, quando chegou a última mensagem dos grupos — 'conectada' sem receber nada há mais de 12 horas é conexão travada (aconteceu em 12/07/2026).",
+      "IA: lê o registro de toda chamada de IA dos últimos 7 dias. Sem crédito ou chave recusada aparece com desde quando e o que fazer (a mesma leitura da Central de Agentes).",
+      "D4SIGN: configurada ou não, o último teste, o segredo do aviso de assinatura e em quantos cofres o aviso está ligado. A configuração continua em Configurações.",
+      "Nenhuma checagem mexe em nada e nenhum segredo aparece na tela.",
+    ],
+    features: [
+      "Todos os aplicativos de fora num lugar só, com o estado testado na hora",
+      "Conexão do Google (Agenda e Drive) feita aqui, não mais no Comercial",
+      "Link direto para ativar a Google Drive API quando ela está desligada",
+      "Linha do WhatsApp 'conectada mas sem receber' aparece como atenção",
+      "Token da Meta avisa 15 dias antes de vencer",
+    ],
+    tips: [
+      "Alguma coisa parou e você não sabe por quê? Abra Integrações antes de investigar a tela: se um aplicativo caiu, aparece aqui.",
+    ],
+    faq: [
+      { q: "Qual a diferença para a Central de Automações e a de Agentes?", a: "Automações são as rotinas agendadas do servidor; Agentes são as capacidades de IA. Integrações são os aplicativos de fora de que as duas dependem." },
+      { q: "Por que Lone Finance e o site não têm teste de resposta?", a: "Nos dois é o outro lado que chama o Lone OS. Daqui dá para saber se a porta está ligada, não se alguém bateu nela." },
     ],
   },
   {

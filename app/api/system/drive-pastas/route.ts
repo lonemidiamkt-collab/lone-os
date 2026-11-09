@@ -48,7 +48,7 @@ async function executar(req: NextRequest, soListar: boolean) {
       const r = await garantirPastaDoCliente(c.id, { origem: "backfill", notificarEquipe: false });
       feitos.push({ id: c.id, nome: c.nome, ok: r.ok, criada: r.criada, erro: r.erro, avisos: r.avisos });
       // Google desconectado ou sem o Drive: as próximas falhariam igual. Para aqui.
-      if (!r.ok && /Google da Lone|API do Google Drive/.test(r.erro ?? "")) break;
+      if (!r.ok && /Google da Lone|Google Drive API/.test(r.erro ?? "")) break;
       await espera(PAUSA_MS);
     }
   }

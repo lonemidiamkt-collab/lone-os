@@ -36,7 +36,7 @@ import DashboardComercial, { type FiltroFunil } from "@/components/crm/Dashboard
 import HojeComercial from "@/components/crm/HojeComercial";
 import { eventosDaAgenda, ROTULO_EVENTO, type Evento } from "@/lib/crm/agenda";
 import MarcarReuniao from "@/components/crm/MarcarReuniao";
-import ConectarGoogle from "@/components/crm/ConectarGoogle";
+import GoogleNoComercial from "@/components/crm/GoogleNoComercial";
 import { motivoLegivel } from "@/lib/google/credencial";
 import { diaCurto, horaCurta, inicioDe, duracaoMin, mensagemVesperaLead, textoExcluirComReuniao, type ReuniaoBase, type Formato } from "@/lib/crm/reunioes";
 import { Anel } from "@/components/crm/graficos";
@@ -1266,9 +1266,10 @@ export default function CrmPage() {
         };
         return (
           <div className="space-y-4">
-            {!agendaGoogle.conectado && <ConectarGoogle onMudou={carregarReunioes} />}
+            {/* A conexão do Google mora no Lone OS (Sistema › Integrações) desde 09/11/2026; aqui só o estado. */}
+            {!agendaGoogle.conectado && <GoogleNoComercial conectado={false} />}
             <div className="flex flex-wrap items-center justify-between gap-3">
-              {agendaGoogle.conectado ? <ConectarGoogle onMudou={carregarReunioes} /> : <span />}
+              {agendaGoogle.conectado ? <GoogleNoComercial conectado email={agendaGoogle.email} /> : <span />}
               <button onClick={() => setMarcando({ dia: hoje })} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"><CalendarClock size={15} /> Nova reunião</button>
             </div>
             <div className="grid items-start gap-4 lg:grid-cols-3">

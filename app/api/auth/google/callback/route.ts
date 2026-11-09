@@ -7,13 +7,15 @@ import { lerState, type DestinoGoogle } from "@/lib/google/estado-oauth";
 
 // GET /api/auth/google/callback?code=&state= — volta do consentimento do Google.
 // Público no middleware (/api/auth); a prova de origem é o `state` assinado (lib/google/estado-oauth.ts),
-// que também diz para onde voltar: a Agenda do Comercial ou a configuração do piloto antigo.
+// que também diz para onde voltar: Sistema › Integrações (desde 09/11/2026), a Agenda do Comercial ou o piloto antigo.
 const COMERCIAL = "https://comercial.lonemidia.com";
 
 function voltar(destino: DestinoGoogle, status: string, extra = "") {
-  const url = destino === "comercial"
-    ? `${COMERCIAL}/crm?aba=agenda&google=${status}${extra}`
-    : `${appUrl()}/prospeccao?tab=configuracao&google=${status}${extra}`;
+  const url = destino === "painel"
+    ? `${appUrl()}/integracoes?google=${status}${extra}`
+    : destino === "comercial"
+      ? `${COMERCIAL}/crm?aba=agenda&google=${status}${extra}`
+      : `${appUrl()}/prospeccao?tab=configuracao&google=${status}${extra}`;
   return NextResponse.redirect(url);
 }
 

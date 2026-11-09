@@ -129,10 +129,12 @@ describe("erros do Google em frase de quem resolve", () => {
   it("sem o Drive liberado manda reconectar no Comercial", () => {
     const f = fraseDoErroDoGoogle({ status: 403, motivo: "insufficientPermissions ACCESS_TOKEN_SCOPE_INSUFFICIENT", mensagem: "Request had insufficient authentication scopes." });
     expect(f).toContain("Reconectar Google");
-    expect(f).toContain("Comercial › Agenda");
+    expect(f).toContain("Sistema › Integrações");
   });
   it("API desligada, sem conexão, cota, instabilidade", () => {
-    expect(fraseDoErroDoGoogle({ status: 403, motivo: "accessNotConfigured SERVICE_DISABLED" })).toContain("Google Drive API");
+    const desligada = fraseDoErroDoGoogle({ status: 403, motivo: "accessNotConfigured SERVICE_DISABLED", mensagem: "Google Drive API has not been used in project 922295894505 before or it is disabled." });
+    expect(desligada).toContain("Google Drive API");
+    expect(desligada).toContain("drive.googleapis.com?project=922295894505");
     expect(fraseDoErroDoGoogle({ motivo: "sem_token" })).toContain("não está conectado");
     expect(fraseDoErroDoGoogle({ status: 429, motivo: "userRateLimitExceeded" })).toContain("esperar");
     expect(fraseDoErroDoGoogle({ status: 503 })).toContain("não respondeu");

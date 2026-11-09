@@ -19,7 +19,7 @@ import {
   AlertTriangle, Target, FileSignature,
   Radar, ListOrdered, Building2, MessageSquare, Settings2, BarChart3,
   Lock, Zap, Info, CalendarCheck, ShoppingBag, DatabaseZap, MapPin,
-  Trophy, BrainCircuit,
+  Trophy, BrainCircuit, Blocks,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/types";
@@ -303,6 +303,12 @@ export const MENU: readonly GrupoMenu[] = [
       { id: "agentes", rotulo: "Central de Agentes", icone: BrainCircuit, href: "/agentes", papeis: GESTAO,
         descricao: "Os agentes de IA: o que fazem, o que os desliga e se estão funcionando",
         termos: ["agentes", "ia", "inteligência artificial", "loninho", "openai", "desligar loninho"] },
+      // 09/11/2026: a conexão do Google saiu do Comercial e veio para cá, com o estado de cada aplicativo que o
+      // sistema usa (lib/integracoes/). A Meta segue com tela própria (Conexão Meta), que o tráfego também abre.
+      { id: "integracoes", rotulo: "Integrações", icone: Blocks, href: "/integracoes", papeis: GESTAO,
+        descricao: "Os aplicativos que o Lone OS usa — Google, Meta, WhatsApp, IA, D4Sign —, conferidos agora",
+        termos: ["integrações", "integração", "aplicativos", "google", "google agenda", "google drive", "drive", "conectar google",
+          "whatsapp", "evolution", "openai", "d4sign", "resend", "e-mail", "pdf"] },
       // Leva 4: a única integração real (as outras 10 de /integrations eram simuladas). Saiu do Tráfego
       // para cá; /integrations redireciona e continua acendendo este item.
       { id: "conexao-meta", rotulo: "Conexão Meta", icone: Plug, href: "/conexao-meta", papeis: TRAFEGO,

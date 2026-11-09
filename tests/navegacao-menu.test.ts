@@ -101,10 +101,12 @@ const LEVA_6A_GESTAO = ["/saude", "/agente?view=desempenho"];
 //    geral do Loninho), ao lado da Central de Automações; a API também exige gestão.
 const LEVA_7D_GESTAO = ["/mapa-postagem"];
 const CENTRAL_DE_AGENTES = ["/agentes"];
+// Sistema › Integrações (09/11/2026): a conexão do Google saiu do Comercial; o estado de cada aplicativo do sistema. Só a gestão.
+const INTEGRACOES = ["/integracoes"];
 const ACRESCIMOS: Record<Role, string[]> = {
   // /crm/rota (17/10/2026): a aba Rota do comercial — tela nova, só dos sócios.
-  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO, ...CENTRAL_DE_AGENTES, "/crm/rota"],
-  manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO, ...CENTRAL_DE_AGENTES],
+  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO, ...CENTRAL_DE_AGENTES, ...INTEGRACOES, "/crm/rota"],
+  manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO, ...CENTRAL_DE_AGENTES, ...INTEGRACOES],
   traffic:   ["/settings", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
   social:    ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA, "/saude"],
   designer:  ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
