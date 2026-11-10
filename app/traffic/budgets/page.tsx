@@ -10,6 +10,10 @@
 // da conta quieto), chips de status e de forma de pagamento, números alinhados, cabeçalho fixo, e
 // vira cartões no celular. Os quatro cards do topo filtram a lista.
 //
+// 10/11/2026: no topo, o INVESTIMENTO SOB GESTÃO do mês — todos os clientes juntos (verba de quem
+// tem + estimativa de quem gasta sem verba), gasto até hoje, onde o mês fecha e verba parada. Ex-
+// cliente saiu da lista (aparecia "Ativa" com o gasto de setembro).
+//
 // Verba, forma de pagamento, próximo aporte e limite de saldo se editam num lugar só: o modal
 // "Verba e alertas" (POST /api/traffic/budget-rules). Alertas por cliente (liga/desliga, destino,
 // grupo) seguem em Tráfego › Grupos dos Clientes — o link está no cabeçalho.
@@ -38,8 +42,8 @@ import { metaAccountStatus } from "@/lib/budgets/account-status";
 import { cn, todaySP } from "@/lib/utils";
 import {
   ritmoDoMes, lerRitmo, foraDoRitmo, avisoAporte, aportesParaMigrar, syncAtrasado, CHAVE_LOCAL_INVESTIMENTO,
-  paraCampo, lerCampoReais,
-  type RitmoMes, type LeituraRitmo, type AvisoAporte,
+  paraCampo, lerCampoReais, investimentoDoMes, diaDoMes,
+  type RitmoMes, type LeituraRitmo, type AvisoAporte, type InvestimentoDoMes,
 } from "@/lib/trafego/contas-verba";
 import type { EstadoConexao } from "@/lib/trafego/anuncios";
 import CelulaRitmo, { BarraRitmo } from "@/components/trafego/contas/CelulaRitmo";
@@ -98,7 +102,7 @@ interface EnrichedAccount extends AdAccountRow {
   aporte: AvisoAporte;
 }
 
-type Filtro = DisplaySeverity | "all" | "ritmo";
+type Filtro = DisplaySeverity | "all" | "ritmo" | "sem_verba";
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -813,6 +817,91 @@ function AddAccountModal({
   );
 }
 
+// ── Investimento sob gestão (10/11/2026) ──────────────────────
+// "Quanto estamos cuidando de tráfego por mês, todos os clientes juntos." Conta TODOS os clientes
+// ativos, inclusive as contas ocultas (ocultar tira das telas, não da carteira). Regra em
+// lib/trafego/contas-verba.ts (investimentoDoMes).
+
+function PainelInvestimento({ inv, hoje, ocultasNoTotal, filtrandoSemVerba, onVerSemVerba }: {
+  inv: InvestimentoDoMes;
+  hoje: string;
+  ocultasNoTotal: number;
+  filtrandoSemVerba: boolean;
+  onVerSemVerba: () => void;
+}) {
+  const mes = new Date(`${hoje}T12:00:00Z`).toLocaleDateString("pt-BR", { month: "long", timeZone: "UTC" });
+  const { dia, diasNoMes } = diaDoMes(hoje);
+  const pctGasto = inv.total > 0 ? Math.round((inv.gastoMes / inv.total) * 100) : null;
+  const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
+  const notas = [
+    ocultasNoTotal > 0 ? `inclui ${plural(ocultasNoTotal, "conta oculta", "contas ocultas")}` : null,
+    inv.contasSemLeitura > 0 ? `${plural(inv.contasSemLeitura, "conta", "contas")} sem leitura da Meta neste mês (o gasto não entrou)` : null,
+  ].filter(Boolean);
+
+  return (
+    <section aria-labelledby="investimento-titulo" className="rounded-xl border border-border bg-card p-4 sm:p-5">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)] lg:items-center">
+        <div className="min-w-0">
+          <p id="investimento-titulo" className="text-lone-eyebrow uppercase text-muted-foreground">
+            Investimento sob gestão · {mes}
+          </p>
+          <p className="mt-2 text-lone-hero tabular-nums tracking-tight text-foreground">{brl0(inv.total)}</p>
+          <p className="mt-1 text-xs leading-snug text-muted-foreground">
+            {brl0(inv.verbaDefinida)} de verba em {plural(inv.contasComVerba, "conta", "contas")}
+            {inv.contasSemVerba > 0 && (
+              <>
+                {" + ~"}{brl0(inv.estimadoSemVerba)} estimado em{" "}
+                <button
+                  type="button"
+                  onClick={onVerSemVerba}
+                  aria-pressed={filtrandoSemVerba}
+                  className="font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {plural(inv.contasSemVerba, "conta sem verba", "contas sem verba")}
+                </button>
+              </>
+            )}
+          </p>
+          {inv.contasSemVerba > 0 && (
+            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+              Estimado = gasto do mês + ritmo dos últimos 3 dias. Defina a verba dessas contas para o total ficar exato.
+            </p>
+          )}
+        </div>
+
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-border px-3 py-2.5">
+            <dt className="text-[11px] text-muted-foreground">Gasto até hoje</dt>
+            <dd className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">{brl0(inv.gastoMes)}</dd>
+            <dd className="text-[11px] leading-snug text-muted-foreground">
+              {pctGasto != null ? `${pctGasto}% do total · ` : ""}dia {dia} de {diasNoMes}
+            </dd>
+          </div>
+          <div className="rounded-lg border border-border px-3 py-2.5">
+            <dt className="text-[11px] text-muted-foreground">Fecha o mês em</dt>
+            <dd className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">~{brl0(inv.fechaEm)}</dd>
+            <dd className="text-[11px] leading-snug text-muted-foreground">no ritmo dos últimos 3 dias</dd>
+          </div>
+          <div className={cn("rounded-lg border px-3 py-2.5", inv.verbaParada > 0 ? "border-lone-danger-border bg-lone-danger-bg" : "border-border")}>
+            <dt className="text-[11px] text-muted-foreground">Verba parada</dt>
+            <dd className={cn("mt-0.5 text-lg font-semibold tabular-nums", inv.verbaParada > 0 ? "text-lone-danger" : "text-foreground")}>
+              {brl0(inv.verbaParada)}
+            </dd>
+            <dd className="text-[11px] leading-snug text-muted-foreground">
+              {inv.contasParadas > 0
+                ? `${plural(inv.contasParadas, "conta", "contas")} com verba e nada gasto no mês`
+                : "toda conta com verba gastou no mês"}
+            </dd>
+          </div>
+        </dl>
+      </div>
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Todos os clientes ativos{notas.length > 0 ? ` — ${notas.join("; ")}` : ""}.
+      </p>
+    </section>
+  );
+}
+
 // ── Página principal ──────────────────────────────────────────
 
 export default function ContasVerbaPage() {
@@ -986,9 +1075,15 @@ export default function ContasVerbaPage() {
   // ── Dados computados ─────────────────────────────────────
   const visiveis = useMemo(() => accounts.filter((a) => !ocultas.has(a.meta_account_id)), [accounts, ocultas]);
   const escondidas = useMemo(() => accounts.filter((a) => ocultas.has(a.meta_account_id)), [accounts, ocultas]);
+  // Total do mês: todas as contas (ocultas inclusive) — ocultar tira da tela, não da carteira.
+  const investimento = useMemo(() => investimentoDoMes(accounts.map((a) => ({
+    verba: a.monthly_budget, gasto: a.current_month_spend, media3d: a.last_3d_avg_spend, sincronizadaEm: a.last_synced_at,
+  })), todaySP()), [accounts]);
 
   const porFiltro = filtro === "all"
     ? visiveis
+    : filtro === "sem_verba"
+      ? visiveis.filter((a) => a.ritmo.status === "sem_verba")
     : filtro === "ritmo"
       ? visiveis.filter((a) => foraDoRitmo(a.leitura))
       // O card "Atenção" conta saldo baixo E pendência na conta (review): o filtro mostra os dois.
@@ -1268,7 +1363,9 @@ export default function ContasVerbaPage() {
     { chave: "critical", label: "Críticos", value: criticalCount, sub: "ação imediata", color: criticalCount > 0 ? "text-lone-danger" : "text-foreground", icone: OctagonAlert },
     { chave: "ritmo", label: "Fora do ritmo", value: foraRitmoCount, sub: `acima, abaixo ou travadas · ${comVerba} com verba`, color: foraRitmoCount > 0 ? "text-lone-warning" : "text-foreground", icone: Gauge },
   ];
-  const filtroAtivo = cards.find((c) => c.chave === filtro);
+  const filtroAtivo = filtro === "sem_verba"
+    ? { label: "Sem verba" }
+    : cards.find((c) => c.chave === filtro);
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -1319,6 +1416,14 @@ export default function ContasVerbaPage() {
             </Button>
           </div>
         </div>
+
+        <PainelInvestimento
+          inv={investimento}
+          hoje={todaySP()}
+          ocultasNoTotal={escondidas.length}
+          filtrandoSemVerba={filtro === "sem_verba"}
+          onVerSemVerba={() => setFiltro(filtro === "sem_verba" ? "all" : "sem_verba")}
+        />
 
         {/* Cards de resumo — cada um filtra a lista (clicar de novo limpa). */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

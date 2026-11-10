@@ -7,7 +7,7 @@ import { runBalanceSync } from "@/lib/traffic/sync-core";
 import { requireCronOrUser } from "@/lib/api/cron-guard";
 
 // ── GET /api/traffic/sync-balances ───────────────────────────
-// Retorna dados atuais do DB (sem chamar Meta) para o frontend.
+// Retorna dados atuais do DB (sem chamar Meta) para o frontend — só contas de cliente ativo.
 // Exige login (vaza PIX/telefone dos clientes) ou CRON_SECRET.
 
 export async function GET(req: NextRequest) {
@@ -23,11 +23,15 @@ export async function GET(req: NextRequest) {
           id, name, nome_fantasia, client_finance_phone, client_pix_key, daily_budget, payment_method${comAporte ? ", next_payment_date" : ""}
         )
       `;
-    let { data, error } = await supabaseAdmin.from("ad_accounts").select(colunas(true)).order("account_name");
+    // Só cliente da carteira (10/11/2026): ex-cliente (Complexo Vida, Depillagos) aparecia como "Ativa"
+    // com o gasto da última leitura, de setembro, e entrava no total do mês.
+    const ler = (comAporte: boolean) => supabaseAdmin.from("ad_accounts").select(colunas(comAporte))
+      .eq("clients.active", true).is("clients.churned_at", null).order("account_name");
+    let { data, error } = await ler(true);
     let aporteDisponivel = true;
     if (error && (error.code === "42703" || /next_payment_date/.test(error.message))) {
       aporteDisponivel = false;
-      ({ data, error } = await supabaseAdmin.from("ad_accounts").select(colunas(false)).order("account_name"));
+      ({ data, error } = await ler(false));
     }
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

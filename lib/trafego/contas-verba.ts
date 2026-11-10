@@ -151,6 +151,87 @@ export function foraDoRitmo(l: LeituraRitmo): boolean {
   return l.tom === "acima" || l.tom === "abaixo" || l.tom === "travada";
 }
 
+// ─── Investimento sob gestão (10/11/2026) ───────────────────────────────────
+// Pedido do CEO: "quanto estamos cuidando de tráfego por mês, todos os clientes juntos". Somar a
+// coluna de verba deixava de fora quem gasta sem verba cadastrada (JP Car e JP Beauty gastavam
+// ~R$ 1.500/mês cada, fora da conta). Aqui: a verba de quem tem, a estimativa de quem não tem (gasto do
+// mês + ritmo dos últimos 3 dias até o fim do mês, a mesma conta da barra), o gasto até hoje, onde o
+// mês fecha e quanto de verba está parada. Gasto lido antes deste mês é de outro mês e não entra.
+
+export interface ContaInvestimento {
+  verba: number | null | undefined;
+  /** current_month_spend: gasto do mês na última leitura da Meta. */
+  gasto: number | null | undefined;
+  /** last_3d_avg_spend. */
+  media3d: number | null | undefined;
+  /** last_synced_at. */
+  sincronizadaEm: string | null | undefined;
+}
+
+export interface InvestimentoDoMes {
+  /** Verba definida + estimativa das contas que gastam sem verba. */
+  total: number;
+  verbaDefinida: number;
+  contasComVerba: number;
+  estimadoSemVerba: number;
+  /** Contas sem verba que gastaram ou estão gastando neste mês. */
+  contasSemVerba: number;
+  gastoMes: number;
+  /** Gasto projetado no fim do mês, todas as contas, no ritmo dos últimos 3 dias. */
+  fechaEm: number;
+  /** Verba de contas que não gastaram nada no mês (a partir do dia 3). */
+  verbaParada: number;
+  contasParadas: number;
+  /** Contas cuja última leitura da Meta é de antes deste mês: o gasto delas não entrou. */
+  contasSemLeitura: number;
+}
+
+/** "YYYY-MM-DD" de um instante, no calendário de São Paulo. */
+function diaSP(iso: string): string | null {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  return new Date(t).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+export function investimentoDoMes(contas: ContaInvestimento[], hoje: string): InvestimentoDoMes {
+  const { dia, diasNoMes } = diaDoMes(hoje);
+  const inicioDoMes = `${hoje.slice(0, 7)}-01`;
+  const restantes = Math.max(0, diasNoMes - dia);
+  const r: InvestimentoDoMes = {
+    total: 0, verbaDefinida: 0, contasComVerba: 0, estimadoSemVerba: 0, contasSemVerba: 0,
+    gastoMes: 0, fechaEm: 0, verbaParada: 0, contasParadas: 0, contasSemLeitura: 0,
+  };
+  for (const c of contas) {
+    const verba = c.verba != null && Number.isFinite(c.verba) && c.verba > 0 ? c.verba : null;
+    const lidaEm = c.sincronizadaEm ? diaSP(c.sincronizadaEm) : null;
+    const lidaNoMes = lidaEm != null && lidaEm >= inicioDoMes;
+    const gasto = lidaNoMes && c.gasto != null && Number.isFinite(c.gasto) && c.gasto > 0 ? c.gasto : 0;
+    const m3 = lidaNoMes && c.media3d != null && Number.isFinite(c.media3d) && c.media3d >= 0 ? c.media3d : null;
+    const ritmoDia = m3 ?? (dia > 0 ? gasto / dia : 0);
+    const projetado = gasto + ritmoDia * restantes;
+
+    if (verba != null) {
+      r.verbaDefinida += verba;
+      r.contasComVerba += 1;
+    } else if (projetado > 0) {
+      r.estimadoSemVerba += projetado;
+      r.contasSemVerba += 1;
+    }
+    if (!lidaNoMes) {
+      if (verba != null || (c.gasto ?? 0) > 0) r.contasSemLeitura += 1;
+      continue;
+    }
+    r.gastoMes += gasto;
+    r.fechaEm += projetado;
+    if (verba != null && gasto === 0 && dia > 2) {
+      r.verbaParada += verba;
+      r.contasParadas += 1;
+    }
+  }
+  r.total = r.verbaDefinida + r.estimadoSemVerba;
+  return r;
+}
+
 export type AvisoAporte = { tipo: "vencido" | "hoje" | "proximo" | "boleto_80"; texto: string } | null;
 
 /** Aviso de pagamento da conta: aporte vencido/próximo (Pix/Boleto) ou boleto com 80% da verba usada. */

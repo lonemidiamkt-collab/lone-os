@@ -172,3 +172,69 @@ describe("leitura do ritmo (barra de Contas & Verba)", () => {
     expect(foraDoRitmo(sd)).toBe(false);
   });
 });
+
+// ─── Investimento sob gestão (10/11/2026) ───────────────────────────────────
+import { investimentoDoMes } from "@/lib/trafego/contas-verba";
+
+describe("investimento sob gestão (todos os clientes juntos)", () => {
+  const hoje = "2026-11-10";
+  const lida = "2026-11-10T19:00:00Z";
+
+  it("soma a verba de quem tem e estima quem gasta sem verba pelo ritmo de 3 dias", () => {
+    const r = investimentoDoMes([
+      { verba: 6000, gasto: 3145, media3d: 467, sincronizadaEm: lida },
+      { verba: 2000, gasto: 480, media3d: 69, sincronizadaEm: lida },
+      // JP Car sem verba: 188 no mês + 55/dia nos 20 dias que faltam = 1.288
+      { verba: null, gasto: 188, media3d: 55, sincronizadaEm: lida },
+    ], hoje);
+    expect(r.verbaDefinida).toBe(8000);
+    expect(r.contasComVerba).toBe(2);
+    expect(r.estimadoSemVerba).toBeCloseTo(1288, 2);
+    expect(r.contasSemVerba).toBe(1);
+    expect(r.total).toBeCloseTo(9288, 2);
+    expect(r.gastoMes).toBeCloseTo(3813, 2);
+    expect(r.fechaEm).toBeCloseTo(3145 + 467 * 20 + 480 + 69 * 20 + 188 + 55 * 20, 2);
+  });
+
+  it("conta sem verba e sem gasto não entra (nem como estimativa)", () => {
+    const r = investimentoDoMes([{ verba: null, gasto: 0, media3d: 0, sincronizadaEm: lida }], hoje);
+    expect(r.contasSemVerba).toBe(0);
+    expect(r.total).toBe(0);
+  });
+
+  it("verba de conta que não gastou nada no mês aparece como parada", () => {
+    const r = investimentoDoMes([
+      { verba: 2000, gasto: 0, media3d: 0, sincronizadaEm: lida },
+      { verba: 1000, gasto: 300, media3d: 30, sincronizadaEm: lida },
+    ], hoje);
+    expect(r.verbaParada).toBe(2000);
+    expect(r.contasParadas).toBe(1);
+    expect(r.total).toBe(3000); // parada continua no total: é verba combinada com o cliente
+  });
+
+  it("nos dois primeiros dias do mês ninguém é 'parado'", () => {
+    const r = investimentoDoMes([{ verba: 2000, gasto: 0, media3d: 0, sincronizadaEm: "2026-11-02T12:00:00Z" }], "2026-11-02");
+    expect(r.contasParadas).toBe(0);
+  });
+
+  it("gasto lido no mês passado não vira gasto deste mês", () => {
+    // Complexo Vida: última leitura em 24/09 com R$ 88 — aparecia como gasto de novembro.
+    const r = investimentoDoMes([{ verba: 750, gasto: 88, media3d: 0, sincronizadaEm: "2026-09-24T13:01:00Z" }], hoje);
+    expect(r.gastoMes).toBe(0);
+    expect(r.fechaEm).toBe(0);
+    expect(r.contasSemLeitura).toBe(1);
+    expect(r.verbaDefinida).toBe(750);
+    expect(r.contasParadas).toBe(0);
+  });
+
+  it("virada do mês pelo relógio de São Paulo: leitura às 23h de 31/10 (02h UTC de 01/11) é de outubro", () => {
+    const r = investimentoDoMes([{ verba: null, gasto: 500, media3d: 20, sincronizadaEm: "2026-11-01T02:00:00Z" }], "2026-11-01");
+    expect(r.gastoMes).toBe(0);
+    expect(r.contasSemLeitura).toBe(1);
+  });
+
+  it("sem média de 3 dias, projeta pela média do mês", () => {
+    const r = investimentoDoMes([{ verba: null, gasto: 500, media3d: null, sincronizadaEm: lida }], hoje);
+    expect(r.estimadoSemVerba).toBeCloseTo(500 + 50 * 20, 2);
+  });
+});
