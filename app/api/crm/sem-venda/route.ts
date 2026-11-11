@@ -8,6 +8,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import * as db from "@/lib/supabase/queries";
 import { registrarEtapa } from "@/lib/crm/etapas-historico";
 import { jobDispensa, lerClientesSemVenda } from "@/lib/crm/sem-venda";
+import { origemDoLeadSource } from "@/lib/crm/origem-cliente";
 
 // GET  /api/crm/sem-venda — clientes que entraram no Lone OS sem venda no Comercial (lib/crm/sem-venda.ts).
 // POST /api/crm/sem-venda { acao: "registrar", clientId, valorMensal, valorImplantacao?, fechadoEm? }
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
     lead = await db.insertCrmLead({
       contatoNome: (cli.contact_name as string) || empresa, empresa,
       telefone: (cli.phone as string) || null, email: (cli.email as string) || null,
-      origem: (cli.lead_source as string) || "indicacao",
+      origem: origemDoLeadSource(cli.lead_source as string | null) ?? "Indicação",
       valorOrcamento: valorMensal, valorImplantacao: implantacao,
       estagio: "ganho", probabilidade: 1, fechadoEm: dia, etapaDesde: new Date().toISOString(),
     });

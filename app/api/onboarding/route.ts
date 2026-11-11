@@ -41,6 +41,7 @@ function baseDoPainel(): string {
 import { montarNotaHandoff, montarMensagemGrupoHandoff, blocoDoLinkDeCadastro, mensagemLinkDeCadastro } from "@/lib/cs/handoff";
 import { randomBytes } from "crypto";
 import { PAPEIS_COMERCIAL } from "@/lib/crm/acesso";
+import { leadSourceDaOrigem } from "@/lib/crm/origem-cliente";
 
 /** Token de onboarding forte (128 bits) — não enumerável. */
 function newOnboardingToken(): string {
@@ -181,7 +182,8 @@ export async function POST(req: NextRequest) {
       ...(lead ? {
         phone: (lead.telefone as string) || null,
         email: (lead.email as string) || null,
-        lead_source: (lead.origem as string) || null,
+        // O canal do lead é texto ("Indicação"); a coluna é enum de 4 valores — gravar direto derrubava a conversão.
+        lead_source: leadSourceDaOrigem(lead.origem as string | null),
         source_lead_id: lead.id as string,
       } : {}),
     }).select("id").maybeSingle();
