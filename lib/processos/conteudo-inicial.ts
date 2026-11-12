@@ -528,4 +528,272 @@ export const PROCESSOS_INICIAIS: ProcessoSeed[] = [
       },
     ],
   },
+  // ══════════════════════════════════════════════════════════════════════════
+  // COM-01 — transcrito do "Fluxo Completo Lone Mídia" (proposta operacional v1.0, Roberto, 12/11/2026).
+  // É o PROCESSO-ALVO: cada passo diz "HOJE NO SISTEMA" quando o Lone OS ainda não faz o que o processo
+  // pede, para ninguém esperar por uma automação que não existe. A comparação linha a linha com o código
+  // está em docs/FLUXO_ENTRADA_CLIENTES.md. Sem nome de cliente e sem valor: o repositório é público.
+  {
+    code: "COM-01",
+    titulo: "Entrada de cliente: da venda fechada à ativação",
+    area: "comercial",
+    tipo: "processo",
+    resumo:
+      "A jornada inteira: lead, follow-up, venda fechada, cadastro, contrato, assinatura na D4Sign, cobrança, " +
+      "pasta do Drive e início da entrega. Processo-alvo, com o que o sistema já faz marcado passo a passo.",
+    tags: ["venda", "cadastro", "onboarding", "contrato", "d4sign", "drive", "cobrança", "ativação"],
+    objetivo:
+      "Toda venda fechada vira um fluxo de trabalho com responsável, etapa, bloqueio e próxima ação visíveis, " +
+      "em vez de uma sequência de mensagens soltas. O tempo entre a venda e a ativação diminui sem aumentar erro.",
+    problema:
+      "Venda fechada, contrato assinado e cliente ativado eram tratados como a mesma coisa. O valor era " +
+      "perguntado de novo na hora do contrato, o contrato saía antes de o cadastro ser revisado, a pasta do " +
+      "Drive e o envio para assinatura dependiam de alguém lembrar, e o cliente começava a ser atendido sem " +
+      "contrato assinado nem cobrança.",
+    escopo: "Do lead criado no Comercial até o cliente ativado, com kickoff marcado e acompanhamento iniciado.",
+    foraDeEscopo:
+      "Rotina de conteúdo e de tráfego depois da ativação (SOC-01 a SOC-03, TRF-01), o setup da primeira " +
+      "semana (CS-01), renovação e encerramento de contrato.",
+    gatilho: "Lead criado no Comercial. O ponto de virada é a venda fechada (lead em Ganho).",
+    frequencia: "A cada lead e a cada venda fechada.",
+    entradas:
+      "Lead com empresa, contato, telefone, responsável, origem e serviço de interesse · acordo fechado " +
+      "(serviço, valor, vigência, condições) · cadastro preenchido pelo cliente · modelo de contrato do serviço",
+    saidas:
+      "Cliente ativo no Lone OS com cadastro aprovado, contrato assinado e arquivado, cobrança emitida, " +
+      "pasta no Drive, grupo de WhatsApp, responsáveis definidos e kickoff marcado.",
+    criterioPronto:
+      "Cadastro aprovado + contrato com todas as assinaturas confirmadas pela D4Sign + situação financeira " +
+      "conforme a política + responsável designado + acessos mínimos recebidos. Venda fechada não é contrato " +
+      "assinado, e contrato assinado não é cliente ativado.",
+    criteriosQualidade:
+      "Nenhum dado é pedido duas vezes: o que o Comercial registrou vale para o contrato e para a cobrança. " +
+      "Nada é informado como assinado, cobrado ou enviado sem a confirmação do serviço (D4Sign, Asaas, Google). " +
+      "Repetir uma ação não cria cliente, contrato, cobrança ou pasta em dobro.",
+    sla:
+      "A DEFINIR: prazo de cada etapa e quem assume o cliente depois da venda. Referência atual do sistema: " +
+      "aviso de contrato sem assinatura depois de 3 dias, setup em 7 dias (CS-01).",
+    passos: [
+      {
+        titulo: "Cadastrar o lead sem duplicar",
+        instrucao:
+          "Antes de criar, procure no Comercial pelo telefone e pelo nome da empresa. Cadastre com empresa, " +
+          "contato, telefone/WhatsApp, responsável, origem e serviço de interesse. HOJE NO SISTEMA: só o nome " +
+          "do contato é obrigatório, a tela não confere duplicidade (só o Loninho de vendas e a importação " +
+          "conferem) e o lead não tem campo de CNPJ. A conferência é manual.",
+        papel: "comercial",
+        sistema: "Lone OS > Comercial > Funil",
+        evidencia: "lead no funil com responsável e origem preenchidos",
+      },
+      {
+        titulo: "Cumprir a cadência de follow-up",
+        instrucao:
+          "Processo-alvo: cinco ações em dias úteis (D1 WhatsApp, D2 WhatsApp, D3 ligação, D4 ligação em outro " +
+          "horário, D5 última mensagem). Registre cada toque como atividade no lead. Se o lead respondeu, marcou " +
+          "reunião ou trouxe objeção, mude a etapa ou use 'Retomar em'. HOJE NO SISTEMA: a régua é por etapa e " +
+          "em dias corridos, aparece na aba Hoje e não cria tarefa. O sistema não percebe sozinho que o lead " +
+          "respondeu: sem mudar a etapa, ele continua sugerindo toque.",
+        papel: "comercial",
+        sistema: "Lone OS > Comercial > Hoje",
+        evidencia: "atividade registrada no lead a cada toque",
+      },
+      {
+        titulo: "Decidir o lead com a régua encerrada",
+        instrucao:
+          "Depois da última tentativa sem resposta, o lead aparece em 'Régua encerrada'. Decida: perdido (com " +
+          "motivo) ou retomar em 30 dias. A oportunidade nunca é encerrada sozinha.",
+        papel: "comercial",
+        sistema: "Lone OS > Comercial > Hoje",
+        evidencia: "lead marcado como perdido com motivo, ou com data de retomada",
+        decisao: "Perdido ou retomar em 30 dias",
+      },
+      {
+        titulo: "Fechar a venda com o acordo completo",
+        instrucao:
+          "Antes de mover para Ganho, confira no lead: serviço vendido, valor mensal exato, taxa de implantação " +
+          "(se houver), vigência, condições negociadas e a evidência do aceite (mensagem ou e-mail do cliente). " +
+          "HOJE NO SISTEMA: mover para Ganho não exige nenhum campo, e não existe o registro congelado do " +
+          "acordo. O contrato e o financeiro leem o valor que estiver no lead no momento, então NÃO altere o " +
+          "valor do lead depois de fechar. Vigência, desconto e data de início não têm campo: escreva na " +
+          "observação do lead.",
+        papel: "comercial",
+        sistema: "Lone OS > Comercial > Funil",
+        evidencia: "lead em Ganho com valor mensal preenchido e aceite anotado",
+      },
+      {
+        titulo: "Criar o cadastro e enviar o link ao cliente",
+        instrucao:
+          "No lead em Ganho, clique em 'Criar cadastro e enviar link'. O sistema cria o cliente em rascunho, " +
+          "gera um link único (um lead, um cliente: o segundo clique é recusado), avisa o grupo de cadastro " +
+          "sem valor nem dado sensível e abre as tarefas de criar e vincular o grupo de WhatsApp. Envie o link " +
+          "ao cliente pelo WhatsApp. Venda em Ganho sem cadastro fica listada na aba Fechados até resolver.",
+        papel: "comercial",
+        sistema: "Lone OS > Comercial > Fechados",
+        evidencia: "aviso do link no grupo de cadastro e cliente em 'aguardando cadastro'",
+      },
+      {
+        titulo: "Preencher o cadastro",
+        instrucao:
+          "O cliente preenche pelo link: CNPJ, razão social, endereço, quem assina (nome, cargo, CPF, e-mail), " +
+          "acessos e documentos. O sistema devolve só os campos que faltam ou estão errados. HOJE NO SISTEMA: " +
+          "para cliente novo o formulário abre vazio (não vem preenchido com o que o Comercial já sabe).",
+        papel: "cliente",
+        sistema: "Link de cadastro do Lone OS",
+        evidencia: "cadastro enviado (aviso 'Novo cadastro pendente')",
+      },
+      {
+        titulo: "Revisar e aprovar o cadastro",
+        instrucao:
+          "Em Cadastros Pendentes, confira razão social e CNPJ, se quem assina tem poder de representar a " +
+          "empresa (cargo e e-mail preenchidos) e se o serviço bate com a venda. Cadastro enviado não é " +
+          "cadastro aprovado. HOJE NO SISTEMA: aprovar já torna o cliente ativo, sem conferir contrato nem " +
+          "cobrança. Só aprove quando o passo 'Liberar o início da operação' estiver cumprido, ou registre a " +
+          "exceção.",
+        papel: "gestor",
+        sistema: "Lone OS > Clientes > Pendentes",
+        evidencia: "cadastro aprovado com signatário, cargo e e-mail conferidos",
+      },
+      {
+        titulo: "Conferir a pasta do cliente no Drive",
+        instrucao:
+          "Ao fim do cadastro o sistema cria 'Clientes Lone Mídia > Cliente' com Documentos (só admin) e Fotos " +
+          "e Vídeos (social e designer do cliente) e manda os links no grupo de cadastro. Se vier 'Pasta do " +
+          "Drive não criada', abra a ficha em Marca & Briefing > Pasta do Drive, leia o motivo e clique em " +
+          "'Tentar de novo'. Senha nunca vai para o Drive: fica no cofre do Lone OS. HOJE NO SISTEMA: são 2 " +
+          "subpastas, não as 8 da proposta (00_Administrativo a 07_Financeiro), e o contrato assinado não é " +
+          "copiado para o Drive.",
+        papel: "gestor",
+        sistema: "Lone OS > Clientes > ficha > Marca & Briefing",
+        evidencia: "links das duas pastas na ficha do cliente",
+      },
+      {
+        titulo: "Gerar a minuta do contrato",
+        instrucao:
+          "Gere o contrato só depois do cadastro aprovado. O valor mensal vem da venda: não redigite. Informe " +
+          "o dia de vencimento. Mantenha separadas as quatro datas: assinatura, início do serviço, primeiro " +
+          "vencimento e recorrência. Prefira gerar pelo grupo de cadastro, que roda a auditoria (razão social, " +
+          "CNPJ, representante, CPF, endereço, escopo e valores) e bloqueia divergência. HOJE NO SISTEMA: o " +
+          "contrato é oferecido já no envio do cadastro, antes da revisão; o gerador da ficha não passa pela " +
+          "auditoria; cargo ou e-mail ausente gera só alerta; a vigência é o padrão da casa e o vencimento é " +
+          "sempre perguntado.",
+        papel: "gestor",
+        sistema: "Lone OS > Clientes > ficha > Contratos",
+        evidencia: "contrato em rascunho na ficha, com versão e PDF",
+      },
+      {
+        titulo: "Aprovar e enviar para assinatura na D4Sign",
+        instrucao:
+          "Na ficha > Contratos, clique em 'Enviar para assinatura', confira na prévia quem assina, o e-mail e " +
+          "o cofre, e confirme. Nada é enviado sozinho e nenhuma mensagem de WhatsApp dispara o envio. Se " +
+          "falhar no meio, clique de novo: o envio continua de onde parou, sem subir o contrato duas vezes. " +
+          "Condições para o envio: e-mail válido no cadastro do cliente, PDF do contrato guardado, cofre " +
+          "escolhido e e-mail de quem assina pela Lone em Configurações > Jurídico. A conta da D4Sign aceita " +
+          "10 chamadas por hora: recusa por limite se resolve esperando alguns minutos. HOJE NO SISTEMA: não " +
+          "existe o estado 'aprovado' separado do envio; o clique de quem tem papel de gestão é a aprovação.",
+        papel: "gestor",
+        sistema: "Lone OS > Clientes > ficha > Contratos",
+        evidencia: "aviso 'enviado para assinatura' no grupo de cadastro",
+      },
+      {
+        titulo: "Acompanhar a assinatura até o fim",
+        instrucao:
+          "A D4Sign avisa a cada assinatura; o grupo de cadastro recebe 'assinado por X, falta Y' e depois " +
+          "'assinou o contrato'. Só com todas as assinaturas o contrato conta como assinado. Dia útil, 8h30, " +
+          "sai a lista de contratos enviados há 3 dias ou mais sem assinatura: cobre o cliente. O PDF assinado " +
+          "é guardado no Lone OS de madrugada. HOJE NO SISTEMA: recusa do signatário e e-mail devolvido não " +
+          "geram aviso; confira no painel da D4Sign quando o contrato não andar.",
+        papel: "gestor",
+        sistema: "Grupo de cadastro e Lone OS > Contratos",
+        evidencia: "contrato com 'Assinado na D4Sign' e PDF assinado no arquivo",
+      },
+      {
+        titulo: "Emitir a cobrança",
+        instrucao:
+          "Com o contrato assinado, confirme o contrato no Lone Finance (a Conferência mostra 'assinado na " +
+          "D4Sign e sem contrato aqui' como urgente) e emita a cobrança no Asaas com o valor e o vencimento do " +
+          "contrato. Cobrança criada não é pagamento confirmado. HOJE NO SISTEMA: não há integração com o " +
+          "Asaas. A cobrança, a confirmação de pagamento e o registro de atraso são manuais.",
+        papel: "admin",
+        sistema: "Lone Finance > Conferência e painel do Asaas",
+        evidencia: "contrato confirmado no Lone Finance e cobrança emitida no Asaas",
+      },
+      {
+        titulo: "Liberar o início da operação",
+        instrucao:
+          "Só libere com: cadastro aprovado, contrato assinado, situação financeira conforme a política, " +
+          "responsável designado (tráfego, social, designer) e acessos mínimos recebidos. Para começar antes, " +
+          "registre na linha do tempo do cliente quem autorizou, o motivo, o prazo e a condição para " +
+          "regularizar. A exceção não apaga a pendência. A DEFINIR: se o pagamento confirmado é exigido antes " +
+          "do kickoff e quem pode autorizar início antecipado. HOJE NO SISTEMA: não existe trava; a conferência " +
+          "é de quem aprova.",
+        papel: "gestor",
+        sistema: "Lone OS > Clientes > ficha",
+        evidencia: "cliente aprovado com responsáveis definidos, ou exceção registrada na linha do tempo",
+        decisao: "Liberar, ou registrar exceção com quem autorizou, motivo e prazo",
+      },
+      {
+        titulo: "Criar o grupo, marcar o kickoff e iniciar o acompanhamento",
+        instrucao:
+          "Cumpra as tarefas [Onboarding] de criar o grupo de WhatsApp e vincular o grupo na ficha, marque a " +
+          "primeira reunião de alinhamento e siga o checklist do serviço contratado (CS-01). Processo-alvo: " +
+          "acompanhamento em 7, 14 e 30 dias. HOJE NO SISTEMA: o acompanhamento é o setup de 7 dias com " +
+          "cobrança até 15 dias e marcos de 3 e 6 meses; o tempo da venda até a ativação não é medido.",
+        papel: "social",
+        sistema: "Lone OS > Tarefas e ficha do cliente",
+        evidencia: "grupo vinculado na ficha e primeira reunião registrada",
+      },
+    ],
+    kpis: [
+      {
+        nome: "Tempo da venda até a ativação",
+        definicao: "Dias entre o lead ir para Ganho e o cliente ser ativado, por cliente e por etapa",
+        fonte: "Lone OS > Comercial > Fechados e a mensagem 'Entrada de clientes' das 8h30 (medição automática ainda não existe)",
+        meta: "A DEFINIR: prazo-alvo em dias",
+        acaoAbaixo: "Ver em qual etapa o cliente está parado, quem é o responsável e registrar a próxima ação.",
+      },
+      {
+        nome: "Vendas em Ganho sem cadastro",
+        definicao: "Quantidade de leads em Ganho que ainda não têm cadastro criado ou enviado",
+        fonte: "Lone OS > Comercial > Fechados",
+        meta: "Zero com mais de 1 dia útil",
+        acaoAbaixo: "O vendedor responsável cria o cadastro e envia o link no mesmo dia.",
+      },
+      {
+        nome: "Contratos enviados sem assinatura há 3 dias ou mais",
+        definicao: "Contratos na D4Sign esperando assinatura há 3 dias ou mais",
+        fonte: "Aviso 'Ainda não assinaram o contrato' no grupo de cadastro (dia útil, 8h30)",
+        meta: "Zero",
+        acaoAbaixo: "Cobrar quem falta assinar no mesmo dia e conferir o e-mail do signatário.",
+      },
+    ],
+    excecoes: [
+      {
+        situacao: "Cliente precisa começar antes de assinar o contrato ou de pagar",
+        tratamento:
+          "Registrar na linha do tempo quem autorizou, o motivo, o prazo e a condição de regularização. A " +
+          "pendência continua aberta até ser resolvida.",
+        escalonarPara: "admin",
+      },
+      {
+        situacao: "Preço, escopo ou cláusula mudou depois de o contrato ser gerado",
+        tratamento:
+          "Gerar nova versão do contrato (ou adendo) e passar de novo pela revisão antes de enviar. Não enviar " +
+          "a versão antiga.",
+        escalonarPara: "gestor",
+      },
+      {
+        situacao: "Quem assina não tem cargo ou poder de representação no cadastro",
+        tratamento: "Não enviar para assinatura. Pedir ao cliente o dado que falta e corrigir na ficha.",
+        escalonarPara: "gestor",
+      },
+      {
+        situacao: "Pasta do Drive não foi criada ou o envio à D4Sign falhou",
+        tratamento:
+          "Ler o motivo que o sistema mostra na ficha (Pasta do Drive) ou no contrato e repetir a ação pelo " +
+          "botão. Não criar pasta à mão nem subir o contrato pelo painel da D4Sign em paralelo, para não " +
+          "duplicar.",
+        escalonarPara: "admin",
+      },
+    ],
+  },
 ];
