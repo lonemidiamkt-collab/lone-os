@@ -232,7 +232,26 @@ export async function garantirPastaDoCliente(
     .or(`drive_trava_em.is.null,drive_trava_em.lt."${limite}"`)
     .select(COLS)
     .maybeSingle();
-  if (eTrava) return { ok: false, criada: false, erro: `Não consegui abrir o cadastro do cliente: ${eTrava.message}`, avisos };
+  if (eTrava) {
+    // Esta falha era MUDA (12/11/2026): sem a trava não há `falhar()`, então nada ia para a ficha, o sino ou o
+    // grupo — só para o log. O caso real é a migration 20261109120000 não aplicada (o deploy não aplica
+    // migrations): as colunas drive_* não existem e nenhuma pasta nasce, de nenhum cliente. `drive_erro` pode
+    // não existir, então o aviso vai pelo sino e pelo grupo, que não dependem dessas colunas.
+    const faltaColuna = /column .* does not exist|could not find the .* column|schema cache/i.test(eTrava.message);
+    const erro = faltaColuna
+      ? "A pasta do Drive não pode ser criada: o banco está sem as colunas da pasta do cliente. Falta aplicar a migration 20261109120000_pasta_drive_cliente.sql em produção."
+      : `Não consegui abrir o cadastro do cliente: ${eTrava.message}`;
+    const { data: quem } = await supabaseAdmin.from("clients").select("name, nome_fantasia").eq("id", clientId).maybeSingle();
+    const nome = (quem?.nome_fantasia || quem?.name || "Cliente") as string;
+    if (avisa) {
+      await avisarGrupo(clientId, nome, mensagemPastaFalhou({ cliente: nome, motivo: erro, linkFicha: `${baseDoPainel()}/clients/${clientId}?tab=marca` }), true)
+        .catch((e) => console.error("[drive] aviso da falha não saiu:", e));
+    } else {
+      await supabaseAdmin.from("notifications").insert({ type: "system", title: "Pasta do Drive não criada", body: `${nome}: ${erro}`, client_id: clientId })
+        .then(() => null, () => null);
+    }
+    return { ok: false, criada: false, erro, avisos };
+  }
   if (!travado) {
     const { data: existe } = await supabaseAdmin.from("clients").select("id").eq("id", clientId).maybeSingle();
     if (!existe) return { ok: false, criada: false, erro: "Cliente não encontrado.", avisos };
