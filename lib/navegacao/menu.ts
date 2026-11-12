@@ -19,7 +19,7 @@ import {
   AlertTriangle, Target, FileSignature,
   Radar, ListOrdered, Building2, MessageSquare, Settings2, BarChart3,
   Lock, Zap, Info, CalendarCheck, ShoppingBag, DatabaseZap, MapPin,
-  Trophy, BrainCircuit, Blocks,
+  Trophy, BrainCircuit, Blocks, Anchor,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/types";
@@ -309,6 +309,11 @@ export const MENU: readonly GrupoMenu[] = [
         descricao: "Os aplicativos que o Lone OS usa — Google, Meta, WhatsApp, IA, D4Sign —, conferidos agora",
         termos: ["integrações", "integração", "aplicativos", "google", "google agenda", "google drive", "drive", "conectar google",
           "whatsapp", "evolution", "openai", "d4sign", "resend", "e-mail", "pdf"] },
+      // 12/11/2026: o acesso de cada cliente ao Âncora CRM — gerar o link de cadastro, copiar e acompanhar
+      // (lib/integracoes/ancora.ts). Gestão: admin e gestor geram o link (decisão do Roberto).
+      { id: "ancora", rotulo: "Âncora", icone: Anchor, href: "/ancora", papeis: GESTAO,
+        descricao: "O acesso de cada cliente ao Âncora CRM: gerar o link de cadastro e ver quem já entrou",
+        termos: ["âncora", "ancora", "crm do cliente", "link de cadastro", "convite", "acesso do cliente", "parceria"] },
       // Leva 4: a única integração real (as outras 10 de /integrations eram simuladas). Saiu do Tráfego
       // para cá; /integrations redireciona e continua acendendo este item.
       { id: "conexao-meta", rotulo: "Conexão Meta", icone: Plug, href: "/conexao-meta", papeis: TRAFEGO,
