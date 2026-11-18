@@ -15,6 +15,7 @@ import { AlertTriangle, CheckCircle2, CircleSlash, ExternalLink, RefreshCw, XCir
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import ConexaoGoogle from "@/components/integracoes/ConexaoGoogle";
+import ConexaoGoogleMarketing from "@/components/integracoes/ConexaoGoogleMarketing";
 import { useRole } from "@/lib/context/RoleContext";
 import { chamar } from "@/lib/api/chamar";
 import { cn } from "@/lib/utils";
@@ -61,6 +62,7 @@ function Cartao({ i, onMudou }: { i: EstadoIntegracao; onMudou: () => void }) {
         )
       )}
       {i.id === "google" && <div className="border-t border-border pt-3"><ConexaoGoogle onMudou={onMudou} /></div>}
+      {i.id === "google_marketing" && <div className="border-t border-border pt-3"><ConexaoGoogleMarketing onMudou={onMudou} /></div>}
     </section>
   );
 }
@@ -85,12 +87,13 @@ export default function IntegracoesPage() {
   // para o aviso não repetir ao recarregar.
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
-    const g = q.get("google");
+    const g = q.get("google") ?? q.get("google_marketing");
     if (!g) return;
-    if (g === "ok") toast.success(`Google conectado${q.get("email") ? ` (${q.get("email")})` : ""}.`);
+    const nome = q.get("google_marketing") ? "Google Ads e Perfil da Empresa" : "Google";
+    if (g === "ok") toast.success(`${nome} conectado${q.get("email") ? ` (${q.get("email")})` : ""}.`);
     else {
       const m = q.get("motivo") ?? "";
-      toast.error(`O Google não conectou: ${MOTIVO_GOOGLE[m] ?? (m || "erro desconhecido")}.`);
+      toast.error(`O ${nome} não conectou: ${MOTIVO_GOOGLE[m] ?? (m || "erro desconhecido")}.`);
     }
     window.history.replaceState(null, "", window.location.pathname);
   }, []);

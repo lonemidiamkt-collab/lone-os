@@ -14,7 +14,7 @@ import type { CausaConhecida } from "@/lib/ia/causa-erro";
 
 export type SituacaoIntegracao = "ok" | "atencao" | "erro" | "desligada";
 
-export type IdIntegracao = "google" | "meta" | "whatsapp" | "ia" | "d4sign" | "email" | "pdf" | "academy" | "finance" | "site";
+export type IdIntegracao = "google" | "google_marketing" | "meta" | "whatsapp" | "ia" | "d4sign" | "email" | "pdf" | "academy" | "finance" | "site";
 
 export interface EstadoIntegracao {
   id: IdIntegracao;
@@ -47,6 +47,8 @@ export function ordenar(lista: EstadoIntegracao[]): EstadoIntegracao[] {
 export const CATALOGO: readonly { id: IdIntegracao; nome: string; servePara: string; grupo: "principal" | "apoio" }[] = [
   { id: "google", nome: "Google (Agenda e Drive)", grupo: "principal",
     servePara: "Reunião do Comercial com Meet no Google Agenda e a pasta de cada cliente no Drive (Documentos e Fotos e Vídeos)." },
+  { id: "google_marketing", nome: "Google Ads e Perfil da Empresa", grupo: "principal",
+    servePara: "Números do Google Ads e do Perfil da Empresa (ligações, rotas, visitas ao site) no relatório semanal e mensal e na aba Google do portal do cliente." },
   { id: "meta", nome: "Meta (Facebook e Instagram)", grupo: "principal",
     servePara: "Saldos e alertas de verba, relatório semanal, portal do cliente, Instagram e a aba Anúncios." },
   { id: "whatsapp", nome: "WhatsApp (Evolution)", grupo: "principal",
@@ -119,6 +121,41 @@ export function estadoGoogleIntegracao(p: {
     return { ...b, situacao: "erro", detalhes: [`Conta${conta}`], resumo: `O Drive não respondeu: ${(api.mensagem || api.motivo || "erro desconhecido").slice(0, 160)}` };
   }
   return { ...b, situacao: "ok", detalhes: [], resumo: `Agenda e Drive funcionando${conta}.` };
+}
+
+// ── Google Ads e Perfil da Empresa ──────────────────────────────────────────────────────────────────
+
+export function estadoGoogleMarketingIntegracao(p: {
+  configurado: boolean;
+  conectado: boolean;
+  email: string | null;
+  /** Permissões aceitas no consentimento (o Google deixa desmarcar cada uma). */
+  ads: boolean;
+  perfil: boolean;
+  /** Teste de uma chamada em cada API (null = não testado). erro = frase pronta. */
+  testeAds: { ok: boolean; contas?: number; erro?: string } | null;
+  testePerfil: { ok: boolean; contas?: number; erro?: string } | null;
+  /** Clientes vinculados e quantos estão com a última leitura falhando. */
+  vinculados: number;
+  comErro: number;
+  ultimaLeitura: string | null;
+}): EstadoIntegracao {
+  const b = base("google_marketing");
+  if (!p.configurado) return { ...b, situacao: "desligada", detalhes: [], resumo: "Falta a credencial do app do Google: configure primeiro o cartão Google (Agenda e Drive) — é a mesma credencial." };
+  if (!p.conectado) return { ...b, situacao: p.vinculados ? "erro" : "desligada", detalhes: [], resumo: `Desconectado${p.vinculados ? `: ${p.vinculados} cliente(s) vinculados ficam sem os números do Google` : ""}. Clique em Conectar Google Ads e Perfil com a conta que gerencia as contas dos clientes.` };
+  const detalhes: string[] = [];
+  if (p.email) detalhes.push(`Conta: ${p.email}`);
+  if (p.testeAds?.ok) detalhes.push(`Google Ads: ${p.testeAds.contas ?? 0} conta(s) de acesso direto`);
+  if (p.testePerfil?.ok) detalhes.push(`Perfil da Empresa: ${p.testePerfil.contas ?? 0} conta(s)`);
+  if (p.vinculados) detalhes.push(`${p.vinculados} cliente(s) vinculados${p.ultimaLeitura ? ` · última leitura ${dataHora(p.ultimaLeitura)}` : ""}`);
+  const faltas: string[] = [];
+  if (!p.ads) faltas.push("a permissão do Google Ads não foi aceita");
+  if (!p.perfil) faltas.push("a permissão do Perfil da Empresa não foi aceita");
+  if (faltas.length) return { ...b, situacao: "atencao", detalhes, resumo: `Conectado, mas ${faltas.join(" e ")}. Clique em Reconectar e marque as duas.` };
+  const erros = [p.testeAds && !p.testeAds.ok ? `Google Ads: ${p.testeAds.erro}` : null, p.testePerfil && !p.testePerfil.ok ? `Perfil da Empresa: ${p.testePerfil.erro}` : null].filter((x): x is string => !!x);
+  if (erros.length) return { ...b, situacao: erros.length === 2 ? "erro" : "atencao", detalhes: [...detalhes, ...erros.slice(1)], resumo: erros[0] };
+  if (p.comErro) return { ...b, situacao: "atencao", detalhes, resumo: `Conexão funcionando, mas ${p.comErro} cliente(s) com a última leitura falhando — o motivo está na ficha de cada um (Admin › Google).` };
+  return { ...b, situacao: "ok", detalhes, resumo: "Google Ads e Perfil da Empresa funcionando." };
 }
 
 // ── Meta ────────────────────────────────────────────────────────────────────────────────────────────
@@ -222,7 +259,7 @@ export function estadoD4signIntegracao(p: {
 
 // ── Serviços de apoio (configurado + responde) ──────────────────────────────────────────────────────
 
-export function estadoServicoIntegracao(id: Exclude<IdIntegracao, "google" | "meta" | "whatsapp" | "ia" | "d4sign">, p: {
+export function estadoServicoIntegracao(id: Exclude<IdIntegracao, "google" | "google_marketing" | "meta" | "whatsapp" | "ia" | "d4sign">, p: {
   configurado: boolean;
   semConfig: string;
   /** Teste de alcance (null = esta integração não tem como testar daqui: quem chama é o outro lado). */

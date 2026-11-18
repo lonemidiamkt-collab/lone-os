@@ -8,6 +8,8 @@ import { WHATSAPP_EQUIPE } from "@/lib/portal/contato";
 import PortalDashboard from "@/components/portal/PortalDashboard";
 import { lerLinkDoPortal, type LinhaDeAcesso } from "@/lib/portal/token";
 import PortalIndisponivel from "@/components/portal/PortalIndisponivel";
+import { temColunasGoogle } from "@/lib/google/colunas";
+import { temGoogleNoRelatorio } from "@/lib/google/relatorio-dados";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +27,11 @@ export default async function PortalPage({
   // BANCO QUE OSCILA NÃO É LINK INVÁLIDO (26/10/2026): a queda de 16/10 e o soluço de 22/10 deram
   // "página não encontrada" em links que funcionam — e o time ouviu "o link do painel não funciona".
   // Agora a falha de leitura mostra "não consegui abrir agora, tente de novo" (lib/portal/token.ts).
+  // As colunas do Google só entram no select depois da migração aplicada (lib/google/colunas.ts): pedir coluna
+  // que não existe derrubaria o portal de TODO cliente.
+  const comGoogle = await temColunasGoogle();
   const lido = await lerLinkDoPortal<LinhaDeAcesso & Record<string, unknown> & { id: string }>(token,
-    "id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, status, join_date");
+    `id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, status, join_date${comGoogle ? ", google_ads_customer_id, google_perfil_local" : ""}`);
   if (lido.estado === "indisponivel") return <PortalIndisponivel />;
   if (lido.estado === "invalido") notFound();
   const client = lido.linha;
@@ -47,6 +52,13 @@ export default async function PortalPage({
   // cria tela vazia pra quem só tem tráfego.
   const hasSocial = ["lone_growth", "assessoria_social", "assessoria_design", "trafego_social_site"].includes(st)
     || !!client.ig_business_account_id;
+
+  // Google: Perfil da Empresa sempre que vinculado; Google Ads só com contrato de tráfego (a regra do relatório).
+  const g = comGoogle ? temGoogleNoRelatorio({
+    id: client.id, service_type: (client.service_type as string) ?? null,
+    google_ads_customer_id: (client.google_ads_customer_id as string) ?? null, google_perfil_local: (client.google_perfil_local as string) ?? null,
+  }) : { ads: false, perfil: false };
+  const hasGoogle = g.ads || g.perfil;
 
   // Log de acesso
   const hdrs = await headers();
@@ -107,7 +119,8 @@ export default async function PortalPage({
         hasAds={hasAds}
         hasSocial={hasSocial}
         hasIg={!!client.ig_business_account_id}
-        comecando={!hasAds && !temIg}
+        hasGoogle={hasGoogle}
+        comecando={!hasAds && !temIg && !hasGoogle}
         desde={(client.join_date as string) ?? null}
         aprovacaoLigada={process.env.PORTAL_APROVACAO_CLIENTE === "on"}
         mesRelatorio={mesRelatorio}

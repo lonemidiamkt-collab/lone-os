@@ -17,7 +17,7 @@ describe("catálogo", () => {
   it("só aplicativos que o código usa, ids únicos, cada um diz o que depende dele", () => {
     const ids = CATALOGO.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toEqual(["google", "meta", "whatsapp", "ia", "d4sign", "email", "pdf", "academy", "finance", "site"]);
+    expect(ids).toEqual(["google", "google_marketing", "meta", "whatsapp", "ia", "d4sign", "email", "pdf", "academy", "finance", "site"]);
     for (const c of CATALOGO) expect(c.servePara.length).toBeGreaterThan(20);
   });
   it("o que precisa de alguém vem primeiro; empate segue a ordem do catálogo", () => {

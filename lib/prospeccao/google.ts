@@ -42,6 +42,9 @@ async function credenciais(): Promise<{ id: string; secret: string } | null> {
 }
 
 /** Testa o par no Google com um código falso (lib/google/credencial.ts explica a leitura). Nada é gravado. */
+/** A mesma credencial do app para a conexão de Google Ads e Perfil da Empresa (lib/google/marketing-auth.ts). */
+export async function credenciaisDoAppGoogle(): Promise<{ id: string; secret: string } | null> { return credenciais(); }
+
 export async function conferirNoGoogle(id: string, secret: string): Promise<ReturnType<typeof lerTesteNoGoogle>> {
   try {
     const body = new URLSearchParams({ code: "teste-de-credencial", client_id: id, client_secret: secret, redirect_uri: redirectUri(), grant_type: "authorization_code" });

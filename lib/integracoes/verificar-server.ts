@@ -6,12 +6,16 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { estadoGoogle } from "@/lib/prospeccao/google";
 import { testarDrive } from "@/lib/drive/google-drive";
+import { estadoMarketing } from "@/lib/google/marketing-auth";
+import { testarAds } from "@/lib/google/ads-api";
+import { testarPerfil } from "@/lib/google/perfil-api";
+import { temColunasGoogle } from "@/lib/google/colunas";
 import { lerConexao } from "@/lib/trafego/anuncios-server";
 import { situacaoDaConfig } from "@/lib/contracts/d4sign-config";
 import { academyConfigurada } from "@/lib/academy/cliente";
 import { iaFora, type FalhaIa } from "@/lib/ia/saude-ia";
 import {
-  ordenar, estadoGoogleIntegracao, estadoMetaIntegracao, estadoWhatsappIntegracao, estadoIaIntegracao,
+  ordenar, estadoGoogleIntegracao, estadoGoogleMarketingIntegracao, estadoMetaIntegracao, estadoWhatsappIntegracao, estadoIaIntegracao,
   estadoD4signIntegracao, estadoServicoIntegracao, base as _base,
   type EstadoIntegracao, type IdIntegracao, type LinhaWhatsapp,
 } from "./catalogo";
@@ -43,6 +47,30 @@ async function google(): Promise<EstadoIntegracao> {
   const testa = g.conectado && g.drive !== false;
   const api = testa ? await testarDrive() : null;
   return estadoGoogleIntegracao({ configurado: g.configurado, conectado: g.conectado, email: g.email ?? null, drive: g.drive, driveApi: api });
+}
+
+async function googleMarketing(): Promise<EstadoIntegracao> {
+  const e = await estadoMarketing();
+  const [ads, perfil] = await Promise.all([
+    e.conectado && e.ads ? testarAds() : Promise.resolve(null),
+    e.conectado && e.perfil ? testarPerfil() : Promise.resolve(null),
+  ]);
+  let vinculados = 0, comErro = 0, ultimaLeitura: string | null = null;
+  if (await temColunasGoogle()) {
+    const { count } = await supabaseAdmin.from("clients").select("id", { count: "exact", head: true })
+      .neq("active", false).or("google_ads_customer_id.not.is.null,google_perfil_local.not.is.null");
+    vinculados = count ?? 0;
+    const { data } = await supabaseAdmin.from("google_sincronia").select("ads_erro, perfil_erro, ads_sincronizado_em, perfil_sincronizado_em");
+    for (const l of (data ?? []) as { ads_erro: string | null; perfil_erro: string | null; ads_sincronizado_em: string | null; perfil_sincronizado_em: string | null }[]) {
+      if ((l.ads_erro && !l.ads_erro.startsWith("Parcial")) || (l.perfil_erro && !l.perfil_erro.startsWith("Parcial"))) comErro++;
+      for (const t of [l.ads_sincronizado_em, l.perfil_sincronizado_em]) if (t && (!ultimaLeitura || t > ultimaLeitura)) ultimaLeitura = t;
+    }
+  }
+  const t = (r: Awaited<ReturnType<typeof testarAds>> | null) => (r ? (r.ok ? { ok: true, contas: r.dados } : { ok: false, erro: r.erro }) : null);
+  return estadoGoogleMarketingIntegracao({
+    configurado: e.configurado, conectado: e.conectado, email: e.email, ads: e.ads, perfil: e.perfil,
+    testeAds: t(ads), testePerfil: t(perfil), vinculados, comErro, ultimaLeitura,
+  });
 }
 
 async function meta(): Promise<EstadoIntegracao> {
@@ -118,6 +146,7 @@ async function academy(): Promise<EstadoIntegracao> {
 export async function verificarIntegracoes(): Promise<EstadoIntegracao[]> {
   const lista = await Promise.all([
     seguro("google", google),
+    seguro("google_marketing", googleMarketing),
     seguro("meta", meta),
     seguro("whatsapp", whatsapp),
     seguro("ia", ia),

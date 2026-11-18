@@ -12,6 +12,7 @@ import type { ClientPatch } from "@/stores/useClientsStore";
 import type { OnboardingItem } from "@/lib/types";
 import CicloDeVida from "./CicloDeVida";
 import ContaMetaAds from "./ContaMetaAds";
+import ContaGoogle from "./ContaGoogle";
 import LoneAcademy from "./LoneAcademy";
 import OnboardingChecklist from "./OnboardingChecklist";
 import ObservacaoDoCadastro from "./ObservacaoDoCadastro";
@@ -54,6 +55,10 @@ export default function AbaAdmin({ ctx, onboarding, dadosCompletos, updateClient
           ))}
           <div className="py-2.5">
             <ContaMetaAds client={c} updateClientData={updateClientData} />
+          </div>
+          {/* Google Ads e Perfil da Empresa (18/11/2026): relatório semanal, mensal e aba Google do portal. */}
+          <div className="py-2.5">
+            <ContaGoogle clientId={c.id} />
           </div>
         </dl>
         {/* 25/10/2026 (onda 5): a palavra do CLIENTE no link de cadastro, em destaque e separada das

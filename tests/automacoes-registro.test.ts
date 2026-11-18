@@ -15,7 +15,8 @@ const RAIZ = path.resolve(__dirname, "..");
 // Só estas diferenças são aceitas. Depois de regenerar o retrato do servidor, podem sair daqui.
 const EM_TRANSICAO: { saindo: string[]; entrando: string[] } = {
   saindo: [],
-  entrando: [],
+  // 18/11/2026: rotina nova do Google. Sai daqui quando o crontab do VPS ganhar a linha e o retrato for regenerado.
+  entrando: ["google-sync"],
 };
 
 interface LinhaCron { cron: string; chave: string; metodo?: string; bruta: string }

@@ -7,8 +7,10 @@
 
 import { createHmac, timingSafeEqual } from "crypto";
 
-export type DestinoGoogle = "prospeccao" | "comercial" | "painel";
-const DESTINOS: DestinoGoogle[] = ["prospeccao", "comercial", "painel"];
+// "marketing" (18/11/2026): a conexão de Google Ads e Perfil da Empresa (lib/google/marketing-auth.ts), separada da
+// Agenda/Drive — volta para Sistema › Integrações e grava em outra chave.
+export type DestinoGoogle = "prospeccao" | "comercial" | "painel" | "marketing";
+const DESTINOS: DestinoGoogle[] = ["prospeccao", "comercial", "painel", "marketing"];
 const segredo = () => process.env.CRON_SECRET || process.env.VAULT_KEY || "lone";
 const mac = (ts: string, destino: string) => createHmac("sha256", segredo()).update(`${ts}.${destino}`).digest("hex").slice(0, 32);
 

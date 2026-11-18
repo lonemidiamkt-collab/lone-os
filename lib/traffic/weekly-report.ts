@@ -11,6 +11,10 @@ import { lerRelatorioAnuncios } from "@/lib/reports/relatorioClienteDados";
 import { relatorioClienteHtml } from "@/lib/reports/relatorioClientePdf";
 import { loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { podeFalarDeAnuncio } from "@/lib/clients/servico";
+import { lerRelatorioGoogle, temGoogleNoRelatorio } from "@/lib/google/relatorio-dados";
+import { temColunasGoogle } from "@/lib/google/colunas";
+import { folhasGoogle } from "@/lib/reports/relatorioGooglePdf";
+import type { RelatorioGoogle } from "@/lib/google/relatorio";
 
 export interface ReportClientRow {
   id: string;
@@ -26,7 +30,12 @@ export interface ReportClientRow {
   /** Ramo e CNAE: decidem como o placar da segunda fala com o dono (lib/traffic/placar-semanal.ts). */
   nicho?: string | null;
   cnae_principal?: string | null;
+  /** Google Ads (só entra com contrato de tráfego) e Perfil da Empresa — lib/google/relatorio-dados.ts. */
+  google_ads_customer_id?: string | null;
+  google_perfil_local?: string | null;
 }
+
+const COLUNAS_GOOGLE = ", google_ads_customer_id, google_perfil_local";
 
 export function clientDisplayName(c: { nome_fantasia: string | null; name: string }): string {
   return c.nome_fantasia || c.name;
@@ -77,9 +86,10 @@ export async function selectActiveMetaClients(
   onlyClientId?: string | null,
   apenasTrafego = false,
 ): Promise<ReportClientRow[]> {
+  const g = await temColunasGoogle(); // migração do Google ainda não aplicada = lista de antes, sem quebrar
   let q = supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, status, draft_status, whatsapp_group_jid, whatsapp_group_name, paused_at, paused_until")
+    .select(`id, name, nome_fantasia, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, status, draft_status, whatsapp_group_jid, whatsapp_group_name, paused_at, paused_until${g ? COLUNAS_GOOGLE : ""}`)
     // `at_risk` ENTRA (24/10/2026, auditoria 5.11): o cliente que mais precisa de atenção ficava sem relatório. Com
     // ele entra também o filtro de ex-cliente — o encerramento grava active=false e mantém o status (muitas vezes
     // at_risk); sem isso, quem saiu voltaria a receber relatório. Mesma regra de selectActiveClientsWithGroup.
@@ -89,16 +99,19 @@ export async function selectActiveMetaClients(
     .order("nome_fantasia");
   // `apenasTrafego` filtrava por "tem conta de anúncio" — o mesmo proxy errado que mandou mensagem
   // de campanha pro Dumar. Agora exige o CONTRATO e a conta: o contrato autoriza, a conta viabiliza.
+  // Google (18/11/2026): conta do Google Ads também viabiliza o semanal (com contrato de tráfego); o Perfil da
+  // Empresa entra no mensal como o Instagram (presença, não anúncio).
   q = apenasTrafego
     ? q.in("service_type", ["lone_growth", "assessoria_trafego", "trafego_pago", "trafego_social_site"])
-        .not("meta_ad_account_id", "is", null)
-    : q.or("meta_ad_account_id.not.is.null,ig_business_account_id.not.is.null,ig_public_username.not.is.null");
+        .or(g ? "meta_ad_account_id.not.is.null,google_ads_customer_id.not.is.null" : "meta_ad_account_id.not.is.null")
+    : q.or(`meta_ad_account_id.not.is.null,ig_business_account_id.not.is.null,ig_public_username.not.is.null${g ? ",google_ads_customer_id.not.is.null,google_perfil_local.not.is.null" : ""}`);
   if (onlyClientId) q = q.eq("id", onlyClientId);
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   // PAUSA (23/09): cliente pausado continua na carteira do time, mas NÃO recebe mensagem, relatório
   // nem alerta até a pausa vencer (paused_until no passado volta sozinho). Ver lib/clients/pausa.ts.
-  return (data ?? []).filter((c) => !estaPausado(c as ClienteComPausa)) as ReportClientRow[];
+  // Select montado em tempo de execução (colunas do Google só com a migração): o tipo vem daqui, não do parser.
+  return ((data ?? []) as unknown as ReportClientRow[]).filter((c) => !estaPausado(c as unknown as ClienteComPausa));
 }
 
 /**
@@ -114,13 +127,14 @@ export async function selectActiveClientsWithGroup(onlyClientId?: string | null)
   //
   // `at_risk` também entra: era excluído pela lista de status, então o cliente que MAIS precisa de
   // atenção era justamente o que parava de receber relatório.
+  const g = await temColunasGoogle();
   let q = supabaseAdmin
     .from("clients")
     // service_type é OBRIGATÓRIO aqui: é ele que autoriza falar de anúncio (lib/clients/servico.ts).
     // Sem esse campo no select, `podeFalarDeAnuncio` receberia undefined e — por ser prudente por
     // desenho — calaria a mensagem de tráfego de TODO MUNDO. O silêncio geral seria pior que o erro
     // que ele corrige.
-    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, status, draft_status, whatsapp_group_jid, whatsapp_group_name, paused_at, paused_until, nicho, cnae_principal")
+    .select(`id, name, nome_fantasia, service_type, meta_ad_account_id, status, draft_status, whatsapp_group_jid, whatsapp_group_name, paused_at, paused_until, nicho, cnae_principal${g ? COLUNAS_GOOGLE : ""}`)
     .in("status", ["good", "average", "onboarding", "at_risk"])
     .is("draft_status", null)
     .neq("active", false) // ex-clientes (churned) não recebem mensagem/relatório
@@ -130,14 +144,16 @@ export async function selectActiveClientsWithGroup(onlyClientId?: string | null)
   if (error) throw new Error(error.message);
   // PAUSA (23/09): cliente pausado continua na carteira do time, mas NÃO recebe mensagem, relatório
   // nem alerta até a pausa vencer (paused_until no passado volta sozinho). Ver lib/clients/pausa.ts.
-  return (data ?? []).filter((c) => !estaPausado(c as ClienteComPausa)) as ReportClientRow[];
+  // Select montado em tempo de execução (colunas do Google só com a migração): o tipo vem daqui, não do parser.
+  return ((data ?? []) as unknown as ReportClientRow[]).filter((c) => !estaPausado(c as unknown as ClienteComPausa));
 }
 
 /** Um cliente pelo id, SEM os filtros de envio (status, pausa, contrato) — só pra PRÉVIA do relatório. */
 export async function selectReportClient(id: string): Promise<ReportClientRow | null> {
+  const g = await temColunasGoogle();
   const { data, error } = await supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, whatsapp_group_jid, whatsapp_group_name, nicho, cnae_principal")
+    .select(`id, name, nome_fantasia, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, whatsapp_group_jid, whatsapp_group_name, nicho, cnae_principal${g ? COLUNAS_GOOGLE : ""}`)
     .eq("id", id)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -179,7 +195,8 @@ function baseUrlPublica(): string {
  * público corrigido, conjunto com nome, gráfico honesto).
  */
 export async function montarHtmlRelatorioCliente(
-  token: string,
+  /** Token da Meta. null = sem token: cliente só de Google sai normalmente; quem tem anúncio na Meta falha nomeado. */
+  token: string | null,
   client: ReportClientRow,
   periodDays = 7,
   /** Intervalo EXATO (YYYY-MM-DD). Quando vem, manda nos anúncios em vez da janela de N dias —
@@ -189,7 +206,7 @@ export async function montarHtmlRelatorioCliente(
    *  número de julho ao lado de um número de 28 dias achando que são a mesma janela. */
   dateFrom?: string,
   dateTo?: string,
-): Promise<{ ok: boolean; html?: string; error?: string; anuncios?: RelatorioAnuncios | null }> {
+): Promise<{ ok: boolean; html?: string; error?: string; anuncios?: RelatorioAnuncios | null; google?: RelatorioGoogle | null; avisos?: string[] }> {
   // Só com contrato de tráfego — ver contaDeAnunciosDoRelatorio.
   const accountId = contaDeAnunciosDoRelatorio(client);
   const clientName = clientDisplayName(client);
@@ -220,34 +237,51 @@ export async function montarHtmlRelatorioCliente(
   // Falha na leitura do período atual NÃO vira relatório só de Instagram: pro cliente de tráfego,
   // um PDF sem os anúncios pareceria "não anunciamos nada". Vira erro nomeado pro time.
   let anuncios: Awaited<ReturnType<typeof lerRelatorioAnuncios>> = null;
-  if (accountId) {
+  if (accountId && !token) return { ok: false, error: "Token Meta ausente/expirado" };
+  if (accountId && token) {
     try {
       anuncios = await lerRelatorioAnuncios(token, contaGraph(accountId), janela, clientName);
     } catch (e) {
       return { ok: false, error: `Meta: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}` };
     }
   }
-  if (!anuncios && !igSnap) {
-    return { ok: false, error: motivoSemRelatorio(client) };
+  // ── Google Ads e Perfil da Empresa (do banco — a rotina google-sync grava todo dia às 7h) ──
+  // Bloco que não pôde ser lido NÃO vai pro PDF do cliente: o motivo volta em `avisos` para o time.
+  let google: RelatorioGoogle | null = null;
+  const avisos: string[] = [];
+  const temG = temGoogleNoRelatorio(client);
+  if (temG.ads || temG.perfil) {
+    try {
+      google = await lerRelatorioGoogle(client, janela);
+    } catch (e) {
+      avisos.push(`Google: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`);
+    }
+    if (google?.adsIndisponivel) avisos.push(`Google Ads fora do relatório: ${google.adsIndisponivel.motivo}`);
+    if (google?.perfilIndisponivel) avisos.push(`Perfil da Empresa fora do relatório: ${google.perfilIndisponivel.motivo}`);
+  }
+  const temFolhaGoogle = folhasGoogle(google, clientName).length > 0;
+
+  if (!anuncios && !igSnap && !temFolhaGoogle) {
+    return { ok: false, error: avisos.length ? avisos.join(" · ") : motivoSemRelatorio(client) };
   }
 
   const logo = (await loadLoneLogo().catch(() => "")) || `${baseUrlPublica()}/logo.png`;
-  const html = relatorioClienteHtml({ clienteNome: clientName, logo, geradoEm: hoje, janela, anuncios, instagram: igSnap });
+  const html = relatorioClienteHtml({ clienteNome: clientName, logo, geradoEm: hoje, janela, anuncios, instagram: igSnap, google });
   // Os dados voltam junto: o placar da segunda (legenda) sai dos MESMOS números do PDF.
-  return { ok: true, html, anuncios };
+  return { ok: true, html, anuncios, google, avisos };
 }
 
 /** Gera o PDF (Buffer) do relatório de UM cliente. Nunca lança. Ver montarHtmlRelatorioCliente. */
 export async function buildClientPdf(
-  token: string,
+  token: string | null,
   client: ReportClientRow,
   periodDays = 7,
   dateFrom?: string,
   dateTo?: string,
-): Promise<{ ok: boolean; buffer?: Buffer; error?: string; anuncios?: RelatorioAnuncios | null }> {
+): Promise<{ ok: boolean; buffer?: Buffer; error?: string; anuncios?: RelatorioAnuncios | null; google?: RelatorioGoogle | null; avisos?: string[] }> {
   const h = await montarHtmlRelatorioCliente(token, client, periodDays, dateFrom, dateTo);
   if (!h.ok || !h.html) return { ok: false, error: h.error ?? "falha ao montar o relatório" };
   const pdf = await htmlToPdf(h.html);
   if (!pdf.ok || !pdf.buffer) return { ok: false, error: pdf.error ?? "falha no render" };
-  return { ok: true, buffer: pdf.buffer, anuncios: h.anuncios ?? null };
+  return { ok: true, buffer: pdf.buffer, anuncios: h.anuncios ?? null, google: h.google ?? null, avisos: h.avisos ?? [] };
 }

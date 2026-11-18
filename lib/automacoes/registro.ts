@@ -406,6 +406,10 @@ export const AUTOMACOES: Automacao[] = [
     nome: "Relatórios de Instagram", descricao: "Pré-gera os relatórios de Instagram (semana e mês) de cada cliente para o portal não bater na Meta ao vivo.",
     familia: "Dados e sync", destino: "sistema", cron: "0 6,15 * * *", agendaBRT: "todo dia, 3h e 12h", maxSilencioHoras: 26,
   }),
+  ep("google-sync", {
+    nome: "Números do Google (Ads e Perfil da Empresa)", descricao: "Lê o Google Ads e o Perfil da Empresa (ligações, rotas, visitas ao site) de cada cliente vinculado e grava dia a dia para os relatórios e a aba Google do portal.",
+    familia: "Dados e sync", destino: "sistema", cron: "0 10 * * *", agendaBRT: "todo dia, 7h", maxSilencioHoras: 26, ensaio: "dry=1",
+  }),
   ep("sync-posts", {
     nome: "Postagens do mês + No ar", descricao: "Recalcula posts do mês e último post de cada cliente a partir do Instagram real, e fecha como \"No ar\" o card planejado que casou com um post real (mesmo cliente, ±1 dia, mesmo formato primeiro).",
     familia: "Dados e sync", destino: "sistema", cron: "30 9 * * *", agendaBRT: "todo dia, 6h30", maxSilencioHoras: 26, ensaio: "dry=1",

@@ -87,8 +87,8 @@ async function previa(url: URL): Promise<NextResponse> {
 
   const c = await selectReportClient(cliente);
   if (!c) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+  // Sem token, cliente só de Google/Instagram ainda tem prévia; quem tem anúncio na Meta falha com o motivo.
   const token = await getMetaToken();
-  if (!token) return NextResponse.json({ ok: false, error: "Token Meta ausente/expirado" }, { status: 503 });
 
   const h = await montarHtmlRelatorioCliente(token, c, periodDays, intervalo ? since : undefined, intervalo ? until : undefined);
   if (!h.ok || !h.html) {
@@ -241,10 +241,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const settings = await getAlertSettings();
+    // Sem token da Meta a rodada NÃO para mais (18/11/2026): cliente só de Google segue; quem tem anúncio na Meta
+    // falha nomeado ("Token Meta ausente/expirado") e entra na lista de falhas — o time vê cliente por cliente.
     const token = await getMetaToken();
-    if (!token) {
-      return NextResponse.json({ ok: false, status: "failed", error: "Token Meta ausente/expirado" }, { status: 200 });
-    }
 
     // Clientes ativos com Meta vinculada
     // SEMANAL É SÓ PRA QUEM TEM TRÁFEGO. Cliente de `assessoria_social` tem relatório MENSAL no
@@ -313,6 +312,8 @@ export async function POST(req: NextRequest) {
     const incertos: { cliente: string; erro?: string }[] = [];
     // Recebeu, mas o registro não gravou: a próxima rodada mandaria de novo. O time precisa saber.
     const semRegistro: string[] = [];
+    // Saiu, mas sem um bloco do Google (leitura falhou ou atrasada): não é falha do envio, mas o time precisa ver.
+    const parciais: string[] = [];
     // Quem falhou por erro PASSAGEIRO (a Meta demorou, caiu, recusou rajada) ganha uma segunda
     // tentativa no fim da rodada. Em 01/10 o relatório de setembro da Armazém do Ferro não saiu por
     // um timeout da Meta e ficou de fora — o aviso pedia pra "conferir", ninguém reenviou.
@@ -365,6 +366,7 @@ export async function POST(req: NextRequest) {
         if (!destinoJid) { failed++; errors.push(`${clientName}: sem grupo de WhatsApp cadastrado`); continue; }
         const res = await sendMediaDocument(destinoJid, pdf.buffer.toString("base64"), fileName, caption);
         if (res.ok || res.incerto) {
+          for (const a of pdf.avisos ?? []) parciais.push(`${clientName}: ${a}`);
           // O registro é o que impede o reenvio — o erro dele não pode sumir (antes: .then(() => {}, () => {})).
           if (res.ok) sent++; else incertos.push({ cliente: clientName, erro: res.error });
           const { error: eLog } = await supabaseAdmin.from("weekly_report_log").insert(res.ok
@@ -439,6 +441,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (!onlyClientId && parciais.length) {
+      const jid = process.env.CS_INTERNAL_GROUP_JID;
+      if (jid) {
+        await csSendGroupText(jid,
+          `ℹ️ *Relatório ${escopoLabel} saiu sem parte do Google para ${parciais.length} cliente(s)*\n\n${parciais.slice(0, 8).map((p) => `• ${p}`).join("\n")}`
+          + `\n\n_Confira a conta do Google na ficha do cliente (Admin › Google). Depois de corrigir, reenvie só para ele com ?clientId=._`,
+          undefined, { origem: "weekly-reports-google", destino: "interno" });
+      }
+    }
+
     if (reservou) {
       await fecharRodada(rotinaTrava, todayKeyBRT(), status !== "failed",
         `enviados ${sent} · falhas ${failed} · incertos ${incertos.length} · já tinham ${jaTinham}`);
@@ -446,7 +458,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: sent > 0 || status === "skipped", status, total: clients.length, sent, failed,
-      jaTinham, incertos, semRegistro, errors: errors.slice(0, 10),
+      jaTinham, incertos, semRegistro, errors: errors.slice(0, 10), parciais: parciais.slice(0, 10),
       ...(force ? { aviso: "force=1 não reenvia mais a quem já recebeu. Para reenviar a um cliente, use ?clientId=." } : {}),
     });
   } catch (err) {

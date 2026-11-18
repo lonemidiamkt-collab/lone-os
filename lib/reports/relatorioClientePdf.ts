@@ -20,6 +20,8 @@
 // decisão antiga que continua valendo: anúncio e perfil não se misturam na mesma página.
 
 import type { IgSnapshot, IgAudiencia } from "@/lib/meta/igSnapshot";
+import type { RelatorioGoogle } from "@/lib/google/relatorio";
+import { folhasGoogle, CSS_GOOGLE } from "./relatorioGooglePdf";
 import { formatarVariacao } from "@/components/ui/painel-comparativo-utils";
 import { formatarBRL } from "@/lib/portal/formatos";
 import { resumoInstagram } from "@/lib/portal/formatDelta";
@@ -60,6 +62,8 @@ export interface OpcoesRelatorio {
   instagram?: IgSnapshot | null;
   /** Janela pedida — usada no cabeçalho quando não há anúncios (cliente só de Instagram). */
   janela: Janela;
+  /** Google Ads e Perfil da Empresa (lib/google/relatorio-dados.ts). Uma folha para cada um que tiver número. */
+  google?: RelatorioGoogle | null;
 }
 
 // ── Pedaços ──────────────────────────────────────────────────────────────────
@@ -380,6 +384,7 @@ export function relatorioClienteHtml(o: OpcoesRelatorio): string {
   const ig = o.instagram && o.instagram.mapped && !o.instagram.error && o.instagram.conta ? o.instagram : null;
   const titulo = r ? r.vocab.titulo : o.janela.tipo === "semana" ? "Relatório semanal" : "Relatório mensal";
   const folhas: string[] = [];
+  const notas: string[] = [];
 
   if (r) {
     // "Comparado com agosto" só quando agosto existe. Conta que começou no período não tem o que
@@ -399,20 +404,31 @@ export function relatorioClienteHtml(o: OpcoesRelatorio): string {
       ${destaquesHtml(r)}
       ${r.publico ? publicoHtml(r.publico, r.leituraPublico, "Quem viu seus anúncios", "Pessoas alcançadas, por gênero e idade") : ""}
       __RODAPE__`);
+    notas.push(NOTA_META);
+  }
+  // Google logo depois dos anúncios da Meta: anúncio com anúncio, presença (Perfil, Instagram) depois.
+  const google = folhasGoogle(o.google, o.clienteNome);
+  for (const g of google) {
+    folhas.push(`${cabecalho(o, titulo)}
+      ${g.miolo}
+      __RODAPE__`);
+    notas.push(g.nota);
   }
   if (ig) {
+    const sozinho = !r && !google.length;
     folhas.push(`${cabecalho(o, titulo)}
-      ${igConteudo(ig, o.geradoEm, r ? undefined : o.clienteNome)}
+      ${igConteudo(ig, o.geradoEm, sozinho ? o.clienteNome : undefined)}
       __RODAPE__`);
+    notas.push(sozinho ? NOTA_SO_IG : NOTA_IG);
   }
 
   const total = folhas.length;
-  const corpo = folhas.map((f, i) => `<div class="folha">${f.replace("__RODAPE__", rodape(o, i + 1, total, i === 0 && r ? NOTA_META : r ? NOTA_IG : NOTA_SO_IG))}</div>`).join("\n");
+  const corpo = folhas.map((f, i) => `<div class="folha">${f.replace("__RODAPE__", rodape(o, i + 1, total, notas[i]))}</div>`).join("\n");
 
   return `<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <title>${esc(titulo)} — ${esc(o.clienteNome)}</title>
-<style>${CSS}</style></head>
+<style>${CSS}${CSS_GOOGLE}</style></head>
 <body>${corpo}</body></html>`;
 }
 

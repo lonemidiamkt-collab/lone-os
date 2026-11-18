@@ -248,16 +248,19 @@ export async function POST(req: NextRequest) {
 
       // Relatório de mídia paga só para quem contratou mídia paga. A conta vinculada continua
       // sendo necessária (é de onde o número vem), mas não é mais o que AUTORIZA.
-      if (withReport && podeFalarDeAnuncio(c) && c.meta_ad_account_id) {
+      // Google (18/11/2026): conta do Google Ads também dá relatório de segunda (o PDF traz a folha do Google).
+      if (withReport && podeFalarDeAnuncio(c) && (c.meta_ad_account_id || c.google_ads_customer_id)) {
         // Segunda, cliente de tráfego: PDF de 7 dias com a mensagem como legenda.
         if (force || !(await alreadySent(c.id, dateKey, "report"))) {
-          if (!token) {
+          if (!token && c.meta_ad_account_id) {
             reportFail++; errors.push(`${name} (relatório): token Meta ausente`); await logMsg(c.id, dateKey, "report", "failed", "token ausente");
           } else {
             const pdf = await buildClientPdf(token, c);
             if (!pdf.ok || !pdf.buffer) {
               reportFail++; errors.push(`${name} (relatório): ${pdf.error}`); await logMsg(c.id, dateKey, "report", "failed", pdf.error);
             } else {
+              // Saiu, mas sem um bloco do Google (leitura falhou/atrasada): não é falha do envio, mas o time vê.
+              for (const a of pdf.avisos ?? []) errors.push(`${name} (relatório enviado sem parte do Google): ${a}`);
               const fileName = `relatorio-${slug(name)}-${dateKey}.pdf`;
               let legenda = resend ? RESEND_REPORT_MESSAGE : mondayReportMessage();
               if (placarModo !== "off" && pdf.anuncios) {
