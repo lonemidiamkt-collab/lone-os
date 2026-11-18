@@ -8,8 +8,16 @@ import { useId } from "react";
 import { motion, MotionConfig, useReducedMotion, type Variants } from "framer-motion";
 import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
-  AlertTriangle, ArrowDownRight, ArrowUpRight, Lightbulb, Minus, Target, TrendingDown, TrendingUp,
+  AlertTriangle, ArrowDownRight, ArrowUpRight, Lightbulb, Minus, Target, TrendingDown, TrendingUp, type LucideIcon,
 } from "lucide-react";
+
+/** Efeito de cartão ao passar o mouse (só em quem tem mouse: no celular não fica "preso" depois do toque).
+ *  Sobe 2px, a borda acende e ganha sombra curta — sem brilho. Com "reduzir movimento", não sobe. */
+export const HOVER_CARTAO =
+  "transition-[transform,border-color,box-shadow] duration-200 ease-out motion-safe:[@media(hover:hover)]:hover:-translate-y-0.5 [@media(hover:hover)]:hover:border-foreground/15 [@media(hover:hover)]:hover:shadow-sm";
+
+/** Só a borda acende (cartões grandes, onde subir o bloco inteiro distrai). */
+export const HOVER_BORDA = "transition-colors duration-200 ease-out [@media(hover:hover)]:hover:border-foreground/15";
 import Skeleton from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { formatarVariacao, tomDaVariacao, variacao, type Natureza, type Tom } from "./painel-comparativo-utils";
@@ -38,6 +46,13 @@ export interface KpiComparativo {
   variacaoPct: number | null;
   natureza?: Natureza;
   dica?: string;
+  /** Ícone ao lado do rótulo (lucide). */
+  icone?: LucideIcon;
+  /** Mini-gráfico do período (valores por dia). Some se tiver menos de 2 pontos. */
+  tendencia?: number[];
+  /** Com `onSelecionar`, o cartão vira botão: clicar troca o que o gráfico mostra. */
+  onSelecionar?: () => void;
+  selecionado?: boolean;
 }
 
 export interface PainelComparativoProps {
@@ -67,7 +82,7 @@ export interface PainelComparativoProps {
 const numeroBR = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 const compactoBR = (n: number) => n.toLocaleString("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
 
-const COLS_KPI: Record<number, string> = { 1: "lg:grid-cols-1", 2: "lg:grid-cols-2", 3: "lg:grid-cols-3", 4: "lg:grid-cols-4" };
+const COLS_KPI: Record<number, string> = { 1: "lg:grid-cols-1", 2: "lg:grid-cols-2", 3: "lg:grid-cols-3", 4: "lg:grid-cols-4", 5: "sm:grid-cols-3 lg:grid-cols-5" };
 
 const entrada: Variants = {
   oculto: { opacity: 0, y: 8, filter: "blur(4px)" },
@@ -147,7 +162,7 @@ export function PainelComparativo({
         <div className={cn("grid gap-4", temLateral && "lg:grid-cols-3")}>
           {/* Gráfico: atual (área) × anterior (tracejado) */}
           <motion.div variants={entrada} custom={ordem++}
-            className={cn("flex min-w-0 flex-col rounded-xl border border-border bg-card p-4 sm:p-5", temLateral && "lg:col-span-2")}>
+            className={cn("flex min-w-0 flex-col rounded-xl border border-border bg-card p-4 sm:p-5", HOVER_BORDA, temLateral && "lg:col-span-2")}>
             <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
               <div className="min-w-0">
                 <h3 className="text-lone-h2 tracking-tight text-foreground">{titulo}</h3>
@@ -179,28 +194,38 @@ export function PainelComparativo({
                     <ComposedChart data={dados} margin={{ top: 6, right: 16, bottom: 0, left: 0 }}>
                       <defs>
                         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.22} />
+                          <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.28} />
+                          <stop offset="60%" stopColor="var(--primary)" stopOpacity={0.08} />
                           <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" />
-                      <XAxis dataKey="rotulo" tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={12}
+                      <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" strokeOpacity={0.7} />
+                      <XAxis dataKey="rotulo" tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={24} tickMargin={8}
                         tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
                       <YAxis tickLine={false} axisLine={false} width={larguraEixo} tickFormatter={(v) => formatarEixo(Number(v))}
-                        tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
+                        tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} allowDecimals={false} />
                       <Tooltip
-                        cursor={{ stroke: "var(--border)" }}
+                        // Linha-guia vertical que acompanha o mouse/dedo.
+                        cursor={{ stroke: "var(--muted-foreground)", strokeOpacity: 0.35, strokeWidth: 1, strokeDasharray: "3 3" }}
+                        animationDuration={150}
                         content={(p) => (
                           <DicaGrafico ativo={p.active} linha={p.payload?.[0]?.payload as LinhaGrafico | undefined}
                             rotuloAtual={rotuloAtual} rotuloAnterior={rotuloAnterior} temAnterior={temAnterior} formatar={formatarValor} />
                         )}
                       />
-                      <Area type="monotone" dataKey="atual" name={rotuloAtual} stroke="var(--primary)" strokeWidth={2}
-                        fill={`url(#${gradId})`} isAnimationActive={!reduzMovimento}
+                      <Area type="monotone" dataKey="atual" name={rotuloAtual} stroke="var(--primary)" strokeWidth={2.25}
+                        strokeLinecap="round" fill={`url(#${gradId})`} isAnimationActive={!reduzMovimento}
+                        animationDuration={700} animationEasing="ease-out"
                         dot={(d) => (d.payload?.atualSolto
                           ? <circle key={`a${d.index}`} cx={d.cx} cy={d.cy} r={3} fill="var(--primary)" />
                           : null)}
-                        activeDot={{ r: 4, fill: "var(--primary)", stroke: "var(--card)", strokeWidth: 2 }} />
+                        activeDot={(d: { cx?: number; cy?: number; index?: number }) => (
+                          // Ponto ativo com anel: o halo tintado marca o dia sem brilho.
+                          <g key={`ativo${d.index}`}>
+                            <circle cx={d.cx} cy={d.cy} r={9} fill="var(--primary)" fillOpacity={0.14} />
+                            <circle cx={d.cx} cy={d.cy} r={4.5} fill="var(--primary)" stroke="var(--card)" strokeWidth={2} />
+                          </g>
+                        )} />
                       {temAnterior && (
                         <Line type="monotone" dataKey="anterior" name={rotuloAnterior} stroke="var(--muted-foreground)"
                           strokeWidth={1.5} strokeDasharray="4 4" isAnimationActive={!reduzMovimento}
@@ -235,7 +260,7 @@ export function PainelComparativo({
         </div>
 
         {kpis.length > 0 && (
-          <div className={cn("grid grid-cols-2 gap-3 sm:gap-4", COLS_KPI[Math.min(kpis.length, 4)])}>
+          <div className={cn("grid grid-cols-2 gap-3 sm:gap-4", COLS_KPI[Math.min(kpis.length, 5)])}>
             {kpis.map((k) => (
               <motion.div key={k.rotulo} variants={entrada} custom={ordem++} className="min-w-0">
                 <CardKpi kpi={k} limiar={limiarNeutroPct} tomRuim={tomRuim} />
@@ -258,21 +283,26 @@ function DicaGrafico({ ativo, linha, rotuloAtual, rotuloAnterior, temAnterior, f
   const pct = variacao(linha.atual, linha.anterior);
   const valor = (n: number | null) => (n == null ? "—" : formatar(n));
   return (
-    <div className="min-w-[160px] rounded-lg border border-border bg-popover px-3 py-2 text-popover-foreground shadow-sm">
-      <p className="mb-1.5 text-lone-caption font-medium text-muted-foreground">{linha.rotulo}</p>
-      <div className="space-y-1 text-lone-body">
+    <div className="min-w-[180px] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-md">
+      <p className="border-b border-border bg-muted/50 px-3 py-1.5 text-lone-caption font-medium text-muted-foreground">{linha.rotulo}</p>
+      <div className="space-y-1.5 px-3 py-2 text-lone-body">
         <p className="flex items-center justify-between gap-4">
-          <span className="inline-flex items-center gap-1.5 text-muted-foreground"><span className="h-0.5 w-3 rounded-full bg-primary" />{rotuloAtual}</span>
-          <span className="font-medium tabular-nums text-foreground">{valor(linha.atual)}</span>
+          <span className="inline-flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-primary" />{rotuloAtual}</span>
+          <span className="text-sm font-semibold tabular-nums text-foreground">{valor(linha.atual)}</span>
         </p>
         {temAnterior && (
           <p className="flex items-center justify-between gap-4">
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground"><span className="w-3 border-t border-dashed border-muted-foreground" />{rotuloAnterior}</span>
+            <span className="inline-flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full border border-dashed border-muted-foreground" />{rotuloAnterior}</span>
             <span className="tabular-nums text-muted-foreground">{valor(linha.anterior)}</span>
           </p>
         )}
       </div>
-      {pct != null && <p className="mt-1.5 text-lone-caption tabular-nums text-muted-foreground">{formatarVariacao(pct)} no comparativo</p>}
+      {pct != null && (
+        <p className={cn("border-t border-border px-3 py-1.5 text-lone-caption font-medium tabular-nums",
+          pct > 0 ? "text-lone-success" : pct < 0 ? "text-lone-warning" : "text-muted-foreground")}>
+          {formatarVariacao(pct)} em relação ao período anterior
+        </p>
+      )}
     </div>
   );
 }
@@ -310,7 +340,7 @@ function CardDestaque({ destaque, grande, tomRuim }: { destaque: DestaqueCompara
   const tom = destaque.tom ?? "neutro";
   const Icone = tom === "bom" ? TrendingUp : tom === "ruim" ? TrendingDown : Lightbulb;
   return (
-    <div className="flex w-full flex-col rounded-xl border border-border bg-card p-5">
+    <div className={cn("flex w-full flex-col rounded-xl border border-border bg-card p-5", HOVER_BORDA)}>
       <span className={cn("grid h-8 w-8 place-items-center rounded-lg border", classesDoTom(tom, tomRuim))}>
         <Icone size={16} aria-hidden />
       </span>
@@ -327,11 +357,33 @@ function CardKpi({ kpi, limiar, tomRuim }: { kpi: KpiComparativo; limiar: number
   const texto = temPct ? formatarVariacao(pct) : "";
   const Seta = !temPct || texto === "0%" ? Minus : pct > 0 ? ArrowUpRight : ArrowDownRight;
   const leitura = tom === "bom" ? "melhorou" : tom === "ruim" ? "piorou" : "estável";
+  const Icone = kpi.icone;
+  const clicavel = !!kpi.onSelecionar;
+  const Tag = clicavel ? "button" : "div";
   return (
-    <div className="h-full rounded-xl border border-border bg-card p-4">
-      <p className="truncate text-lone-caption text-muted-foreground" title={kpi.rotulo}>{kpi.rotulo}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <p className="break-words text-lone-h1 font-semibold tracking-tight tabular-nums text-foreground sm:text-lone-hero">{kpi.valor}</p>
+    <Tag
+      {...(clicavel ? { type: "button" as const, onClick: kpi.onSelecionar, "aria-pressed": !!kpi.selecionado } : {})}
+      className={cn(
+        "group relative flex h-full w-full flex-col overflow-hidden rounded-xl border bg-card p-4 text-left",
+        HOVER_CARTAO,
+        kpi.selecionado ? "border-primary/50 ring-1 ring-primary/25" : "border-border",
+        clicavel && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+      )}>
+      {/* Faixa da marca no topo do cartão escolhido: diz "é este que está no gráfico" sem pintar o cartão todo. */}
+      {kpi.selecionado && <span aria-hidden className="absolute inset-x-0 top-0 h-0.5 bg-primary" />}
+      {/* span em vez de p/div: o cartão pode ser <button>, que só aceita conteúdo em linha. */}
+      <span className="flex min-w-0 items-center gap-1.5 text-lone-caption text-muted-foreground" title={kpi.rotulo}>
+        {Icone && (
+          <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors duration-200",
+            kpi.selecionado ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary")}>
+            <Icone size={13} aria-hidden />
+          </span>
+        )}
+        {/* Até 2 linhas: "Ligações pelo anúncio" cortava no celular. */}
+        <span className="line-clamp-2 leading-tight">{kpi.rotulo}</span>
+      </span>
+      <span className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="block break-words text-lone-h1 font-semibold tracking-tight tabular-nums text-foreground sm:text-lone-hero">{kpi.valor}</span>
         {temPct && (
           <span className={cn("inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-lone-caption font-medium tabular-nums", classesDoTom(tom, tomRuim))}>
             <Seta size={12} aria-hidden />
@@ -339,9 +391,29 @@ function CardKpi({ kpi, limiar, tomRuim }: { kpi: KpiComparativo; limiar: number
             <span className="sr-only"> ({leitura})</span>
           </span>
         )}
-      </div>
-      {kpi.dica && <p className="mt-1.5 text-lone-caption text-muted-foreground">{kpi.dica}</p>}
-    </div>
+      </span>
+      {kpi.dica && <span className="mt-1.5 block text-lone-caption text-muted-foreground">{kpi.dica}</span>}
+      {kpi.tendencia && kpi.tendencia.length >= 2 && (
+        <MiniTendencia valores={kpi.tendencia} realce={!!kpi.selecionado} />
+      )}
+    </Tag>
+  );
+}
+
+/** Mini-gráfico do cartão: linha fina na cor da marca, sem eixo. Acende no hover do cartão. */
+function MiniTendencia({ valores, realce }: { valores: number[]; realce: boolean }) {
+  const L = 100, A = 28;
+  const max = Math.max(...valores), min = Math.min(...valores);
+  const faixa = max - min || 1;
+  const pts = valores.map((v, i) => [(i / (valores.length - 1)) * L, A - 2 - ((v - min) / faixa) * (A - 4)] as const);
+  const linha = pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${L} ${A}`} preserveAspectRatio="none" aria-hidden
+      className={cn("mt-auto h-7 w-full pt-2 text-primary transition-opacity duration-200",
+        realce ? "opacity-100" : "opacity-50 group-hover:opacity-100")}>
+      <path d={`${linha} L${L},${A} L0,${A} Z`} fill="currentColor" fillOpacity={0.08} />
+      <path d={linha} fill="none" stroke="currentColor" strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
   );
 }
 

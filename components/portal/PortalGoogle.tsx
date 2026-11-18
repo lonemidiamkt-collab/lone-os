@@ -1,16 +1,21 @@
 "use client";
 
-// Aba "Google" do painel de resultados: Perfil da Empresa (Google Meu Negócio — ligações, rotas pedidas, visitas ao
-// site, conversas, onde o perfil apareceu e as buscas que o mostraram) e Google Ads (investimento, cliques,
-// conversões, o que os anúncios geraram e as campanhas).
+// Aba "Google" do painel de resultados — reformulada em 18/11/2026 (pedido do Roberto):
+//   · DUAS partes, com seletor no topo: Google Meu Negócio (Perfil da Empresa) PRIMEIRO, depois Google Anúncios.
+//   · Meu Negócio: ligações, rotas pedidas, cliques no site e mensagens — o que o dono entende como "gente que me
+//     procurou". Clicar num cartão troca o gráfico para aquela ação.
+//   · Anúncios: CLIQUES, nunca "conversões" (o dono não tem como conferir conversão; clique e ligação ele confere).
+//     Cartões: Cliques, Ligações pelo anúncio, Vezes que apareceu, Investido (com custo por clique).
 //
 // Os números vêm de /api/portal/[token]/google, que lê a MESMA conta do relatório semanal e mensal
-// (lib/google/relatorio.ts): o cliente vê aqui o que recebeu no PDF. Bloco que não pôde ser lido mostra
-// "atualizando" — nunca zero.
+// (lib/google/relatorio.ts). Bloco que não pôde ser lido mostra "atualizando" — nunca zero.
 
-import { useCallback, useEffect, useState } from "react";
-import { MapPin, Megaphone, RefreshCw, Search } from "lucide-react";
-import { Aviso, Cartao, CabecalhoSecao, Segmentado } from "./ui";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Eye, Globe, MapPin, Megaphone, MessageCircle, MousePointerClick, Navigation, Phone, RefreshCw, Search,
+  Smartphone, UtensilsCrossed, CalendarCheck, Wallet, Monitor, Map as MapaIcone, type LucideIcon,
+} from "lucide-react";
+import { Aviso, Cartao, CabecalhoSecao, ListaBarras, Segmentado } from "./ui";
 import Skeleton from "@/components/ui/Skeleton";
 import { chamar } from "@/lib/api/chamar";
 import { rotuloDia } from "@/lib/portal/formatos";
@@ -35,84 +40,94 @@ interface Resposta {
   perfilIndisponivel?: boolean;
 }
 
-const paraKpi = (k: KpiGoogle, moeda?: string): KpiComparativo => ({
-  rotulo: k.rotulo,
-  valor: formatarValor(k.valor, k.formato, moeda),
-  variacaoPct: k.variacaoPct,
-  natureza: k.natureza,
-  dica: k.nota ?? undefined,
-});
+type Parte = "negocio" | "anuncios";
 
-const paraSerie = (s: PontoGoogle[]) => s.map((p) => ({ rotulo: rotuloDia(p.dia), atual: p.atual, anterior: p.anterior }));
+const paraSerie = (s: PontoGoogle[] | undefined) => (s ?? []).map((p) => ({ rotulo: rotuloDia(p.dia), atual: p.atual, anterior: p.anterior }));
+const tendencia = (s: PontoGoogle[] | undefined) => (s ?? []).map((p) => p.atual);
 const intervalo = (a: string, b: string) => `${rotuloDia(a)} a ${rotuloDia(b)}`;
 const inteiro = (v: number) => Math.round(v).toLocaleString("pt-BR");
+const subtituloDe = (j: { inicio: string; fim: string }, ant: { inicio: string; fim: string } | null) =>
+  ant ? `${intervalo(j.inicio, j.fim)}, comparado com ${intervalo(ant.inicio, ant.fim)}` : intervalo(j.inicio, j.fim);
 
-function Linha({ rotulo, valor, sub }: { rotulo: string; valor: string; sub?: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3 border-t border-border py-2 first:border-t-0">
-      <span className="min-w-0 text-sm text-secondary-foreground">{rotulo}{sub && <span className="ml-1.5 text-lone-caption text-muted-foreground">{sub}</span>}</span>
-      <span className="shrink-0 text-sm font-medium tabular-nums text-foreground">{valor}</span>
-    </div>
-  );
-}
+// ── Google Meu Negócio ──────────────────────────────────────────────────────────────────────────────
 
-function Barra({ rotulo, valor, total }: { rotulo: string; valor: number; total: number }) {
-  const pct = total > 0 ? Math.round((valor / total) * 100) : 0;
-  return (
-    <div className="flex items-center gap-3 text-sm">
-      <span className="w-28 shrink-0 text-muted-foreground">{rotulo}</span>
-      <span className="h-2 flex-1 overflow-hidden rounded-full bg-muted" role="img" aria-label={`${rotulo}: ${pct}%`}>
-        <span className="block h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-      </span>
-      <span className="w-20 shrink-0 text-right tabular-nums text-foreground">{inteiro(valor)} <span className="text-muted-foreground">({pct}%)</span></span>
-    </div>
-  );
-}
+const ICONE_ACAO: Record<string, LucideIcon> = {
+  ligacoes: Phone, rotas: Navigation, cliques_site: Globe, conversas: MessageCircle, reservas: CalendarCheck, cardapio: UtensilsCrossed,
+};
+/** Título do gráfico quando a ação está escolhida. */
+const GRAFICO_ACAO: Record<string, string> = {
+  ligacoes: "Ligações por dia", rotas: "Rotas pedidas por dia", cliques_site: "Cliques no site por dia",
+  conversas: "Mensagens por dia", reservas: "Reservas por dia", cardapio: "Cliques no cardápio por dia",
+};
 
-function BlocoPerfil({ r, carregando }: { r: RelatorioGooglePerfil; carregando: boolean }) {
-  const v = r.visualizacoes;
+function BlocoNegocio({ r, carregando }: { r: RelatorioGooglePerfil; carregando: boolean }) {
+  // null = todos os contatos somados; clicar num cartão mostra só aquela ação; clicar de novo volta ao total.
+  const [escolha, setEscolha] = useState<string | null>(null);
   const total = r.kpis.find((k) => k.chave === "acoes");
+  const v = r.visualizacoes;
+  const acaoEscolhida = r.acoes.find((a) => a.chave === escolha);
+
+  const kpis: KpiComparativo[] = r.acoes.map((a) => ({
+    rotulo: a.rotulo === "Visitas ao site" ? "Cliques no site" : a.rotulo,
+    valor: inteiro(a.valor),
+    variacaoPct: a.variacaoPct,
+    natureza: "direta",
+    icone: ICONE_ACAO[a.chave],
+    tendencia: tendencia(r.seriePorAcao?.[a.chave]),
+    selecionado: escolha === a.chave,
+    onSelecionar: r.seriePorAcao?.[a.chave]?.length ? () => setEscolha((e) => (e === a.chave ? null : a.chave)) : undefined,
+  }));
+
   return (
     <div className="space-y-4">
-      <CabecalhoSecao icone={MapPin} titulo="Seu perfil no Google" descricao="Busca e Maps: quem achou a sua empresa e entrou em contato" />
+      <CabecalhoSecao icone={MapPin} titulo="Seu perfil no Google"
+        descricao="Quem achou a sua empresa na Busca e no Maps e entrou em contato" />
       {r.nota && <Aviso tom="neutro">{r.nota}</Aviso>}
       <PainelComparativo
         carregando={carregando}
-        titulo="Contatos pelo perfil por dia"
-        subtitulo={r.anterior ? `${intervalo(r.janela.inicio, r.janela.fim)}, comparado com ${intervalo(r.anterior.inicio, r.anterior.fim)}` : intervalo(r.janela.inicio, r.janela.fim)}
+        titulo={acaoEscolhida ? GRAFICO_ACAO[acaoEscolhida.chave] ?? acaoEscolhida.rotulo : "Contatos pelo perfil por dia"}
+        subtitulo={subtituloDe(r.janela, r.anterior)}
         rotuloAtual="Este período"
         rotuloAnterior="Período anterior"
-        serie={paraSerie(r.serieAcoes)}
+        serie={paraSerie(acaoEscolhida ? r.seriePorAcao?.[acaoEscolhida.chave] : r.serieAcoes)}
         formatarValor={(n) => n.toLocaleString("pt-BR")}
-        destaque={{ texto: r.frase, tom: tomDaVariacao(total?.variacaoPct, "direta", 5) }}
-        kpis={r.kpis.slice(0, 4).map((k) => paraKpi(k))}
+        destaque={{
+          texto: r.frase,
+          tom: tomDaVariacao(total?.variacaoPct, "direta", 5),
+          detalhe: "Toque num número abaixo para ver só ele no gráfico.",
+        }}
+        kpis={kpis}
         limiarNeutroPct={5}
         tomRuim="atencao"
         vazio="Nenhum contato pelo perfil neste período."
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <Cartao as="section" className="p-4 sm:p-5">
-          <CabecalhoSecao nivel={3} titulo="Onde o perfil apareceu" descricao={`${inteiro(v.total)} visualizações no período`} />
-          <div className="mt-4 space-y-2.5">
-            <Barra rotulo="Busca do Google" valor={v.busca} total={v.total} />
-            <Barra rotulo="Google Maps" valor={v.mapas} total={v.total} />
-            <div className="h-1" />
-            <Barra rotulo="Celular" valor={v.celular} total={v.total} />
-            <Barra rotulo="Computador" valor={v.computador} total={v.total} />
-          </div>
-          <div className="mt-4">
-            {r.acoes.map((a) => (
-              <Linha key={a.chave} rotulo={a.rotulo} sub={a.nota} valor={inteiro(a.valor)} />
-            ))}
+          <CabecalhoSecao nivel={3} icone={Eye} titulo="Onde o perfil apareceu"
+            descricao={`${inteiro(v.total)} ${v.total === 1 ? "vez" : "vezes"} no período`} />
+          <div className="mt-4 space-y-4">
+            <ListaBarras rotulo="Busca ou Maps" itens={[
+              { chave: "busca", rotulo: "Busca do Google", valor: v.busca, icone: Search, texto: pctDe(v.busca, v.total) },
+              { chave: "mapas", rotulo: "Google Maps", valor: v.mapas, icone: MapaIcone, texto: pctDe(v.mapas, v.total) },
+            ]} />
+            <ListaBarras rotulo="Celular ou computador" itens={[
+              { chave: "celular", rotulo: "Celular", valor: v.celular, icone: Smartphone, texto: pctDe(v.celular, v.total) },
+              { chave: "computador", rotulo: "Computador", valor: v.computador, icone: Monitor, texto: pctDe(v.computador, v.total) },
+            ]} />
           </div>
         </Cartao>
         <Cartao as="section" className="p-4 sm:p-5">
-          <CabecalhoSecao nivel={3} icone={Search} titulo="Buscas que mostraram o perfil"
-            descricao={r.termosMes ? `Em ${r.termosMes} — o Google fecha os termos por mês` : "O Google fecha os termos por mês"} />
-          <div className="mt-3">
-            {r.termos.length ? r.termos.map((t, i) => (
-              <Linha key={t.termo} rotulo={`${i + 1}. ${t.termo}`} valor={t.valor != null ? inteiro(t.valor) : t.limiar != null ? `menos de ${inteiro(t.limiar)}` : "—"} />
-            )) : <p className="py-2 text-sm text-muted-foreground">O Google ainda não liberou os termos de busca do mês.</p>}
+          <CabecalhoSecao nivel={3} icone={Search} titulo="O que pesquisaram"
+            descricao={r.termosMes ? `Buscas que mostraram o seu perfil em ${r.termosMes}` : "O Google fecha os termos de busca por mês"} />
+          <div className="mt-4">
+            <ListaBarras rotulo="Buscas que mostraram o perfil"
+              vazio="O Google ainda não liberou os termos de busca do mês."
+              itens={r.termos.map((t) => ({
+                chave: t.termo,
+                rotulo: t.termo,
+                valor: t.valor ?? t.limiar ?? 0,
+                texto: t.valor != null ? inteiro(t.valor) : t.limiar != null ? `menos de ${inteiro(t.limiar)}` : "—",
+              }))} />
           </div>
         </Cartao>
       </div>
@@ -120,75 +135,92 @@ function BlocoPerfil({ r, carregando }: { r: RelatorioGooglePerfil; carregando: 
   );
 }
 
-function BlocoAds({ r, carregando }: { r: RelatorioGoogleAds; carregando: boolean }) {
-  const [metrica, setMetrica] = useState<"conversoes" | "cliques">("conversoes");
+const pctDe = (v: number, total: number) => `${total > 0 ? Math.round((v / total) * 100) : 0}%`;
+
+// ── Google Anúncios ─────────────────────────────────────────────────────────────────────────────────
+
+type MetricaAds = "cliques" | "ligacoes" | "impressoes" | "investimento";
+
+const GRAFICO_ADS: Record<MetricaAds, string> = {
+  cliques: "Cliques por dia", ligacoes: "Ligações pelo anúncio por dia", impressoes: "Vezes que os anúncios apareceram por dia", investimento: "Investimento por dia",
+};
+
+function BlocoAnuncios({ r, carregando }: { r: RelatorioGoogleAds; carregando: boolean }) {
+  const [metrica, setMetrica] = useState<MetricaAds>("cliques");
   const k = (c: string) => r.kpis.find((x) => x.chave === c);
-  const temConv = (k("conversoes")?.valor ?? 0) > 0 || (k("conversoes")?.anterior ?? 0) > 0;
-  const m = temConv ? metrica : "cliques";
-  const ordem = temConv ? ["conversoes", "investimento", "custo_conversao", "cliques"] : ["cliques", "investimento", "cpc", "impressoes"];
-  const kpis = ordem.map(k).filter((x): x is KpiGoogle => !!x).map((x) => paraKpi(x, r.moeda));
-  const principal = k(m);
+  const dinheiro = (n: number | null) => formatarValor(n, "dinheiro", r.moeda);
+  const series: Record<MetricaAds, PontoGoogle[]> = {
+    cliques: r.serieCliques, ligacoes: r.serieLigacoes ?? [], impressoes: r.serieImpressoes ?? [], investimento: r.serieInvestimento ?? [],
+  };
+  const cartao = (m: MetricaAds, x: KpiGoogle | undefined, rotulo: string, icone: LucideIcon, dica?: string): KpiComparativo | null =>
+    x ? {
+      rotulo, icone, dica,
+      valor: formatarValor(x.valor, x.formato, r.moeda),
+      variacaoPct: x.variacaoPct,
+      natureza: x.natureza,
+      tendencia: tendencia(series[m]),
+      selecionado: metrica === m,
+      // Sem a série (resposta de uma versão anterior do servidor), o cartão não troca o gráfico para o vazio.
+      onSelecionar: series[m]?.length ? () => setMetrica(m) : undefined,
+    } : null;
+
+  const ctr = k("ctr")?.valor, cpc = k("cpc")?.valor;
+  const kpis = [
+    cartao("cliques", k("cliques"), "Cliques", MousePointerClick, "pessoas que tocaram no anúncio"),
+    cartao("ligacoes", k("ligacoes"), "Ligações pelo anúncio", Phone, "toques no botão de ligar"),
+    cartao("impressoes", k("impressoes"), "Vezes que apareceu", Eye, ctr != null ? `${formatarValor(ctr, "pct")} clicaram` : undefined),
+    cartao("investimento", k("investimento"), "Investido", Wallet, cpc != null ? `${dinheiro(cpc)} por clique` : undefined),
+  ].filter((x): x is KpiComparativo => !!x);
+  const m = kpis.some((x) => x.selecionado) ? metrica : "cliques";
+
   return (
     <div className="space-y-4">
-      <CabecalhoSecao icone={Megaphone} titulo="Anúncios no Google" descricao="Google Ads: Pesquisa, Maps, YouTube e Performance Max" />
-      {temConv && (
-        <Segmentado rotulo="Ver no gráfico" tamanho="sm" valor={metrica} onChange={setMetrica}
-          opcoes={[{ valor: "conversoes", rotulo: "Conversões" }, { valor: "cliques", rotulo: "Cliques" }]} />
-      )}
+      <CabecalhoSecao icone={Megaphone} titulo="Seus anúncios no Google" descricao="Pesquisa, Maps, YouTube e Performance Max" />
       <PainelComparativo
         carregando={carregando}
-        titulo={m === "conversoes" ? "Conversões por dia" : "Cliques por dia"}
-        subtitulo={r.anterior ? `${intervalo(r.janela.inicio, r.janela.fim)}, comparado com ${intervalo(r.anterior.inicio, r.anterior.fim)}` : intervalo(r.janela.inicio, r.janela.fim)}
+        titulo={GRAFICO_ADS[m]}
+        subtitulo={subtituloDe(r.janela, r.anterior)}
         rotuloAtual="Este período"
         rotuloAnterior="Período anterior"
-        serie={paraSerie(m === "conversoes" ? r.serieConversoes : r.serieCliques)}
-        formatarValor={(n) => n.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
-        destaque={{ texto: r.frase, tom: tomDaVariacao(principal?.variacaoPct, "direta", 5) }}
+        serie={paraSerie(series[m])}
+        formatarValor={m === "investimento" ? (n) => dinheiro(n) : (n) => n.toLocaleString("pt-BR")}
+        larguraEixo={m === "investimento" ? 56 : 44}
+        destaque={{ texto: r.frase, tom: tomDaVariacao(k("cliques")?.variacaoPct, "direta", 5), detalhe: "Toque num número abaixo para ver ele no gráfico." }}
         kpis={kpis}
         limiarNeutroPct={5}
         tomRuim="atencao"
         vazio="Os anúncios no Google não rodaram neste período."
       />
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Cartao as="section" className="p-4 sm:p-5 lg:col-span-2">
-          <CabecalhoSecao nivel={3} titulo="O que os anúncios geraram" descricao="Ações registradas pelo Google Ads" />
-          <div className="mt-3">
-            {r.acoes.length ? r.acoes.map((a) => (
-              <Linha key={a.categoria} rotulo={a.rotulo} valor={formatarValor(a.todas, "decimal")} />
-            )) : <p className="py-2 text-sm text-muted-foreground">Nenhuma ação de conversão registrada no período.</p>}
-            {k("ligacoes") && <Linha rotulo="Ligações pelo anúncio" sub="botão de ligar" valor={formatarValor(k("ligacoes")!.valor, "inteiro")} />}
-            <Linha rotulo="Impressões" valor={formatarValor(k("impressoes")?.valor ?? null, "inteiro")} />
-            <Linha rotulo="Taxa de cliques" valor={formatarValor(k("ctr")?.valor ?? null, "pct")} />
-            <Linha rotulo="Custo por clique" valor={formatarValor(k("cpc")?.valor ?? null, "dinheiro", r.moeda)} />
-          </div>
-        </Cartao>
-        <Cartao as="section" className="p-4 sm:p-5 lg:col-span-3">
-          <CabecalhoSecao nivel={3} titulo="Campanhas" descricao="Por investimento no período" />
-          <div className="mt-3">
-            {r.campanhas.length ? r.campanhas.slice(0, 8).map((c) => (
-              <div key={c.id} className="border-t border-border py-2.5 first:border-t-0">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="min-w-0 break-words text-sm font-medium text-foreground">{c.nome}</span>
-                  <span className="shrink-0 text-sm tabular-nums text-foreground">{formatarValor(c.custo, "dinheiro", r.moeda)}</span>
-                </div>
-                <p className="mt-0.5 text-lone-caption text-muted-foreground">
-                  {c.canal} · {inteiro(c.cliques)} cliques · {formatarValor(c.conversoes, "decimal")} conversões
-                  {c.custoPorConversao != null ? ` · ${formatarValor(c.custoPorConversao, "dinheiro", r.moeda)} por conversão` : ""}
-                </p>
-              </div>
-            )) : <p className="py-2 text-sm text-muted-foreground">Nenhuma campanha com veiculação no período.</p>}
-          </div>
-        </Cartao>
-      </div>
+      <Cartao as="section" className="p-4 sm:p-5">
+        <CabecalhoSecao nivel={3} titulo="Campanhas" descricao="Onde o investimento foi e quantos cliques trouxe" />
+        <div className="mt-4">
+          <ListaBarras rotulo="Campanhas por investimento"
+            vazio="Nenhuma campanha com veiculação no período."
+            itens={r.campanhas.slice(0, 8).map((c) => ({
+              chave: c.id,
+              rotulo: <span className="font-medium">{c.nome}</span>,
+              valor: c.custo,
+              texto: dinheiro(c.custo),
+              detalhe: [
+                c.canal,
+                c.cliques > 0 ? `${inteiro(c.cliques)} ${c.cliques === 1 ? "clique" : "cliques"}` : `${inteiro(c.impressoes)} vezes na tela`,
+                c.cliques > 0 ? `${dinheiro(c.custo / c.cliques)} por clique` : null,
+              ].filter(Boolean).join(" · "),
+            }))} />
+        </div>
+      </Cartao>
     </div>
   );
 }
+
+// ── A aba ───────────────────────────────────────────────────────────────────────────────────────────
 
 export default function PortalGoogle({ token }: { token: string }) {
   const [periodo, setPeriodo] = useState<PeriodKind>("last_week");
   const [dados, setDados] = useState<Resposta | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [parte, setParte] = useState<Parte | null>(null);
 
   const buscar = useCallback(async (p: PeriodKind) => {
     setCarregando(true);
@@ -205,16 +237,30 @@ export default function PortalGoogle({ token }: { token: string }) {
 
   useEffect(() => { buscar(periodo); }, [buscar, periodo]);
 
-  const nada = !carregando && !erro && dados && !dados.aviso && !dados.ads && !dados.perfil && !dados.adsIndisponivel && !dados.perfilIndisponivel;
+  const temNegocio = !!dados?.perfil || !!dados?.perfilIndisponivel;
+  const temAnuncios = !!dados?.ads || !!dados?.adsIndisponivel;
+  const partes = useMemo(() => [
+    ...(temNegocio ? [{ valor: "negocio" as const, rotulo: "Google Meu Negócio", icone: MapPin }] : []),
+    ...(temAnuncios ? [{ valor: "anuncios" as const, rotulo: "Google Anúncios", icone: Megaphone }] : []),
+  ], [temNegocio, temAnuncios]);
+  // Meu Negócio vem primeiro; se o cliente só tem uma das partes, é ela.
+  const atual: Parte | null = parte && partes.some((p) => p.valor === parte) ? parte : partes[0]?.valor ?? null;
+
+  const nada = !carregando && !erro && dados && !dados.aviso && !temNegocio && !temAnuncios;
 
   return (
     <div className="space-y-6">
-      <Segmentado rotulo="Período" opcoes={PERIODOS} valor={periodo} onChange={setPeriodo} desabilitado={carregando} cheio className="sm:inline-flex sm:w-auto" />
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        {partes.length > 1 && atual && (
+          <Segmentado rotulo="Parte do Google" opcoes={partes} valor={atual} onChange={setParte} destaque />
+        )}
+        <Segmentado rotulo="Período" opcoes={PERIODOS} valor={periodo} onChange={setPeriodo} desabilitado={carregando} cheio className="sm:inline-flex sm:w-auto" />
+      </div>
 
       {erro && !carregando && (
         <Aviso tom="atencao" role="alert" acao={
           <button onClick={() => buscar(periodo)}
-            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-xs font-medium text-foreground hover:bg-accent">
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-xs font-medium text-foreground transition-colors hover:bg-accent">
             <RefreshCw size={13} aria-hidden /> Tentar de novo
           </button>
         }>{erro}</Aviso>
@@ -225,13 +271,13 @@ export default function PortalGoogle({ token }: { token: string }) {
         <div className="space-y-4" aria-busy="true"><Skeleton className="h-8 w-60" /><Skeleton className="h-72" /></div>
       )}
 
-      {dados?.perfil && <BlocoPerfil r={dados.perfil} carregando={carregando} />}
-      {dados?.perfilIndisponivel && !carregando && (
+      {atual === "negocio" && dados?.perfil && <BlocoNegocio r={dados.perfil} carregando={carregando} />}
+      {atual === "negocio" && !dados?.perfil && dados?.perfilIndisponivel && !carregando && (
         <Aviso tom="info" role="status">Os números do seu perfil no Google estão sendo atualizados — volte mais tarde.</Aviso>
       )}
 
-      {dados?.ads && <BlocoAds r={dados.ads} carregando={carregando} />}
-      {dados?.adsIndisponivel && !carregando && (
+      {atual === "anuncios" && dados?.ads && <BlocoAnuncios r={dados.ads} carregando={carregando} />}
+      {atual === "anuncios" && !dados?.ads && dados?.adsIndisponivel && !carregando && (
         <Aviso tom="info" role="status">Os números dos anúncios no Google estão sendo atualizados — volte mais tarde.</Aviso>
       )}
 

@@ -178,7 +178,13 @@ describe("relatório do Google Ads", () => {
     expect(k.ligacoes.valor).toBe(7);
     expect(r.serieCliques).toHaveLength(7);
     expect(r.serieCliques[0]).toEqual({ dia: "2026-11-09", atual: 10, anterior: 5 });
-    expect(r.frase).toMatch(/70 cliques, 100% a mais que na semana anterior e 7 conversões/);
+    // 18/11/2026: a frase fala de clique e ligação, nunca de "conversão".
+    expect(r.frase.replace(/\s/g, " ")).toBe("Na última semana, 70 pessoas clicaram nos seus anúncios no Google, 100% a mais que na semana anterior, e 7 ligaram direto pelo anúncio, com R$ 140,00 investidos.");
+    expect(r.frase).not.toMatch(/convers/i);
+    // Uma série por cartão do painel (clicar no cartão troca o gráfico).
+    expect(r.serieLigacoes[0]).toEqual({ dia: "2026-11-09", atual: 1, anterior: 1 });
+    expect(r.serieImpressoes[0].atual).toBe(100);
+    expect(r.serieInvestimento[0]).toEqual({ dia: "2026-11-09", atual: 20, anterior: 20 });
   });
 
   it("período anterior sem veiculação não é base de comparação", () => {
@@ -227,6 +233,10 @@ describe("relatório do Perfil da Empresa", () => {
     expect(r.visualizacoes).toMatchObject({ busca: 420, mapas: 280, celular: 560, computador: 140 });
     // Reserva e cardápio zerados nos dois períodos não aparecem.
     expect(r.acoes.map((a) => a.chave)).toEqual(["ligacoes", "rotas", "cliques_site", "conversas"]);
+    // Cada cartão tem a própria série por dia (o painel troca o gráfico ao clicar).
+    expect(r.seriePorAcao.ligacoes).toHaveLength(r.serieAcoes.length);
+    expect(r.seriePorAcao.ligacoes?.[0].atual).toBe(2);
+    expect(r.seriePorAcao.visualizacoes?.[0].atual).toBe(100);
     expect(r.termos.map((t) => t.termo)).toEqual(["b", "a"]);
     expect(r.frase).toBe("Na última semana, o seu perfil apareceu 700 vezes no Google e gerou 14 ligações, 7 rotas pedidas e 21 visitas ao site — 20% mais contatos que na semana anterior.");
   });

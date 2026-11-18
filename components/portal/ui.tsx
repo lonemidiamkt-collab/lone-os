@@ -8,6 +8,7 @@ import { useId, useState, type HTMLAttributes, type ReactNode } from "react";
 import { motion, type Variants } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { HOVER_BORDA } from "@/components/ui/painel-comparativo";
 
 /** Mesma entrada do PainelComparativo do topo (sobe 8px e aparece). Com "reduzir movimento" o
  *  MotionConfig da página tira o deslocamento e fica só o fade. */
@@ -19,9 +20,52 @@ export const entrada: Variants = {
   }),
 };
 
-export function Cartao({ children, className, as: Tag = "div", ...resto }:
-  { children: ReactNode; className?: string; as?: "div" | "section" } & Omit<HTMLAttributes<HTMLElement>, "className" | "children">) {
-  return <Tag className={cn("rounded-xl border border-border bg-card", className)} {...resto}>{children}</Tag>;
+/** `interativo`: a borda acende ao passar o mouse (padrão do painel — ver HOVER_BORDA). */
+export function Cartao({ children, className, as: Tag = "div", interativo = true, ...resto }:
+  { children: ReactNode; className?: string; as?: "div" | "section"; interativo?: boolean } & Omit<HTMLAttributes<HTMLElement>, "className" | "children">) {
+  return <Tag className={cn("rounded-xl border border-border bg-card", interativo && HOVER_BORDA, className)} {...resto}>{children}</Tag>;
+}
+
+export interface ItemBarra { chave: string; rotulo: ReactNode; valor: number; texto?: string; detalhe?: ReactNode; icone?: LucideIcon }
+
+/**
+ * Lista com barra embutida (ranking, divisão por canal/tipo): a barra é a fatia do MAIOR item, então o 1º sempre
+ * enche a linha e os outros se medem contra ele. Linha acende no hover; a barra cresce ao aparecer.
+ */
+export function ListaBarras({ itens, formatar = (n) => n.toLocaleString("pt-BR"), vazio, rotulo }: {
+  itens: readonly ItemBarra[];
+  formatar?: (n: number) => string;
+  vazio?: ReactNode;
+  /** Nome da lista para leitor de tela. */
+  rotulo: string;
+}) {
+  const max = Math.max(0, ...itens.map((i) => i.valor));
+  if (!itens.length) return <p className="py-2 text-sm text-muted-foreground">{vazio}</p>;
+  return (
+    <ul aria-label={rotulo} className="space-y-1">
+      {itens.map((it, i) => {
+        const pct = max > 0 ? Math.max(it.valor > 0 ? 3 : 0, (it.valor / max) * 100) : 0;
+        const Icone = it.icone;
+        return (
+          <li key={it.chave} className="group -mx-2 rounded-lg px-2 py-1.5 transition-colors duration-150 [@media(hover:hover)]:hover:bg-accent/60">
+            <div className="flex items-baseline justify-between gap-3 text-sm">
+              <span className="flex min-w-0 items-center gap-2 text-foreground">
+                {Icone && <Icone size={14} className="shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden />}
+                <span className="min-w-0 break-words">{it.rotulo}</span>
+              </span>
+              <span className="shrink-0 font-medium tabular-nums text-foreground">{it.texto ?? formatar(it.valor)}</span>
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+              <motion.div className="h-full rounded-full bg-primary/70 transition-colors group-hover:bg-primary"
+                initial={{ width: 0 }} animate={{ width: `${pct}%` }}
+                transition={{ duration: 0.7, delay: Math.min(i, 8) * 0.04, ease: [0.16, 1, 0.3, 1] }} />
+            </div>
+            {it.detalhe && <p className="mt-1 text-lone-caption text-muted-foreground">{it.detalhe}</p>}
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 export function CabecalhoSecao({ titulo, descricao, icone: Icone, acao, className, nivel = 2 }: {

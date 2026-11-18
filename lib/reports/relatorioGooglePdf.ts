@@ -103,31 +103,24 @@ function deltaCurto(atual: number, anterior: number | null): string {
 // ── Google Ads ───────────────────────────────────────────────────────────────
 
 function adsFolha(r: RelatorioGoogleAds, clienteNome: string): string {
+  // 18/11/2026: o relatório fala de CLIQUE e LIGAÇÃO, não de "conversão" — o mesmo que o painel mostra.
   const k = (c: string) => r.kpis.find((x) => x.chave === c);
-  const temConv = (k("conversoes")?.valor ?? 0) > 0 || (k("conversoes")?.anterior ?? 0) > 0;
-  const principal = temConv ? "conversoes" : "cliques";
-  const ordem = temConv
-    ? ["conversoes", "investimento", "custo_conversao", "cliques", "ligacoes"]
-    : ["cliques", "investimento", "cpc", "impressoes", "ligacoes"];
-  const faixaKpis = ordem.map(k).filter((x): x is KpiGoogle => !!x);
+  const principal = "cliques";
+  const faixaKpis = ["cliques", "ligacoes", "impressoes", "investimento"].map(k).filter((x): x is KpiGoogle => !!x);
   const antes = r.anterior && r.kpis.some((x) => x.anterior != null) ? `Comparado com ${r.anterior.rotulo}.` : "";
 
-  const acoes = r.acoes.length
-    ? `<div class="g-lista">${r.acoes.slice(0, 7).map((a) => `<div class="numero"><span>${esc(a.rotulo)}</span><b>${fmtQtd(a.todas)} ${deltaCurto(a.todas, a.anterior)}</b></div>`).join("")}</div>`
-    : `<div class="vazio">Nenhuma ação de conversão registrada pelo Google Ads no período.</div>`;
   const outros: [string, string][] = [
-    ["Impressões", formatarValor(k("impressoes")?.valor ?? null, "inteiro")],
-    ["Taxa de cliques (CTR)", formatarValor(k("ctr")?.valor ?? null, "pct")],
+    ["Taxa de cliques", formatarValor(k("ctr")?.valor ?? null, "pct")],
     ["Custo por clique", formatarValor(k("cpc")?.valor ?? null, "dinheiro", r.moeda)],
   ];
-  if (temConv) outros.unshift(["Cliques", formatarValor(k("cliques")?.valor ?? null, "inteiro")]);
-  if (k("valor")) outros.push(["Valor das conversões", formatarValor(k("valor")!.valor, "dinheiro", r.moeda)]);
+  const ligSerie = r.serieLigacoes.some((p) => p.atual > 0);
 
   const camps = r.campanhas.slice(0, 6);
+  const porClique = (c: { custo: number; cliques: number }) => (c.cliques > 0 ? formatarValor(c.custo / c.cliques, "dinheiro", r.moeda) : "—");
   const tabela = camps.length ? `<section class="bloco">
       <h2>Campanhas</h2><div class="sub">Por investimento no período</div>
-      <table class="g-tabela"><thead><tr><th>Campanha</th><th>Tipo</th><th>Investido</th><th>Cliques</th><th>Conversões</th><th>Custo/conv.</th></tr></thead>
-      <tbody>${camps.map((c) => `<tr><td>${esc(c.nome)}</td><td>${esc(c.canal)}</td><td>${esc(formatarValor(c.custo, "dinheiro", r.moeda))}</td><td>${inteiro(c.cliques)}</td><td>${fmtQtd(c.conversoes)}</td><td>${esc(formatarValor(c.custoPorConversao, "dinheiro", r.moeda))}</td></tr>`).join("")}</tbody></table>
+      <table class="g-tabela"><thead><tr><th>Campanha</th><th>Tipo</th><th>Investido</th><th>Cliques</th><th>Por clique</th></tr></thead>
+      <tbody>${camps.map((c) => `<tr><td>${esc(c.nome)}</td><td>${esc(c.canal)}</td><td>${esc(formatarValor(c.custo, "dinheiro", r.moeda))}</td><td>${inteiro(c.cliques)}</td><td>${esc(porClique(c))}</td></tr>`).join("")}</tbody></table>
       ${r.campanhas.length > camps.length ? `<div class="sub">+ ${r.campanhas.length - camps.length} campanha(s) com investimento menor</div>` : ""}
     </section>` : "";
 
@@ -138,9 +131,9 @@ function adsFolha(r: RelatorioGoogleAds, clienteNome: string): string {
       ${antes ? `<p class="frase-sub">${esc(antes)}</p>` : ""}
     </section>
     ${faixa(faixaKpis, principal, r.vocab, r.moeda)}
-    ${temConv ? colunas(r.serieConversoes, "Conversões por dia", "conversão", "conversões", r.vocab, r.anterior) : colunas(r.serieCliques, "Cliques por dia", "clique", "cliques", r.vocab, r.anterior)}
+    ${colunas(r.serieCliques, "Cliques por dia", "clique", "cliques", r.vocab, r.anterior)}
     <div class="duas">
-      <section class="bloco"><h2>O que os anúncios geraram</h2><div class="sub">Ações registradas pelo Google Ads (inclui as secundárias)</div>${acoes}</section>
+      ${ligSerie ? colunas(r.serieLigacoes, "Ligações pelo anúncio por dia", "ligação", "ligações", r.vocab, r.anterior) : ""}
       <section class="bloco lateral"><div class="outros"><div class="rotulo">Outros números do período</div>
         ${outros.map(([a, b]) => `<div class="numero"><span>${esc(a)}</span><b>${esc(b)}</b></div>`).join("")}</div></section>
     </div>

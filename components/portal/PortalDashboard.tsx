@@ -12,7 +12,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
-  BarChart3, ChevronDown, Globe, Handshake, ClipboardList, Pause, Pin, Palette, RefreshCw, Star, Trophy, TrendingUp, Wallet, Zap,
+  BarChart3, ChevronDown, Globe, Handshake, ClipboardList, MessageCircle, MousePointerClick, Pause, Pin, Palette, Receipt,
+  RefreshCw, Star, Trophy, TrendingUp, Users, Wallet, Zap,
   type LucideIcon,
 } from "lucide-react";
 import type { SnapshotData, PeriodKind, CreativeItem } from "@/lib/portal/types";
@@ -46,6 +47,9 @@ const PERIODS: { valor: PeriodKind; rotulo: string }[] = [
   { valor: "this_month",   rotulo: "Este mês"    },
   { valor: "last_month",   rotulo: "Mês passado" },
 ];
+
+/** O que o gráfico do topo mostra — escolhido clicando no cartão do número. */
+type MetricaGrafico = MetricType | "clicks";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   new_creative:  Palette,
@@ -111,7 +115,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   const [view, setView] = useState<"ads" | "social" | "conteudo" | "google" | "crm">(hasAds ? "ads" : hasGoogle ? "google" : hasCrm ? "crm" : "social");
   // Gráfico do topo (05/11/2026): um gráfico só, com a escolha da métrica — a "Evolução diária" de baixo
   // repetia o mesmo desenho.
-  const [metricaGrafico, setMetricaGrafico] = useState<"messages" | "spend" | "clicks">("messages");
+  const [metricaGrafico, setMetricaGrafico] = useState<MetricaGrafico>("messages");
   const [comoContamos, setComoContamos] = useState(false);
 
   const phone = whatsappPhone || WHATSAPP_EQUIPE;
@@ -175,31 +179,55 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   const palavras = palavrasDoResultado(tipoResultado);
   const resumo = kpis ? resumoConversas(kpis.messages.value, kpis.messages.delta_pct, periodoDado, tipoResultado) : null;
 
+  // Cliques (18/11/2026): estava escondido no seletor do gráfico; agora é cartão como os outros. O total e a
+  // comparação saem da própria série por dia (o snapshot não traz KPI de cliques).
+  const somaSerie = (s: readonly (number | null)[] | null | undefined) => (s ? s.reduce<number>((a, v) => a + (v ?? 0), 0) : null);
+  const cliquesTotal = somaSerie(chart?.series.clicks);
+  const cliquesAntes = chart?.previous_series ? somaSerie(chart.previous_series.clicks) : null;
+  const cliquesKpi = cliquesTotal != null
+    ? { value: cliquesTotal, delta_pct: cliquesAntes ? ((cliquesTotal - cliquesAntes) / cliquesAntes) * 100 : null, direction: "" }
+    : undefined;
+
   const kpiItems: Array<{
-    key: MetricType; label: string;
+    key: MetricaGrafico; label: string; icone: LucideIcon;
     val: { value: number | null; delta_pct: number | null; direction: string } | undefined;
     format: (v: number) => string;
   }> = [
-    { key: "messages", label: palavras.Varios,      val: kpis?.messages, format: (v) => fmt(v) },
-    { key: "spend",    label: "Investido",          val: kpis?.spend,    format: (v) => formatarBRL(v) },
-    { key: "cpa",      label: palavras.custo,       val: kpis?.cpa,      format: (v) => formatarBRL(v) },
-    { key: "reach",    label: "Pessoas alcançadas", val: kpis?.reach,    format: (v) => fmt(v) },
+    { key: "messages", label: palavras.Varios,      icone: MessageCircle,     val: kpis?.messages, format: (v) => fmt(v) },
+    { key: "spend",    label: "Investido",          icone: Wallet,            val: kpis?.spend,    format: (v) => formatarBRL(v) },
+    { key: "cpa",      label: palavras.custo,       icone: Receipt,           val: kpis?.cpa,      format: (v) => formatarBRL(v) },
+    { key: "reach",    label: "Pessoas alcançadas", icone: Users,             val: kpis?.reach,    format: (v) => fmt(v) },
+    { key: "clicks",   label: "Cliques",            icone: MousePointerClick, val: cliquesKpi,     format: (v) => fmt(v) },
   ];
 
-  // Resumo do topo: resultado por dia × mesmo dia do período anterior + os 4 números principais.
+  // Resumo do topo: a métrica escolhida por dia × mesmo dia do período anterior. Clicar num cartão troca o
+  // gráfico (antes era um seletor separado em cima — 18/11/2026).
   const dias = chart?.days ?? [];
-  const prevConversas = chart?.previous_messages ?? null;
-  const serieAtual = chart?.series[metricaGrafico] ?? [];
-  const serieAnterior = metricaGrafico === "messages" ? prevConversas : chart?.previous_series?.[metricaGrafico] ?? null;
-  const serieConversas = dias.map((d, i) => ({ rotulo: rotuloDia(d), atual: serieAtual[i] ?? 0, anterior: serieAnterior?.[i] ?? null }));
-  const nomeMetrica = metricaGrafico === "messages" ? palavras.Varios : metricaGrafico === "spend" ? "Investido" : "Cliques";
-  const kpisResumo: KpiComparativo[] = kpiItems.map(({ key, label, val, format }) => ({
+  const serieDe = (m: MetricaGrafico): { atual: (number | null)[]; anterior: (number | null)[] | null } => {
+    if (!chart) return { atual: [], anterior: null };
+    if (m === "cpa") {
+      // Custo por resultado do dia = investido ÷ resultados; dia sem resultado não tem custo (fica vazio, não zero).
+      const por = (g: readonly (number | null)[] | null | undefined, r: readonly (number | null)[] | null | undefined) =>
+        g && r ? g.map((x, i) => ((r[i] ?? 0) > 0 && x != null ? Math.round((x / (r[i] as number)) * 100) / 100 : null)) : null;
+      return { atual: por(chart.series.spend, chart.series.messages) ?? [], anterior: por(chart.previous_series?.spend, chart.previous_messages) };
+    }
+    if (m === "messages") return { atual: chart.series.messages, anterior: chart.previous_messages ?? null };
+    return { atual: chart.series[m], anterior: chart.previous_series?.[m] ?? null };
+  };
+  const escolhida = serieDe(metricaGrafico);
+  const serieConversas = dias.map((d, i) => ({ rotulo: rotuloDia(d), atual: escolhida.atual[i] ?? (metricaGrafico === "cpa" ? null : 0), anterior: escolhida.anterior?.[i] ?? null }));
+  const nomeMetrica = kpiItems.find((k) => k.key === metricaGrafico)?.label ?? palavras.Varios;
+  const kpisResumo: KpiComparativo[] = kpiItems.filter((k) => k.val).map(({ key, label, icone, val, format }) => ({
     rotulo: label,
+    icone,
     valor: val?.value != null ? format(val.value) : "—",
     variacaoPct: val?.delta_pct ?? null,
     // Custo por resultado: cair é bom. Investimento: nem bom nem ruim.
     natureza: key === "cpa" ? "inversa" : key === "spend" ? "neutra" : "direta",
-    dica: fraseDelta(key, val?.delta_pct ?? null, periodoDado) ?? undefined,
+    dica: key === "clicks" ? "toques no anúncio" : fraseDelta(key, val?.delta_pct ?? null, periodoDado) ?? undefined,
+    tendencia: serieDe(key).atual.filter((x): x is number => x != null),
+    selecionado: metricaGrafico === key,
+    onSelecionar: chart ? () => setMetricaGrafico(key) : undefined,
   }));
   const per = data?.period;
   // Hoje (05/11/2026): gráfico por hora e comparação com ontem ATÉ A MESMA HORA.
@@ -385,17 +413,6 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                   Some com erro ou "números sendo atualizados" — nunca pinta zero no lugar. */}
               {(loading || (!erro && !atualizando && kpis)) && (
                 <div className="space-y-3">
-                <Segmentado
-                  rotulo="Ver no gráfico"
-                  tamanho="sm"
-                  opcoes={[
-                    { valor: "messages", rotulo: palavras.Varios },
-                    { valor: "spend", rotulo: "Investido" },
-                    { valor: "clicks", rotulo: "Cliques" },
-                  ]}
-                  valor={metricaGrafico}
-                  onChange={setMetricaGrafico}
-                />
                 <PainelComparativo
                   carregando={loading}
                   titulo={`${nomeMetrica} por ${porHora ? "hora" : "dia"}`}
@@ -403,8 +420,9 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                   rotuloAtual={porHora ? "Hoje" : "Este período"}
                   rotuloAnterior={porHora ? "Ontem" : "Período anterior"}
                   serie={serieConversas}
-                  formatarValor={(v) => metricaGrafico === "spend" ? formatarBRL(v) : v.toLocaleString("pt-BR")}
-                  destaque={resumo ? { texto: resumo, tom: tomDaVariacao(kpis?.messages.delta_pct, "direta", 5), detalhe: datasPeriodo } : null}
+                  formatarValor={(v) => metricaGrafico === "spend" || metricaGrafico === "cpa" ? formatarBRL(v) : v.toLocaleString("pt-BR")}
+                  larguraEixo={metricaGrafico === "spend" || metricaGrafico === "cpa" ? 56 : 44}
+                  destaque={resumo ? { texto: resumo, tom: tomDaVariacao(kpis?.messages.delta_pct, "direta", 5), detalhe: [datasPeriodo, "Toque num número abaixo para ver ele no gráfico."].filter(Boolean).join(" ") } : null}
                   kpis={kpisResumo}
                   limiarNeutroPct={5}
                   tomRuim="atencao"
@@ -438,7 +456,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                       <div className="space-y-2">
                         {loading
                           ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-[72px] rounded-xl" />)
-                          : top.map((c, i) => <CardCriativo key={c.id} criativo={c} posicao={i + 1} palavras={palavras} />)}
+                          : top.map((c, i) => <CardCriativo key={c.id} criativo={c} posicao={i + 1} palavras={palavras} maximo={Math.max(...top.map((t) => t.messages))} />)}
                       </div>
                       {!loading && ativos && ativos.total > 0 && per && (
                         <AnunciosAtivos lista={ativos} periodo={per.kind} tipoResultado={tipoResultado} />
@@ -526,19 +544,22 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
 }
 
 /** Criativo do topo: toca pra ver taxa de clique, frequência e custo por resultado. */
-function CardCriativo({ criativo: c, posicao, palavras }: { criativo: CreativeItem; posicao: number; palavras: PalavrasResultado }) {
+function CardCriativo({ criativo: c, posicao, palavras, maximo }: { criativo: CreativeItem; posicao: number; palavras: PalavrasResultado; maximo: number }) {
   const [aberto, setAberto] = useState(false);
   const idDetalhe = `criativo-${c.id}`;
+  // Fatia do melhor anúncio (o 1º enche a barra; os outros se medem contra ele).
+  const fatia = maximo > 0 ? Math.max(c.messages > 0 ? 4 : 0, (c.messages / maximo) * 100) : 0;
   return (
-    <Cartao className={cn("overflow-hidden transition-colors", aberto && "border-primary/40")}>
+    <Cartao className={cn("group overflow-hidden transition-[border-color,box-shadow] duration-200 [@media(hover:hover)]:hover:shadow-sm", aberto && "border-primary/40")}>
       <button
         type="button"
         aria-expanded={aberto}
         aria-controls={idDetalhe}
         onClick={() => setAberto((v) => !v)}
-        className="flex min-h-[72px] w-full items-center gap-3 p-3 text-left [-webkit-tap-highlight-color:transparent] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+        className="flex min-h-[72px] w-full items-center gap-3 p-3 text-left transition-colors duration-150 [-webkit-tap-highlight-color:transparent] [@media(hover:hover)]:hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
       >
-        <span className="w-4 shrink-0 text-center text-lone-caption font-medium tabular-nums text-muted-foreground" aria-hidden>{posicao}</span>
+        <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-md text-lone-caption font-medium tabular-nums",
+          posicao === 1 ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground")} aria-hidden>{posicao}</span>
         <CriativoThumb url={c.thumbnail_url} path={c.thumbnail_path ?? null} name={c.name} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-1.5">
@@ -555,8 +576,12 @@ function CardCriativo({ criativo: c, posicao, palavras }: { criativo: CreativeIt
             <span className="tabular-nums">{formatarBRL(c.spend)}</span>
             {c.cpa != null && <><span aria-hidden>·</span><span><span className="tabular-nums">{formatarBRL(c.cpa)}</span> {palavras.porUm}</span></>}
           </p>
+          <span className="mt-2 block h-1 overflow-hidden rounded-full bg-muted" aria-hidden>
+            <motion.span className="block h-full rounded-full bg-primary/60 transition-colors group-hover:bg-primary"
+              initial={{ width: 0 }} animate={{ width: `${fatia}%` }} transition={{ duration: 0.7, delay: posicao * 0.05, ease: [0.16, 1, 0.3, 1] }} />
+          </span>
         </div>
-        <ChevronDown size={16} className={cn("shrink-0 text-muted-foreground transition-transform duration-200", aberto && "rotate-180")} aria-hidden />
+        <ChevronDown size={16} className={cn("shrink-0 text-muted-foreground transition-[transform,color] duration-200 group-hover:text-foreground", aberto && "rotate-180")} aria-hidden />
       </button>
       <AnimatePresence initial={false}>
         {aberto && (

@@ -143,6 +143,10 @@ export interface RelatorioGoogleAds {
   /** Cliques por dia, com o dia equivalente do período anterior. */
   serieCliques: PontoGoogle[];
   serieConversoes: PontoGoogle[];
+  /** Por dia, para o painel trocar o gráfico ao clicar no cartão (18/11/2026: o cliente vê cliques, não conversões). */
+  serieLigacoes: PontoGoogle[];
+  serieImpressoes: PontoGoogle[];
+  serieInvestimento: PontoGoogle[];
   acoes: AcaoAds[];
   campanhas: CampanhaAds[];
   semVeiculacao: boolean;
@@ -236,7 +240,7 @@ export function montarRelatorioAds(e: EntradaAds): RelatorioGoogleAds {
     return { id, nome: c.nome, canal: rotuloCanal(c.canal), custo: s.custo, cliques: s.cliques, impressoes: s.impressoes, conversoes: s.conversoes, custoPorConversao: div(s.custo, s.conversoes) };
   }).filter((c) => c.custo > 0 || c.impressoes > 0).sort((x, y) => y.custo - x.custo || y.cliques - x.cliques);
 
-  const porDia = (campo: "cliques" | "conversoes") => {
+  const porDia = (campo: "cliques" | "conversoes" | "ligacoes" | "impressoes" | "custo") => {
     const m = new Map<string, number>();
     for (const l of e.linhas) m.set(l.dia, (m.get(l.dia) ?? 0) + num(l[campo]));
     return (dia: string) => Math.round((m.get(dia) ?? 0) * 100) / 100;
@@ -247,6 +251,9 @@ export function montarRelatorioAds(e: EntradaAds): RelatorioGoogleAds {
     janela: e.janela, anterior: ant, vocab, moeda, frase: "", kpis,
     serieCliques: serie(e.janela, ant, antValido, porDia("cliques")),
     serieConversoes: serie(e.janela, ant, antValido, porDia("conversoes")),
+    serieLigacoes: serie(e.janela, ant, antValido, porDia("ligacoes")),
+    serieImpressoes: serie(e.janela, ant, antValido, porDia("impressoes")),
+    serieInvestimento: serie(e.janela, ant, antValido, porDia("custo")),
     acoes, campanhas,
     semVeiculacao: a.impressoes === 0 && a.custo === 0,
   };
@@ -263,12 +270,19 @@ function comparacao(k: KpiGoogle | undefined, vocab: Vocabulario): string {
   return `, ${pctAbs(k.variacaoPct)} ${k.variacaoPct > 0 ? "a mais" : "a menos"} que ${vocab.referenciaAnterior}`;
 }
 
-/** "Na última semana, os anúncios no Google tiveram 412 cliques (12% a mais que na semana anterior) e 18 conversões, com R$ 1.230,00 investidos." */
+/**
+ * "Na última semana, 412 pessoas clicaram nos seus anúncios no Google, 12% a mais que na semana anterior, e 18
+ * ligaram direto pelo anúncio, com R$ 1.230,00 investidos."
+ *
+ * Fala de CLIQUE e de LIGAÇÃO (toque no botão de ligar), nunca de "conversão" (18/11/2026): o dono confere clique
+ * e ligação; "conversão" depende de etiqueta no site e ele não tem como saber se é real.
+ */
 export function fraseDoAds(r: RelatorioGoogleAds): string {
   if (r.semVeiculacao) return `${r.vocab.abertura}, os anúncios no Google não rodaram.`;
-  const cliques = valorDe(r.kpis, "cliques")!, conv = valorDe(r.kpis, "conversoes")!, inv = valorDe(r.kpis, "investimento")!;
-  let f = `${r.vocab.abertura}, os anúncios no Google tiveram ${formatarValor(cliques.valor, "inteiro")} ${cliques.valor === 1 ? "clique" : "cliques"}${comparacao(cliques, r.vocab)}`;
-  if ((conv.valor ?? 0) > 0) f += ` e ${formatarValor(conv.valor, "decimal")} ${conv.valor === 1 ? "conversão" : "conversões"}`;
+  const cliques = valorDe(r.kpis, "cliques")!, inv = valorDe(r.kpis, "investimento")!, lig = valorDe(r.kpis, "ligacoes");
+  const n = cliques.valor ?? 0;
+  let f = `${r.vocab.abertura}, ${formatarValor(n, "inteiro")} ${n === 1 ? "pessoa clicou" : "pessoas clicaram"} nos seus anúncios no Google${comparacao(cliques, r.vocab)}`;
+  if ((lig?.valor ?? 0) > 0) f += `, e ${formatarValor(lig!.valor, "inteiro")} ${lig!.valor === 1 ? "ligou" : "ligaram"} direto pelo anúncio`;
   f += `, com ${formatarValor(inv.valor, "dinheiro", r.moeda)} investidos`;
   return `${f}.`;
 }
@@ -279,7 +293,8 @@ export const ACOES_PERFIL = [
   { chave: "ligacoes", rotulo: "Ligações", um: "ligação", nota: "toques em \"Ligar\" no perfil" },
   { chave: "rotas", rotulo: "Rotas pedidas", um: "rota pedida", nota: "pedidos de rota até o endereço" },
   { chave: "cliques_site", rotulo: "Visitas ao site", um: "visita ao site", nota: "cliques no site a partir do perfil" },
-  { chave: "conversas", rotulo: "Conversas", um: "conversa", nota: "mensagens iniciadas pelo perfil" },
+  // BUSINESS_CONVERSATIONS: conversas abertas pelo botão de mensagem do perfil (chat/WhatsApp ligado no perfil).
+  { chave: "conversas", rotulo: "Mensagens", um: "mensagem", nota: "conversas abertas pelo botão de mensagem do perfil" },
   { chave: "reservas", rotulo: "Reservas", um: "reserva", nota: "reservas feitas pelo perfil" },
   { chave: "cardapio", rotulo: "Cliques no cardápio", um: "clique no cardápio", nota: "toques no cardápio" },
 ] as const;
@@ -326,6 +341,8 @@ export interface RelatorioGooglePerfil {
   acoes: AcaoPerfil[];
   visualizacoes: { busca: number; mapas: number; celular: number; computador: number; total: number };
   serieAcoes: PontoGoogle[];
+  /** Cada ação por dia (ligações, rotas…) e as visualizações — o painel troca o gráfico ao clicar no cartão. */
+  seriePorAcao: Partial<Record<ChaveAcaoPerfil | "visualizacoes", PontoGoogle[]>>;
   termos: LinhaTermo[];
   /** Mês dos termos ("outubro de 2026") — o Google só fecha por mês. */
   termosMes: string | null;
@@ -380,6 +397,7 @@ export function montarRelatorioPerfil(e: EntradaPerfil): RelatorioGooglePerfil |
   ];
 
   const porDia = new Map(e.linhas.map((l) => [l.dia, totalAcoes(l)]));
+  const linhaDoDia = new Map(e.linhas.map((l) => [l.dia, l]));
   const vocab = vocabulario(janela, ant);
   const termos = [...(e.termos ?? [])]
     .sort((a, b) => (b.valor ?? b.limiar ?? 0) - (a.valor ?? a.limiar ?? 0))
@@ -388,6 +406,10 @@ export function montarRelatorioPerfil(e: EntradaPerfil): RelatorioGooglePerfil |
   const r: RelatorioGooglePerfil = {
     janela, anterior: ant, vocab, nota, frase: "", kpis, acoes: visiveis, visualizacoes: vis,
     serieAcoes: serie(janela, ant, antValido, (d) => porDia.get(d) ?? 0),
+    seriePorAcao: Object.fromEntries([
+      ...visiveis.map((a) => [a.chave, serie(janela, ant, antValido, (d) => num(linhaDoDia.get(d)?.[a.chave]))] as const),
+      ["visualizacoes", serie(janela, ant, antValido, (d) => { const l = linhaDoDia.get(d); return l ? totalVisualizacoes(l) : 0; })] as const,
+    ]),
     termos, termosMes: termos.length ? (e.termosMes ?? null) : null,
     semDados: vis.total === 0 && acoesTotal === 0,
   };

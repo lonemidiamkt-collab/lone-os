@@ -11,7 +11,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Bookmark, Camera, Eye, Heart, MessageCircle, MousePointerClick, Play, RefreshCw } from "lucide-react";
+import {
+  Bookmark, Camera, Eye, Heart, Image as ImageIcon, MessageCircle, MousePointerClick, Play, RefreshCw, UserPlus, Users,
+  type LucideIcon,
+} from "lucide-react";
+import { HOVER_CARTAO } from "@/components/ui/painel-comparativo";
 import { chamar } from "@/lib/api/chamar";
 import Skeleton from "@/components/ui/Skeleton";
 // clsx (não cn) onde o tamanho de fonte "lone" encontra uma cor de texto: o twMerge acha que os dois são cor
@@ -241,7 +245,9 @@ export default function PortalInstagram({ token, clientId, period, inicial = nul
       </motion.section>
 
       {!loading && (botoes.length > 0 || formatos.length > 0) && (
-        <motion.div variants={entrada} initial="oculto" animate="visivel" custom={1} className="grid gap-4 lg:grid-cols-2">
+        <motion.div variants={entrada} initial="oculto" animate="visivel" custom={1}
+          // Só um dos dois cartões: ocupa a largura toda (sozinho em meia tela parecia que faltava algo).
+          className={cn("grid gap-4", botoes.length > 0 && formatos.length > 0 && "lg:grid-cols-2")}>
           {botoes.length > 0 && (
             <Barras
               icone={MousePointerClick}
@@ -297,10 +303,20 @@ function GradeKpis({ kpis, loading, grande = false }: { kpis: Kpi[]; loading: bo
   const impar = kpis.length % 2 === 1;
   return (
     <div className={cn("grid grid-cols-2 gap-3 sm:gap-4", kpis.length >= 4 ? "lg:grid-cols-4" : kpis.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-2")}>
-      {kpis.map((k, i) => (
-        <Cartao key={k.rotulo} className={cn("min-w-0 p-4", impar && i === 0 && "col-span-2 lg:col-span-1", k.destaque && "border-primary/30")}>
+      {kpis.map((k, i) => {
+        const Icone = ICONE_KPI[k.rotulo];
+        return (
+        <Cartao key={k.rotulo} interativo={false}
+          className={cn("group min-w-0 p-4", HOVER_CARTAO, impar && i === 0 && "col-span-2 lg:col-span-1", k.destaque && "border-primary/30")}>
           <div className="flex items-start justify-between gap-2">
-            <p className="truncate text-lone-caption text-muted-foreground">{k.rotulo}</p>
+            <p className="flex min-w-0 items-center gap-1.5 text-lone-caption text-muted-foreground">
+              {Icone && (
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground transition-colors duration-200 group-hover:bg-primary/10 group-hover:text-primary">
+                  <Icone size={13} aria-hidden />
+                </span>
+              )}
+              <span className="truncate">{k.rotulo}</span>
+            </p>
             {k.dica && <Dica rotulo={k.rotulo}>{k.dica}</Dica>}
           </div>
           {loading ? (
@@ -315,10 +331,21 @@ function GradeKpis({ kpis, loading, grande = false }: { kpis: Kpi[]; loading: bo
             </>
           )}
         </Cartao>
-      ))}
+        );
+      })}
     </div>
   );
 }
+
+/** Ícone de cada número (pelo rótulo que a aba já usa). Rótulo sem ícone aparece sem — nunca quebra. */
+const ICONE_KPI: Record<string, LucideIcon> = {
+  "Seguidores": UserPlus,
+  "Pessoas alcançadas": Users,
+  "Visualizações": Eye,
+  "Toques nos botões": MousePointerClick,
+  "Interações": Heart,
+  "Posts no período": ImageIcon,
+};
 
 /** "↑ 12%" contra o período anterior. Estável dentro de 5%. */
 function Variacao({ pct }: { pct: number }) {
@@ -326,7 +353,10 @@ function Variacao({ pct }: { pct: number }) {
   const subiu = pct > 0;
   return (
     <span
-      className={clsx("text-lone-caption font-medium tabular-nums", estavel ? "text-muted-foreground" : subiu ? "text-lone-success" : "text-lone-warning")}
+      className={clsx("inline-flex items-center rounded-full border px-1.5 py-0.5 text-lone-caption font-medium tabular-nums",
+        estavel ? "border-border bg-muted text-muted-foreground"
+          : subiu ? "border-lone-success-border bg-lone-success-bg text-lone-success"
+          : "border-lone-warning-border bg-lone-warning-bg text-lone-warning")}
       title="Comparado com o período anterior"
     >
       {estavel ? "≈ estável" : `${subiu ? "↑" : "↓"} ${Math.abs(pct)}%`}
@@ -343,17 +373,19 @@ function Barras({ icone, titulo, descricao, itens, formato }: {
   return (
     <Cartao as="section" className="p-4 sm:p-5">
       <CabecalhoSecao icone={icone} titulo={titulo} descricao={descricao} nivel={3} />
-      <ul className="mt-4 space-y-3">
-        {itens.slice(0, 5).map((i) => (
-          <li key={i.rotulo}>
+      <ul className="mt-4 space-y-1">
+        {itens.slice(0, 5).map((i, n) => (
+          <li key={i.rotulo} className="group -mx-2 rounded-lg px-2 py-1.5 transition-colors duration-150 [@media(hover:hover)]:hover:bg-accent/60">
             <div className="flex items-baseline justify-between gap-3 text-sm">
               <span className="text-foreground">{i.rotulo}</span>
-              <span className="tabular-nums text-muted-foreground">
+              <span className="font-medium tabular-nums text-foreground">
                 {formato === "pct" ? `${Math.round((i.valor / total) * 100)}%` : formatarNumero(i.valor)}
               </span>
             </div>
             <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-              <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(4, Math.round((i.valor / maior) * 100))}%` }} />
+              <motion.div className="h-full rounded-full bg-primary/70 transition-colors group-hover:bg-primary"
+                initial={{ width: 0 }} animate={{ width: `${Math.max(4, Math.round((i.valor / maior) * 100))}%` }}
+                transition={{ duration: 0.7, delay: n * 0.05, ease: [0.16, 1, 0.3, 1] }} />
             </div>
           </li>
         ))}
@@ -367,10 +399,10 @@ function CardPost({ post: p }: { post: Post }) {
   const salvosEComp = (p.salvos ?? 0) + (p.compartilhamentos ?? 0);
   return (
     <a href={p.permalink ?? "#"} target="_blank" rel="noopener noreferrer"
-      className="group block overflow-hidden rounded-xl border border-border bg-card transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-      <div className="relative">
+      className={cn("group block overflow-hidden rounded-xl border border-border bg-card [@media(hover:hover)]:hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40", HOVER_CARTAO)}>
+      <div className="relative overflow-hidden">
         {p.thumb
-          ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={p.thumb} alt="" className="aspect-square w-full bg-muted object-cover" loading="lazy" />
+          ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={p.thumb} alt="" className="aspect-square w-full bg-muted object-cover transition-transform duration-500 ease-out motion-safe:[@media(hover:hover)]:group-hover:scale-105" loading="lazy" />
           : <div className="aspect-square w-full bg-muted" />}
         {video && (
           <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-overlay text-overlay-foreground" aria-label="Reels">

@@ -40,12 +40,26 @@ const nextConfig: NextConfig = {
     return config;
   },
   async rewrites() {
-    return [
-      // Proxy /supabase/* to internal Kong API gateway
-      { source: "/supabase/rest/:path*", destination: `${SUPABASE_INTERNAL}/rest/:path*` },
-      { source: "/supabase/auth/:path*", destination: `${SUPABASE_INTERNAL}/auth/:path*` },
-      { source: "/supabase/storage/:path*", destination: `${SUPABASE_INTERNAL}/storage/:path*` },
-    ];
+    // Prévia do painel (app/portal-preview, só desenvolvimento): as LEITURAS do portal vão para produção.
+    // Só com PORTAL_PREVIEW_ORIGIN definido (no .env.local de quem desenvolve) — em produção fica vazio.
+    const previa = process.env.NODE_ENV !== "production" && process.env.PORTAL_PREVIEW_ORIGIN
+      ? ["snapshot", "google", "crm"].map((r) => ({ source: `/api/portal/:token/${r}`, destination: `${process.env.PORTAL_PREVIEW_ORIGIN}/api/portal/:token/${r}` }))
+        .concat([
+          { source: "/api/meta/instagram/:path*", destination: `${process.env.PORTAL_PREVIEW_ORIGIN}/api/meta/instagram/:path*` },
+          // Miniaturas dos criativos e posts (arquivos públicos do storage).
+          { source: "/supabase/storage/v1/object/public/:path*", destination: `${process.env.PORTAL_PREVIEW_ORIGIN}/supabase/storage/v1/object/public/:path*` },
+        ])
+      : [];
+    return {
+      beforeFiles: previa,
+      afterFiles: [
+        // Proxy /supabase/* to internal Kong API gateway
+        { source: "/supabase/rest/:path*", destination: `${SUPABASE_INTERNAL}/rest/:path*` },
+        { source: "/supabase/auth/:path*", destination: `${SUPABASE_INTERNAL}/auth/:path*` },
+        { source: "/supabase/storage/:path*", destination: `${SUPABASE_INTERNAL}/storage/:path*` },
+      ],
+      fallback: [],
+    };
   },
 };
 
