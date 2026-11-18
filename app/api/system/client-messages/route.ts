@@ -19,6 +19,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 800;
 
+import { detectarAncora } from "@/lib/crm-externo/servidor";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/emailService";
@@ -228,6 +229,8 @@ export async function POST(req: NextRequest) {
     // Token Meta só é necessário pros relatórios (segunda, clientes com Meta).
     // Sem token, os relatórios falham por cliente — os social-puro seguem normal.
     const token = withReport ? await getMetaToken() : null;
+    // Âncora: conexão de quem já se cadastrou pelo link, antes dos relatórios (o PDF já sai com Atendimento e vendas).
+    const deteccaoAncora = withReport ? await detectarAncora() : null;
 
     // Mensagens escritas pela IA aguardando a leitura do Roberto (modo revisão).
     const revisar: { cliente: string; texto: string; sinais: string[] }[] = [];
@@ -240,6 +243,7 @@ export async function POST(req: NextRequest) {
 
     let supportSent = 0, supportFail = 0, reportSent = 0, reportFail = 0;
     const errors: string[] = [];
+    if (deteccaoAncora?.erro) errors.push(`Detecção do Âncora: ${deteccaoAncora.erro}`);
 
     for (let i = 0; i < withGroup.length; i++) {
       const c: ReportClientRow = withGroup[i];
@@ -260,7 +264,7 @@ export async function POST(req: NextRequest) {
               reportFail++; errors.push(`${name} (relatório): ${pdf.error}`); await logMsg(c.id, dateKey, "report", "failed", pdf.error);
             } else {
               // Saiu, mas sem um bloco do Google (leitura falhou/atrasada): não é falha do envio, mas o time vê.
-              for (const a of pdf.avisos ?? []) errors.push(`${name} (relatório enviado sem parte do Google): ${a}`);
+              for (const a of pdf.avisos ?? []) errors.push(`${name} (relatório enviado sem parte do Google ou do CRM): ${a}`);
               const fileName = `relatorio-${slug(name)}-${dateKey}.pdf`;
               let legenda = resend ? RESEND_REPORT_MESSAGE : mondayReportMessage();
               if (placarModo !== "off" && pdf.anuncios) {

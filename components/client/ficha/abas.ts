@@ -1,14 +1,15 @@
-// components/client/ficha/abas.ts — AS SEIS ABAS DA FICHA DO CLIENTE (Leva 6B, E2). Módulo PURO.
+// components/client/ficha/abas.ts — AS ABAS DA FICHA DO CLIENTE (Leva 6B, E2; Integrações em 18/11/2026). Módulo PURO.
 //
 // Antes eram 15 abas numa faixa só e a ficha abria numa página longa e misturada. Agora são seis, na
 // ordem em que alguém pensa no cliente: quem é e o que falta (Resumo), a marca, o que está sendo
-// produzido, o resultado, a conversa e o cadastro.
+// produzido, o resultado, a conversa e o cadastro. Em 18/11/2026 entrou a sétima, Integrações (Âncora/CRM e Lone
+// Academy), a pedido do Roberto: "uma aba separada no cadastro do cliente, para ver esses registros e ativar".
 //
 // LINK ANTIGO CONTINUA FUNCIONANDO. Toda aba que já existiu (`?tab=onboarding`, `?tab=contratos`,
 // `?tab=chat`…) cai na aba nova certa e rola até a seção dela. O teste tests/ficha-abas.test.ts
 // varre o código atrás de `?tab=` e falha se algum link apontar para uma aba que este mapa não conhece.
 
-export type AbaFicha = "resumo" | "marca" | "entregas" | "resultados" | "relacionamento" | "admin";
+export type AbaFicha = "resumo" | "marca" | "entregas" | "resultados" | "relacionamento" | "integracoes" | "admin";
 
 export const ABAS_FICHA: readonly { id: AbaFicha; rotulo: string }[] = [
   { id: "resumo", rotulo: "Resumo" },
@@ -16,6 +17,7 @@ export const ABAS_FICHA: readonly { id: AbaFicha; rotulo: string }[] = [
   { id: "entregas", rotulo: "Entregas" },
   { id: "resultados", rotulo: "Resultados" },
   { id: "relacionamento", rotulo: "Relacionamento" },
+  { id: "integracoes", rotulo: "Integrações" },
   { id: "admin", rotulo: "Admin" },
 ] as const;
 
@@ -57,6 +59,8 @@ export const SECAO = {
   contrato: "contrato",
   onboarding: "onboarding",
   cicloDeVida: "ciclo-de-vida",
+  // Integrações
+  crm: "crm-do-cliente",
   academy: "lone-academy",
 } as const;
 
@@ -83,6 +87,7 @@ export interface Destino { aba: AbaFicha; secao?: string }
  *   portal                        → Resumo, com o painel do botão "Portal" do topo já aberto
  *   ficha-viva (Comercial)        → Marca & Briefing
  *   reports (Relatórios, saiu na Leva 1 — virou o PDF automático) → Resultados
+ *   academy, ancora, crm (atalhos de 18/11/2026)  → Integrações (a Lone Academy saiu do Admin)
  */
 export const ABA_ANTIGA: Readonly<Record<string, Destino>> = {
   overview: { aba: "resumo" },
@@ -101,6 +106,9 @@ export const ABA_ANTIGA: Readonly<Record<string, Destino>> = {
   portal: { aba: "resumo" }, // o painel "Portal" abre sozinho (app/clients/[id]/page.tsx)
   "ficha-viva": { aba: "marca", secao: SECAO.fichaViva },
   reports: { aba: "resultados" },
+  academy: { aba: "integracoes", secao: SECAO.academy },
+  ancora: { aba: "integracoes", secao: SECAO.crm },
+  crm: { aba: "integracoes", secao: SECAO.crm },
 };
 
 const IDS = new Set<string>(ABAS_FICHA.map((a) => a.id));

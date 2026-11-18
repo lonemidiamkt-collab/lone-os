@@ -1,4 +1,4 @@
-// tests/ficha-abas.test.ts — a ficha do cliente em seis abas (Leva 6B, E2).
+// tests/ficha-abas.test.ts — a ficha do cliente em sete abas (Leva 6B, E2; Integrações em 18/11/2026).
 //
 // O que isto protege: link antigo (`/clients/<id>?tab=onboarding`, `?tab=chat`…) caindo no Resumo em
 // vez do lugar certo, e seção-âncora apontando para um id que nenhuma aba renderiza.
@@ -21,9 +21,16 @@ function arquivos(dir: string): string[] {
   return out;
 }
 
-describe("seis abas, abrindo no Resumo", () => {
-  it("as seis, nesta ordem", () => {
-    expect(ABAS_FICHA.map((a) => a.rotulo)).toEqual(["Resumo", "Marca & Briefing", "Entregas", "Resultados", "Relacionamento", "Admin"]);
+describe("sete abas, abrindo no Resumo", () => {
+  it("as sete, nesta ordem (Integrações entrou em 18/11/2026)", () => {
+    expect(ABAS_FICHA.map((a) => a.rotulo)).toEqual(["Resumo", "Marca & Briefing", "Entregas", "Resultados", "Relacionamento", "Integrações", "Admin"]);
+  });
+
+  it("Lone Academy e o CRM moram em Integrações", () => {
+    expect(resolverAba("integracoes")).toEqual({ aba: "integracoes" });
+    expect(resolverAba("academy")).toEqual({ aba: "integracoes", secao: SECAO.academy });
+    expect(resolverAba("ancora")).toEqual({ aba: "integracoes", secao: SECAO.crm });
+    expect(resolverAba("crm")).toEqual({ aba: "integracoes", secao: SECAO.crm });
   });
 
   it("sem ?tab (ou desconhecido) → Resumo", () => {

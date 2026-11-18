@@ -13,6 +13,9 @@ import { temColunasGoogle } from "@/lib/google/colunas";
 import { lerConexao } from "@/lib/trafego/anuncios-server";
 import { situacaoDaConfig } from "@/lib/contracts/d4sign-config";
 import { academyConfigurada } from "@/lib/academy/cliente";
+import { ancoraLigada, lerEstadosNoAncora } from "@/lib/integracoes/ancora-server";
+import { temTabelasCrm } from "@/lib/crm-externo/servidor";
+import { ROTULO_PROVEDOR, type ProvedorCrm } from "@/lib/crm-externo/metricas";
 import { iaFora, type FalhaIa } from "@/lib/ia/saude-ia";
 import {
   ordenar, estadoGoogleIntegracao, estadoGoogleMarketingIntegracao, estadoMetaIntegracao, estadoWhatsappIntegracao, estadoIaIntegracao,
@@ -143,6 +146,27 @@ async function academy(): Promise<EstadoIntegracao> {
   });
 }
 
+/** Âncora: o segredo compartilhado está aqui E o Âncora aceita a assinatura (lê o estado de uma referência que não
+ *  existe — volta lista vazia quando a porta está certa). Nos detalhes, quantos clientes têm CRM em cada sistema. */
+async function ancora(): Promise<EstadoIntegracao> {
+  const ligada = ancoraLigada();
+  const r = ligada ? await lerEstadosNoAncora(["verificacao-lone-os"]) : null;
+  const detalhes: string[] = [];
+  if (await temTabelasCrm()) {
+    const { data, error } = await supabaseAdmin.from("crm_conexoes").select("provedor, ativa");
+    if (error) detalhes.push("Não consegui contar as conexões de CRM.");
+    else {
+      const conta = new Map<ProvedorCrm, number>();
+      for (const x of (data ?? []) as { provedor: ProvedorCrm; ativa: boolean }[]) if (x.ativa) conta.set(x.provedor, (conta.get(x.provedor) ?? 0) + 1);
+      detalhes.push(conta.size ? `Clientes com CRM no relatório: ${[...conta].map(([p, n]) => `${ROTULO_PROVEDOR[p]} ${n}`).join(" · ")}` : "Nenhum cliente com CRM conectado ainda.");
+    }
+  } else detalhes.push("Falta aplicar a migração 20261118150000_crm_conexoes.sql: o CRM ainda não entra no relatório.");
+  return estadoServicoIntegracao("ancora", {
+    configurado: ligada, semConfig: "Âncora desligado: falta o ANCORA_PARCEIRO_SECRET no servidor (Kommo e API aberta funcionam sem ele).",
+    alcance: r ? { ok: r.ok, erro: r.ok ? null : r.mensagem } : null, okTexto: "Ligado: link de cadastro e números do Âncora no relatório.", detalhes,
+  });
+}
+
 export async function verificarIntegracoes(): Promise<EstadoIntegracao[]> {
   const lista = await Promise.all([
     seguro("google", google),
@@ -157,6 +181,7 @@ export async function verificarIntegracoes(): Promise<EstadoIntegracao[]> {
     })),
     seguro("pdf", pdf),
     seguro("academy", academy),
+    seguro("ancora", ancora),
     seguro("finance", async () => estadoServicoIntegracao("finance", {
       configurado: !!process.env.LONEOS_FINANCE_READ_SECRET, semConfig: "Porta de leitura desligada: o Lone Finance não lê os clientes.",
       alcance: null, okTexto: "Porta de leitura ligada (quem chama é o Lone Finance).",

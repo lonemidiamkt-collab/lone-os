@@ -63,6 +63,12 @@ function Cartao({ i, onMudou }: { i: EstadoIntegracao; onMudou: () => void }) {
       )}
       {i.id === "google" && <div className="border-t border-border pt-3"><ConexaoGoogle onMudou={onMudou} /></div>}
       {i.id === "google_marketing" && <div className="border-t border-border pt-3"><ConexaoGoogleMarketing onMudou={onMudou} /></div>}
+      {i.id === "ancora" && (
+        <p className="border-t border-border pt-3 text-lone-caption text-muted-foreground">
+          O CRM de cada cliente se conecta na ficha dele, aba Integrações: Âncora (nasce sozinho quando o cliente se cadastra pelo
+          link), Kommo (subdomínio + token) ou outro CRM pela API aberta (POST /api/crm-externo/eventos com o token da ficha).
+        </p>
+      )}
     </section>
   );
 }

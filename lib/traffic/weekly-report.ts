@@ -15,6 +15,8 @@ import { lerRelatorioGoogle, temGoogleNoRelatorio } from "@/lib/google/relatorio
 import { temColunasGoogle } from "@/lib/google/colunas";
 import { folhasGoogle } from "@/lib/reports/relatorioGooglePdf";
 import type { RelatorioGoogle } from "@/lib/google/relatorio";
+import { lerRelatorioCrm } from "@/lib/crm-externo/servidor";
+import type { RelatorioCrm } from "@/lib/crm-externo/relatorio";
 
 export interface ReportClientRow {
   id: string;
@@ -261,12 +263,24 @@ export async function montarHtmlRelatorioCliente(
   }
   const temFolhaGoogle = folhasGoogle(google, clientName).length > 0;
 
-  if (!anuncios && !igSnap && !temFolhaGoogle) {
+  // ── Atendimento e vendas (CRM do cliente: Âncora, Kommo ou API aberta — lib/crm-externo) ──
+  // Lido AGORA no CRM (fresco, sem cache). Período que não pôde ser lido não vai pro PDF: vira aviso pro time.
+  let crm: RelatorioCrm | null = null;
+  if (client.id) {
+    try {
+      const c = await lerRelatorioCrm(client.id, janela, { fresco: true });
+      if (c) { crm = c.relatorio && !c.relatorio.semDados ? c.relatorio : null; avisos.push(...c.avisos); }
+    } catch (e) {
+      avisos.push(`CRM: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`);
+    }
+  }
+
+  if (!anuncios && !igSnap && !temFolhaGoogle && !crm) {
     return { ok: false, error: avisos.length ? avisos.join(" · ") : motivoSemRelatorio(client) };
   }
 
   const logo = (await loadLoneLogo().catch(() => "")) || `${baseUrlPublica()}/logo.png`;
-  const html = relatorioClienteHtml({ clienteNome: clientName, logo, geradoEm: hoje, janela, anuncios, instagram: igSnap, google });
+  const html = relatorioClienteHtml({ clienteNome: clientName, logo, geradoEm: hoje, janela, anuncios, instagram: igSnap, google, crm });
   // Os dados voltam junto: o placar da segunda (legenda) sai dos MESMOS números do PDF.
   return { ok: true, html, anuncios, google, avisos };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 // components/client/ficha/AbaAdmin.tsx — ADMIN: o cadastro e o que é da gestão. Identificação, cofre
-// de acessos, documentos, configuração da operação, conta Meta Ads, contrato, onboarding e o ciclo de
+// de acessos, documentos, configuração da operação, conta Meta Ads e Google, contrato, onboarding e o ciclo de
 // vida (pausar, retomar, encerrar). Cada bloco mantém a MESMA visibilidade de antes: o cofre mostra
 // só as plataformas do papel de quem vê, documentos e contrato só para gestão (e o servidor confere).
 // Nenhum valor de contrato novo aparece aqui (pedido do CEO: nada de faturamento da agência).
@@ -13,7 +13,6 @@ import type { OnboardingItem } from "@/lib/types";
 import CicloDeVida from "./CicloDeVida";
 import ContaMetaAds from "./ContaMetaAds";
 import ContaGoogle from "./ContaGoogle";
-import LoneAcademy from "./LoneAcademy";
 import OnboardingChecklist from "./OnboardingChecklist";
 import ObservacaoDoCadastro from "./ObservacaoDoCadastro";
 import RadarRenovacao from "@/components/client/RadarRenovacao";
@@ -89,11 +88,7 @@ export default function AbaAdmin({ ctx, onboarding, dadosCompletos, updateClient
         <OnboardingChecklist client={c} itens={onboarding} currentUser={currentUser} />
       </Secao>
 
-      {isAdmin && (
-        <Secao id={SECAO.academy} titulo="Lone Academy" descricao="Treinamento do time do cliente. A gestão libera por cliente; o dono recebe o acesso por e-mail.">
-          <LoneAcademy client={c} />
-        </Secao>
-      )}
+      {/* Lone Academy saiu daqui (18/11/2026): mora na aba Integrações, junto com o CRM do cliente. */}
 
       {isAdmin && (
         <Secao id={SECAO.cicloDeVida} titulo="Ciclo de vida">

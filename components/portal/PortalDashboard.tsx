@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
-  BarChart3, ChevronDown, Globe, ClipboardList, Pause, Pin, Palette, RefreshCw, Star, Trophy, TrendingUp, Wallet, Zap,
+  BarChart3, ChevronDown, Globe, Handshake, ClipboardList, Pause, Pin, Palette, RefreshCw, Star, Trophy, TrendingUp, Wallet, Zap,
   type LucideIcon,
 } from "lucide-react";
 import type { SnapshotData, PeriodKind, CreativeItem } from "@/lib/portal/types";
@@ -23,6 +23,7 @@ import PortalUpload from "@/components/portal/PortalUpload";
 import PortalAgenda from "./PortalAgenda";
 import PortalMateriais from "./PortalMateriais";
 import PortalGoogle from "./PortalGoogle";
+import PortalCrm from "./PortalCrm";
 import PublicoCard from "./PublicoCard";
 import AnunciosAtivos from "./AnunciosAtivos";
 import VendasDoCliente from "@/components/trafego/vendas/VendasDoCliente";
@@ -79,12 +80,13 @@ interface Props {
   hasIg?: boolean;     // Instagram vinculado de verdade (informativo; a seção continua avisando "não conectado" quando há anúncios)
   comecando?: boolean; // nada vinculado ainda (sem conta de anúncio e sem Instagram) → "estamos começando"
   hasGoogle?: boolean; // Perfil da Empresa vinculado ou Google Ads (com contrato de tráfego) → aba "Google"
+  hasCrm?: boolean; // CRM conectado e ativo (Âncora, Kommo, API aberta) → aba "Atendimento e vendas"
   desde?: string | null;
   /** "MM/AAAA" do rodapé, calculado no servidor em SP (evita divergência de hidratação). */
   mesRelatorio?: string;
 }
 
-export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, initialIg = null, hasAds = true, hasSocial = false, hasGoogle = false, comecando = false, desde = null, aprovacaoLigada = false, mesRelatorio = "" }: Props) {
+export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, initialIg = null, hasAds = true, hasSocial = false, hasGoogle = false, hasCrm = false, comecando = false, desde = null, aprovacaoLigada = false, mesRelatorio = "" }: Props) {
   const [period, setPeriod]   = useState<PeriodKind>("last_week");
   const [data, setData]       = useState<SnapshotData | null>(initialData);
   const [loading, setLoading] = useState(false);
@@ -104,8 +106,9 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   // 05/11/2026: "Conteúdo e envios" saiu de dentro de "Crescimento nas redes" — a aba misturava o
   // relatório do Instagram com agenda, artes entregues e envio de material.
   // 18/11/2026: aba "Google" (Perfil da Empresa e Google Ads) quando o cliente tem um dos dois vinculado.
-  const showToggle = hasSocial || (hasAds && hasGoogle); // seletor só com 2+ abas
-  const [view, setView] = useState<"ads" | "social" | "conteudo" | "google">(hasAds ? "ads" : hasGoogle ? "google" : "social");
+  // 18/11/2026: aba "Atendimento e vendas" quando o CRM do cliente está conectado (lib/crm-externo).
+  const showToggle = hasSocial || [hasAds, hasGoogle, hasCrm].filter(Boolean).length >= 2; // seletor só com 2+ abas
+  const [view, setView] = useState<"ads" | "social" | "conteudo" | "google" | "crm">(hasAds ? "ads" : hasGoogle ? "google" : hasCrm ? "crm" : "social");
   // Gráfico do topo (05/11/2026): um gráfico só, com a escolha da métrica — a "Evolução diária" de baixo
   // repetia o mesmo desenho.
   const [metricaGrafico, setMetricaGrafico] = useState<"messages" | "spend" | "clicks">("messages");
@@ -265,6 +268,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
             opcoes={[
               ...(hasAds ? [{ valor: "ads" as const, rotulo: "Anúncios", icone: BarChart3 }] : []),
               ...(hasGoogle ? [{ valor: "google" as const, rotulo: "Google", icone: Globe }] : []),
+              ...(hasCrm ? [{ valor: "crm" as const, rotulo: "Atendimento e vendas", icone: Handshake }] : []),
               ...(hasSocial ? [
                 { valor: "social" as const, rotulo: "Crescimento nas redes", icone: TrendingUp },
                 { valor: "conteudo" as const, rotulo: "Conteúdo e envios", icone: Palette },
@@ -318,6 +322,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
 
           {/* ── Google: Perfil da Empresa (ligações, rotas, site) e Google Ads ── */}
           {hasGoogle && view === "google" && <PortalGoogle token={token} />}
+          {hasCrm && view === "crm" && <PortalCrm token={token} />}
 
           {/* ── Conteúdo e envios: agenda, artes entregues, enviar material e o histórico de envios ── */}
           {hasSocial && view === "conteudo" && (

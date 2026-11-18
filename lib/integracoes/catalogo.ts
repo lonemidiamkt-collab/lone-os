@@ -14,7 +14,7 @@ import type { CausaConhecida } from "@/lib/ia/causa-erro";
 
 export type SituacaoIntegracao = "ok" | "atencao" | "erro" | "desligada";
 
-export type IdIntegracao = "google" | "google_marketing" | "meta" | "whatsapp" | "ia" | "d4sign" | "email" | "pdf" | "academy" | "finance" | "site";
+export type IdIntegracao = "google" | "google_marketing" | "meta" | "whatsapp" | "ia" | "d4sign" | "email" | "pdf" | "academy" | "ancora" | "finance" | "site";
 
 export interface EstadoIntegracao {
   id: IdIntegracao;
@@ -63,6 +63,8 @@ export const CATALOGO: readonly { id: IdIntegracao; nome: string; servePara: str
     servePara: "Todos os PDFs: relatório semanal e mensal, contratos, diagnóstico de tráfego." },
   { id: "academy", nome: "Lone Academy", grupo: "apoio",
     servePara: "Liberar o treinamento para o time do cliente." },
+  { id: "ancora", nome: "Âncora CRM e CRMs dos clientes", grupo: "apoio",
+    servePara: "Link de cadastro do cliente no Âncora e a folha Atendimento e vendas (Âncora, Kommo ou API aberta) no relatório e no portal." },
   { id: "finance", nome: "Lone Finance", grupo: "apoio",
     servePara: "O financeiro lê clientes e contratos do Lone OS (só leitura)." },
   { id: "site", nome: "Site da Lone (leads)", grupo: "apoio",

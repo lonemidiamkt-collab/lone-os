@@ -44,6 +44,8 @@ const sendMediaDocument = vi.fn();
 const csSendGroupText = vi.fn(async () => ({ ok: true }));
 
 vi.mock("@/lib/api/cron-guard", () => ({ requireCron: () => null }));
+// A detecção do Âncora (CRM do cliente) roda antes da rodada; aqui não há Âncora.
+vi.mock("@/lib/crm-externo/servidor", () => ({ detectarAncora: async () => ({ criadas: 0, erro: null }) }));
 vi.mock("@/lib/email/emailService", () => ({ sendEmail: async () => ({}) }));
 vi.mock("@/lib/traffic/renderPdf", () => ({ htmlToPdf: async () => ({ ok: true, buffer: Buffer.from("") }) }));
 vi.mock("@/lib/traffic/sync-core", () => ({

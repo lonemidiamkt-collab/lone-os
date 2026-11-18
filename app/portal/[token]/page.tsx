@@ -10,6 +10,7 @@ import { lerLinkDoPortal, type LinhaDeAcesso } from "@/lib/portal/token";
 import PortalIndisponivel from "@/components/portal/PortalIndisponivel";
 import { temColunasGoogle } from "@/lib/google/colunas";
 import { temGoogleNoRelatorio } from "@/lib/google/relatorio-dados";
+import { clientesComCrm } from "@/lib/crm-externo/servidor";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,8 @@ export default async function PortalPage({
     google_ads_customer_id: (client.google_ads_customer_id as string) ?? null, google_perfil_local: (client.google_perfil_local as string) ?? null,
   }) : { ads: false, perfil: false };
   const hasGoogle = g.ads || g.perfil;
+  // CRM conectado e ativo → aba "Atendimento e vendas". Falha ao conferir = sem a aba (o resto do portal abre).
+  const hasCrm = await clientesComCrm([client.id as string]).then((s) => s.has(client.id as string)).catch(() => false);
 
   // Log de acesso
   const hdrs = await headers();
@@ -120,7 +123,8 @@ export default async function PortalPage({
         hasSocial={hasSocial}
         hasIg={!!client.ig_business_account_id}
         hasGoogle={hasGoogle}
-        comecando={!hasAds && !temIg && !hasGoogle}
+        hasCrm={hasCrm}
+        comecando={!hasAds && !temIg && !hasGoogle && !hasCrm}
         desde={(client.join_date as string) ?? null}
         aprovacaoLigada={process.env.PORTAL_APROVACAO_CLIENTE === "on"}
         mesRelatorio={mesRelatorio}

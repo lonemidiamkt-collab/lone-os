@@ -22,6 +22,8 @@
 import type { IgSnapshot, IgAudiencia } from "@/lib/meta/igSnapshot";
 import type { RelatorioGoogle } from "@/lib/google/relatorio";
 import { folhasGoogle, CSS_GOOGLE } from "./relatorioGooglePdf";
+import { folhaCrm, CSS_CRM, NOTA_CRM } from "./relatorioCrmPdf";
+import type { RelatorioCrm } from "@/lib/crm-externo/relatorio";
 import { formatarVariacao } from "@/components/ui/painel-comparativo-utils";
 import { formatarBRL } from "@/lib/portal/formatos";
 import { resumoInstagram } from "@/lib/portal/formatDelta";
@@ -64,6 +66,8 @@ export interface OpcoesRelatorio {
   janela: Janela;
   /** Google Ads e Perfil da Empresa (lib/google/relatorio-dados.ts). Uma folha para cada um que tiver número. */
   google?: RelatorioGoogle | null;
+  /** Atendimento e vendas, do CRM do cliente (lib/crm-externo). Uma folha quando o CRM respondeu. */
+  crm?: RelatorioCrm | null;
 }
 
 // ── Pedaços ──────────────────────────────────────────────────────────────────
@@ -414,8 +418,16 @@ export function relatorioClienteHtml(o: OpcoesRelatorio): string {
       __RODAPE__`);
     notas.push(g.nota);
   }
+  // CRM depois dos anúncios: o que os anúncios trouxeram → como o time atendeu e quanto vendeu.
+  const crm = folhaCrm(o.crm, o.clienteNome);
+  if (crm) {
+    folhas.push(`${cabecalho(o, titulo)}
+      ${crm}
+      __RODAPE__`);
+    notas.push(NOTA_CRM);
+  }
   if (ig) {
-    const sozinho = !r && !google.length;
+    const sozinho = !r && !google.length && !crm;
     folhas.push(`${cabecalho(o, titulo)}
       ${igConteudo(ig, o.geradoEm, sozinho ? o.clienteNome : undefined)}
       __RODAPE__`);
@@ -428,7 +440,7 @@ export function relatorioClienteHtml(o: OpcoesRelatorio): string {
   return `<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <title>${esc(titulo)} — ${esc(o.clienteNome)}</title>
-<style>${CSS}${CSS_GOOGLE}</style></head>
+<style>${CSS}${CSS_GOOGLE}${CSS_CRM}</style></head>
 <body>${corpo}</body></html>`;
 }
 

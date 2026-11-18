@@ -26,6 +26,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 800;
 
+import { detectarAncora } from "@/lib/crm-externo/servidor";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/emailService";
@@ -312,8 +313,14 @@ export async function POST(req: NextRequest) {
     const incertos: { cliente: string; erro?: string }[] = [];
     // Recebeu, mas o registro não gravou: a próxima rodada mandaria de novo. O time precisa saber.
     const semRegistro: string[] = [];
-    // Saiu, mas sem um bloco do Google (leitura falhou ou atrasada): não é falha do envio, mas o time precisa ver.
+    // Saiu, mas sem um bloco do Google ou do CRM (leitura falhou ou atrasada): não é falha do envio, mas o time precisa ver.
     const parciais: string[] = [];
+    // Âncora: quem se cadastrou pelo link do Lone OS (inclusive depois do cadastro aqui) ganha a conexão antes do
+    // relatório — o PDF de hoje já sai com Atendimento e vendas. Falha aqui não para a rodada: vira parcial.
+    {
+      const d = await detectarAncora();
+      if (d.erro) parciais.push(`Detecção do Âncora: ${d.erro}`);
+    }
     // Quem falhou por erro PASSAGEIRO (a Meta demorou, caiu, recusou rajada) ganha uma segunda
     // tentativa no fim da rodada. Em 01/10 o relatório de setembro da Armazém do Ferro não saiu por
     // um timeout da Meta e ficou de fora — o aviso pedia pra "conferir", ninguém reenviou.
@@ -445,7 +452,7 @@ export async function POST(req: NextRequest) {
       const jid = process.env.CS_INTERNAL_GROUP_JID;
       if (jid) {
         await csSendGroupText(jid,
-          `ℹ️ *Relatório ${escopoLabel} saiu sem parte do Google para ${parciais.length} cliente(s)*\n\n${parciais.slice(0, 8).map((p) => `• ${p}`).join("\n")}`
+          `ℹ️ *Relatório ${escopoLabel} saiu sem parte do Google ou do CRM (${parciais.length})*\n\n${parciais.slice(0, 8).map((p) => `• ${p}`).join("\n")}`
           + `\n\n_Confira a conta do Google na ficha do cliente (Admin › Google). Depois de corrigir, reenvie só para ele com ?clientId=._`,
           undefined, { origem: "weekly-reports-google", destino: "interno" });
       }

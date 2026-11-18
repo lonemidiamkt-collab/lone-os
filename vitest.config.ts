@@ -22,6 +22,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "."),
+      // O Next resolve "server-only" no build; nos testes é um módulo vazio (tests/stubs/server-only.ts).
+      "server-only": path.resolve(__dirname, "tests/stubs/server-only.ts"),
     },
   },
 });

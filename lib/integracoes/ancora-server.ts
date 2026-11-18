@@ -93,3 +93,13 @@ export function cancelarLinkNoAncora(clientId: string): Promise<RespostaAncora<{
   const texto = JSON.stringify({ ref_externa: clientId });
   return chamar<{ cancelado: boolean }>("POST", "/api/parceiro/convites/cancelar", texto, texto);
 }
+
+/**
+ * As métricas do cliente no Âncora (GET /api/parceiro/metricas) entre `de` e `ate` — data e hora ISO COM fuso, fim
+ * inclusivo. Devolve o `data` cru (bloco que falhou lá vem null); quem traduz é lib/crm-externo/metricas.ts (deAncora).
+ * 404 = o cliente ainda não tem empresa criada pelo link do Lone OS.
+ */
+export function lerMetricasNoAncora(clientId: string, de: string, ate: string): Promise<RespostaAncora<Record<string, unknown>>> {
+  const { mensagem, url } = mensagemDoGet("/api/parceiro/metricas", { ref: clientId, from: de, to: ate });
+  return chamar<Record<string, unknown>>("GET", url, mensagem);
+}

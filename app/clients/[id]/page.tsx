@@ -34,6 +34,7 @@ import AbaEntregas from "@/components/client/ficha/AbaEntregas";
 import AbaResultados from "@/components/client/ficha/AbaResultados";
 import AbaRelacionamento from "@/components/client/ficha/AbaRelacionamento";
 import AbaAdmin from "@/components/client/ficha/AbaAdmin";
+import AbaIntegracoes from "@/components/client/ficha/AbaIntegracoes";
 import { ABAS_FICHA, resolverAba, type AbaFicha } from "@/components/client/ficha/abas";
 import type { FichaCtx, ResumoCliente } from "@/components/client/ficha/tipos";
 import { mesclarFicha, separarPatchFicha } from "@/lib/clients/ficha-sensiveis";
@@ -339,6 +340,7 @@ export default function ClientDetailPage() {
         {aba === "entregas" && <AbaEntregas ctx={ctx} cards={cards} pedidos={pedidos} tarefas={tarefas} />}
         {aba === "resultados" && <AbaResultados ctx={ctx} />}
         {aba === "relacionamento" && <AbaRelacionamento ctx={ctx} />}
+        {aba === "integracoes" && <AbaIntegracoes ctx={ctx} />}
         {aba === "admin" && (
           <AbaAdmin ctx={ctx} onboarding={obItens} dadosCompletos={dadosCompletos} updateClientData={salvarCliente}
             onNavigateTab={irParaAntiga} onboardingLink={onboardingLink} gerandoLink={gerandoLink} gerarLink={gerarLinkOnboarding} />
