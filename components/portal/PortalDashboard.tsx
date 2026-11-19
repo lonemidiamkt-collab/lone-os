@@ -12,12 +12,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
-  BarChart3, ChevronDown, CircleHelp, Globe, Handshake, LayoutDashboard, ClipboardList, MessageCircle, MousePointerClick, Pause, Pin, Palette, Receipt,
+  BarChart3, CalendarDays, Camera, ChevronDown, CircleHelp, LayoutDashboard, MapPin, Megaphone, ReceiptText, ClipboardList, MessageCircle, MousePointerClick, Pause, Pin, Palette, Receipt,
   RefreshCw, Star, Trophy, TrendingUp, Users, Wallet, Zap,
   type LucideIcon,
 } from "lucide-react";
 import type { SnapshotData, PeriodKind, CreativeItem } from "@/lib/portal/types";
-import MobileFAB from "./MobileFAB";
 import PortalContent from "./PortalContent";
 import PortalInstagram, { type IgSnapPortal } from "./PortalInstagram";
 import PortalCasco, { type ItemDoCasco } from "./PortalCasco";
@@ -33,7 +32,7 @@ import PublicoCard from "./PublicoCard";
 import AnunciosAtivos from "./AnunciosAtivos";
 import VendasDoCliente from "@/components/trafego/vendas/VendasDoCliente";
 import CriativoThumb from "./CriativoThumb";
-import { Aviso, Cartao, CabecalhoSecao, Segmentado, entrada } from "./ui";
+import { Aviso, Cartao, CabecalhoSecao, EstadoVazio, Segmentado, Selo, entrada } from "./ui";
 import Skeleton from "@/components/ui/Skeleton";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { chamar } from "@/lib/api/chamar";
@@ -44,18 +43,19 @@ import { formatarBRL, formatarNumero, palavrasDoResultado, rotuloDia, type Palav
 import { PainelComparativo, type KpiComparativo } from "@/components/ui/painel-comparativo";
 import { tomDaVariacao } from "@/components/ui/painel-comparativo-utils";
 import {
-  PERIODOS_DA_ABA, PERIODOS_PORTAL, abaValida, abasDisponiveis, buscaDoPortal, diasDoPeriodo, paraPeriodKind, paraPeriodoIg,
+  ABAS_PORTAL, PERIODOS_DA_ABA, PERIODOS_PORTAL, abaValida, buscaDoPortal, diasDoPeriodo, paraPeriodKind, paraPeriodoIg,
   periodoValido, type AbaPortal, type PeriodoPortal,
 } from "@/lib/portal/navegacao";
 
-/** As áreas do painel: nome completo (menu lateral) e nome curto (barra do celular). */
-const AREAS: Record<AbaPortal, Omit<ItemDoCasco<AbaPortal>, "valor">> = {
-  resumo:   { rotulo: "Visão geral",           curto: "Resumo",    icone: LayoutDashboard },
-  ads:      { rotulo: "Anúncios",              curto: "Anúncios",  icone: BarChart3 },
-  google:   { rotulo: "Google",                curto: "Google",    icone: Globe },
-  crm:      { rotulo: "Atendimento e vendas",  curto: "Vendas",    icone: Handshake },
-  social:   { rotulo: "Crescimento nas redes", curto: "Instagram", icone: TrendingUp },
-  conteudo: { rotulo: "Conteúdo e envios",     curto: "Conteúdo",  icone: Palette },
+/** As sete áreas do protótipo Lone Results 3.0: nome no menu lateral, nome curto (barra do celular) e a linha de apoio do cabeçalho. */
+const AREAS: Record<AbaPortal, Omit<ItemDoCasco<AbaPortal>, "valor"> & { apoio: string }> = {
+  resumo:   { rotulo: "Visão geral",         curto: "Resumo",     icone: LayoutDashboard, apoio: "Seu marketing, seus resultados e as entregas da Lone em um só lugar." },
+  ads:      { rotulo: "Meta Ads",            curto: "Meta Ads",   icone: BarChart3,       apoio: "Facebook e Instagram · anúncios pagos" },
+  gads:     { rotulo: "Google Ads",          curto: "Google Ads", icone: Megaphone,       apoio: "Pesquisa, Maps, YouTube e Performance Max" },
+  maps:     { rotulo: "Google Maps",         curto: "Maps",       icone: MapPin,          apoio: "Perfil da Empresa no Google · quem achou a sua loja" },
+  social:   { rotulo: "Instagram",           curto: "Instagram",  icone: Camera,          apoio: "Evolução do perfil" },
+  conteudo: { rotulo: "Conteúdo e entregas", curto: "Conteúdo",   icone: CalendarDays,    apoio: "Calendário, artes entregues e materiais enviados" },
+  vendas:   { rotulo: "Vendas",              curto: "Vendas",     icone: ReceiptText,     apoio: "Acompanhamento comercial · registro das suas vendas", selo: "Registro" },
 };
 
 /** O que o gráfico do topo mostra — escolhido clicando no cartão do número. */
@@ -93,7 +93,10 @@ interface Props {
   hasSocial?: boolean; // pacote inclui social/design → mostra artes entregues + Instagram orgânico
   hasIg?: boolean;     // Instagram vinculado de verdade (informativo; a seção continua avisando "não conectado" quando há anúncios)
   comecando?: boolean; // nada vinculado ainda (sem conta de anúncio e sem Instagram) → "estamos começando"
-  hasGoogle?: boolean; // Perfil da Empresa vinculado ou Google Ads (com contrato de tráfego) → aba "Google"
+  hasGoogle?: boolean; // Perfil da Empresa vinculado ou Google Ads (com contrato de tráfego)
+  /** Cada parte do Google separada (são duas áreas do menu). Ausentes = valem o `hasGoogle`. */
+  hasGoogleAds?: boolean;
+  hasGoogleMaps?: boolean;
   hasCrm?: boolean; // CRM conectado e ativo (Âncora, Kommo, API aberta) → aba "Atendimento e vendas"
   desde?: string | null;
   /** "MM/AAAA" do rodapé, calculado no servidor em SP (evita divergência de hidratação). */
@@ -103,9 +106,15 @@ interface Props {
   periodoInicial?: PeriodoPortal;
 }
 
-export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, initialIg = null, hasAds = true, hasSocial = false, hasGoogle = false, hasCrm = false, comecando = false, desde = null, aprovacaoLigada = false, mesRelatorio = "", abaInicial, periodoInicial }: Props) {
-  // Áreas que este cliente tem e a que abre primeiro (a do endereço, se ele tem; senão a primeira).
-  const abas = abasDisponiveis({ hasAds, hasGoogle, hasCrm, hasSocial });
+export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, initialIg = null, hasAds = true, hasSocial = false, hasGoogle = false, hasGoogleAds, hasGoogleMaps, hasCrm = false, comecando = false, desde = null, aprovacaoLigada = false, mesRelatorio = "", abaInicial, periodoInicial }: Props) {
+  // As sete áreas do menu, sempre (canal que o cliente não tem mostra a página "ainda não ativo").
+  const abas = ABAS_PORTAL;
+  const temGads = hasGoogleAds ?? hasGoogle;
+  const temMaps = hasGoogleMaps ?? hasGoogle;
+  /** O canal da área está ligado para este cliente? (Visão geral, Conteúdo e Vendas existem sempre.) */
+  const ligado: Record<AbaPortal, boolean> = {
+    resumo: true, ads: hasAds, gads: temGads, maps: temMaps, social: hasSocial && !comecando, conteudo: true, vendas: true,
+  };
   const abaPadrao = abaValida(null, abas);
   const [view, setView] = useState<AbaPortal>(() => abaValida(abaInicial, abas));
   // UM período para o painel todo (lib/portal/navegacao.ts): acompanha o cliente entre as áreas e vai na URL.
@@ -179,8 +188,8 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   }, [view, periodo, abaPadrao]);
 
   const periodosDaArea = PERIODOS_PORTAL.filter((p) => PERIODOS_DA_ABA[view].includes(p.valor));
-  // "Estamos começando" (nada vinculado) não tem número para filtrar.
-  const mostraPeriodo = periodosDaArea.length > 0 && !(view === "social" && comecando);
+  // Canal ainda não ligado não tem número para filtrar.
+  const mostraPeriodo = periodosDaArea.length > 0 && ligado[view];
 
   // Meta não respondeu e não havia dado recente: nada de número, só o aviso.
   const atualizando = data?.ads_status === "indisponivel";
@@ -276,8 +285,11 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
     : `${rotuloDia(per.start)} a ${rotuloDia(per.end)}, comparado com ${rotuloDia(per.previous_start)} a ${rotuloDia(per.previous_end)}.`;
 
   const comoContamos = {
-    temResumo: abas.includes("resumo"), temAnuncios: hasAds, temGoogle: hasGoogle, temInstagram: hasSocial && !comecando, palavras,
+    temResumo: true, temAnuncios: hasAds, temGoogle: temGads || temMaps, temInstagram: hasSocial && !comecando, palavras,
   };
+
+  const datasCurta = !per ? "" : porHora ? "Hoje, comparado com ontem até a mesma hora"
+    : `${rotuloDia(per.start)} a ${rotuloDia(per.end)} · comparação ${rotuloDia(per.previous_start)} a ${rotuloDia(per.previous_end)}`;
 
   const mostraPublico = loading || !!demo?.gender || (demo?.age_ranges?.length ?? 0) > 0;
   const mostraCriativos = loading || top.length > 0 || (ativos?.total ?? 0) > 0 || incompleto;
@@ -291,50 +303,28 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
       onChange={mudarAba}
       clientName={clientName}
     >
-      <MobileFAB phone={phone} clientName={clientName} acimaDaBarra={abas.length > 1} />
-
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
 
-        {/* ── Cabeçalho ─────────────────────────────────────────────── */}
-        <header className="mb-5 flex items-start justify-between gap-4 lg:mb-7">
+        {/* ── Cabeçalho (como no protótipo): área, título, linha de apoio e as três ações ── */}
+        <header className="mb-5 flex flex-wrap items-center justify-between gap-x-5 gap-y-3 lg:mb-6">
           <div className="min-w-0">
-            {/* No computador, com menu lateral, a marca já está no menu. */}
-            <div className={cn("flex items-center gap-2", abas.length > 1 && "lg:hidden")}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.png" alt="Lone Mídia" className="h-4 w-auto opacity-70" />
-              <p className="text-lone-eyebrow uppercase text-muted-foreground">Painel de Resultados</p>
-            </div>
-            <h1 className={cn("mt-2 break-words text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl lg:text-4xl", abas.length > 1 && "lg:mt-0")}>
-              {clientName}
+            <p className="text-lone-eyebrow font-semibold uppercase text-lone-brand-soft">Painel de resultados · {AREAS[view].rotulo}</p>
+            <h1 className="mt-1.5 break-words text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl lg:text-4xl">
+              {view === "resumo" ? clientName : AREAS[view].rotulo}
             </h1>
-            {genAt && view === "ads" && (
-              <p className="mt-1.5 inline-flex items-center gap-1.5 text-lone-caption text-muted-foreground">
-                <RefreshCw size={12} aria-hidden /> Atualizado em {genAt}
-              </p>
-            )}
+            <p className="mt-1 text-lone-body text-muted-foreground">{view === "resumo" ? AREAS.resumo.apoio : `${clientName} · ${AREAS[view].apoio}`}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {/* Só depois de montar: o tema do cliente só é conhecido no navegador (evita ícone trocado). */}
-            {/* "Como contamos": de qualquer área, o que cada número quer dizer (antes só no rodapé de Anúncios). */}
+            {montado ? <ThemeToggle /> : <span className="h-9 w-9" aria-hidden />}
             <ComoContamos {...comoContamos}>
               <button type="button" aria-label="Como contamos os números"
-                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
                 <CircleHelp size={15} aria-hidden />
-                <span className="hidden sm:inline">Como contamos</span>
+                <span className="hidden min-[441px]:inline">Como contamos</span>
               </button>
             </ComoContamos>
-            {montado ? <ThemeToggle /> : <span className="h-9 w-9" aria-hidden />}
-            {/* Desktop: botão no cabeçalho / Celular: botão flutuante (MobileFAB) */}
-            <a
-              href={linkWhatsapp(phone)}
-              target="_blank" rel="noopener noreferrer"
-              className="hidden h-10 shrink-0 items-center gap-2 rounded-lg bg-whatsapp px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 lg:inline-flex"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z" />
-              </svg>
-              Falar com a equipe
-            </a>
+            <FalarComALone phone={phone} clientName={clientName} curto />
           </div>
         </header>
 
@@ -344,15 +334,24 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
 
         {/* Período: um só, no mesmo lugar em todas as áreas. Cada área mostra o que a fonte dela responde. */}
         {mostraPeriodo && (
-          <Segmentado
-            className="mb-5 sm:inline-flex sm:w-auto lg:mb-6"
-            rotulo="Período"
-            opcoes={periodosDaArea}
-            valor={periodo}
-            onChange={setPeriodo}
-            desabilitado={view === "ads" && loading}
-            cheio
-          />
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 lg:mb-6">
+            <Segmentado
+              className="sm:inline-flex sm:w-auto"
+              rotulo="Período"
+              opcoes={periodosDaArea}
+              valor={periodo}
+              onChange={setPeriodo}
+              desabilitado={view === "ads" && loading}
+              cheio
+            />
+            {/* Do que são os números: datas, com o que comparamos e quando buscamos (áreas dos anúncios). */}
+            {(view === "ads" || view === "resumo") && hasAds && per && genAt && !loading && (
+              <p className="inline-flex items-center gap-2 text-lone-caption text-muted-foreground">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-lone-success" aria-hidden />
+                {datasCurta} · atualizado em {genAt}
+              </p>
+            )}
+          </div>
         )}
 
         {/* Troca de aba SEM esperar a anterior sair (05/11/2026): com AnimatePresence mode="wait" a saída
@@ -365,6 +364,12 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
           {/* ── Crescimento nas redes (Instagram orgânico + Conteúdo entregue + Enviar material) ── */}
+          {view === "social" && !hasSocial && (
+            <EstadoVazio icone={Camera} selo={<Selo tom="atencao">A ativar</Selo>} titulo="Seu Instagram ainda não está conectado ao painel"
+              acao={<FalarComALone phone={phone} clientName={clientName} />}>
+              Com o perfil conectado, esta área mostra seguidores, pessoas alcançadas, visualizações e os posts que mais renderam.
+            </EstadoVazio>
+          )}
           {hasSocial && view === "social" && (
             <div className="space-y-6">
               {/* Nada vinculado ainda (JP Barbearia, 15/09: link enviado 1 semana após o cadastro e o cliente
@@ -380,7 +385,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                     <li><span className="font-medium text-foreground">Instagram</span> — seguidores, alcance e os posts que mais renderam</li>
                     <li><span className="font-medium text-foreground">Conteúdo</span> — as artes que a equipe entregou para você</li>
                   </ul>
-                  <p className="mt-3 text-sm text-muted-foreground">Enquanto isso, o que mais ajuda é mandar o material da loja na aba <button type="button" onClick={() => mudarAba("conteudo")} className="font-medium text-foreground underline underline-offset-2">Conteúdo e envios</button> — logo, fotos, tabela de preço, vídeo.</p>
+                  <p className="mt-3 text-sm text-muted-foreground">Enquanto isso, o que mais ajuda é mandar o material da loja na aba <button type="button" onClick={() => mudarAba("conteudo")} className="font-medium text-foreground underline underline-offset-2">Conteúdo e entregas</button> — logo, fotos, tabela de preço, vídeo.</p>
                 </Cartao>
               ) : (
                 <PortalInstagram token={token} clientId={clientId} period={paraPeriodoIg(periodo)} inicial={initialIg} />
@@ -388,23 +393,76 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
             </div>
           )}
 
-          {/* ── Visão geral: a frase do período e um cartão por canal (só com 2+ canais) ── */}
+          {/* ── Visão geral: todas as seções do protótipo (resumo, números, evolução, canais, execução) ── */}
           {view === "resumo" && (periodo === "7d" || periodo === "14d") && (
             <PortalResumo
               token={token} clientId={clientId} periodo={periodo}
               anuncios={{ dados: data, carregando: loading, falhou: !!erro }}
               igInicial={initialIg}
-              temAnuncios={hasAds} temGoogle={hasGoogle} temInstagram={hasSocial && !comecando} temConteudo={hasSocial}
+              temAnuncios={hasAds} temGoogleAds={temGads} temGoogleMaps={temMaps} temInstagram={hasSocial && !comecando}
               onAbrir={mudarAba}
             />
           )}
 
-          {/* ── Google: Perfil da Empresa (ligações, rotas, site) e Google Ads ── */}
-          {hasGoogle && view === "google" && <PortalGoogle token={token} periodo={period} />}
-          {hasCrm && view === "crm" && <PortalCrm token={token} />}
+          {/* ── Google Ads ── */}
+          {view === "gads" && (temGads
+            ? <PortalGoogle token={token} periodo={period} parte="anuncios" />
+            : (
+              <EstadoVazio icone={Megaphone} selo={<Selo>Ainda não ativo</Selo>} titulo="Você ainda não anuncia no Google com a Lone"
+                acao={<FalarComALone phone={phone} clientName={clientName} />}>
+                Quando houver campanhas no Google (Pesquisa, Maps, YouTube), esta área mostra cliques, vezes que o anúncio apareceu, ligações pelo anúncio e investimento.
+              </EstadoVazio>
+            ))}
+
+          {/* ── Google Maps (Perfil da Empresa) ── */}
+          {view === "maps" && (temMaps
+            ? <PortalGoogle token={token} periodo={period} parte="negocio" />
+            : (
+              <div className="space-y-6">
+                <EstadoVazio icone={MapPin} selo={<Selo tom="atencao">A ativar</Selo>} titulo="Seu perfil no Google ainda não está ligado ao painel"
+                  acao={<FalarComALone phone={phone} clientName={clientName} />}>
+                  Com o Perfil da Empresa conectado, você vê aqui quem achou a sua loja na Busca e no Maps e entrou em contato.
+                </EstadoVazio>
+                <section className="space-y-3">
+                  <CabecalhoSecao titulo="O que esta área vai mostrar" descricao="Os números aparecem assim que o perfil for conectado" />
+                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    {["Cliques para ligar", "Pedidos de rota", "Cliques no site", "Vezes que o perfil apareceu"].map((r) => (
+                      <Cartao key={r} interativo={false} className="p-4">
+                        <p className="text-lone-caption text-muted-foreground">{r}</p>
+                        <p className="mt-2 text-lone-h1 font-semibold text-muted-foreground" aria-label="sem número ainda">—</p>
+                        <p className="mt-1 text-lone-caption text-muted-foreground">Aguardando ativação</p>
+                      </Cartao>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            ))}
+
+          {/* ── Vendas: o registro das vendas do cliente e, com CRM ligado, o atendimento ── */}
+          {view === "vendas" && (
+            <div className="space-y-6">
+              {hasCrm && <PortalCrm token={token} />}
+              <VendasDoCliente token={token} />
+              <Cartao as="section" interativo={false} className="p-5">
+                <CabecalhoSecao nivel={3} titulo="Como chegar ao retorno real" descricao="O caminho do contato até a venda" />
+                <ol className="mt-4 space-y-3 text-sm">
+                  {[
+                    ["Anote de onde veio o contato", "Quando alguém chamar, pergunte como achou a loja: anúncio, Google ou Instagram."],
+                    ["Registre a venda aqui", "Valor e data de cada venda que veio do marketing."],
+                    ["Compare com o investimento", "Com as vendas registradas, o painel mostra quanto cada real investido trouxe de volta."],
+                  ].map(([t, d], i) => (
+                    <li key={t} className="flex items-start gap-3">
+                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary/10 text-lone-caption font-medium text-lone-brand-soft" aria-hidden>{i + 1}</span>
+                      <span><span className="block font-medium text-foreground">{t}</span><span className="block text-muted-foreground">{d}</span></span>
+                    </li>
+                  ))}
+                </ol>
+              </Cartao>
+            </div>
+          )}
 
           {/* ── Conteúdo e envios: agenda, artes entregues, enviar material e o histórico de envios ── */}
-          {hasSocial && view === "conteudo" && (
+          {view === "conteudo" && (
             <div className="space-y-6">
               {/* Próximos posts e calendário do mês (N36): só Agendado, No ar e aprovado pelo cliente. */}
               <PortalAgenda token={token} />
@@ -416,7 +474,13 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
             </div>
           )}
 
-          {/* ── Anúncios (tráfego) — só pra pacote que tem anúncios ── */}
+          {view === "ads" && !hasAds && (
+            <EstadoVazio icone={BarChart3} selo={<Selo>Ainda não ativo</Selo>} titulo="Seus anúncios ainda não estão no ar"
+              acao={<FalarComALone phone={phone} clientName={clientName} />}>
+              Quando as campanhas no Facebook e no Instagram começarem a rodar, esta área mostra conversas, investimento, custo por conversa e os anúncios que mais trouxeram resultado.
+            </EstadoVazio>
+          )}
+          {/* ── Meta Ads (tráfego) — só pra pacote que tem anúncios ── */}
           {hasAds && view === "ads" && (
             <div className="space-y-5 lg:space-y-6">
               {/* Falhou a busca: fala com o cliente em vez de mostrar zeros ou o período anterior. */}
@@ -454,6 +518,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                   Some com erro ou "números sendo atualizados" — nunca pinta zero no lugar. */}
               {(loading || (!erro && !atualizando && kpis)) && (
                 <div className="space-y-3">
+                <CabecalhoSecao titulo="Performance de anúncios" descricao={datasPeriodo ? `Meta Ads · ${datasPeriodo}` : "Meta Ads"} />
                 <PainelComparativo
                   carregando={loading}
                   titulo={`${nomeMetrica} por ${porHora ? "hora" : "dia"}`}
@@ -469,6 +534,14 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                   tomRuim="atencao"
                   vazio={`Ainda não houve ${palavras.varios} neste período.`}
                 />
+                {!loading && (
+                  <Cartao interativo={false} className="px-4 py-3.5">
+                    <h3 className="text-lone-h2 font-medium text-foreground">Entendendo os volumes</h3>
+                    <p className="mt-1 text-lone-caption text-muted-foreground">
+                      Pessoas alcançadas, cliques e {palavras.varios} são contagens diferentes: não formam um funil pessoa a pessoa. Por isso o painel não mostra taxa de conversão entre elas.
+                    </p>
+                  </Cartao>
+                )}
                 </div>
               )}
 
@@ -493,7 +566,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                 <div className="contents lg:col-span-2 lg:flex lg:flex-col lg:gap-6">
                   {mostraCriativos && (
                     <motion.section variants={entrada} initial="oculto" animate="visivel" custom={1} className="order-2 min-w-0 space-y-3">
-                      <CabecalhoSecao icone={Trophy} titulo="Top criativos" descricao={`Os anúncios que mais trouxeram ${palavras.varios} no período`} />
+                      <CabecalhoSecao icone={Trophy} titulo={`Criativos com mais ${palavras.varios}`} descricao="Toque num anúncio para ver os detalhes" />
                       <div className="space-y-2">
                         {loading
                           ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-[72px] rounded-xl" />)
@@ -546,12 +619,6 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                 </div>
               </div>
 
-              {/* Vendas × investimento (Leva 7A, N9): depois dos resultados dos anúncios, o que eles
-                  viraram em venda. O cliente registra as vendas dele aqui; é o dinheiro dele — nada da
-                  agência aparece. */}
-              <motion.div variants={entrada} initial="oculto" animate="visivel" custom={4} className="min-w-0">
-                <VendasDoCliente token={token} />
-              </motion.div>
             </div>
           )}
           </motion.div>
@@ -560,7 +627,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
         <div className="mt-10"><PortalInstalar /></div>
 
         {/* ── Rodapé ───────────────────────────────────────────────────── */}
-        <footer className="mt-8 space-y-2 border-t border-border pb-20 pt-6 text-center lg:pb-10">
+        <footer className="mt-8 space-y-2 border-t border-border pb-8 pt-6 text-center lg:pb-10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="Lone Mídia" className="mx-auto h-6 w-auto opacity-50" />
           <p className="text-lone-caption text-muted-foreground">
@@ -575,6 +642,21 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
       </div>
     </PortalCasco>
     </MotionConfig>
+  );
+}
+
+/** "Falar com a Lone": WhatsApp da equipe. `curto` = no cabeçalho (só o ícone em tela muito estreita). */
+function FalarComALone({ phone, clientName, curto = false }: { phone: string; clientName: string; curto?: boolean }) {
+  const texto = `Olá! Tenho uma dúvida sobre os resultados da ${clientName}.`;
+  return (
+    <a href={`${linkWhatsapp(phone)}?text=${encodeURIComponent(texto)}`}
+      target="_blank" rel="noopener noreferrer" aria-label="Falar com a Lone pelo WhatsApp"
+      className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-whatsapp px-3.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z" />
+      </svg>
+      <span className={curto ? "hidden min-[441px]:inline" : undefined}>Falar com a Lone</span>
+    </a>
   );
 }
 

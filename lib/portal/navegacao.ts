@@ -11,12 +11,15 @@
 
 import type { PeriodKind } from "./types";
 
-export type AbaPortal = "resumo" | "ads" | "google" | "crm" | "social" | "conteudo";
+/** As sete áreas do protótipo Lone Results 3.0, nesta ordem. */
+export type AbaPortal = "resumo" | "ads" | "gads" | "maps" | "social" | "conteudo" | "vendas";
 export type PeriodoPortal = "hoje" | "7d" | "14d" | "30d" | "mes" | "mes-passado";
 /** Os períodos que o Instagram guarda (mesmos valores de IG_PERIODOS em PortalInstagram). */
 export type PeriodoIg = "7d" | "14d" | "30d";
 
-export const ABAS_PORTAL: readonly AbaPortal[] = ["resumo", "ads", "google", "crm", "social", "conteudo"];
+export const ABAS_PORTAL: readonly AbaPortal[] = ["resumo", "ads", "gads", "maps", "social", "conteudo", "vendas"];
+/** Endereços antigos (antes de 19/11/2026) que continuam abrindo: "google" e "crm" viraram outras áreas. */
+const APELIDOS: Record<string, AbaPortal> = { google: "maps", crm: "vendas" };
 export const PERIODO_PADRAO: PeriodoPortal = "7d";
 
 export const PERIODOS_PORTAL: readonly { valor: PeriodoPortal; rotulo: string }[] = [
@@ -28,15 +31,16 @@ export const PERIODOS_PORTAL: readonly { valor: PeriodoPortal; rotulo: string }[
   { valor: "mes-passado", rotulo: "Mês passado" },
 ];
 
-/** O que cada fonte responde. Aba sem período (atendimento, conteúdo) = lista vazia = sem filtro. */
+/** O que cada fonte responde. Área sem período (conteúdo, vendas) = lista vazia = sem filtro. */
 export const PERIODOS_DA_ABA: Record<AbaPortal, readonly PeriodoPortal[]> = {
   // A Visão geral junta as três fontes: só oferece o que TODAS respondem.
   resumo: ["7d", "14d"],
   ads: ["hoje", "7d", "14d", "mes", "mes-passado"],
-  google: ["7d", "14d", "mes", "mes-passado"],
+  gads: ["7d", "14d", "mes", "mes-passado"],
+  maps: ["7d", "14d", "mes", "mes-passado"],
   social: ["7d", "14d", "30d"],
-  crm: [],
   conteudo: [],
+  vendas: [],
 };
 
 const PARA_KIND: Partial<Record<PeriodoPortal, PeriodKind>> = {
@@ -44,23 +48,17 @@ const PARA_KIND: Partial<Record<PeriodoPortal, PeriodKind>> = {
 };
 
 /**
- * Abas que este cliente tem, na ordem fixa do menu. A "Visão geral" só existe (e abre primeiro) para quem
- * tem dois ou mais canais com número — com um canal só ela repetiria a área dele.
+ * As áreas do menu. Desde o Lone Results 3.0 são sempre as sete, para todo cliente: canal que ele ainda não
+ * tem aparece com a página "ainda não ativo", em vez de sumir do menu (decisão do Roberto, 19/11/2026).
  */
-export function abasDisponiveis(tem: { hasAds?: boolean; hasGoogle?: boolean; hasCrm?: boolean; hasSocial?: boolean }): AbaPortal[] {
-  const canais = [tem.hasAds, tem.hasGoogle, tem.hasSocial].filter(Boolean).length;
-  return [
-    ...(canais >= 2 ? ["resumo" as const] : []),
-    ...(tem.hasAds ? ["ads" as const] : []),
-    ...(tem.hasGoogle ? ["google" as const] : []),
-    ...(tem.hasCrm ? ["crm" as const] : []),
-    ...(tem.hasSocial ? ["social" as const, "conteudo" as const] : []),
-  ];
+export function abasDisponiveis(): AbaPortal[] {
+  return [...ABAS_PORTAL];
 }
 
 /** A aba pedida (da URL) se o cliente tem; senão a primeira que ele tem. Sem nenhuma: "social" (a tela de "estamos começando"). */
 export function abaValida(pedida: string | null | undefined, disponiveis: readonly AbaPortal[]): AbaPortal {
-  const achada = disponiveis.find((a) => a === pedida);
+  const procurada = pedida ? APELIDOS[pedida] ?? pedida : pedida;
+  const achada = disponiveis.find((a) => a === procurada);
   return achada ?? disponiveis[0] ?? "social";
 }
 

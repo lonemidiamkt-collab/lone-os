@@ -119,7 +119,7 @@ export default async function PortalPage({
   });
 
   // Área e período do endereço (`?aba=google&p=14d`), validados contra o que este cliente tem.
-  const abaInicial = abaValida(daBusca("aba"), abasDisponiveis({ hasAds, hasGoogle, hasCrm, hasSocial }));
+  const abaInicial = abaValida(daBusca("aba"), abasDisponiveis());
   const periodoInicial = periodoValido(daBusca("p"), abaInicial);
 
   // Snapshot inicial (do período do endereço; 7 dias se não vier) pelo MESMO caminho da rota: respeita a
@@ -165,6 +165,8 @@ export default async function PortalPage({
         hasSocial={hasSocial}
         hasIg={!!client.ig_business_account_id}
         hasGoogle={hasGoogle}
+        hasGoogleAds={g.ads}
+        hasGoogleMaps={g.perfil}
         hasCrm={hasCrm}
         comecando={!hasAds && !temIg && !hasGoogle && !hasCrm}
         desde={(client.join_date as string) ?? null}

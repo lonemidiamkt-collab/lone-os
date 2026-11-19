@@ -217,3 +217,34 @@ export function Dica({ rotulo, children }: { rotulo: string; children: ReactNode
   );
 }
 
+
+/** Selo de situação (como os do protótipo: "Com dados", "Sem veiculação", "A ativar"). */
+export function Selo({ tom = "neutro", children }: { tom?: "bom" | "atencao" | "marca" | "neutro"; children: ReactNode }) {
+  return (
+    <span className={cn("inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-medium",
+      tom === "bom" ? "border-lone-success-border bg-lone-success-bg text-lone-success"
+        : tom === "atencao" ? "border-lone-warning-border bg-lone-warning-bg text-lone-warning"
+        : tom === "marca" ? "border-primary/30 bg-primary/10 text-lone-brand-soft"
+        : "border-border bg-muted text-muted-foreground")}>
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Página de um canal que o cliente ainda não tem (Lone Results 3.0): a área continua no menu e diz, com
+ * palavras de cliente, o que vai aparecer ali e como ativar — nunca uma tela de zeros.
+ */
+export function EstadoVazio({ icone: Icone, selo, titulo, children, acao }: {
+  icone: LucideIcon; selo?: ReactNode; titulo: string; children: ReactNode; acao?: ReactNode;
+}) {
+  return (
+    <div className="grid justify-items-center gap-2.5 rounded-2xl border border-dashed border-border bg-card px-6 py-11 text-center">
+      <span className="grid place-items-center rounded-xl bg-muted p-3.5 text-lone-brand-soft" aria-hidden><Icone size={24} /></span>
+      {selo}
+      <h2 className="mt-0.5 text-lone-h1 font-semibold tracking-tight text-foreground">{titulo}</h2>
+      <p className="max-w-[500px] text-sm text-muted-foreground">{children}</p>
+      {acao && <div className="mt-2">{acao}</div>}
+    </div>
+  );
+}

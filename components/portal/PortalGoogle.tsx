@@ -216,7 +216,8 @@ function BlocoAnuncios({ r, carregando }: { r: RelatorioGoogleAds; carregando: b
 // ── A aba ───────────────────────────────────────────────────────────────────────────────────────────
 
 /** `periodo`: quando o painel manda (período único do casco), a aba não mostra o próprio seletor. */
-export default function PortalGoogle({ token, periodo: periodoDoPainel }: { token: string; periodo?: PeriodKind }) {
+/** `parte`: a área mostra só Google Meu Negócio ou só Google Anúncios (no Lone Results 3.0 são duas áreas do menu). */
+export default function PortalGoogle({ token, periodo: periodoDoPainel, parte: parteFixa }: { token: string; periodo?: PeriodKind; parte?: Parte }) {
   const [periodoProprio, setPeriodo] = useState<PeriodKind>("last_week");
   // O Google não tem "Hoje": se vier, mostra 7 dias (o painel já não oferece "Hoje" nesta área).
   const periodo: PeriodKind = periodoDoPainel ? (periodoDoPainel === "today" ? "last_week" : periodoDoPainel) : periodoProprio;
@@ -247,14 +248,15 @@ export default function PortalGoogle({ token, periodo: periodoDoPainel }: { toke
     ...(temAnuncios ? [{ valor: "anuncios" as const, rotulo: "Google Anúncios", icone: Megaphone }] : []),
   ], [temNegocio, temAnuncios]);
   // Meu Negócio vem primeiro; se o cliente só tem uma das partes, é ela.
-  const atual: Parte | null = parte && partes.some((p) => p.valor === parte) ? parte : partes[0]?.valor ?? null;
+  const atual: Parte | null = parteFixa ?? (parte && partes.some((p) => p.valor === parte) ? parte : partes[0]?.valor ?? null);
 
-  const nada = !carregando && !erro && dados && !dados.aviso && !temNegocio && !temAnuncios;
+  const temAParte = parteFixa === "negocio" ? temNegocio : parteFixa === "anuncios" ? temAnuncios : temNegocio || temAnuncios;
+  const nada = !carregando && !erro && dados && !dados.aviso && !temAParte;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        {partes.length > 1 && atual && (
+        {!parteFixa && partes.length > 1 && atual && (
           <Segmentado rotulo="Parte do Google" opcoes={partes} valor={atual} onChange={setParte} destaque />
         )}
         {!periodoDoPainel && (

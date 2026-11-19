@@ -42,8 +42,8 @@ export default function PortalPreview({ params }: { params: Promise<{ token: str
       hasGoogle={abas.includes("google")}
       hasCrm={abas.includes("crm")}
       mesRelatorio="11/2026"
-      abaInicial={abaValida(q.get("aba"), abasDisponiveis({ hasAds: abas.includes("ads"), hasGoogle: abas.includes("google"), hasCrm: abas.includes("crm"), hasSocial: abas.includes("social") }))}
-      periodoInicial={periodoValido(q.get("p"), abaValida(q.get("aba"), abasDisponiveis({ hasAds: abas.includes("ads"), hasGoogle: abas.includes("google"), hasCrm: abas.includes("crm"), hasSocial: abas.includes("social") })))}
+      abaInicial={abaValida(q.get("aba"), abasDisponiveis())}
+      periodoInicial={periodoValido(q.get("p"), abaValida(q.get("aba"), abasDisponiveis()))}
     />
   );
 }

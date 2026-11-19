@@ -8,28 +8,30 @@ import {
 import { manifestoDoPortal } from "@/lib/portal/manifesto";
 import { iniciais } from "@/components/portal/PortalCasco";
 
-describe("áreas do cliente", () => {
-  it("ordem fixa, só o que ele tem", () => {
-    expect(abasDisponiveis({ hasAds: true, hasGoogle: true, hasCrm: true, hasSocial: true })).toEqual(["resumo", "ads", "google", "crm", "social", "conteudo"]);
-    // Visão geral só com 2+ canais de número (atendimento não conta: não é canal de resultado).
-    expect(abasDisponiveis({ hasAds: true, hasCrm: true })).toEqual(["ads", "crm"]);
-    expect(abasDisponiveis({ hasAds: true, hasGoogle: true })).toEqual(["resumo", "ads", "google"]);
-    expect(abasDisponiveis({ hasGoogle: true })).toEqual(["google"]);
-    expect(abasDisponiveis({})).toEqual([]);
+describe("áreas do painel", () => {
+  it("são sempre as sete do protótipo, nesta ordem", () => {
+    expect(abasDisponiveis()).toEqual(["resumo", "ads", "gads", "maps", "social", "conteudo", "vendas"]);
   });
 
-  it("área do endereço só vale se o cliente tem; senão abre a primeira dele", () => {
-    expect(abaValida("google", ["ads", "google"])).toBe("google");
-    expect(abaValida("crm", ["ads", "google"])).toBe("ads");
-    expect(abaValida("qualquer-coisa", ["social", "conteudo"])).toBe("social");
-    expect(abaValida(undefined, [])).toBe("social");
+  it("área do endereço vale se existe; senão abre a Visão geral", () => {
+    const todas = abasDisponiveis();
+    expect(abaValida("gads", todas)).toBe("gads");
+    expect(abaValida("qualquer-coisa", todas)).toBe("resumo");
+    expect(abaValida(undefined, todas)).toBe("resumo");
+  });
+
+  it("endereço antigo continua abrindo: google → Google Maps, crm → Vendas", () => {
+    const todas = abasDisponiveis();
+    expect(abaValida("google", todas)).toBe("maps");
+    expect(abaValida("crm", todas)).toBe("vendas");
   });
 });
 
 describe("período único", () => {
   it("vale se a fonte da área responde; senão 7 dias", () => {
     expect(periodoValido("hoje", "ads")).toBe("hoje");
-    expect(periodoValido("hoje", "google")).toBe("7d");
+    expect(periodoValido("hoje", "gads")).toBe("7d");
+    expect(periodoValido("mes", "maps")).toBe("mes");
     expect(periodoValido("30d", "social")).toBe("30d");
     expect(periodoValido("30d", "ads")).toBe("7d");
     expect(periodoValido("mes", "social")).toBe("7d");
@@ -41,7 +43,7 @@ describe("período único", () => {
 
   it("área sem filtro só carrega o período adiante", () => {
     expect(periodoValido("14d", "conteudo")).toBe("14d");
-    expect(periodoValido("mes", "crm")).toBe("mes");
+    expect(periodoValido("mes", "vendas")).toBe("mes");
   });
 
   it("conversão para cada fonte", () => {
@@ -56,19 +58,19 @@ describe("período único", () => {
 });
 
 describe("endereço", () => {
-  it("o padrão (primeira área, 7 dias) não aparece", () => {
-    expect(buscaDoPortal("", "ads", "7d", "ads")).toBe("");
-    expect(buscaDoPortal("?aba=google&p=14d", "ads", "7d", "ads")).toBe("");
+  it("o padrão (Visão geral, 7 dias) não aparece", () => {
+    expect(buscaDoPortal("", "resumo", "7d", "resumo")).toBe("");
+    expect(buscaDoPortal("?aba=gads&p=14d", "resumo", "7d", "resumo")).toBe("");
   });
 
   it("área e período fora do padrão vão para o endereço", () => {
-    expect(buscaDoPortal("", "google", "14d", "ads")).toBe("?aba=google&p=14d");
-    expect(buscaDoPortal("", "ads", "mes-passado", "ads")).toBe("?p=mes-passado");
+    expect(buscaDoPortal("", "gads", "14d", "resumo")).toBe("?aba=gads&p=14d");
+    expect(buscaDoPortal("", "resumo", "14d", "resumo")).toBe("?p=14d");
   });
 
   it("área sem filtro não leva período; outros parâmetros ficam", () => {
-    expect(buscaDoPortal("?p=14d", "conteudo", "14d", "ads")).toBe("?aba=conteudo");
-    expect(buscaDoPortal("?cliente=x", "google", "7d", "ads")).toBe("?cliente=x&aba=google");
+    expect(buscaDoPortal("?p=14d", "conteudo", "14d", "resumo")).toBe("?aba=conteudo");
+    expect(buscaDoPortal("?cliente=x", "maps", "7d", "resumo")).toBe("?cliente=x&aba=maps");
   });
 });
 

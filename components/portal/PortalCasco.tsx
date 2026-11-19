@@ -22,6 +22,8 @@ export interface ItemDoCasco<T extends string> {
   /** Nome que cabe na barra do celular. */
   curto: string;
   icone: LucideIcon;
+  /** Etiqueta pequena ao lado do nome no menu lateral ("Registro" em Vendas). */
+  selo?: string;
 }
 
 /** Iniciais da empresa para o selo do rodapé do menu ("Império dos Pisos" → "IP"). */
@@ -64,11 +66,17 @@ export default function PortalCasco<T extends string>({ itens, valor, onChange, 
     <div className={cn("casco-portal min-h-screen bg-background text-foreground", temMenu && "lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]")}>
       {temMenu && (
         <aside className="sticky top-0 hidden h-screen flex-col border-r border-border bg-card px-3 py-6 lg:flex">
-          <div className="flex items-center gap-2 px-3 pb-7">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Lone Mídia" className="h-5 w-auto" />
-            <p className="text-lone-eyebrow uppercase text-muted-foreground">Painel de Resultados</p>
+          <div className="flex items-center gap-2.5 px-2.5 pb-7">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="" className="h-5 w-auto" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold tracking-wide text-foreground">LONE <span className="text-lone-brand-soft">RESULTS</span></p>
+              <p className="text-lone-eyebrow uppercase text-muted-foreground">Performance &amp; crescimento</p>
+            </div>
           </div>
+          <p className="px-4 pb-2.5 text-lone-eyebrow uppercase text-muted-foreground">Seu painel</p>
           <nav aria-label="Áreas do painel" className="flex flex-col gap-1">
             {itens.map((it) => {
               const ativo = it.valor === valor;
@@ -82,6 +90,7 @@ export default function PortalCasco<T extends string>({ itens, valor, onChange, 
                   )}>
                   <Icone size={17} className={cn("shrink-0", ativo && "text-lone-brand-soft")} aria-hidden />
                   <span className="min-w-0 break-words">{it.rotulo}</span>
+                  {it.selo && <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[9px] font-normal text-muted-foreground">{it.selo}</span>}
                 </button>
               );
             })}

@@ -170,6 +170,9 @@ export default function PortalInstagram({ token, clientId, period, inicial = nul
   const detalheSeguidores = isPublico ? undefined
     : saldo != null ? `${nfSinal(saldo)} no período · ${formatarNumero(atual!.entraram!)} entraram, ${formatarNumero(atual!.sairam!)} saíram`
     : r?.seguidoresGanhos != null ? `${nfSinal(r.seguidoresGanhos)} ${r.seguidoresGanhos === 1 ? "novo" : "novos"} no período` : undefined;
+  // Barra "entraram × saíram" do destaque: só quando a Meta entrega os dois lados e houve movimento.
+  const temLados = !isPublico && atual?.entraram != null && atual?.sairam != null && atual.entraram + atual.sairam > 0;
+  const pctEntraram = temLados ? Math.round((atual!.entraram! / (atual!.entraram! + atual!.sairam!)) * 100) : 0;
   const alcance = atual?.alcance ?? r?.alcance ?? null;
   const interacoes = atual?.interacoes ?? (posts.length ? posts.reduce((s, p) => s + p.engajamento, 0) : null);
 
@@ -216,11 +219,32 @@ export default function PortalInstagram({ token, clientId, period, inicial = nul
         )}
 
         {!loading && frase && (
-          // A frase do período em destaque, no mesmo desenho da Visão geral (19/11/2026).
-          <Cartao interativo={false} className="p-5 sm:p-6">
-            <p className="text-lone-eyebrow uppercase text-muted-foreground">Em uma frase</p>
-            <p className="mt-2 max-w-prose text-lone-h2 font-medium leading-snug tracking-tight text-foreground sm:text-lone-h1 sm:leading-snug">{frase}</p>
-          </Cartao>
+          // Como no protótipo (19/11/2026): a frase do período em destaque e, ao lado, os seguidores totais com
+          // quem entrou e quem saiu.
+          <div className={cn("grid gap-3.5", temLados && "lg:grid-cols-5")}>
+            <Cartao interativo={false} className={cn("flex flex-col justify-center p-5 sm:p-7", temLados && "lg:col-span-3")}>
+              <p className="text-lone-eyebrow font-semibold uppercase text-lone-brand-soft">Crescimento nas redes · {dias} dias</p>
+              <p className="mt-2 max-w-prose text-lone-h1 font-semibold leading-snug tracking-tight text-foreground sm:text-[24px] sm:leading-snug">{frase}</p>
+            </Cartao>
+            {temLados && (
+              <Cartao interativo={false} className="flex flex-col justify-between gap-3 p-5 sm:p-6 lg:col-span-2">
+                <p className="text-lone-eyebrow font-semibold uppercase text-lone-brand-soft">Seguidores totais</p>
+                <p className="text-[40px] font-semibold leading-none tabular-nums tracking-tight text-foreground">{nf(data?.conta?.seguidores ?? null)}</p>
+                <div>
+                  <div className="flex items-center justify-between gap-3 text-xs text-foreground">
+                    <span>{formatarNumero(atual!.entraram!)} entraram</span>
+                    <span className="font-medium">{formatarNumero(atual!.sairam!)} saíram</span>
+                  </div>
+                  <div className="mt-1.5 flex h-3 overflow-hidden rounded-full bg-muted" role="img"
+                    aria-label={`${formatarNumero(atual!.entraram!)} entraram e ${formatarNumero(atual!.sairam!)} saíram`}>
+                    <span className="bg-lone-success" style={{ width: `${pctEntraram}%` }} />
+                    <span className="bg-lone-warning" style={{ width: `${100 - pctEntraram}%` }} />
+                  </div>
+                  <p className="mt-2 text-lone-caption text-muted-foreground">Saldo = entradas − saídas no mesmo intervalo.</p>
+                </div>
+              </Cartao>
+            )}
+          </div>
         )}
 
         <GradeKpis kpis={principais} loading={loading} grande />
