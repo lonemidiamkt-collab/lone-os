@@ -5,8 +5,8 @@
 // que abria o login interno — um aplicativo que ele não consegue usar. Aqui cada link tem o próprio
 // manifesto: abre no painel DELE e leva o nome da empresa dele.
 
-/** Cores de fundo do portal (as mesmas de --background em app/globals.css) — manifesto não lê CSS. */
-export const FUNDO_PORTAL = { escuro: "#111318", claro: "#f4f5f8" } as const;
+/** Cores de fundo do portal (as mesmas de --background em .casco-portal, app/globals.css) — manifesto não lê CSS. */
+export const FUNDO_PORTAL = { escuro: "#090d14", claro: "#f3f5fb" } as const;
 
 export interface ManifestoDoPortal {
   name: string;

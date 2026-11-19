@@ -48,6 +48,11 @@ export default function PortalCasco<T extends string>({ itens, valor, onChange, 
   const emMais = itens.slice(naBarra.length);
   const [maisAberto, setMaisAberto] = useState(false);
   const ativoEmMais = emMais.some((it) => it.valor === valor);
+  // Paleta do portal também no <html>: as janelas (anúncios ativos, "Como contamos") abrem fora do casco.
+  useEffect(() => {
+    document.documentElement.classList.add("casco-portal");
+    return () => document.documentElement.classList.remove("casco-portal");
+  }, []);
   useEffect(() => {
     if (!maisAberto) return;
     const aoTeclar = (e: KeyboardEvent) => { if (e.key === "Escape") setMaisAberto(false); };
@@ -56,7 +61,7 @@ export default function PortalCasco<T extends string>({ itens, valor, onChange, 
   }, [maisAberto]);
 
   return (
-    <div className={cn("min-h-screen bg-background text-foreground", temMenu && "lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]")}>
+    <div className={cn("casco-portal min-h-screen bg-background text-foreground", temMenu && "lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]")}>
       {temMenu && (
         <aside className="sticky top-0 hidden h-screen flex-col border-r border-border bg-card px-3 py-6 lg:flex">
           <div className="flex items-center gap-2 px-3 pb-7">

@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
-  BarChart3, ChevronDown, Globe, Handshake, LayoutDashboard, ClipboardList, MessageCircle, MousePointerClick, Pause, Pin, Palette, Receipt,
+  BarChart3, ChevronDown, CircleHelp, Globe, Handshake, LayoutDashboard, ClipboardList, MessageCircle, MousePointerClick, Pause, Pin, Palette, Receipt,
   RefreshCw, Star, Trophy, TrendingUp, Users, Wallet, Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -22,6 +22,7 @@ import PortalContent from "./PortalContent";
 import PortalInstagram, { type IgSnapPortal } from "./PortalInstagram";
 import PortalCasco, { type ItemDoCasco } from "./PortalCasco";
 import PortalResumo from "./PortalResumo";
+import ComoContamos from "./ComoContamos";
 import PortalUpload from "@/components/portal/PortalUpload";
 import PortalAgenda from "./PortalAgenda";
 import PortalMateriais from "./PortalMateriais";
@@ -131,7 +132,6 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   // Gráfico do topo (05/11/2026): um gráfico só, com a escolha da métrica — a "Evolução diária" de baixo
   // repetia o mesmo desenho.
   const [metricaGrafico, setMetricaGrafico] = useState<MetricaGrafico>("messages");
-  const [comoContamos, setComoContamos] = useState(false);
 
   const phone = whatsappPhone || WHATSAPP_EQUIPE;
 
@@ -274,6 +274,10 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
     : porHora ? `Hoje até as ${ultimaHora ?? "0h"}, comparado com ontem até a mesma hora.`
     : `${rotuloDia(per.start)} a ${rotuloDia(per.end)}, comparado com ${rotuloDia(per.previous_start)} a ${rotuloDia(per.previous_end)}.`;
 
+  const comoContamos = {
+    temResumo: abas.includes("resumo"), temAnuncios: hasAds, temGoogle: hasGoogle, temInstagram: hasSocial && !comecando, palavras,
+  };
+
   const mostraPublico = loading || !!demo?.gender || (demo?.age_ranges?.length ?? 0) > 0;
   const mostraCriativos = loading || top.length > 0 || (ativos?.total ?? 0) > 0 || incompleto;
   const mostraTimeline = loading || actions.length > 0;
@@ -310,6 +314,14 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {/* Só depois de montar: o tema do cliente só é conhecido no navegador (evita ícone trocado). */}
+            {/* "Como contamos": de qualquer área, o que cada número quer dizer (antes só no rodapé de Anúncios). */}
+            <ComoContamos {...comoContamos}>
+              <button type="button" aria-label="Como contamos os números"
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                <CircleHelp size={15} aria-hidden />
+                <span className="hidden sm:inline">Como contamos</span>
+              </button>
+            </ComoContamos>
             {montado ? <ThemeToggle /> : <span className="h-9 w-9" aria-hidden />}
             {/* Desktop: botão no cabeçalho / Celular: botão flutuante (MobileFAB) */}
             <a
@@ -550,20 +562,11 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           <p className="text-lone-caption text-muted-foreground">
             Relatório exclusivo{mesRelatorio ? ` · ${mesRelatorio}` : ""}
           </p>
-          {view === "ads" && hasAds && (
-            <div className="mx-auto max-w-prose">
-              <button type="button" aria-expanded={comoContamos} onClick={() => setComoContamos((v) => !v)}
-                className="text-lone-caption text-muted-foreground underline-offset-2 hover:underline">
-                Como contamos os números
-              </button>
-              {comoContamos && (
-                <p className="mt-1 text-lone-caption text-muted-foreground">
-                  Conversas e cliques contam quem agiu até 7 dias depois de clicar no anúncio, ou no dia em que o viu.
-                  Os números podem ficar até 5% diferentes do Gerenciador de Anúncios, porque a Meta ainda ajusta os dias recentes.
-                </p>
-              )}
-            </div>
-          )}
+          <ComoContamos {...comoContamos}>
+            <button type="button" className="text-lone-caption text-muted-foreground underline-offset-2 hover:underline">
+              Como contamos os números
+            </button>
+          </ComoContamos>
         </footer>
       </div>
     </PortalCasco>

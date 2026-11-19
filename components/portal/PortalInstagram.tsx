@@ -216,9 +216,10 @@ export default function PortalInstagram({ token, clientId, period, inicial = nul
         )}
 
         {!loading && frase && (
-          <Cartao className="px-4 py-3.5">
+          // A frase do período em destaque, no mesmo desenho da Visão geral (19/11/2026).
+          <Cartao interativo={false} className="p-5 sm:p-6">
             <p className="text-lone-eyebrow uppercase text-muted-foreground">Em uma frase</p>
-            <p className="mt-1 text-sm font-medium text-foreground sm:text-base">{frase}</p>
+            <p className="mt-2 max-w-prose text-lone-h2 font-medium leading-snug tracking-tight text-foreground sm:text-lone-h1 sm:leading-snug">{frase}</p>
           </Cartao>
         )}
 
