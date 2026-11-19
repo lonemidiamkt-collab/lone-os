@@ -10,7 +10,10 @@ import { iniciais } from "@/components/portal/PortalCasco";
 
 describe("áreas do cliente", () => {
   it("ordem fixa, só o que ele tem", () => {
-    expect(abasDisponiveis({ hasAds: true, hasGoogle: true, hasCrm: true, hasSocial: true })).toEqual(["ads", "google", "crm", "social", "conteudo"]);
+    expect(abasDisponiveis({ hasAds: true, hasGoogle: true, hasCrm: true, hasSocial: true })).toEqual(["resumo", "ads", "google", "crm", "social", "conteudo"]);
+    // Visão geral só com 2+ canais de número (atendimento não conta: não é canal de resultado).
+    expect(abasDisponiveis({ hasAds: true, hasCrm: true })).toEqual(["ads", "crm"]);
+    expect(abasDisponiveis({ hasAds: true, hasGoogle: true })).toEqual(["resumo", "ads", "google"]);
     expect(abasDisponiveis({ hasGoogle: true })).toEqual(["google"]);
     expect(abasDisponiveis({})).toEqual([]);
   });
@@ -32,6 +35,8 @@ describe("período único", () => {
     expect(periodoValido("mes", "social")).toBe("7d");
     expect(periodoValido("ontem", "ads")).toBe("7d");
     expect(periodoValido(null, "ads")).toBe("7d");
+    expect(periodoValido("14d", "resumo")).toBe("14d");
+    expect(periodoValido("mes", "resumo")).toBe("7d");
   });
 
   it("área sem filtro só carrega o período adiante", () => {

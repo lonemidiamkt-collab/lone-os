@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
-  BarChart3, ChevronDown, Globe, Handshake, ClipboardList, MessageCircle, MousePointerClick, Pause, Pin, Palette, Receipt,
+  BarChart3, ChevronDown, Globe, Handshake, LayoutDashboard, ClipboardList, MessageCircle, MousePointerClick, Pause, Pin, Palette, Receipt,
   RefreshCw, Star, Trophy, TrendingUp, Users, Wallet, Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -21,6 +21,7 @@ import MobileFAB from "./MobileFAB";
 import PortalContent from "./PortalContent";
 import PortalInstagram, { type IgSnapPortal } from "./PortalInstagram";
 import PortalCasco, { type ItemDoCasco } from "./PortalCasco";
+import PortalResumo from "./PortalResumo";
 import PortalUpload from "@/components/portal/PortalUpload";
 import PortalAgenda from "./PortalAgenda";
 import PortalMateriais from "./PortalMateriais";
@@ -47,6 +48,7 @@ import {
 
 /** As áreas do painel: nome completo (menu lateral) e nome curto (barra do celular). */
 const AREAS: Record<AbaPortal, Omit<ItemDoCasco<AbaPortal>, "valor">> = {
+  resumo:   { rotulo: "Visão geral",           curto: "Resumo",    icone: LayoutDashboard },
   ads:      { rotulo: "Anúncios",              curto: "Anúncios",  icone: BarChart3 },
   google:   { rotulo: "Google",                curto: "Google",    icone: Globe },
   crm:      { rotulo: "Atendimento e vendas",  curto: "Vendas",    icone: Handshake },
@@ -156,7 +158,8 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   // o período em outra área (Google, Instagram) e voltou: sem isto ficaria o número de 7 dias sob "14 dias".
   const kindPedido = useRef<PeriodKind>(period);
   useEffect(() => {
-    if (view !== "ads" || !hasAds || kindPedido.current === period) return;
+    // A Visão geral usa o mesmo snapshot dos anúncios.
+    if ((view !== "ads" && view !== "resumo") || !hasAds || kindPedido.current === period) return;
     kindPedido.current = period;
     fetchPeriod(period);
   }, [view, hasAds, period, fetchPeriod]);
@@ -370,6 +373,17 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                 <PortalInstagram token={token} clientId={clientId} period={paraPeriodoIg(periodo)} inicial={initialIg} />
               )}
             </div>
+          )}
+
+          {/* ── Visão geral: a frase do período e um cartão por canal (só com 2+ canais) ── */}
+          {view === "resumo" && (periodo === "7d" || periodo === "14d") && (
+            <PortalResumo
+              token={token} clientId={clientId} periodo={periodo}
+              anuncios={{ dados: data, carregando: loading, falhou: !!erro }}
+              igInicial={initialIg}
+              temAnuncios={hasAds} temGoogle={hasGoogle} temInstagram={hasSocial && !comecando} temConteudo={hasSocial}
+              onAbrir={mudarAba}
+            />
           )}
 
           {/* ── Google: Perfil da Empresa (ligações, rotas, site) e Google Ads ── */}

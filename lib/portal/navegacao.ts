@@ -11,12 +11,12 @@
 
 import type { PeriodKind } from "./types";
 
-export type AbaPortal = "ads" | "google" | "crm" | "social" | "conteudo";
+export type AbaPortal = "resumo" | "ads" | "google" | "crm" | "social" | "conteudo";
 export type PeriodoPortal = "hoje" | "7d" | "14d" | "30d" | "mes" | "mes-passado";
 /** Os períodos que o Instagram guarda (mesmos valores de IG_PERIODOS em PortalInstagram). */
 export type PeriodoIg = "7d" | "14d" | "30d";
 
-export const ABAS_PORTAL: readonly AbaPortal[] = ["ads", "google", "crm", "social", "conteudo"];
+export const ABAS_PORTAL: readonly AbaPortal[] = ["resumo", "ads", "google", "crm", "social", "conteudo"];
 export const PERIODO_PADRAO: PeriodoPortal = "7d";
 
 export const PERIODOS_PORTAL: readonly { valor: PeriodoPortal; rotulo: string }[] = [
@@ -30,6 +30,8 @@ export const PERIODOS_PORTAL: readonly { valor: PeriodoPortal; rotulo: string }[
 
 /** O que cada fonte responde. Aba sem período (atendimento, conteúdo) = lista vazia = sem filtro. */
 export const PERIODOS_DA_ABA: Record<AbaPortal, readonly PeriodoPortal[]> = {
+  // A Visão geral junta as três fontes: só oferece o que TODAS respondem.
+  resumo: ["7d", "14d"],
   ads: ["hoje", "7d", "14d", "mes", "mes-passado"],
   google: ["7d", "14d", "mes", "mes-passado"],
   social: ["7d", "14d", "30d"],
@@ -41,9 +43,14 @@ const PARA_KIND: Partial<Record<PeriodoPortal, PeriodKind>> = {
   hoje: "today", "7d": "last_week", "14d": "last_2_weeks", mes: "this_month", "mes-passado": "last_month",
 };
 
-/** Abas que este cliente tem, na ordem fixa do menu. */
+/**
+ * Abas que este cliente tem, na ordem fixa do menu. A "Visão geral" só existe (e abre primeiro) para quem
+ * tem dois ou mais canais com número — com um canal só ela repetiria a área dele.
+ */
 export function abasDisponiveis(tem: { hasAds?: boolean; hasGoogle?: boolean; hasCrm?: boolean; hasSocial?: boolean }): AbaPortal[] {
+  const canais = [tem.hasAds, tem.hasGoogle, tem.hasSocial].filter(Boolean).length;
   return [
+    ...(canais >= 2 ? ["resumo" as const] : []),
     ...(tem.hasAds ? ["ads" as const] : []),
     ...(tem.hasGoogle ? ["google" as const] : []),
     ...(tem.hasCrm ? ["crm" as const] : []),

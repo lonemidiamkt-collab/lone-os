@@ -11,6 +11,7 @@ vi.mock("@/components/portal/PortalInstagram", () => ({
   default: () => <div>RELATORIO_INSTAGRAM</div>,
   IG_PERIODOS: [{ valor: "7d", rotulo: "7 dias", dias: 7 }],
 }));
+vi.mock("@/components/portal/PortalResumo", () => ({ default: () => <div>VISAO_GERAL</div> }));
 vi.mock("@/components/portal/PortalAgenda", () => ({ default: () => <div>AGENDA</div> }));
 vi.mock("@/components/portal/PortalContent", () => ({ default: () => <div>ARTES</div> }));
 vi.mock("@/components/portal/PortalUpload", () => ({ default: () => <div>ENVIAR_MATERIAL</div> }));
@@ -76,6 +77,7 @@ describe("período único e endereço", () => {
   it("cada área oferece só o período que a fonte dela responde, e o período escolhido acompanha a troca", () => {
     render(<PortalDashboard {...props} />);
     const periodos = () => within(screen.getByRole("group", { name: "Período" }));
+    fireEvent.click(area(/Anúncios/));
     expect(periodos().getByRole("button", { name: "Hoje" })).toBeInTheDocument();
     expect(periodos().queryByRole("button", { name: "30 dias" })).toBeNull();
 
@@ -89,7 +91,7 @@ describe("período único e endereço", () => {
     fireEvent.click(periodos().getByRole("button", { name: "30 dias" }));
     fireEvent.click(area(/Anúncios/));
     expect(periodos().getByRole("button", { name: "7 dias" })).toHaveAttribute("aria-pressed", "true");
-    expect(window.location.search).toBe("");
+    expect(window.location.search).toBe("?aba=ads");
   });
 
   it("trocar o período em outra área e voltar aos anúncios busca o período novo", async () => {
@@ -101,5 +103,30 @@ describe("período único e endereço", () => {
     expect(chamar).not.toHaveBeenCalled();
     fireEvent.click(area(/Anúncios/));
     expect(chamar).toHaveBeenCalledWith("/api/portal/t/snapshot", { period_kind: "last_2_weeks" });
+  });
+});
+
+describe("visão geral", () => {
+  it("com dois canais ou mais o painel abre na Visão geral, com 7 e 14 dias", () => {
+    render(<PortalDashboard {...props} />);
+    expect(screen.getByText("VISAO_GERAL")).toBeInTheDocument();
+    const periodos = within(screen.getByRole("group", { name: "Período" }));
+    expect(periodos.getAllByRole("button").map((b) => b.textContent)).toEqual(["7 dias", "14 dias"]);
+    expect(window.location.search).toBe("");
+  });
+
+  it("com um canal só não existe Visão geral: abre direto na área dele", () => {
+    render(<PortalDashboard {...props} hasSocial={false} hasGoogle={false} />);
+    expect(screen.queryByText("VISAO_GERAL")).toBeNull();
+  });
+
+  it("seis áreas: a barra do celular mostra quatro e guarda as outras em Mais", () => {
+    render(<PortalDashboard {...props} hasGoogle hasCrm />);
+    const barra = within(screen.getAllByRole("navigation", { name: "Áreas do painel" })[1]);
+    expect(barra.queryByRole("button", { name: "Conteúdo e envios" })).toBeNull();
+    fireEvent.click(barra.getByRole("button", { name: "Mais áreas" }));
+    fireEvent.click(barra.getByRole("button", { name: "Conteúdo e envios" }));
+    expect(screen.getByText("ENVIAR_MATERIAL")).toBeInTheDocument();
+    expect(barra.queryByRole("button", { name: "Conteúdo e envios" })).toBeNull(); // fechou
   });
 });
