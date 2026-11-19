@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- Tela "sem conexão" do Painel de Resultados (Leva 4, 19/11/2026). Servida pelo service worker
+     (public/sw.js) quando o cliente abre o portal sem internet. Página solta, sem o app: por isso o
+     estilo e as cores ficam aqui dentro (as mesmas de .casco-portal em app/globals.css). -->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#090d14">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f5fb">
+<title>Sem conexão · Painel de Resultados</title>
+<style>
+  :root { --fundo:#f3f5fb; --cartao:#ffffff; --borda:#dde4f0; --texto:#172138; --apagado:#5b6a85; --acao:#3751ec; --sobre-acao:#ffffff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fundo:#090d14; --cartao:#141a25; --borda:#293246; --texto:#f5f7fd; --apagado:#9aa6bc; --acao:#3f57f0; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; display: grid; place-items: center; background: var(--fundo); color: var(--texto);
+    font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+    -webkit-font-smoothing: antialiased;
+  }
+  main { width: 100%; max-width: 380px; text-align: center; }
+  .marca { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--apagado); font-weight: 500; }
+  .selo { width: 56px; height: 56px; margin: 20px auto 0; border-radius: 16px; border: 1px solid var(--borda); background: var(--cartao); display: grid; place-items: center; color: var(--apagado); }
+  h1 { margin: 20px 0 6px; font-size: 22px; font-weight: 600; letter-spacing: -.02em; line-height: 1.25; }
+  p { margin: 0; color: var(--apagado); }
+  button {
+    margin-top: 24px; min-height: 48px; padding: 0 22px; border: 0; border-radius: 10px; cursor: pointer;
+    background: var(--acao); color: var(--sobre-acao); font: inherit; font-weight: 500;
+  }
+  button:focus-visible { outline: 3px solid var(--acao); outline-offset: 3px; }
+  .estado { margin-top: 14px; min-height: 22px; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="marca">Lone Mídia · Painel de Resultados</div>
+  <div class="selo" aria-hidden="true">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 8.8a15 15 0 0 1 4.2-2.7M22 8.8a15 15 0 0 0-8.4-3.7M5 12.9a10 10 0 0 1 3.3-2.2M19 12.9a10 10 0 0 0-3.1-2.1M8.5 16.4a5 5 0 0 1 7 0M12 20h.01M3 3l18 18"/>
+    </svg>
+  </div>
+  <h1>Sem conexão com a internet</h1>
+  <p>Seus resultados continuam guardados com a gente. Quando a internet voltar, o painel abre de novo.</p>
+  <button type="button" id="tentar">Tentar de novo</button>
+  <p class="estado" id="estado" role="status"></p>
+</main>
+<script>
+  (function () {
+    var estado = document.getElementById("estado");
+    function abrir() { window.location.reload(); }
+    document.getElementById("tentar").addEventListener("click", function () {
+      if (navigator.onLine === false) { estado.textContent = "Ainda sem internet. Confira o Wi-Fi ou os dados do celular."; return; }
+      estado.textContent = "Abrindo…";
+      abrir();
+    });
+    // A internet voltou sozinha: abre o painel sem o cliente precisar tocar.
+    window.addEventListener("online", function () { estado.textContent = "A internet voltou. Abrindo…"; abrir(); });
+  })();
+</script>
+</body>
+</html>

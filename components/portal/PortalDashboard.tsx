@@ -23,6 +23,7 @@ import PortalInstagram, { type IgSnapPortal } from "./PortalInstagram";
 import PortalCasco, { type ItemDoCasco } from "./PortalCasco";
 import PortalResumo from "./PortalResumo";
 import ComoContamos from "./ComoContamos";
+import PortalInstalar from "./PortalInstalar";
 import PortalUpload from "@/components/portal/PortalUpload";
 import PortalAgenda from "./PortalAgenda";
 import PortalMateriais from "./PortalMateriais";
@@ -555,8 +556,11 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           )}
           </motion.div>
 
+        {/* Convite para ter o painel na tela do celular — no fim da página, nunca na frente dos números. */}
+        <div className="mt-10"><PortalInstalar /></div>
+
         {/* ── Rodapé ───────────────────────────────────────────────────── */}
-        <footer className="mt-12 space-y-2 border-t border-border pb-20 pt-6 text-center lg:pb-10">
+        <footer className="mt-8 space-y-2 border-t border-border pb-20 pt-6 text-center lg:pb-10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="Lone Mídia" className="mx-auto h-6 w-auto opacity-50" />
           <p className="text-lone-caption text-muted-foreground">
