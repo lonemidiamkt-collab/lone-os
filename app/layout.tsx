@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Montserrat, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import ConditionalAppShell from "@/components/ConditionalAppShell";
@@ -30,15 +30,23 @@ export const metadata: Metadata = {
   description: "Sistema de Gestão Operacional Interna",
   icons: { icon: "/logo.png" },
   manifest: "/manifest.json",
-  themeColor: "#2b3cff",
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Lone OS" },
+};
+
+// Viewport do painel do time (igual ao que estava fixo no <head>). Como export, a página do portal do cliente
+// consegue trocar o dela (zoom liberado, cor da barra) — meta fixa no <head> não dá para sobrescrever.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  userScalable: false,
+  themeColor: "#2b3cff",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="apple-touch-icon" href="/icon-192.png" />

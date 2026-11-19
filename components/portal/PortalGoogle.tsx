@@ -215,8 +215,11 @@ function BlocoAnuncios({ r, carregando }: { r: RelatorioGoogleAds; carregando: b
 
 // ── A aba ───────────────────────────────────────────────────────────────────────────────────────────
 
-export default function PortalGoogle({ token }: { token: string }) {
-  const [periodo, setPeriodo] = useState<PeriodKind>("last_week");
+/** `periodo`: quando o painel manda (período único do casco), a aba não mostra o próprio seletor. */
+export default function PortalGoogle({ token, periodo: periodoDoPainel }: { token: string; periodo?: PeriodKind }) {
+  const [periodoProprio, setPeriodo] = useState<PeriodKind>("last_week");
+  // O Google não tem "Hoje": se vier, mostra 7 dias (o painel já não oferece "Hoje" nesta área).
+  const periodo: PeriodKind = periodoDoPainel ? (periodoDoPainel === "today" ? "last_week" : periodoDoPainel) : periodoProprio;
   const [dados, setDados] = useState<Resposta | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -254,7 +257,9 @@ export default function PortalGoogle({ token }: { token: string }) {
         {partes.length > 1 && atual && (
           <Segmentado rotulo="Parte do Google" opcoes={partes} valor={atual} onChange={setParte} destaque />
         )}
-        <Segmentado rotulo="Período" opcoes={PERIODOS} valor={periodo} onChange={setPeriodo} desabilitado={carregando} cheio className="sm:inline-flex sm:w-auto" />
+        {!periodoDoPainel && (
+          <Segmentado rotulo="Período" opcoes={PERIODOS} valor={periodo} onChange={setPeriodo} desabilitado={carregando} cheio className="sm:inline-flex sm:w-auto" />
+        )}
       </div>
 
       {erro && !carregando && (

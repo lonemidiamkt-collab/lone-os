@@ -1,3 +1,4 @@
+import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -6,7 +7,9 @@ import { lerIgDoCache, paraOPortal } from "@/lib/meta/igSnapshot";
 import type { SnapshotData } from "@/lib/portal/types";
 import { WHATSAPP_EQUIPE } from "@/lib/portal/contato";
 import PortalDashboard from "@/components/portal/PortalDashboard";
-import { lerLinkDoPortal, type LinhaDeAcesso } from "@/lib/portal/token";
+import { clienteDoLink, lerLinkDoPortal, type LinhaDeAcesso } from "@/lib/portal/token";
+import { abaValida, abasDisponiveis, paraPeriodKind, periodoValido } from "@/lib/portal/navegacao";
+import { FUNDO_PORTAL } from "@/lib/portal/manifesto";
 import PortalIndisponivel from "@/components/portal/PortalIndisponivel";
 import { temColunasGoogle } from "@/lib/google/colunas";
 import { temGoogleNoRelatorio } from "@/lib/google/relatorio-dados";
@@ -14,12 +17,47 @@ import { clientesComCrm } from "@/lib/crm-externo/servidor";
 
 export const dynamic = "force-dynamic";
 
+// O portal é do CLIENTE (19/11/2026): título, ícone na tela inicial e manifesto próprios. Antes herdava tudo
+// do painel do time — a aba do navegador dizia "Lone OS" e "Adicionar à tela inicial" criava um ícone
+// "Lone OS" que abria o login da equipe (public/manifest.json tem start_url "/").
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const { token } = await params;
+  const lido = await clienteDoLink(token).catch(() => null);
+  const robots = { index: false, follow: false };
+  if (lido?.estado !== "ok") return { title: "Painel de Resultados · Lone Mídia", robots };
+  return {
+    title: `${lido.linha.nome} · Painel de Resultados`,
+    description: "Seus resultados com a Lone Mídia",
+    manifest: `/portal/${encodeURIComponent(token)}/manifest.webmanifest`,
+    appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Resultados" },
+    robots,
+  };
+}
+
+// Zoom liberado no portal: o painel do time trava (app/layout.tsx), mas quem abre aqui é o dono da loja, no
+// celular, e precisa poder ampliar um número. A barra do sistema acompanha o fundo da página, não o azul.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  userScalable: true,
+  maximumScale: 5,
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: FUNDO_PORTAL.escuro },
+    { media: "(prefers-color-scheme: light)", color: FUNDO_PORTAL.claro },
+  ],
+};
+
 export default async function PortalPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { token } = await params;
+  const busca = await searchParams;
+  const daBusca = (k: string) => { const v = busca[k]; return typeof v === "string" ? v : undefined; };
 
   // Valida token
   // EX-CLIENTE NÃO VÊ MAIS (23/09): desativar/arquivar o cliente parava o sync, as mensagens e a
@@ -80,12 +118,17 @@ export default async function PortalPage({
     was_valid: true,
   });
 
-  // Snapshot inicial (last_week) pelo MESMO caminho da rota: respeita a idade do cache. Antes pegava
-  // o último gravado, de qualquer idade. Falhou a Meta → vem "indisponivel" e a tela diz "atualizando".
+  // Área e período do endereço (`?aba=google&p=14d`), validados contra o que este cliente tem.
+  const abaInicial = abaValida(daBusca("aba"), abasDisponiveis({ hasAds, hasGoogle, hasCrm, hasSocial }));
+  const periodoInicial = periodoValido(daBusca("p"), abaInicial);
+
+  // Snapshot inicial (do período do endereço; 7 dias se não vier) pelo MESMO caminho da rota: respeita a
+  // idade do cache. Falhou a Meta → vem "indisponivel" e a tela diz "atualizando".
+
   let initialData: SnapshotData | null = null;
   if (hasAds) {
     try {
-      initialData = await obterSnapshot(client.id as string, "last_week");
+      initialData = await obterSnapshot(client.id as string, paraPeriodKind(periodoInicial));
     } catch (err) {
       console.error("[portal] falhou o snapshot inicial:", client.id, String(err));
     }
@@ -110,7 +153,6 @@ export default async function PortalPage({
 
   return (
     <>
-      <meta name="robots" content="noindex, nofollow" />
       <PortalDashboard
         token={token}
         clientId={client.id as string}
@@ -128,6 +170,8 @@ export default async function PortalPage({
         desde={(client.join_date as string) ?? null}
         aprovacaoLigada={process.env.PORTAL_APROVACAO_CLIENTE === "on"}
         mesRelatorio={mesRelatorio}
+        abaInicial={abaInicial}
+        periodoInicial={periodoInicial}
       />
     </>
   );

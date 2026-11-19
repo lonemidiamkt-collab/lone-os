@@ -3,9 +3,11 @@
 interface Props {
   phone: string;
   clientName: string;
+  /** Com a barra de áreas embaixo (celular), o botão sobe para não ficar em cima dela. */
+  acimaDaBarra?: boolean;
 }
 
-export default function MobileFAB({ phone, clientName }: Props) {
+export default function MobileFAB({ phone, clientName, acimaDaBarra = false }: Props) {
   const text = `Olá! Tenho uma dúvida sobre os resultados da ${clientName}.`;
   const url  = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 
@@ -15,7 +17,7 @@ export default function MobileFAB({ phone, clientName }: Props) {
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Falar com a equipe pelo WhatsApp"
-      className="lg:hidden fixed bottom-4 right-4 z-50 flex items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-overlay-foreground bg-whatsapp text-primary-foreground"
+      className={`lg:hidden fixed right-4 z-50 ${acimaDaBarra ? "bottom-[calc(5rem+env(safe-area-inset-bottom))]" : "bottom-4"} flex items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-overlay-foreground bg-whatsapp text-primary-foreground`}
       style={{
         width: 56,
         height: 56,

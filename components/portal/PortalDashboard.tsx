@@ -19,7 +19,8 @@ import {
 import type { SnapshotData, PeriodKind, CreativeItem } from "@/lib/portal/types";
 import MobileFAB from "./MobileFAB";
 import PortalContent from "./PortalContent";
-import PortalInstagram, { IG_PERIODOS, type IgPeriodo, type IgSnapPortal } from "./PortalInstagram";
+import PortalInstagram, { type IgSnapPortal } from "./PortalInstagram";
+import PortalCasco, { type ItemDoCasco } from "./PortalCasco";
 import PortalUpload from "@/components/portal/PortalUpload";
 import PortalAgenda from "./PortalAgenda";
 import PortalMateriais from "./PortalMateriais";
@@ -39,14 +40,19 @@ import { fraseDelta, periodoAnterior, resumoConversas, type MetricType } from "@
 import { formatarBRL, formatarNumero, palavrasDoResultado, rotuloDia, type PalavrasResultado } from "@/lib/portal/formatos";
 import { PainelComparativo, type KpiComparativo } from "@/components/ui/painel-comparativo";
 import { tomDaVariacao } from "@/components/ui/painel-comparativo-utils";
+import {
+  PERIODOS_DA_ABA, PERIODOS_PORTAL, abaValida, abasDisponiveis, buscaDoPortal, diasDoPeriodo, paraPeriodKind, paraPeriodoIg,
+  periodoValido, type AbaPortal, type PeriodoPortal,
+} from "@/lib/portal/navegacao";
 
-const PERIODS: { valor: PeriodKind; rotulo: string }[] = [
-  { valor: "today",        rotulo: "Hoje"        },
-  { valor: "last_week",    rotulo: "7 dias"      },
-  { valor: "last_2_weeks", rotulo: "14 dias"     },
-  { valor: "this_month",   rotulo: "Este mês"    },
-  { valor: "last_month",   rotulo: "Mês passado" },
-];
+/** As áreas do painel: nome completo (menu lateral) e nome curto (barra do celular). */
+const AREAS: Record<AbaPortal, Omit<ItemDoCasco<AbaPortal>, "valor">> = {
+  ads:      { rotulo: "Anúncios",              curto: "Anúncios",  icone: BarChart3 },
+  google:   { rotulo: "Google",                curto: "Google",    icone: Globe },
+  crm:      { rotulo: "Atendimento e vendas",  curto: "Vendas",    icone: Handshake },
+  social:   { rotulo: "Crescimento nas redes", curto: "Instagram", icone: TrendingUp },
+  conteudo: { rotulo: "Conteúdo e envios",     curto: "Conteúdo",  icone: Palette },
+};
 
 /** O que o gráfico do topo mostra — escolhido clicando no cartão do número. */
 type MetricaGrafico = MetricType | "clicks";
@@ -88,10 +94,20 @@ interface Props {
   desde?: string | null;
   /** "MM/AAAA" do rodapé, calculado no servidor em SP (evita divergência de hidratação). */
   mesRelatorio?: string;
+  /** Área e período pedidos no endereço (`?aba=…&p=…`), já validados no servidor. `initialData` é DESTE período. */
+  abaInicial?: AbaPortal;
+  periodoInicial?: PeriodoPortal;
 }
 
-export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, initialIg = null, hasAds = true, hasSocial = false, hasGoogle = false, hasCrm = false, comecando = false, desde = null, aprovacaoLigada = false, mesRelatorio = "" }: Props) {
-  const [period, setPeriod]   = useState<PeriodKind>("last_week");
+export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, initialIg = null, hasAds = true, hasSocial = false, hasGoogle = false, hasCrm = false, comecando = false, desde = null, aprovacaoLigada = false, mesRelatorio = "", abaInicial, periodoInicial }: Props) {
+  // Áreas que este cliente tem e a que abre primeiro (a do endereço, se ele tem; senão a primeira).
+  const abas = abasDisponiveis({ hasAds, hasGoogle, hasCrm, hasSocial });
+  const abaPadrao = abaValida(null, abas);
+  const [view, setView] = useState<AbaPortal>(() => abaValida(abaInicial, abas));
+  // UM período para o painel todo (lib/portal/navegacao.ts): acompanha o cliente entre as áreas e vai na URL.
+  const [periodo, setPeriodo] = useState<PeriodoPortal>(() => periodoValido(periodoInicial, abaValida(abaInicial, abas)));
+  /** O período no formato das rotas de anúncios e do Google. */
+  const period: PeriodKind = paraPeriodKind(periodo);
   const [data, setData]       = useState<SnapshotData | null>(initialData);
   const [loading, setLoading] = useState(false);
   // Sem dado no primeiro render = a busca do servidor não completou. Já abre avisando, em vez de
@@ -99,7 +115,6 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   const [erro, setErro]       = useState<string | null>(
     initialData ? null : "Não consegui carregar seus resultados agora.",
   );
-  const [igPeriod, setIgPeriod] = useState<IgPeriodo>("7d");
   // Sobe depois de um envio de material: o histórico "Seus envios" (N37) recarrega.
   const [versaoEnvios, setVersaoEnvios] = useState(0);
   const [montado, setMontado]   = useState(false);
@@ -111,8 +126,6 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   // relatório do Instagram com agenda, artes entregues e envio de material.
   // 18/11/2026: aba "Google" (Perfil da Empresa e Google Ads) quando o cliente tem um dos dois vinculado.
   // 18/11/2026: aba "Atendimento e vendas" quando o CRM do cliente está conectado (lib/crm-externo).
-  const showToggle = hasSocial || [hasAds, hasGoogle, hasCrm].filter(Boolean).length >= 2; // seletor só com 2+ abas
-  const [view, setView] = useState<"ads" | "social" | "conteudo" | "google" | "crm">(hasAds ? "ads" : hasGoogle ? "google" : hasCrm ? "crm" : "social");
   // Gráfico do topo (05/11/2026): um gráfico só, com a escolha da métrica — a "Evolução diária" de baixo
   // repetia o mesmo desenho.
   const [metricaGrafico, setMetricaGrafico] = useState<MetricaGrafico>("messages");
@@ -139,10 +152,31 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
     setLoading(false);
   }, [token]);
 
-  function handlePeriod(p: PeriodKind) {
-    setPeriod(p);
-    fetchPeriod(p);
+  // Os anúncios buscam quando a área está aberta e o período dela mudou — inclusive quando o cliente trocou
+  // o período em outra área (Google, Instagram) e voltou: sem isto ficaria o número de 7 dias sob "14 dias".
+  const kindPedido = useRef<PeriodKind>(period);
+  useEffect(() => {
+    if (view !== "ads" || !hasAds || kindPedido.current === period) return;
+    kindPedido.current = period;
+    fetchPeriod(period);
+  }, [view, hasAds, period, fetchPeriod]);
+
+  // Trocar de área leva o período junto; se a fonte da área nova não responde por ele, volta para 7 dias.
+  function mudarAba(a: AbaPortal) {
+    setView(a);
+    setPeriodo((p) => periodoValido(p, a));
+    window.scrollTo({ top: 0 });
   }
+
+  // Área e período no endereço, sem recarregar: o link copiado (ou mandado pelo time) abre no mesmo lugar.
+  useEffect(() => {
+    const busca = buscaDoPortal(window.location.search, view, periodo, abaPadrao);
+    if (busca !== window.location.search) window.history.replaceState(window.history.state, "", `${window.location.pathname}${busca}${window.location.hash}`);
+  }, [view, periodo, abaPadrao]);
+
+  const periodosDaArea = PERIODOS_PORTAL.filter((p) => PERIODOS_DA_ABA[view].includes(p.valor));
+  // "Estamos começando" (nada vinculado) não tem número para filtrar.
+  const mostraPeriodo = periodosDaArea.length > 0 && !(view === "social" && comecando);
 
   // Meta não respondeu e não havia dado recente: nada de número, só o aviso.
   const atualizando = data?.ads_status === "indisponivel";
@@ -243,20 +277,26 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
 
   return (
     <MotionConfig reducedMotion="user">
-    <div className="min-h-screen bg-background text-foreground">
-      <MobileFAB phone={phone} clientName={clientName} />
+    <PortalCasco
+      itens={abas.map((a) => ({ valor: a, ...AREAS[a] }))}
+      valor={view}
+      onChange={mudarAba}
+      clientName={clientName}
+    >
+      <MobileFAB phone={phone} clientName={clientName} acimaDaBarra={abas.length > 1} />
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
 
         {/* ── Cabeçalho ─────────────────────────────────────────────── */}
         <header className="mb-5 flex items-start justify-between gap-4 lg:mb-7">
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            {/* No computador, com menu lateral, a marca já está no menu. */}
+            <div className={cn("flex items-center gap-2", abas.length > 1 && "lg:hidden")}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logo.png" alt="Lone Mídia" className="h-4 w-auto opacity-70" />
               <p className="text-lone-eyebrow uppercase text-muted-foreground">Painel de Resultados</p>
             </div>
-            <h1 className="mt-2 break-words text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl lg:text-4xl">
+            <h1 className={cn("mt-2 break-words text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl lg:text-4xl", abas.length > 1 && "lg:mt-0")}>
               {clientName}
             </h1>
             {genAt && view === "ads" && (
@@ -286,24 +326,16 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           <Cartao className="mb-5 px-4 py-3 text-sm text-muted-foreground lg:mb-7">{welcomeMessage}</Cartao>
         )}
 
-        {/* Seletor: Anúncios × Crescimento nas redes (só quando o pacote tem os dois) */}
-        {showToggle && (
+        {/* Período: um só, no mesmo lugar em todas as áreas. Cada área mostra o que a fonte dela responde. */}
+        {mostraPeriodo && (
           <Segmentado
-            className="mb-6 sm:inline-flex sm:w-auto"
-            rotulo="O que ver"
+            className="mb-5 sm:inline-flex sm:w-auto lg:mb-6"
+            rotulo="Período"
+            opcoes={periodosDaArea}
+            valor={periodo}
+            onChange={setPeriodo}
+            desabilitado={view === "ads" && loading}
             cheio
-            destaque
-            opcoes={[
-              ...(hasAds ? [{ valor: "ads" as const, rotulo: "Anúncios", icone: BarChart3 }] : []),
-              ...(hasGoogle ? [{ valor: "google" as const, rotulo: "Google", icone: Globe }] : []),
-              ...(hasCrm ? [{ valor: "crm" as const, rotulo: "Atendimento e vendas", icone: Handshake }] : []),
-              ...(hasSocial ? [
-                { valor: "social" as const, rotulo: "Crescimento nas redes", icone: TrendingUp },
-                { valor: "conteudo" as const, rotulo: "Conteúdo e envios", icone: Palette },
-              ] : []),
-            ]}
-            valor={view}
-            onChange={setView}
           />
         )}
 
@@ -319,14 +351,6 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           {/* ── Crescimento nas redes (Instagram orgânico + Conteúdo entregue + Enviar material) ── */}
           {hasSocial && view === "social" && (
             <div className="space-y-6">
-              {!comecando && (
-                <Segmentado
-                  rotulo="Período"
-                  opcoes={IG_PERIODOS.map((p) => ({ valor: p.valor, rotulo: p.rotulo }))}
-                  valor={igPeriod}
-                  onChange={setIgPeriod}
-                />
-              )}
               {/* Nada vinculado ainda (JP Barbearia, 15/09: link enviado 1 semana após o cadastro e o cliente
                   abriu "Instagram ainda não conectado" + upload). Aqui o cliente lê o que vem, não o que falta. */}
               {comecando ? (
@@ -340,16 +364,16 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                     <li><span className="font-medium text-foreground">Instagram</span> — seguidores, alcance e os posts que mais renderam</li>
                     <li><span className="font-medium text-foreground">Conteúdo</span> — as artes que a equipe entregou para você</li>
                   </ul>
-                  <p className="mt-3 text-sm text-muted-foreground">Enquanto isso, o que mais ajuda é mandar o material da loja na aba <button type="button" onClick={() => setView("conteudo")} className="font-medium text-foreground underline underline-offset-2">Conteúdo e envios</button> — logo, fotos, tabela de preço, vídeo.</p>
+                  <p className="mt-3 text-sm text-muted-foreground">Enquanto isso, o que mais ajuda é mandar o material da loja na aba <button type="button" onClick={() => mudarAba("conteudo")} className="font-medium text-foreground underline underline-offset-2">Conteúdo e envios</button> — logo, fotos, tabela de preço, vídeo.</p>
                 </Cartao>
               ) : (
-                <PortalInstagram token={token} clientId={clientId} period={igPeriod} inicial={initialIg} />
+                <PortalInstagram token={token} clientId={clientId} period={paraPeriodoIg(periodo)} inicial={initialIg} />
               )}
             </div>
           )}
 
           {/* ── Google: Perfil da Empresa (ligações, rotas, site) e Google Ads ── */}
-          {hasGoogle && view === "google" && <PortalGoogle token={token} />}
+          {hasGoogle && view === "google" && <PortalGoogle token={token} periodo={period} />}
           {hasCrm && view === "crm" && <PortalCrm token={token} />}
 
           {/* ── Conteúdo e envios: agenda, artes entregues, enviar material e o histórico de envios ── */}
@@ -358,7 +382,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
               {/* Próximos posts e calendário do mês (N36): só Agendado, No ar e aprovado pelo cliente. */}
               <PortalAgenda token={token} />
               <PortalContent token={token} aprovacaoLigada={aprovacaoLigada}
-                dias={IG_PERIODOS.find((p) => p.valor === igPeriod)?.dias ?? 7} />
+                dias={diasDoPeriodo(periodo)} />
               <PortalUpload token={token} clientName={clientName} onEnviado={() => setVersaoEnvios((v) => v + 1)} />
               {/* O que o cliente já mandou, se o time recebeu e onde foi usado (N37). */}
               <PortalMateriais token={token} versao={versaoEnvios} />
@@ -368,16 +392,6 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           {/* ── Anúncios (tráfego) — só pra pacote que tem anúncios ── */}
           {hasAds && view === "ads" && (
             <div className="space-y-5 lg:space-y-6">
-              <Segmentado
-                rotulo="Período dos anúncios"
-                opcoes={PERIODS}
-                valor={period}
-                onChange={handlePeriod}
-                desabilitado={loading}
-                cheio
-                className="sm:inline-flex sm:w-auto"
-              />
-
               {/* Falhou a busca: fala com o cliente em vez de mostrar zeros ou o período anterior. */}
               {erro && !loading && (
                 <Aviso tom="atencao" role="alert" acao={
@@ -538,7 +552,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           )}
         </footer>
       </div>
-    </div>
+    </PortalCasco>
     </MotionConfig>
   );
 }
