@@ -13,6 +13,16 @@ export function urlDoPortal(token: string, dominio: string = PORTAL_DOMAIN): str
   return `${dominio.replace(/\/+$/, "")}/portal/${token}`;
 }
 
+/**
+ * A legenda do relatório de segunda com o link do painel no fim (19/11/2026). Nos 7 dias antes disto, só
+ * 13 dos 62 clientes tinham aberto o portal: o link só chegava uma vez, no cadastro, e se perdia no grupo.
+ * Agora vai toda semana, junto do relatório. Sem link ativo, a legenda fica como está; nunca repete o link.
+ */
+export function comLinkDoPainel(legenda: string, url: string | null | undefined): string {
+  if (!url || legenda.includes(url)) return legenda;
+  return `${legenda}\n\nSeu painel completo, atualizado todo dia: ${url}`;
+}
+
 export type EstadoPortal = "ativo" | "desativado" | "sem_link";
 
 /**

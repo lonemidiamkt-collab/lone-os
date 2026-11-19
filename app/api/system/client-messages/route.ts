@@ -37,6 +37,7 @@ import { montarMensagemCliente } from "@/lib/cs/mensagem-cliente";
 import { sendGroupText, sendMediaDocument } from "@/lib/whatsapp/evolution";
 import { bloqueiaReenvio, erroParaLog, podeTrocarDeNumero } from "@/lib/whatsapp/desfecho-envio";
 import { montarPlacar, segmentoDeVoz } from "@/lib/traffic/placar-semanal";
+import { comLinkDoPainel, estadoDoPortal, urlDoPortal } from "@/lib/portal/link";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -99,6 +100,37 @@ async function modoMensagemIa(): Promise<ModoIa> {
  *   vai para o grupo do TRÁFEGO ler;  "on" → o placar vai para o cliente.
  * Chave: agency_settings.placar_semanal.
  */
+/**
+ * LINK DO PAINEL NA SEGUNDA (19/11/2026): a legenda do relatório termina com o endereço do painel do cliente.
+ * Nasce DESLIGADO — é texto que sai para grupo de cliente; liga com agency_settings.painel_link_segunda = on,
+ * depois de o Roberto ver a prévia. Devolve o link de cada cliente que tem o portal ativo (sem link, revogado
+ * ou desligado fica de fora). Falha de leitura = ninguém recebe o link; o relatório sai como sempre.
+ */
+async function linksDoPainel(ids: string[]): Promise<Map<string, string>> {
+  const links = new Map<string, string>();
+  if (!ids.length) return links;
+  try {
+    const { data: chave } = await supabaseAdmin
+      .from("agency_settings").select("value").eq("key", "painel_link_segunda").maybeSingle();
+    const v = (chave?.value ?? "off").trim().toLowerCase();
+    if (v !== "on" && v !== "true") return links;
+    const { data, error } = await supabaseAdmin
+      .from("clients").select("id, public_report_token, public_report_enabled, public_report_token_revoked_at").in("id", ids);
+    if (error) { console.error("[client-messages] não li os links do painel:", error.message); return links; }
+    for (const c of data ?? []) {
+      const estado = estadoDoPortal({
+        publicReportToken: c.public_report_token as string | null,
+        publicReportEnabled: c.public_report_enabled as boolean | null,
+        publicReportTokenRevokedAt: c.public_report_token_revoked_at as string | null,
+      });
+      if (estado === "ativo") links.set(c.id as string, urlDoPortal(c.public_report_token as string));
+    }
+  } catch (err) {
+    console.error("[client-messages] não li os links do painel:", String(err));
+  }
+  return links;
+}
+
 async function modoPlacar(): Promise<ModoIa> {
   try {
     const { data } = await supabaseAdmin
@@ -237,6 +269,7 @@ export async function POST(req: NextRequest) {
     // Placar da segunda: o modo, o que ficou para o time ler (revisão) e o que o gestor precisa
     // explicar hoje (semana zerada, anúncio parado, queda forte — regra 4 do playbook).
     const placarModo = withReport && !resend ? await modoPlacar() : "off";
+    const linksPainel = withReport ? await linksDoPainel(withGroup.map((c) => c.id)) : new Map<string, string>();
     const placarRevisar: { cliente: string; texto: string }[] = [];
     const placarAlertas: { cliente: string; motivo: string }[] = [];
     const hojeSP = todayKeyBRT();
@@ -278,6 +311,7 @@ export async function POST(req: NextRequest) {
                   else placarRevisar.push({ cliente: name, texto: placar.texto });
                 }
               }
+              legenda = comLinkDoPainel(legenda, linksPainel.get(c.id));
               const res = await sendMediaDocument(jid, pdf.buffer.toString("base64"), fileName, legenda);
               if (res.ok) { reportSent++; await logMsg(c.id, dateKey, "report", "sent"); }
               else { reportFail++; errors.push(`${name} (relatório): ${res.error}`); await logMsg(c.id, dateKey, "report", "failed", erroParaLog(res)); }

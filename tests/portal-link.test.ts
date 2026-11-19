@@ -2,7 +2,7 @@
 // no portal (N4, lib/portal/formatos.ts + formatDelta.ts).
 
 import { describe, it, expect } from "vitest";
-import { estadoDoPortal, mensagemParaCliente, numeroWhatsapp, rascunhoWhatsapp, urlDoPortal } from "@/lib/portal/link";
+import { comLinkDoPainel, estadoDoPortal, mensagemParaCliente, numeroWhatsapp, rascunhoWhatsapp, urlDoPortal } from "@/lib/portal/link";
 import { formatarMetrica, palavrasDoResultado, rotuloMetrica } from "@/lib/portal/formatos";
 import { resumoConversas } from "@/lib/portal/formatDelta";
 import { resolverAba } from "@/components/client/ficha/abas";
@@ -61,5 +61,24 @@ describe("N4 — as palavras seguem o resultado", () => {
     expect(formatarMetrica("messages", 29)).toBe("29 conversas");
     expect(resumoConversas(12, 20, "last_week", "leads")).toBe("Nos últimos 7 dias: 12 leads, 20% a mais que a semana anterior.");
     expect(resumoConversas(48, null, "last_week")).toBe("Nos últimos 7 dias: 48 conversas.");
+  });
+});
+
+describe("link do painel na legenda de segunda", () => {
+  const url = "https://resultados.lonemidia.com/portal/abc";
+
+  it("vai no fim da legenda, depois de uma linha em branco", () => {
+    expect(comLinkDoPainel("Bom dia! Relatório da semana aqui em cima.", url))
+      .toBe("Bom dia! Relatório da semana aqui em cima.\n\nSeu painel completo, atualizado todo dia: https://resultados.lonemidia.com/portal/abc");
+  });
+
+  it("cliente sem link ativo recebe a legenda como sempre", () => {
+    expect(comLinkDoPainel("Bom dia!", null)).toBe("Bom dia!");
+    expect(comLinkDoPainel("Bom dia!", undefined)).toBe("Bom dia!");
+  });
+
+  it("não repete o link se a legenda já o traz", () => {
+    const comLink = comLinkDoPainel("Bom dia!", url);
+    expect(comLinkDoPainel(comLink, url)).toBe(comLink);
   });
 });

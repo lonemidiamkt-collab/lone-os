@@ -15,14 +15,14 @@ import {
   ArrowUpRight, Bookmark, Camera, Eye, Heart, Image as ImageIcon, MessageCircle, MousePointerClick, Play, RefreshCw, Trophy, UserPlus, Users,
   type LucideIcon,
 } from "lucide-react";
-import { HOVER_CARTAO } from "@/components/ui/painel-comparativo";
+import { HOVER_CARTAO, PainelComparativo } from "@/components/ui/painel-comparativo";
 import { chamar } from "@/lib/api/chamar";
 import Skeleton from "@/components/ui/Skeleton";
 // clsx (não cn) onde o tamanho de fonte "lone" encontra uma cor de texto: o twMerge acha que os dois são cor
 // e apaga o tamanho.
 import { clsx } from "clsx";
 import { cn } from "@/lib/utils";
-import { formatarNumero } from "@/lib/portal/formatos";
+import { formatarNumero, rotuloDia } from "@/lib/portal/formatos";
 import { resumoInstagram } from "@/lib/portal/formatDelta";
 import PublicoCard from "./PublicoCard";
 import { Cartao, CabecalhoSecao, Dica, entrada } from "./ui";
@@ -32,7 +32,7 @@ interface Post {
   curtidas: number | null; comentarios: number | null; views: number | null; alcance: number | null;
   salvos?: number | null; compartilhamentos?: number | null; engajamento: number;
 }
-interface Resumo { alcance: number | null; alcanceJanelaDias?: number | null; seguidoresGanhos: number | null; curtidas: number; comentarios: number; engajamento: number; postsNoPeriodo: number | null }
+interface Resumo { alcance: number | null; alcanceJanelaDias?: number | null; seguidoresGanhos: number | null; seguidoresPorDia?: { dia: string; valor: number }[] | null; curtidas: number; comentarios: number; engajamento: number; postsNoPeriodo: number | null }
 interface Audiencia { generoMascPct: number | null; generoFemPct: number | null; idades: { faixa: string; pct: number }[]; cidades: { nome: string; pct: number }[] }
 interface Numeros { views: number | null; alcance: number | null; interacoes: number | null; toques: number | null; entraram: number | null; sairam: number | null; posts: number | null }
 interface Metricas {
@@ -260,6 +260,20 @@ export default function PortalInstagram({ token, clientId, period, inicial = nul
 
         <GradeKpis kpis={principais} loading={loading} grande />
         <GradeKpis kpis={secundarios} loading={loading} />
+
+        {/* Evolução dos seguidores (19/11/2026): quem começou a seguir, dia a dia. Só aparece com a série da
+            Meta e pelo menos dois dias — sem ela não há gráfico vazio. */}
+        {!loading && !isPublico && (r?.seguidoresPorDia?.length ?? 0) >= 2 && (
+          <PainelComparativo
+            titulo="Novos seguidores por dia"
+            subtitulo={`Quem começou a seguir o perfil em cada dia dos últimos ${dias} dias`}
+            rotuloAtual="Novos seguidores"
+            serie={r!.seguidoresPorDia!.map((p) => ({ rotulo: rotuloDia(p.dia), atual: p.valor, anterior: null }))}
+            formatarValor={(v) => v.toLocaleString("pt-BR")}
+            kpis={[]}
+            vazio="Ninguém começou a seguir neste período."
+          />
+        )}
 
         {!loading && (data?.parcial || data?.fonte === "parcial") && (
           <p className="text-lone-caption text-muted-foreground">

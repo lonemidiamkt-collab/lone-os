@@ -62,6 +62,8 @@ export interface IgSnapshot {
      *  e escrever "últimos 14 dias" dobrava o alcance aos olhos do cliente. */
     alcanceJanelaDias: number | null;
     seguidoresGanhos: number | null;
+    /** Quem começou a seguir, dia a dia, no período (a Meta só entrega os últimos 30 dias). Ausente/null = sem leitura. */
+    seguidoresPorDia?: PontoDiario[] | null;
     curtidas: number;
     comentarios: number;
     engajamento: number;
@@ -144,15 +146,19 @@ async function buildAudiencia(igId: string, token: string): Promise<IgAudiencia 
   return { generoMascPct, generoFemPct, idades, cidades };
 }
 
-// Soma uma série diária de insight (follower_count…) num intervalo. Best-effort → null se falhar.
-async function somaInsightDiario(igId: string, metric: string, since: string, until: string, token: string): Promise<number | null> {
+/** Um dia de uma série de insight: o dia (YYYY-MM-DD, pelo fim da janela que a Meta devolve) e o valor. */
+export interface PontoDiario { dia: string; valor: number }
+
+// Série diária de um insight (follower_count…) num intervalo. Best-effort → null se falhar.
+// 19/11/2026: antes só a soma saía daqui; a série alimenta "Novos seguidores por dia" no painel do cliente.
+async function serieInsightDiario(igId: string, metric: string, since: string, until: string, token: string): Promise<PontoDiario[] | null> {
   try {
     const r = await fetch(`${GRAPH}/${igId}/insights?metric=${metric}&period=day&since=${since}&until=${until}&access_token=${token}`);
     const j = await r.json().catch(() => ({}));
     if (j?.error) return null;
-    const vals = (j.data?.[0]?.values ?? []) as { value: number }[];
+    const vals = (j.data?.[0]?.values ?? []) as { value: number; end_time?: string }[];
     if (!vals.length) return null;
-    return vals.reduce((s, v) => s + (v.value || 0), 0);
+    return vals.map((v) => ({ dia: String(v.end_time ?? "").slice(0, 10), valor: v.value || 0 }));
   } catch { return null; }
 }
 
@@ -510,11 +516,12 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
 
   // Insights de conta no período (best-effort): alcance (reach) e seguidores ganhos (follower_count).
   // + demografia do público (gênero/idade/cidades) — lifetime, não depende do período.
-  const [alcance, seguidoresGanhos, audiencia] = await Promise.all([
+  const [alcance, seguidoresPorDia, audiencia] = await Promise.all([
     reachDedup(igId, dias, token),
-    somaInsightDiario(igId, "follower_count", sinceStr, untilStr, token),
+    serieInsightDiario(igId, "follower_count", sinceStr, untilStr, token),
     buildAudiencia(igId, token),
   ]);
+  const seguidoresGanhos = seguidoresPorDia ? seguidoresPorDia.reduce((s, p) => s + p.valor, 0) : null;
 
   // Posts do período E do anterior (paginado — ver fetchMediaDoPeriodo): o anterior só conta, para a
   // comparação "posts no período" (sem buscar métricas de post antigo).
@@ -579,6 +586,7 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
     alcance: alcance.valor,
     alcanceJanelaDias: alcance.janelaDias,
     seguidoresGanhos,
+    seguidoresPorDia: seguidoresPorDia?.filter((p) => p.dia) ?? null,
     curtidas: posts.reduce((s, p) => s + (p.curtidas || 0), 0),
     comentarios: posts.reduce((s, p) => s + (p.comentarios || 0), 0),
     engajamento: posts.reduce((s, p) => s + p.engajamento, 0),

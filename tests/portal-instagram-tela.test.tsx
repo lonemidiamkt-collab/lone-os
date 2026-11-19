@@ -114,3 +114,22 @@ describe("PortalInstagram — toques nos botões em zero", () => {
     expect(screen.getByText("Toques nos botões")).toBeInTheDocument();
   });
 });
+
+describe("PortalInstagram — novos seguidores por dia", () => {
+  beforeAll(() => {
+    globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
+  });
+  const serie = [{ dia: "2026-11-16", valor: 12 }, { dia: "2026-11-17", valor: 9 }, { dia: "2026-11-18", valor: 15 }];
+
+  it("com a série da Meta, mostra o gráfico de quem começou a seguir em cada dia", () => {
+    render(<PortalInstagram token="t" clientId="c" period="7d" inicial={snap({ seguidoresPorDia: serie })} />);
+    expect(screen.getByRole("heading", { name: "Novos seguidores por dia" })).toBeInTheDocument();
+  });
+
+  it("sem a série (retrato antigo ou a Meta não entregou), não há gráfico vazio", () => {
+    render(<PortalInstagram token="t" clientId="c" period="7d" inicial={snap({ seguidoresPorDia: null })} />);
+    expect(screen.queryByRole("heading", { name: "Novos seguidores por dia" })).toBeNull();
+    render(<PortalInstagram token="t" clientId="c" period="7d" inicial={snap({ seguidoresPorDia: [serie[0]] })} />);
+    expect(screen.queryByRole("heading", { name: "Novos seguidores por dia" })).toBeNull();
+  });
+});
