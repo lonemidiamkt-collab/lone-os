@@ -54,7 +54,7 @@ export default function ConexaoGoogleMarketing({ onMudou }: { onMudou?: () => vo
         )}
       </div>
       <p className="text-lone-caption text-muted-foreground">
-        Entre com a conta Google que é gerente das contas de anúncio (ou do MCC) e dos perfis dos clientes, e marque as duas permissões. O Lone OS só lê: não mexe em campanha nem no perfil.
+        Entre com a conta Google que é gerente das contas de anúncio (ou do MCC), dos perfis e do Google Analytics dos clientes, e marque todas as permissões. O Lone OS só lê: não mexe em campanha, no perfil nem no site.
       </p>
     </div>
   );

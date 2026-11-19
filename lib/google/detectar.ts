@@ -23,15 +23,23 @@ export interface ClienteParaCasar {
   contact_phone: string | null;
   google_ads_customer_id: string | null;
   google_perfil_local: string | null;
+  /** Google Analytics (migração 20261119100000) — ausente num banco sem a migração. */
+  google_analytics_propriedade?: string | null;
 }
 
-export interface Candidato { chave: string; nome: string; telefone?: string | null }
+/** `outrosNomes`: no Analytics, o nome da CONTA do GA (a propriedade costuma se chamar só "Site" ou o domínio). */
+export interface Candidato { chave: string; nome: string; telefone?: string | null; outrosNomes?: readonly string[] }
 
-const RUIDO = new Set(["ltda", "me", "mei", "epp", "eireli", "sa", "s/a", "cia", "comercio", "comercial", "de", "da", "do", "das", "dos", "e", "&", "the", "loja", "empresa", "servicos", "industria"]);
+export type TipoVinculo = "ads" | "perfil" | "analytics";
+const COLUNA_DO_TIPO = { ads: "google_ads_customer_id", perfil: "google_perfil_local", analytics: "google_analytics_propriedade" } as const;
+
+const RUIDO = new Set(["ga4", "www", "ltda", "me", "mei", "epp", "eireli", "sa", "s/a", "cia", "comercio", "comercial", "de", "da", "do", "das", "dos", "e", "&", "the", "loja", "empresa", "servicos", "industria"]);
 
 /** "Serraria Sao Joao LTDA - ME" → "serraria sao joao". Pura. */
 export function nomeNormalizado(s: string | null | undefined): string {
   return String(s ?? "")
+    // Propriedade do Analytics com o domínio no nome: "www.reformar.com.br - GA4" → "reformar".
+    .replace(/\.(com|net|org|art|site|online|store|shop|app)(\.br)?\b/gi, " ").replace(/\.br\b/gi, " ")
     .normalize("NFD").replace(/[̀-ͯ]/g, "")
     .toLowerCase().replace(/['’`´]/g, "").replace(/[^a-z0-9]+/g, " ")
     .split(" ").filter((t) => t && !RUIDO.has(t)).join(" ");
@@ -52,16 +60,18 @@ export type Forca = "forte" | "fraca";
 
 /** Quanto o candidato parece ser deste cliente. null = nada a ver. Pura. */
 export function forcaDoCasamento(c: ClienteParaCasar, k: Candidato): { forca: Forca; motivo: string } | null {
-  const nomeK = nomeNormalizado(k.nome);
   const nomes = nomesDo(c);
   const tel = telefoneNormalizado(k.telefone);
   if (tel && telefonesDo(c).includes(tel)) return { forca: "forte", motivo: "mesmo telefone" };
-  if (nomeK.length >= 3 && nomes.includes(nomeK)) return { forca: "forte", motivo: "mesmo nome" };
+  const nomesK = [k.nome, ...(k.outrosNomes ?? [])].map(nomeNormalizado).filter((n) => n.length >= 3);
+  if (nomesK.some((n) => nomes.includes(n))) return { forca: "forte", motivo: "mesmo nome" };
   // Fraca: um nome contém o outro (com pelo menos 2 palavras ou 6 letras do lado menor) — "Ferragem Central" ×
   // "Ferragem Central Campinas". Só sugere: pode ser outra loja da mesma rede.
-  for (const n of nomes) {
-    const [menor, maior] = n.length <= nomeK.length ? [n, nomeK] : [nomeK, n];
-    if (menor.length >= 6 && (` ${maior} `).includes(` ${menor} `)) return { forca: "fraca", motivo: "nome parecido" };
+  for (const nomeK of nomesK) {
+    for (const n of nomes) {
+      const [menor, maior] = n.length <= nomeK.length ? [n, nomeK] : [nomeK, n];
+      if (menor.length >= 6 && (` ${maior} `).includes(` ${menor} `)) return { forca: "fraca", motivo: "nome parecido" };
+    }
   }
   return null;
 }
@@ -75,9 +85,9 @@ export interface Casamento { clientId: string; chave: string; nome: string; forc
 export function casar(
   clientes: readonly ClienteParaCasar[],
   candidatos: readonly Candidato[],
-  tipo: "ads" | "perfil",
+  tipo: TipoVinculo,
 ): { automaticos: Casamento[]; sugestoes: Casamento[] } {
-  const coluna = tipo === "ads" ? "google_ads_customer_id" : "google_perfil_local";
+  const coluna = COLUNA_DO_TIPO[tipo];
   const jaUsadas = new Set(clientes.map((c) => c[coluna]).filter((x): x is string => !!x));
   const livres = candidatos.filter((k) => !jaUsadas.has(k.chave));
   const semVinculo = clientes.filter((c) => !c[coluna]);

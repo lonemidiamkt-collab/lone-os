@@ -78,6 +78,37 @@ Perfil da Empresa API ┘   lib/google/sincronizar.ts       └─ aba "Google" 
    - `POST /api/system/google-sync?dry=1` lista quem será lido;
    - a prévia `weekly-reports?cliente=<id>&dry=1` mostra o HTML com as folhas do Google.
 
+## Google Analytics: o site do cliente (19/11/2026)
+
+O pedido do Roberto foi saber, pelo site, quantas pessoas visitaram e quantas **clicaram no WhatsApp, ligaram ou mandaram formulário**. Nada de "conversão". No portal, isso aparece na aba Google, parte **"Seu site"**, depois de Google Meu Negócio e Google Anúncios.
+
+- **Mesma conexão de marketing**, com o escopo `analytics.readonly` a mais. Conexão feita antes de 19/11 não tem a permissão, e a tela de Integrações pede para reconectar.
+- **Mesma rotina** (`google-sync`, 7h): relê os últimos 7 dias. A primeira leitura de uma propriedade cobre 400 dias. São 3 relatórios da Data API por cliente:
+  1. dia × canal: visitas, visitas com interesse, páginas e pessoas novas;
+  2. dia × evento: os eventos do site, sem o ruído (page_view, scroll…);
+  3. dia × link clicado: só links `wa.me`/WhatsApp e `tel:`. Esses cliques vêm da "medição otimizada" do GA4, que grava sozinha o clique em link de saída.
+- **O que é contato** fica em `acaoDoEvento`, em `lib/google/relatorio.ts`:
+  - link de WhatsApp ou evento com "whats"/"wpp" no nome → WhatsApp;
+  - `tel:` ou evento de ligação → ligação;
+  - `generate_lead`, `form_submit` e semelhantes → formulário. `form_start` não conta.
+- **Sem contagem em dobro.** O mesmo clique costuma vir duas vezes: o evento do site e o clique no link. Por dia, vale a maior das fontes. A contagem é conservadora de propósito: pode contar a menos, nunca a mais.
+- **Contato que o site não mede não vira "0".** O cartão some e o painel avisa que a medição ainda não está ligada.
+- **Ainda não entra** no relatório semanal, no mensal nem no PDF; por enquanto, só no portal.
+- **Vínculo:**
+  - automático pelo nome da propriedade ou pelo nome da conta do Analytics. O domínio no nome é ignorado ("www.loja.com.br - GA4" → "loja");
+  - ou na ficha: Admin › Google › Site (Google Analytics).
+  - O cliente precisa adicionar a conta Google da Lone como **Leitor** na propriedade.
+
+**Para ligar (uma vez):**
+
+1. Google Cloud (projeto `lone-os-agenda`):
+   1. Ative a **Google Analytics Data API** e a **Google Analytics Admin API**.
+   2. Na tela de consentimento, adicione o escopo `.../auth/analytics.readonly`.
+2. Banco: aplique `supabase/migrations/20261119100000_google_analytics.sql`.
+3. Deploy.
+4. Sistema › Integrações › Google Ads e Perfil da Empresa › **Reconectar**. Marque as três permissões.
+5. Rode `google-sync` uma vez ou use "Procurar agora" na ficha.
+
 ## Limites conhecidos
 
 - **Conversões do Google Ads:** a coluna principal usa as ações **principais** da conta. O quadro "O que os anúncios geraram" usa **todas as conversões**, que incluem as secundárias, como as rotas e as ligações da Performance Max.

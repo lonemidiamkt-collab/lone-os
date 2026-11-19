@@ -1,5 +1,5 @@
-// POST /api/system/google-sync — rotina diária (7h BRT, antes dos relatórios das 8h): lê o Google Ads e o Perfil da
-// Empresa de cada cliente vinculado e grava dia a dia (lib/google/sincronizar.ts). Relatório semanal, mensal e a aba
+// POST /api/system/google-sync — rotina diária (7h BRT, antes dos relatórios das 8h): lê o Google Ads, o Perfil da
+// Empresa e o Google Analytics (site) de cada cliente vinculado e grava dia a dia (lib/google/sincronizar.ts). Relatório semanal, mensal e a aba
 // Google do portal leem o que esta rotina gravou.
 //
 //   ?dry=1          → só lista quem seria lido (não chama o Google)
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   if (dry) {
     return NextResponse.json({
       ok: true, status: "dry_run", total: clientes.length,
-      clientes: clientes.map((c) => ({ nome: c.name, ads: !!c.google_ads_customer_id, perfil: !!c.google_perfil_local })),
+      clientes: clientes.map((c) => ({ nome: c.name, ads: !!c.google_ads_customer_id, perfil: !!c.google_perfil_local, analytics: !!c.google_analytics_propriedade })),
     });
   }
 
@@ -61,7 +61,11 @@ export async function POST(req: NextRequest) {
   for (let i = 0; i < clientes.length; i += 2) {
     const lote = await Promise.all(clientes.slice(i, i + 2).map((c) => sincronizarCliente(c, { refazerTudo }).then((r) => ({ c, r }))));
     for (const { c, r } of lote) {
-      const erros = [r.ads && !r.ads.ok ? `Google Ads: ${r.ads.erro}` : null, r.perfil && !r.perfil.ok ? `Perfil: ${r.perfil.erro}` : null].filter(Boolean);
+      const erros = [
+        r.ads && !r.ads.ok ? `Google Ads: ${r.ads.erro}` : null,
+        r.perfil && !r.perfil.ok ? `Perfil: ${r.perfil.erro}` : null,
+        r.analytics && !r.analytics.ok ? `Analytics: ${r.analytics.erro}` : null,
+      ].filter(Boolean);
       if (erros.length) falhas.push(`${c.name ?? c.id}: ${erros.join(" · ")}`);
       else ok++;
       if (r.ads?.avisos?.length) parciais.push(`${c.name ?? c.id}: ${r.ads.avisos.join("; ")}`);

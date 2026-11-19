@@ -9,6 +9,7 @@ import { testarDrive } from "@/lib/drive/google-drive";
 import { estadoMarketing } from "@/lib/google/marketing-auth";
 import { testarAds } from "@/lib/google/ads-api";
 import { testarPerfil } from "@/lib/google/perfil-api";
+import { testarAnalytics } from "@/lib/google/analytics-api";
 import { temColunasGoogle } from "@/lib/google/colunas";
 import { lerConexao } from "@/lib/trafego/anuncios-server";
 import { situacaoDaConfig } from "@/lib/contracts/d4sign-config";
@@ -54,9 +55,10 @@ async function google(): Promise<EstadoIntegracao> {
 
 async function googleMarketing(): Promise<EstadoIntegracao> {
   const e = await estadoMarketing();
-  const [ads, perfil] = await Promise.all([
+  const [ads, perfil, analytics] = await Promise.all([
     e.conectado && e.ads ? testarAds() : Promise.resolve(null),
     e.conectado && e.perfil ? testarPerfil() : Promise.resolve(null),
+    e.conectado && e.analytics ? testarAnalytics() : Promise.resolve(null),
   ]);
   let vinculados = 0, comErro = 0, ultimaLeitura: string | null = null;
   if (await temColunasGoogle()) {
@@ -71,8 +73,8 @@ async function googleMarketing(): Promise<EstadoIntegracao> {
   }
   const t = (r: Awaited<ReturnType<typeof testarAds>> | null) => (r ? (r.ok ? { ok: true, contas: r.dados } : { ok: false, erro: r.erro }) : null);
   return estadoGoogleMarketingIntegracao({
-    configurado: e.configurado, conectado: e.conectado, email: e.email, ads: e.ads, perfil: e.perfil,
-    testeAds: t(ads), testePerfil: t(perfil), vinculados, comErro, ultimaLeitura,
+    configurado: e.configurado, conectado: e.conectado, email: e.email, ads: e.ads, perfil: e.perfil, analytics: e.analytics,
+    testeAds: t(ads), testePerfil: t(perfil), testeAnalytics: t(analytics), vinculados, comErro, ultimaLeitura,
   });
 }
 

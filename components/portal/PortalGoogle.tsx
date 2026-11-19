@@ -6,6 +6,8 @@
 //     procurou". Clicar num cartão troca o gráfico para aquela ação.
 //   · Anúncios: CLIQUES, nunca "conversões" (o dono não tem como conferir conversão; clique e ligação ele confere).
 //     Cartões: Cliques, Ligações pelo anúncio, Vezes que apareceu, Investido (com custo por clique).
+//   · Seu site (Google Analytics, 19/11/2026): visitas, cliques no WhatsApp, ligações e formulários pelo site, e de
+//     onde vieram as visitas. Contato que o site não mede não aparece como "0".
 //
 // Os números vêm de /api/portal/[token]/google, que lê a MESMA conta do relatório semanal e mensal
 // (lib/google/relatorio.ts). Bloco que não pôde ser lido mostra "atualizando" — nunca zero.
@@ -13,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Eye, Globe, MapPin, Megaphone, MessageCircle, MousePointerClick, Navigation, Phone, RefreshCw, Search,
-  Smartphone, UtensilsCrossed, CalendarCheck, Wallet, Monitor, Map as MapaIcone, type LucideIcon,
+  Smartphone, UtensilsCrossed, CalendarCheck, Wallet, Monitor, Map as MapaIcone, LayoutPanelTop, FileText, UserPlus, type LucideIcon,
 } from "lucide-react";
 import { Aviso, Cartao, CabecalhoSecao, ListaBarras, Segmentado } from "./ui";
 import Skeleton from "@/components/ui/Skeleton";
@@ -21,7 +23,7 @@ import { chamar } from "@/lib/api/chamar";
 import { rotuloDia } from "@/lib/portal/formatos";
 import { PainelComparativo, type KpiComparativo } from "@/components/ui/painel-comparativo";
 import { tomDaVariacao } from "@/components/ui/painel-comparativo-utils";
-import { formatarValor, type KpiGoogle, type RelatorioGoogleAds, type RelatorioGooglePerfil, type PontoGoogle } from "@/lib/google/relatorio";
+import { formatarValor, type KpiGoogle, type RelatorioGoogleAds, type RelatorioGooglePerfil, type RelatorioGoogleSite, type PontoGoogle } from "@/lib/google/relatorio";
 import type { PeriodKind } from "@/lib/portal/types";
 
 const PERIODOS: { valor: PeriodKind; rotulo: string }[] = [
@@ -38,9 +40,11 @@ interface Resposta {
   perfil?: RelatorioGooglePerfil | null;
   adsIndisponivel?: boolean;
   perfilIndisponivel?: boolean;
+  site?: RelatorioGoogleSite | null;
+  siteIndisponivel?: boolean;
 }
 
-type Parte = "negocio" | "anuncios";
+type Parte = "negocio" | "anuncios" | "site";
 
 const paraSerie = (s: PontoGoogle[] | undefined) => (s ?? []).map((p) => ({ rotulo: rotuloDia(p.dia), atual: p.atual, anterior: p.anterior }));
 const tendencia = (s: PontoGoogle[] | undefined) => (s ?? []).map((p) => p.atual);
@@ -213,6 +217,81 @@ function BlocoAnuncios({ r, carregando }: { r: RelatorioGoogleAds; carregando: b
   );
 }
 
+// ── Seu site (Google Analytics) ─────────────────────────────────────────────────────────────────────
+
+const ICONE_SITE: Record<string, LucideIcon> = { visitas: Globe, whatsapp: MessageCircle, ligacao: Phone, formulario: FileText, novos: UserPlus };
+const GRAFICO_SITE: Record<string, string> = {
+  visitas: "Visitas ao site por dia", whatsapp: "Cliques no WhatsApp por dia", ligacao: "Ligações pelo site por dia",
+  formulario: "Formulários enviados por dia", novos: "Pessoas novas no site por dia",
+};
+
+function BlocoSite({ r, carregando }: { r: RelatorioGoogleSite; carregando: boolean }) {
+  const [escolha, setEscolha] = useState<string>("visitas");
+  const k = (c: string) => r.kpis.find((x) => x.chave === c);
+  const eng = k("engajamento")?.valor;
+  const chaves = ["visitas", ...r.acoes.map((a) => a.chave), "novos"];
+  const dicas: Record<string, string | undefined> = {
+    visitas: eng != null ? `${formatarValor(eng, "pct")} com interesse` : undefined,
+    whatsapp: "toques no botão do WhatsApp", ligacao: "toques no telefone do site", formulario: "contatos pelo formulário",
+    novos: "abriram o site pela 1ª vez",
+  };
+  const kpis: KpiComparativo[] = chaves.flatMap((c) => {
+    const x = k(c);
+    if (!x) return [];
+    const serie = r.seriePorChave?.[c as keyof typeof r.seriePorChave];
+    return [{
+      rotulo: x.rotulo, icone: ICONE_SITE[c], dica: dicas[c],
+      valor: formatarValor(x.valor, x.formato), variacaoPct: x.variacaoPct, natureza: x.natureza,
+      tendencia: tendencia(serie), selecionado: escolha === c,
+      onSelecionar: serie?.length ? () => setEscolha(c) : undefined,
+    }];
+  });
+  const atual = chaves.includes(escolha) ? escolha : "visitas";
+  const contatos = k("contatos");
+
+  return (
+    <div className="space-y-4">
+      <CabecalhoSecao icone={LayoutPanelTop} titulo="Seu site" descricao="Quem entrou no site e quem chamou você por ele" />
+      <PainelComparativo
+        carregando={carregando}
+        titulo={GRAFICO_SITE[atual]}
+        subtitulo={subtituloDe(r.janela, r.anterior)}
+        rotuloAtual="Este período"
+        rotuloAnterior="Período anterior"
+        serie={paraSerie(r.seriePorChave?.[atual as keyof typeof r.seriePorChave])}
+        formatarValor={(n) => n.toLocaleString("pt-BR")}
+        destaque={{
+          texto: r.frase,
+          tom: tomDaVariacao((contatos ?? k("visitas"))?.variacaoPct, "direta", 5),
+          detalhe: "Toque num número abaixo para ver ele no gráfico.",
+        }}
+        kpis={kpis}
+        limiarNeutroPct={5}
+        tomRuim="atencao"
+        vazio="O site não teve visitas neste período."
+      />
+      {r.semContatosMedidos && !r.semDados && (
+        <Aviso tom="neutro">Os cliques no WhatsApp, as ligações e os formulários do seu site ainda não estão sendo medidos. Fale com a equipe da Lone para ligar essa medição.</Aviso>
+      )}
+      <Cartao as="section" className="p-4 sm:p-5">
+        <CabecalhoSecao nivel={3} icone={Search} titulo="De onde vieram as visitas"
+          descricao={`${inteiro(k("visitas")?.valor ?? 0)} visitas no período`} />
+        <div className="mt-4">
+          <ListaBarras rotulo="Origem das visitas"
+            vazio="Nenhuma visita no período."
+            itens={r.canais.slice(0, 8).map((c) => ({
+              chave: c.canal,
+              rotulo: c.rotulo,
+              valor: c.visitas,
+              texto: `${c.pct}%`,
+              detalhe: `${inteiro(c.visitas)} ${c.visitas === 1 ? "visita" : "visitas"}`,
+            }))} />
+        </div>
+      </Cartao>
+    </div>
+  );
+}
+
 // ── A aba ───────────────────────────────────────────────────────────────────────────────────────────
 
 /** `periodo`: quando o painel manda (período único do casco), a aba não mostra o próprio seletor. */
@@ -243,14 +322,16 @@ export default function PortalGoogle({ token, periodo: periodoDoPainel, parte: p
 
   const temNegocio = !!dados?.perfil || !!dados?.perfilIndisponivel;
   const temAnuncios = !!dados?.ads || !!dados?.adsIndisponivel;
+  const temSite = !!dados?.site || !!dados?.siteIndisponivel;
   const partes = useMemo(() => [
     ...(temNegocio ? [{ valor: "negocio" as const, rotulo: "Google Meu Negócio", icone: MapPin }] : []),
     ...(temAnuncios ? [{ valor: "anuncios" as const, rotulo: "Google Anúncios", icone: Megaphone }] : []),
-  ], [temNegocio, temAnuncios]);
+    ...(temSite ? [{ valor: "site" as const, rotulo: "Seu site", icone: LayoutPanelTop }] : []),
+  ], [temNegocio, temAnuncios, temSite]);
   // Meu Negócio vem primeiro; se o cliente só tem uma das partes, é ela.
   const atual: Parte | null = parteFixa ?? (parte && partes.some((p) => p.valor === parte) ? parte : partes[0]?.valor ?? null);
 
-  const temAParte = parteFixa === "negocio" ? temNegocio : parteFixa === "anuncios" ? temAnuncios : temNegocio || temAnuncios;
+  const temAParte = parteFixa === "negocio" ? temNegocio : parteFixa === "anuncios" ? temAnuncios : parteFixa === "site" ? temSite : temNegocio || temAnuncios || temSite;
   const nada = !carregando && !erro && dados && !dados.aviso && !temAParte;
 
   return (
@@ -286,6 +367,11 @@ export default function PortalGoogle({ token, periodo: periodoDoPainel, parte: p
       {atual === "anuncios" && dados?.ads && <BlocoAnuncios r={dados.ads} carregando={carregando} />}
       {atual === "anuncios" && !dados?.ads && dados?.adsIndisponivel && !carregando && (
         <Aviso tom="info" role="status">Os números dos anúncios no Google estão sendo atualizados — volte mais tarde.</Aviso>
+      )}
+
+      {atual === "site" && dados?.site && <BlocoSite r={dados.site} carregando={carregando} />}
+      {atual === "site" && !dados?.site && dados?.siteIndisponivel && !carregando && (
+        <Aviso tom="info" role="status">Os números do seu site estão sendo atualizados — volte mais tarde.</Aviso>
       )}
 
       {nada && <Aviso tom="neutro">Ainda não há números do Google para este período.</Aviso>}

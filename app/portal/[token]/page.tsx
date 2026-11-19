@@ -11,7 +11,7 @@ import { clienteDoLink, lerLinkDoPortal, type LinhaDeAcesso } from "@/lib/portal
 import { abaValida, abasDisponiveis, paraPeriodKind, periodoValido } from "@/lib/portal/navegacao";
 import { FUNDO_PORTAL } from "@/lib/portal/manifesto";
 import PortalIndisponivel from "@/components/portal/PortalIndisponivel";
-import { temColunasGoogle } from "@/lib/google/colunas";
+import { temColunasGoogle, temColunasAnalytics } from "@/lib/google/colunas";
 import { temGoogleNoRelatorio } from "@/lib/google/relatorio-dados";
 import { clientesComCrm } from "@/lib/crm-externo/servidor";
 
@@ -69,8 +69,9 @@ export default async function PortalPage({
   // As colunas do Google só entram no select depois da migração aplicada (lib/google/colunas.ts): pedir coluna
   // que não existe derrubaria o portal de TODO cliente.
   const comGoogle = await temColunasGoogle();
+  const comAnalytics = comGoogle && (await temColunasAnalytics());
   const lido = await lerLinkDoPortal<LinhaDeAcesso & Record<string, unknown> & { id: string }>(token,
-    `id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, status, join_date${comGoogle ? ", google_ads_customer_id, google_perfil_local" : ""}`);
+    `id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, status, join_date${comGoogle ? ", google_ads_customer_id, google_perfil_local" : ""}${comAnalytics ? ", google_analytics_propriedade" : ""}`);
   if (lido.estado === "indisponivel") return <PortalIndisponivel />;
   if (lido.estado === "invalido") notFound();
   const client = lido.linha;
@@ -96,8 +97,9 @@ export default async function PortalPage({
   const g = comGoogle ? temGoogleNoRelatorio({
     id: client.id, service_type: (client.service_type as string) ?? null,
     google_ads_customer_id: (client.google_ads_customer_id as string) ?? null, google_perfil_local: (client.google_perfil_local as string) ?? null,
-  }) : { ads: false, perfil: false };
-  const hasGoogle = g.ads || g.perfil;
+    google_analytics_propriedade: (client.google_analytics_propriedade as string) ?? null,
+  }) : { ads: false, perfil: false, site: false };
+  const hasGoogle = g.ads || g.perfil || g.site;
   // CRM conectado e ativo → aba "Atendimento e vendas". Falha ao conferir = sem a aba (o resto do portal abre).
   const hasCrm = await clientesComCrm([client.id as string]).then((s) => s.has(client.id as string)).catch(() => false);
 

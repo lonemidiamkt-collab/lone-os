@@ -48,7 +48,7 @@ export const CATALOGO: readonly { id: IdIntegracao; nome: string; servePara: str
   { id: "google", nome: "Google (Agenda e Drive)", grupo: "principal",
     servePara: "Reunião do Comercial com Meet no Google Agenda e a pasta de cada cliente no Drive (Documentos e Fotos e Vídeos)." },
   { id: "google_marketing", nome: "Google Ads e Perfil da Empresa", grupo: "principal",
-    servePara: "Números do Google Ads e do Perfil da Empresa (ligações, rotas, visitas ao site) no relatório semanal e mensal e na aba Google do portal do cliente." },
+    servePara: "Números do Google Ads e do Perfil da Empresa (ligações, rotas, visitas ao site) no relatório semanal e mensal, e do Google Analytics (visitas e cliques no WhatsApp do site), na aba Google do portal do cliente." },
   { id: "meta", nome: "Meta (Facebook e Instagram)", grupo: "principal",
     servePara: "Saldos e alertas de verba, relatório semanal, portal do cliente, Instagram e a aba Anúncios." },
   { id: "whatsapp", nome: "WhatsApp (Evolution)", grupo: "principal",
@@ -134,9 +134,12 @@ export function estadoGoogleMarketingIntegracao(p: {
   /** Permissões aceitas no consentimento (o Google deixa desmarcar cada uma). */
   ads: boolean;
   perfil: boolean;
+  /** Google Analytics (19/11/2026). Ausente = não avaliado. false = conexão antiga, sem a permissão. */
+  analytics?: boolean;
   /** Teste de uma chamada em cada API (null = não testado). erro = frase pronta. */
   testeAds: { ok: boolean; contas?: number; erro?: string } | null;
   testePerfil: { ok: boolean; contas?: number; erro?: string } | null;
+  testeAnalytics?: { ok: boolean; contas?: number; erro?: string } | null;
   /** Clientes vinculados e quantos estão com a última leitura falhando. */
   vinculados: number;
   comErro: number;
@@ -149,11 +152,14 @@ export function estadoGoogleMarketingIntegracao(p: {
   if (p.email) detalhes.push(`Conta: ${p.email}`);
   if (p.testeAds?.ok) detalhes.push(`Google Ads: ${p.testeAds.contas ?? 0} conta(s) de acesso direto`);
   if (p.testePerfil?.ok) detalhes.push(`Perfil da Empresa: ${p.testePerfil.contas ?? 0} conta(s)`);
+  if (p.testeAnalytics?.ok) detalhes.push(`Google Analytics: ${p.testeAnalytics.contas ?? 0} site(s)`);
+  if (p.testeAnalytics && !p.testeAnalytics.ok) detalhes.push(`Google Analytics: ${p.testeAnalytics.erro}`);
   if (p.vinculados) detalhes.push(`${p.vinculados} cliente(s) vinculados${p.ultimaLeitura ? ` · última leitura ${dataHora(p.ultimaLeitura)}` : ""}`);
   const faltas: string[] = [];
   if (!p.ads) faltas.push("a permissão do Google Ads não foi aceita");
   if (!p.perfil) faltas.push("a permissão do Perfil da Empresa não foi aceita");
-  if (faltas.length) return { ...b, situacao: "atencao", detalhes, resumo: `Conectado, mas ${faltas.join(" e ")}. Clique em Reconectar e marque as duas.` };
+  if (p.analytics === false) faltas.push("a permissão do Google Analytics não foi aceita (conexão feita antes do Analytics)");
+  if (faltas.length) return { ...b, situacao: "atencao", detalhes, resumo: `Conectado, mas ${faltas.join(" e ")}. Clique em Reconectar e marque todas as permissões.` };
   const erros = [p.testeAds && !p.testeAds.ok ? `Google Ads: ${p.testeAds.erro}` : null, p.testePerfil && !p.testePerfil.ok ? `Perfil da Empresa: ${p.testePerfil.erro}` : null].filter((x): x is string => !!x);
   if (erros.length) return { ...b, situacao: erros.length === 2 ? "erro" : "atencao", detalhes: [...detalhes, ...erros.slice(1)], resumo: erros[0] };
   if (p.comErro) return { ...b, situacao: "atencao", detalhes, resumo: `Conexão funcionando, mas ${p.comErro} cliente(s) com a última leitura falhando — o motivo está na ficha de cada um (Admin › Google).` };

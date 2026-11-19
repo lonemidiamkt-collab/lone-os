@@ -21,11 +21,16 @@ import { somarDias } from "@/lib/reports/relatorioCliente";
 import { normalizarIdAds } from "./marketing-auth";
 import { lerContaAds } from "./ads-api";
 import { lerMetricasDiarias, lerBuscasDoMes } from "./perfil-api";
+import { lerPropriedade, PROPRIEDADE_VALIDA } from "./analytics-api";
 
 const DIAS_ADS = 30;
 const DIAS_ADS_PRIMEIRA = 120;
 const DIAS_PERFIL = 12;
 const DIAS_PERFIL_PRIMEIRA = 400;
+// Google Analytics: o GA4 ainda ajusta os 2–3 últimos dias (sessão que atravessa a meia-noite, dado atrasado do app).
+// Relê 7; a primeira leitura cobre 400 dias (dá o mês anterior e o mesmo mês do ano passado).
+const DIAS_ANALYTICS = 7;
+const DIAS_ANALYTICS_PRIMEIRA = 400;
 const LOTE = 500;
 
 export interface ClienteGoogle {
@@ -34,12 +39,15 @@ export interface ClienteGoogle {
   google_ads_customer_id: string | null;
   google_ads_login_id: string | null;
   google_perfil_local: string | null;
+  /** Só existe depois da migração 20261119100000_google_analytics.sql. */
+  google_analytics_propriedade?: string | null;
 }
 
 export interface ResultadoSincronia {
   clientId: string;
   ads: { ok: boolean; linhas?: number; de?: string; ate?: string; erro?: string; avisos?: string[] } | null;
   perfil: { ok: boolean; linhas?: number; ultimoDia?: string | null; termos?: number; erro?: string } | null;
+  analytics?: { ok: boolean; linhas?: number; eventos?: number; de?: string; ate?: string; erro?: string } | null;
 }
 
 async function gravarEmLotes(tabela: string, linhas: Record<string, unknown>[], onConflict: string): Promise<string | null> {
@@ -52,8 +60,8 @@ async function gravarEmLotes(tabela: string, linhas: Record<string, unknown>[], 
 
 async function estadoAtual(clientId: string) {
   const { data } = await supabaseAdmin.from("google_sincronia")
-    .select("ads_sincronizado_em, perfil_sincronizado_em, perfil_ultimo_dia").eq("client_id", clientId).maybeSingle();
-  return (data ?? null) as { ads_sincronizado_em: string | null; perfil_sincronizado_em: string | null; perfil_ultimo_dia: string | null } | null;
+    .select("*").eq("client_id", clientId).maybeSingle();
+  return (data ?? null) as { ads_sincronizado_em: string | null; perfil_sincronizado_em: string | null; perfil_ultimo_dia: string | null; analytics_sincronizado_em?: string | null } | null;
 }
 
 async function anotar(clientId: string, campos: Record<string, unknown>) {
@@ -141,6 +149,30 @@ async function sincronizarPerfil(c: ClienteGoogle, primeira: boolean, ultimoGrav
   return { ok: true, linhas: validas.length, ultimoDia, termos };
 }
 
+async function sincronizarAnalytics(c: ClienteGoogle, primeira: boolean, hoje: string): Promise<NonNullable<ResultadoSincronia["analytics"]>> {
+  const prop = c.google_analytics_propriedade ?? "";
+  if (!PROPRIEDADE_VALIDA.test(prop)) return { ok: false, erro: "Propriedade do Google Analytics inválida na ficha (esperado properties/<número>)." };
+  const ate = somarDias(hoje, -1);
+  const de = somarDias(ate, -((primeira ? DIAS_ANALYTICS_PRIMEIRA : DIAS_ANALYTICS) - 1));
+  const r = await lerPropriedade(prop, de, ate);
+  if (!r.ok) return { ok: false, erro: r.erro, de, ate };
+
+  const rodada = new Date().toISOString();
+  const erroDia = await gravarEmLotes("google_analytics_dia",
+    r.dados.dias.map((l) => ({ propriedade: prop, ...l, atualizado_em: rodada })), "propriedade,dia,canal");
+  if (erroDia) return { ok: false, erro: `Li o Google Analytics mas não consegui gravar (${erroDia}).`, de, ate };
+  const erroEv = await gravarEmLotes("google_analytics_evento_dia",
+    r.dados.eventos.map((l) => ({ propriedade: prop, ...l, atualizado_em: rodada })), "propriedade,dia,evento,link");
+  if (erroEv) return { ok: false, erro: `Li o Google Analytics mas não consegui gravar os eventos (${erroEv}).`, de, ate };
+  // O que não veio nesta leitura, dentro da janela relida, saiu do GA4 (canal reclassificado, evento renomeado).
+  for (const tabela of ["google_analytics_dia", "google_analytics_evento_dia"]) {
+    const { error } = await supabaseAdmin.from(tabela).delete().eq("propriedade", prop).gte("dia", de).lte("dia", ate).lt("atualizado_em", rodada);
+    if (error) console.error(`[google-sync] limpeza de ${tabela}:`, error.message);
+  }
+  await anotar(c.id, { analytics_sincronizado_em: rodada, analytics_erro: null });
+  return { ok: true, linhas: r.dados.dias.length, eventos: r.dados.eventos.length, de, ate };
+}
+
 /** Lê e grava um cliente. Nunca lança. */
 export async function sincronizarCliente(c: ClienteGoogle, opcoes: { refazerTudo?: boolean } = {}): Promise<ResultadoSincronia> {
   const hoje = hojeSP();
@@ -164,26 +196,37 @@ export async function sincronizarCliente(c: ClienteGoogle, opcoes: { refazerTudo
     out.perfil = { ok: false, erro: `Falha inesperada ao ler o Perfil da Empresa: ${e instanceof Error ? e.message : String(e)}` };
     await anotar(c.id, { perfil_erro: out.perfil.erro });
   }
+  try {
+    if (c.google_analytics_propriedade) {
+      out.analytics = await sincronizarAnalytics(c, opcoes.refazerTudo || !estado?.analytics_sincronizado_em, hoje);
+      if (!out.analytics.ok) await anotar(c.id, { analytics_erro: out.analytics.erro });
+    }
+  } catch (e) {
+    out.analytics = { ok: false, erro: `Falha inesperada ao ler o Google Analytics: ${e instanceof Error ? e.message : String(e)}` };
+    await anotar(c.id, { analytics_erro: out.analytics.erro });
+  }
   return out;
 }
 
 export const COLUNAS_CLIENTE_GOOGLE = "id, name, google_ads_customer_id, google_ads_login_id, google_perfil_local";
 
-/** Todos os clientes ativos com Google Ads ou Perfil vinculado. */
+/** Todos os clientes ativos com Google Ads, Perfil ou Analytics vinculado. */
 export async function clientesComGoogle(onlyClientId?: string | null): Promise<{ clientes: ClienteGoogle[]; erro: string | null }> {
-  let q = supabaseAdmin.from("clients").select(COLUNAS_CLIENTE_GOOGLE)
-    .or("google_ads_customer_id.not.is.null,google_perfil_local.not.is.null")
+  const { temColunasAnalytics } = await import("./colunas");
+  const ga = await temColunasAnalytics();
+  let q = supabaseAdmin.from("clients").select(`${COLUNAS_CLIENTE_GOOGLE}${ga ? ", google_analytics_propriedade" : ""}`)
+    .or(`google_ads_customer_id.not.is.null,google_perfil_local.not.is.null${ga ? ",google_analytics_propriedade.not.is.null" : ""}`)
     .neq("active", false); // ex-cliente (encerramento grava active=false) não é mais lido
   if (onlyClientId) q = q.eq("id", onlyClientId);
   const { data, error } = await q;
   if (error) return { clientes: [], erro: error.message };
-  return { clientes: (data ?? []) as ClienteGoogle[], erro: null };
+  return { clientes: (data ?? []) as unknown as ClienteGoogle[], erro: null };
 }
 
 // ── Vínculo automático (lib/google/detectar.ts) ──────────────────────────────────────────────────────
 
 export interface ResultadoDeteccao {
-  vinculados: { clientId: string; cliente: string; tipo: "ads" | "perfil"; nome: string; motivo: string }[];
+  vinculados: { clientId: string; cliente: string; tipo: "ads" | "perfil" | "analytics"; nome: string; motivo: string }[];
   sugestoes: number;
   erros: string[];
 }
@@ -197,15 +240,18 @@ export async function detectarVinculos(): Promise<ResultadoDeteccao> {
   const { estadoMarketing } = await import("./marketing-auth");
   const { listarContasAds } = await import("./ads-api");
   const { listarPerfis } = await import("./perfil-api");
+  const { listarPropriedades } = await import("./analytics-api");
+  const { temColunasAnalytics } = await import("./colunas");
   const { casar } = await import("./detectar");
   const conexao = await estadoMarketing();
   if (!conexao.conectado) { out.erros.push("conexão do Google Ads e Perfil não está feita"); return out; }
+  const ga = conexao.analytics && (await temColunasAnalytics());
 
   const { data, error } = await supabaseAdmin.from("clients")
-    .select("id, name, nome_fantasia, razao_social, phone, contact_phone, google_ads_customer_id, google_perfil_local")
+    .select(`id, name, nome_fantasia, razao_social, phone, contact_phone, google_ads_customer_id, google_perfil_local${ga ? ", google_analytics_propriedade" : ""}`)
     .neq("active", false).is("draft_status", null);
   if (error) { out.erros.push(`clientes: ${error.message}`); return out; }
-  const clientes = (data ?? []) as import("./detectar").ClienteParaCasar[];
+  const clientes = (data ?? []) as unknown as import("./detectar").ClienteParaCasar[];
   const nomeDe = new Map(clientes.map((c) => [c.id, c.nome_fantasia || c.name || c.id]));
 
   const sugestoes: Record<string, unknown>[] = [];
@@ -243,6 +289,23 @@ export async function detectarVinculos(): Promise<ResultadoDeteccao> {
       }
       for (const m of s) sugestoes.push({ client_id: m.clientId, tipo: "perfil", chave: m.chave, nome: m.nome, login_id: null, motivo: m.motivo });
       procurados.add("perfil");
+    }
+  }
+
+  if (ga) {
+    const r = await listarPropriedades();
+    if (!r.ok) out.erros.push(`Google Analytics: ${r.erro}`);
+    else {
+      const { automaticos, sugestoes: s } = casar(clientes, r.dados.map((x) => ({ chave: x.propriedade, nome: x.nome, outrosNomes: x.contaNome ? [x.contaNome] : [] })), "analytics");
+      for (const m of automaticos) {
+        const { data: feito, error: e } = await supabaseAdmin.from("clients")
+          .update({ google_analytics_propriedade: m.chave, google_analytics_nome: m.nome })
+          .eq("id", m.clientId).is("google_analytics_propriedade", null).select("id");
+        if (e) out.erros.push(`${nomeDe.get(m.clientId)}: ${e.message}`);
+        else if (feito?.length) out.vinculados.push({ clientId: m.clientId, cliente: nomeDe.get(m.clientId)!, tipo: "analytics", nome: m.nome, motivo: m.motivo });
+      }
+      for (const m of s) sugestoes.push({ client_id: m.clientId, tipo: "analytics", chave: m.chave, nome: m.nome, login_id: null, motivo: m.motivo });
+      procurados.add("analytics");
     }
   }
 

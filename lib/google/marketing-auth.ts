@@ -20,7 +20,9 @@ const CHAVE = "google_marketing_oauth";
 
 export const ESCOPO_ADS = "https://www.googleapis.com/auth/adwords";
 export const ESCOPO_PERFIL = "https://www.googleapis.com/auth/business.manage";
-const ESCOPOS = [ESCOPO_ADS, ESCOPO_PERFIL, "https://www.googleapis.com/auth/userinfo.email"].join(" ");
+// Google Analytics (19/11/2026): o site do cliente na aba Google do portal (lib/google/analytics-api.ts). Só leitura.
+export const ESCOPO_ANALYTICS = "https://www.googleapis.com/auth/analytics.readonly";
+const ESCOPOS = [ESCOPO_ADS, ESCOPO_PERFIL, ESCOPO_ANALYTICS, "https://www.googleapis.com/auth/userinfo.email"].join(" ");
 
 interface Tokens { refresh_token: string; email?: string | null; conectado_em: string; escopos?: string | null }
 
@@ -38,6 +40,8 @@ export interface EstadoMarketing {
   /** O que a conta aceitou no consentimento (o Google deixa desmarcar cada permissão). */
   ads: boolean;
   perfil: boolean;
+  /** Conexão feita antes de 19/11/2026 não tem o Analytics: precisa reconectar uma vez. */
+  analytics: boolean;
 }
 
 export async function estadoMarketing(): Promise<EstadoMarketing> {
@@ -46,6 +50,7 @@ export async function estadoMarketing(): Promise<EstadoMarketing> {
   return {
     configurado: !!c, conectado: !!t, email: t?.email ?? null, conectado_em: t?.conectado_em ?? null,
     ads: !!t && escopos.includes(ESCOPO_ADS), perfil: !!t && escopos.includes(ESCOPO_PERFIL),
+    analytics: !!t && escopos.includes(ESCOPO_ANALYTICS),
   };
 }
 

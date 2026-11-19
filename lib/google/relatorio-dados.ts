@@ -13,8 +13,8 @@ import { janelaAnterior, somarDias, type Janela } from "@/lib/reports/relatorioC
 import { hojeSP } from "@/lib/clients/pausa";
 import { normalizarIdAds } from "./ids";
 import {
-  montarRelatorioAds, montarRelatorioPerfil,
-  type LinhaAdsDia, type LinhaAcaoDia, type LinhaPerfilDia, type LinhaTermo, type RelatorioGoogle,
+  montarRelatorioAds, montarRelatorioPerfil, montarRelatorioSite,
+  type LinhaSiteDia, type LinhaSiteEvento, type LinhaAdsDia, type LinhaAcaoDia, type LinhaPerfilDia, type LinhaTermo, type RelatorioGoogle,
 } from "./relatorio";
 
 export const COLUNAS_GOOGLE_CLIENTE = "google_ads_customer_id, google_ads_login_id, google_perfil_local";
@@ -24,13 +24,17 @@ export interface ClienteGoogleRelatorio {
   service_type: string | null;
   google_ads_customer_id?: string | null;
   google_perfil_local?: string | null;
+  /** Site (Google Analytics). Só quem pede a coluna (o portal) recebe o bloco do site. */
+  google_analytics_propriedade?: string | null;
 }
 
 /** O cliente tem algo do Google para entrar no relatório? (Ads só com contrato de tráfego.) */
-export function temGoogleNoRelatorio(c: ClienteGoogleRelatorio): { ads: boolean; perfil: boolean } {
+export function temGoogleNoRelatorio(c: ClienteGoogleRelatorio): { ads: boolean; perfil: boolean; site: boolean } {
   return {
     ads: !!normalizarIdAds(c.google_ads_customer_id) && podeFalarDeAnuncio(c),
     perfil: !!c.google_perfil_local,
+    // O site é presença (como o Perfil e o Instagram): aparece sempre que vinculado.
+    site: !!c.google_analytics_propriedade,
   };
 }
 
@@ -65,21 +69,24 @@ export async function lerRelatorioGoogle(
   opcoes: { anterior?: Janela } = {},
 ): Promise<RelatorioGoogle | null> {
   const tem = temGoogleNoRelatorio(c);
-  if (!tem.ads && !tem.perfil) return null;
-  const out: RelatorioGoogle = { ads: null, adsIndisponivel: null, perfil: null, perfilIndisponivel: null };
+  if (!tem.ads && !tem.perfil && !tem.site) return null;
+  const out: RelatorioGoogle = { ads: null, adsIndisponivel: null, perfil: null, perfilIndisponivel: null, ...(tem.site ? { site: null, siteIndisponivel: null } : {}) };
 
+  // `*`: as colunas do Analytics só existem depois da migração 20261119100000 — pedir pelo nome quebraria antes dela.
   const { data: estado, error: errEstado } = await supabaseAdmin.from("google_sincronia")
-    .select("ads_sincronizado_em, ads_erro, ads_moeda, perfil_sincronizado_em, perfil_erro, perfil_ultimo_dia")
+    .select("*")
     .eq("client_id", c.id).maybeSingle();
   if (errEstado) {
     const motivo = `Não consegui ler o estado do Google no banco (${errEstado.message}).`;
     if (tem.ads) out.adsIndisponivel = { motivo };
     if (tem.perfil) out.perfilIndisponivel = { motivo };
+    if (tem.site) out.siteIndisponivel = { motivo };
     return out;
   }
   const e = (estado ?? {}) as {
     ads_sincronizado_em?: string | null; ads_erro?: string | null; ads_moeda?: string | null;
     perfil_sincronizado_em?: string | null; perfil_erro?: string | null; perfil_ultimo_dia?: string | null;
+    analytics_sincronizado_em?: string | null; analytics_erro?: string | null;
   };
   const ant = opcoes.anterior ?? janelaAnterior(janela);
   // O Perfil pode recuar a janela (atraso do Google): lê 2 períodos para trás para a comparação recuada caber.
@@ -144,6 +151,35 @@ export async function lerRelatorioGoogle(
         else out.perfilIndisponivel = { motivo: `O Google ainda não liberou os números do perfil para ${janela.rotulo} (tem até ${e.perfil_ultimo_dia.split("-").reverse().join("/")}).` };
       } catch (err) {
         out.perfilIndisponivel = { motivo: `Não consegui ler os números do Perfil da Empresa no banco (${err instanceof Error ? err.message : String(err)}).` };
+      }
+    }
+  }
+
+  // ── Site (Google Analytics) ──
+  if (tem.site) {
+    const prop = c.google_analytics_propriedade!;
+    if (!e.analytics_sincronizado_em) {
+      out.siteIndisponivel = { motivo: e.analytics_erro ? `O Google Analytics ainda não foi lido: ${e.analytics_erro}` : "A propriedade do Google Analytics foi vinculada e ainda não foi lida (a rotina roda todo dia às 7h — ou use \"Atualizar agora\" na ficha)." };
+    } else {
+      const cobertoAte = somarDias(hojeSP(new Date(e.analytics_sincronizado_em)), -1);
+      if (cobertoAte < janela.fim) {
+        out.siteIndisponivel = {
+          motivo: `A última leitura do Google Analytics (${quando(e.analytics_sincronizado_em)}) vai só até ${cobertoAte.split("-").reverse().join("/")} — não cobre ${janela.rotulo}.${e.analytics_erro ? ` A leitura seguinte falhou: ${e.analytics_erro}` : ""}`,
+        };
+      } else {
+        try {
+          const [dias, eventos] = await Promise.all([
+            lerTudo<LinhaSiteDia>((a, b) => supabaseAdmin.from("google_analytics_dia")
+              .select("dia, canal, sessoes, sessoes_engajadas, visualizacoes, novos_usuarios")
+              .eq("propriedade", prop).gte("dia", ant.inicio).lte("dia", janela.fim).order("dia").range(a, b)),
+            lerTudo<LinhaSiteEvento>((a, b) => supabaseAdmin.from("google_analytics_evento_dia")
+              .select("dia, evento, link, contagem")
+              .eq("propriedade", prop).gte("dia", ant.inicio).lte("dia", janela.fim).order("dia").range(a, b)),
+          ]);
+          out.site = montarRelatorioSite({ janela, anterior: ant, dias, eventos });
+        } catch (err) {
+          out.siteIndisponivel = { motivo: `Não consegui ler os números do Google Analytics no banco (${err instanceof Error ? err.message : String(err)}).` };
+        }
       }
     }
   }

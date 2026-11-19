@@ -23,5 +23,23 @@ export async function temColunasGoogle(): Promise<boolean> {
   }
 }
 
+// O Google Analytics veio numa migração SEPARADA (20261119100000_google_analytics.sql): mesma pergunta, à parte —
+// o Ads e o Perfil seguem funcionando num banco que ainda não tem as colunas do Analytics.
+let sabidoGa: { tem: boolean; em: number } | null = null;
+
+export async function temColunasAnalytics(): Promise<boolean> {
+  if (sabidoGa && (sabidoGa.tem || Date.now() - sabidoGa.em < 5 * 60_000)) return sabidoGa.tem;
+  try {
+    const { data, error } = await supabaseAdmin.from("clients").select("*").limit(1);
+    if (error) return false;
+    const linha = (data ?? [])[0] as Record<string, unknown> | undefined;
+    const tem = !!linha && "google_analytics_propriedade" in linha;
+    sabidoGa = { tem, em: Date.now() };
+    return tem;
+  } catch {
+    return false;
+  }
+}
+
 /** Para os testes. */
-export function _esquecerColunasGoogle() { sabido = null; }
+export function _esquecerColunasGoogle() { sabido = null; sabidoGa = null; }

@@ -438,7 +438,207 @@ export function fraseDoPerfil(r: RelatorioGooglePerfil): string {
   return `${abertura}, o seu perfil ${vezes} e gerou ${lista}${fim}.`;
 }
 
-// ── Os dois juntos ───────────────────────────────────────────────────────────────────────────────────
+// ── Site (Google Analytics 4) ────────────────────────────────────────────────────────────────────────
+//
+// Roberto (18/11/2026): o que interessa do site é GENTE QUE PROCUROU — quem clicou no WhatsApp, ligou ou mandou
+// formulário pelo site —, mais quantas visitas o site teve e de onde elas vieram. Nada de "conversão".
+
+export interface LinhaSiteDia { dia: string; canal: string; sessoes: number; sessoes_engajadas: number; visualizacoes: number; novos_usuarios: number }
+export interface LinhaSiteEvento { dia: string; evento: string; link: string; contagem: number }
+
+export const ACOES_SITE = [
+  { chave: "whatsapp", rotulo: "Cliques no WhatsApp", um: "clique no WhatsApp", verbo: ["clicou no WhatsApp", "clicaram no WhatsApp"], nota: "toques no botão ou link do WhatsApp do site" },
+  { chave: "ligacao", rotulo: "Ligações pelo site", um: "ligação pelo site", verbo: ["ligou pelo site", "ligaram pelo site"], nota: "toques no telefone do site" },
+  { chave: "formulario", rotulo: "Formulários enviados", um: "formulário enviado", verbo: ["mandou formulário", "mandaram formulário"], nota: "formulários de contato enviados no site" },
+] as const;
+export type ChaveAcaoSite = (typeof ACOES_SITE)[number]["chave"];
+
+/**
+ * O evento do GA4 é um contato? Pura (testada).
+ *   · com link (clique em link, medição otimizada): wa.me / whatsapp → WhatsApp; tel: → ligação;
+ *   · sem link: pelo NOME do evento — os que a Lone e os construtores de site costumam criar ("clique_whatsapp",
+ *     "click_to_call", "generate_lead", "form_submit"...). "form_start" (começou a preencher) não é envio.
+ */
+export function acaoDoEvento(evento: string, link: string): ChaveAcaoSite | null {
+  if (link) {
+    if (/wa\.me|whatsapp/i.test(link)) return "whatsapp";
+    if (/^tel:/i.test(link)) return "ligacao";
+    return null;
+  }
+  const e = evento.toLowerCase();
+  if (/whats|wpp|(^|[_-])zap([_-]|$)/.test(e)) return "whatsapp";
+  if (/click_to_call|(^|[_-])(tel|telefone|ligar|ligacao|ligacoes|phone|call|chamada)([_-]|$)/.test(e)) return "ligacao";
+  if (/start|view|abandon|inicio|erro|error/.test(e)) return null;
+  if (e === "generate_lead" || e === "form_submit" || /(^|[_-])(lead|leads|formulario|form|submit|enviar_formulario)([_-]|$)/.test(e)) return "formulario";
+  return null;
+}
+
+/**
+ * Contatos de um tipo por dia. O mesmo clique costuma ser gravado DUAS vezes (o evento que o site criou e o clique no
+ * link que o GA4 grava sozinho; ou "form_submit" e "generate_lead" para o mesmo formulário). Somar dobraria o número:
+ * por dia vale a MAIOR das fontes (cada nome de evento é uma fonte; os cliques em link, juntos, são outra).
+ * Conservador de propósito — pode contar a menos, nunca a mais. Pura (testada).
+ */
+export function contatosDoSitePorDia(eventos: readonly LinhaSiteEvento[], tipo: ChaveAcaoSite): Map<string, number> {
+  const fontes = new Map<string, Map<string, number>>(); // dia → fonte → soma
+  for (const l of eventos) {
+    if (acaoDoEvento(l.evento, l.link) !== tipo) continue;
+    const fonte = l.link ? "(links)" : l.evento.toLowerCase();
+    const doDia = fontes.get(l.dia) ?? new Map<string, number>();
+    doDia.set(fonte, (doDia.get(fonte) ?? 0) + num(l.contagem));
+    fontes.set(l.dia, doDia);
+  }
+  return new Map([...fontes.entries()].map(([dia, m]) => [dia, Math.max(...m.values())]));
+}
+
+const ROTULO_CANAL_SITE: Record<string, string> = {
+  "Organic Search": "Pesquisa no Google (sem anúncio)",
+  "Paid Search": "Anúncio na pesquisa do Google",
+  "Cross-network": "Anúncio do Google (Performance Max)",
+  "Organic Maps": "Google Maps",
+  "Paid Maps": "Anúncio no Google Maps",
+  "Direct": "Direto (digitou o endereço ou link salvo)",
+  "Organic Social": "Redes sociais",
+  "Paid Social": "Anúncio nas redes sociais",
+  "Referral": "Outros sites",
+  "Display": "Anúncio em sites",
+  "Organic Video": "YouTube e vídeos",
+  "Paid Video": "Anúncio em vídeo",
+  "Organic Shopping": "Google Shopping",
+  "Paid Shopping": "Anúncio no Google Shopping",
+  "Email": "E-mail",
+  "SMS": "SMS",
+  "Mobile Push Notifications": "Notificação no celular",
+  "Paid Other": "Outros anúncios",
+  "Affiliates": "Parceiros",
+  "Audio": "Áudio",
+  "Unassigned": "Origem não identificada",
+  "(not set)": "Origem não identificada",
+};
+export const rotuloCanalSite = (c: string) => ROTULO_CANAL_SITE[c] ?? c;
+
+export interface AcaoSite { chave: ChaveAcaoSite; rotulo: string; um: string; nota: string; valor: number; anterior: number | null; variacaoPct: number | null; tom: Tom }
+export interface CanalSite { canal: string; rotulo: string; visitas: number; pct: number }
+
+export interface RelatorioGoogleSite {
+  janela: Janela;
+  anterior: Janela | null;
+  vocab: Vocabulario;
+  frase: string;
+  kpis: KpiGoogle[];
+  /** Só os contatos que o site registra (WhatsApp, ligação, formulário com número no período ou no anterior). */
+  acoes: AcaoSite[];
+  canais: CanalSite[];
+  serieVisitas: PontoGoogle[];
+  seriePorChave: Partial<Record<ChaveAcaoSite | "visitas" | "novos", PontoGoogle[]>>;
+  /** O site não registra NENHUM contato (sem botão de WhatsApp medido, sem formulário): o painel explica. */
+  semContatosMedidos: boolean;
+  semDados: boolean;
+}
+
+export interface EntradaSite {
+  janela: Janela;
+  /** Linhas cobrindo a janela E o período anterior. */
+  dias: readonly LinhaSiteDia[];
+  eventos: readonly LinhaSiteEvento[];
+  /** Ausente = janelaAnterior(janela); null = sem comparação. */
+  anterior?: Janela | null;
+}
+
+export function montarRelatorioSite(e: EntradaSite): RelatorioGoogleSite {
+  const ant = e.anterior === undefined ? janelaAnterior(e.janela) : e.anterior;
+  const atual = e.dias.filter(dentro(e.janela));
+  const anterior = ant ? e.dias.filter(dentro(ant)) : [];
+  const soma = (ls: readonly LinhaSiteDia[], f: (l: LinhaSiteDia) => number) => ls.reduce((s, l) => s + num(f(l)), 0);
+  const antValido = !!ant && soma(anterior, (l) => l.sessoes) > 0;
+  const B = (v: number) => (antValido ? v : null);
+
+  const porTipo = Object.fromEntries(ACOES_SITE.map((a) => [a.chave, contatosDoSitePorDia(e.eventos, a.chave)])) as Record<ChaveAcaoSite, Map<string, number>>;
+  const somaEm = (m: Map<string, number>, j: Janela | null) => (j ? [...m.entries()].filter(([d]) => d >= j.inicio && d <= j.fim).reduce((s, [, v]) => s + v, 0) : 0);
+
+  const todas: AcaoSite[] = ACOES_SITE.map((a) => {
+    const valor = somaEm(porTipo[a.chave], e.janela);
+    const antV = antValido ? somaEm(porTipo[a.chave], ant) : null;
+    const v = variacao(valor, antV);
+    return { chave: a.chave, rotulo: a.rotulo, um: a.um, nota: a.nota, valor, anterior: antV, variacaoPct: v, tom: tomDaVariacao(v, "direta", LIMIAR_NEUTRO) };
+  });
+  // Contato que o site nunca registrou não aparece como "0": pode ser só que o botão não é medido.
+  const acoes = todas.filter((a) => a.valor > 0 || (a.anterior ?? 0) > 0);
+
+  const visitas = soma(atual, (l) => l.sessoes);
+  const engajadas = soma(atual, (l) => l.sessoes_engajadas);
+  const novos = soma(atual, (l) => l.novos_usuarios);
+  const totalContatos = acoes.reduce((s, a) => s + a.valor, 0);
+  const totalContatosAnt = antValido ? acoes.reduce((s, a) => s + (a.anterior ?? 0), 0) : null;
+
+  const kpis: KpiGoogle[] = [
+    kpi("visitas", "Visitas ao site", visitas, B(soma(anterior, (l) => l.sessoes)), "direta", "inteiro", "cada vez que alguém abriu o site"),
+    ...(acoes.length ? [kpi("contatos", "Contatos pelo site", totalContatos, totalContatosAnt, "direta", "inteiro", "WhatsApp + ligação + formulário")] : []),
+    ...acoes.map((a) => kpi(a.chave, a.rotulo, a.valor, a.anterior, "direta", "inteiro", a.nota)),
+    kpi("novos", "Pessoas novas", novos, B(soma(anterior, (l) => l.novos_usuarios)), "direta", "inteiro", "abriram o site pela primeira vez"),
+    kpi("engajamento", "Visitas com interesse", div(engajadas * 100, visitas), antValido ? div(soma(anterior, (l) => l.sessoes_engajadas) * 100, soma(anterior, (l) => l.sessoes)) : null, "direta", "pct", "ficaram 10 s ou mais, viram 2 páginas ou tocaram em algo"),
+  ];
+
+  const porCanal = new Map<string, number>();
+  for (const l of atual) porCanal.set(l.canal, (porCanal.get(l.canal) ?? 0) + num(l.sessoes));
+  // "(not set)" e "Unassigned" são a mesma coisa para o dono.
+  const juntos = new Map<string, { canal: string; visitas: number }>();
+  for (const [canal, n] of porCanal) {
+    const rotulo = rotuloCanalSite(canal);
+    const x = juntos.get(rotulo) ?? { canal, visitas: 0 };
+    x.visitas += n;
+    juntos.set(rotulo, x);
+  }
+  const canais: CanalSite[] = [...juntos.entries()]
+    .map(([rotulo, x]) => ({ canal: x.canal, rotulo, visitas: x.visitas, pct: visitas > 0 ? Math.round((x.visitas / visitas) * 100) : 0 }))
+    .filter((c) => c.visitas > 0)
+    .sort((a, b) => b.visitas - a.visitas);
+
+  const diaA = (f: (l: LinhaSiteDia) => number) => {
+    const m = new Map<string, number>();
+    for (const l of e.dias) m.set(l.dia, (m.get(l.dia) ?? 0) + num(f(l)));
+    return (dia: string) => m.get(dia) ?? 0;
+  };
+  const vocab = vocabulario(e.janela, ant);
+  const r: RelatorioGoogleSite = {
+    janela: e.janela, anterior: ant, vocab, frase: "", kpis, acoes, canais,
+    serieVisitas: serie(e.janela, ant, antValido, diaA((l) => l.sessoes)),
+    seriePorChave: Object.fromEntries([
+      ["visitas", serie(e.janela, ant, antValido, diaA((l) => l.sessoes))] as const,
+      ["novos", serie(e.janela, ant, antValido, diaA((l) => l.novos_usuarios))] as const,
+      ...acoes.map((a) => [a.chave, serie(e.janela, ant, antValido, (d) => porTipo[a.chave].get(d) ?? 0)] as const),
+    ]),
+    semContatosMedidos: !todas.some((a) => a.valor > 0 || (a.anterior ?? 0) > 0),
+    semDados: visitas === 0,
+  };
+  r.frase = fraseDoSite(r);
+  return r;
+}
+
+/**
+ * "Na última semana, o seu site recebeu 1.234 visitas, 12% a mais que na semana anterior, e 56 pessoas clicaram no
+ * WhatsApp, 12 ligaram pelo site e 3 mandaram formulário."
+ */
+export function fraseDoSite(r: RelatorioGoogleSite): string {
+  if (r.semDados) return `${r.vocab.abertura}, o Google Analytics não registrou visitas no seu site.`;
+  const vis = valorDe(r.kpis, "visitas")!;
+  const n = vis.valor ?? 0;
+  let f = `${r.vocab.abertura}, o seu site recebeu ${formatarValor(n, "inteiro")} ${n === 1 ? "visita" : "visitas"}${comparacao(vis, r.vocab)}`;
+  const partes = r.acoes.filter((a) => a.valor > 0).map((a) => {
+    const def = ACOES_SITE.find((x) => x.chave === a.chave)!;
+    return `${formatarValor(a.valor, "inteiro")} ${a.valor === 1 ? `pessoa ${def.verbo[0]}` : `${def.verbo[1]}`}`;
+  });
+  if (partes.length) {
+    // "56 clicaram no WhatsApp" lê melhor com "pessoas" só no primeiro: "56 pessoas clicaram no WhatsApp, 12 ligaram…".
+    const [primeira, ...resto] = partes;
+    const p1 = /pessoa /.test(primeira) ? primeira : primeira.replace(/^(\S+) /, "$1 pessoas ");
+    const lista = [p1, ...resto];
+    f += `, e ${lista.length > 1 ? `${lista.slice(0, -1).join(", ")} e ${lista[lista.length - 1]}` : lista[0]}`;
+  }
+  return `${f}.`;
+}
+
+// ── Os três juntos ───────────────────────────────────────────────────────────────────────────────────
 
 export interface BlocoIndisponivel { motivo: string }
 
@@ -448,6 +648,9 @@ export interface RelatorioGoogle {
   adsIndisponivel: BlocoIndisponivel | null;
   perfil: RelatorioGooglePerfil | null;
   perfilIndisponivel: BlocoIndisponivel | null;
+  /** Site (Google Analytics) — opcional: o relatório semanal e o PDF ainda não mostram. */
+  site?: RelatorioGoogleSite | null;
+  siteIndisponivel?: BlocoIndisponivel | null;
 }
 
 export const temAlgoDoGoogle = (g: RelatorioGoogle | null | undefined) => !!g && (!!g.ads || !!g.perfil || !!g.adsIndisponivel || !!g.perfilIndisponivel);
