@@ -8,12 +8,15 @@
 // "atualizando" — nunca zero.
 
 import { useCallback, useEffect, useState } from "react";
-import { Handshake, RefreshCw, Timer, Filter } from "lucide-react";
-import { Aviso, Cartao, CabecalhoSecao, Segmentado } from "./ui";
+import { motion } from "framer-motion";
+import {
+  BadgeCheck, FileText, Filter, Handshake, Hourglass, Percent, RefreshCw, Timer, UserPlus, Wallet, XCircle, Zap, type LucideIcon,
+} from "lucide-react";
+import { Aviso, Cartao, CabecalhoSecao, ListaBarras, Segmentado, entrada } from "./ui";
+import { CardKpi, type KpiComparativo } from "@/components/ui/painel-comparativo";
 import Skeleton from "@/components/ui/Skeleton";
 import { chamar } from "@/lib/api/chamar";
 import { rotuloDia } from "@/lib/portal/formatos";
-import { formatarVariacao } from "@/components/ui/painel-comparativo-utils";
 import { cn } from "@/lib/utils";
 import { formatarCrm, formatarCentavos, formatarDuracao, type KpiCrm, type RelatorioCrm } from "@/lib/crm-externo/relatorio";
 import type { PeriodKind } from "@/lib/portal/types";
@@ -33,41 +36,21 @@ interface Resposta {
 }
 
 const inteiro = (v: number) => Math.round(v).toLocaleString("pt-BR");
-const TOM = {
-  bom: "bg-lone-success-bg text-lone-success border-lone-success-border",
-  ruim: "bg-lone-warning-bg text-lone-warning border-lone-warning-border",
-  neutro: "bg-muted text-muted-foreground border-border",
-} as const;
 
-function CartaoKpi({ k, destaque }: { k: KpiCrm; destaque: boolean }) {
-  const pct = k.variacaoPct;
-  return (
-    <Cartao className={cn("flex flex-col gap-1 p-4", destaque && "border-primary/40")}>
-      <span className="text-lone-caption text-muted-foreground">{k.rotulo}</span>
-      <span className={cn("font-semibold tabular-nums text-foreground", destaque ? "text-2xl" : "text-xl")}>{formatarCrm(k.valor, k.formato)}</span>
-      {pct != null && k.anterior != null && (
-        <span className="flex flex-wrap items-center gap-1.5 text-lone-caption">
-          <span className={cn("rounded-full border px-1.5 py-0.5 font-medium tabular-nums", TOM[k.tom])}>{formatarVariacao(pct)}</span>
-          <span className="text-muted-foreground">antes: {formatarCrm(k.anterior, k.formato)}</span>
-        </span>
-      )}
-      {k.nota && <span className="text-lone-caption text-muted-foreground">{k.nota}</span>}
-    </Cartao>
-  );
-}
+// Ícone de cada número — o mesmo cartão das outras abas (CardKpi do painel), com ícone e pílula de variação.
+const ICONE: Record<string, LucideIcon> = {
+  vendas: BadgeCheck, leads: UserPlus, resposta: Timer, faturamento: Wallet,
+  orcamentos: FileText, ciclo: Hourglass, conversao: Percent, resposta_boa: Zap, perdidos: XCircle,
+};
 
-function Barra({ rotulo, valor, total, cor = "bg-primary" }: { rotulo: string; valor: number; total: number; cor?: string }) {
-  const pct = total > 0 ? Math.round((valor / total) * 100) : 0;
-  return (
-    <div className="flex items-center gap-3 text-sm">
-      <span className="w-32 shrink-0 truncate text-muted-foreground sm:w-40" title={rotulo}>{rotulo}</span>
-      <span className="h-2 flex-1 overflow-hidden rounded-full bg-muted" role="img" aria-label={`${rotulo}: ${inteiro(valor)}`}>
-        <span className={cn("block h-full rounded-full", cor)} style={{ width: `${pct}%` }} />
-      </span>
-      <span className="w-10 shrink-0 text-right tabular-nums text-foreground">{inteiro(valor)}</span>
-    </div>
-  );
-}
+const paraKpi = (k: KpiCrm): KpiComparativo => ({
+  rotulo: k.rotulo,
+  valor: formatarCrm(k.valor, k.formato),
+  variacaoPct: k.anterior != null ? k.variacaoPct : null,
+  natureza: k.natureza,
+  dica: k.nota ?? undefined,
+  icone: ICONE[k.chave],
+});
 
 function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
@@ -78,54 +61,71 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
   );
 }
 
+function Fileira({ kpis, colunas, inicio }: { kpis: KpiCrm[]; colunas: string; inicio: number }) {
+  if (!kpis.length) return null;
+  return (
+    <div className={cn("grid grid-cols-2 gap-3 sm:gap-4", colunas)}>
+      {kpis.map((k, i) => (
+        <motion.div key={k.chave} variants={entrada} initial="oculto" animate="visivel" custom={inicio + i} className="min-w-0">
+          <CardKpi kpi={paraKpi(k)} limiar={5} tomRuim="atencao" />
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
 function Bloco({ r }: { r: RelatorioCrm }) {
   const k = (c: string) => r.kpis.find((x) => x.chave === c);
   const principais = ["vendas", "leads", "resposta", "faturamento"].map(k).filter((x): x is KpiCrm => !!x);
   const outros = ["orcamentos", "ciclo", "conversao", "resposta_boa", "perdidos"].map(k).filter((x): x is KpiCrm => !!x);
   const t = r.resposta ? r.resposta.boa + r.resposta.atencao + r.resposta.estourada : 0;
-  const maiorEtapa = Math.max(1, ...(r.funil ?? []).map((e) => e.negocios));
+  const pct = (v: number) => (t > 0 ? ` (${Math.round((v / t) * 100)}%)` : "");
+  const COLS: Record<number, string> = { 1: "lg:grid-cols-1", 2: "lg:grid-cols-2", 3: "lg:grid-cols-3", 4: "lg:grid-cols-4", 5: "sm:grid-cols-3 lg:grid-cols-5" };
+  const temFunil = !!(r.funil?.length || r.abertos || r.recuperadas);
   return (
     <div className="space-y-4">
       <CabecalhoSecao icone={Handshake} titulo="Atendimento e vendas"
         descricao={`Do seu CRM (${r.rotuloProvedor}) · ${rotuloDia(r.janela.inicio)} a ${rotuloDia(r.janela.fim)}${r.anterior ? `, comparado com ${rotuloDia(r.anterior.inicio)} a ${rotuloDia(r.anterior.fim)}` : ""}`} />
-      <Cartao className="p-4 sm:p-5"><p className="text-sm text-foreground">{r.frase}</p></Cartao>
-      {principais.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          {principais.map((x, i) => <CartaoKpi key={x.chave} k={x} destaque={i === 0} />)}
-        </div>
-      )}
-      {outros.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
-          {outros.map((x) => <CartaoKpi key={x.chave} k={x} destaque={false} />)}
-        </div>
-      )}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {r.resposta && (
-          <Cartao as="section" className="p-4 sm:p-5">
-            <CabecalhoSecao nivel={3} icone={Timer} titulo="Primeira resposta ao lead"
-              descricao={`${inteiro(t)} respondido${t === 1 ? "" : "s"} no período${r.resposta.p90Seg != null ? ` · 9 em cada 10 em até ${formatarDuracao(r.resposta.p90Seg)}` : ""}`} />
-            <div className="mt-4 space-y-2.5">
-              <Barra rotulo="Menos de 5 min" valor={r.resposta.boa} total={t} cor="bg-lone-success" />
-              <Barra rotulo="5 a 10 min" valor={r.resposta.atencao} total={t} cor="bg-lone-warning" />
-              <Barra rotulo="Mais de 10 min" valor={r.resposta.estourada} total={t} cor="bg-lone-danger" />
-            </div>
-          </Cartao>
-        )}
-        {(r.funil?.length || r.abertos || r.recuperadas) && (
-          <Cartao as="section" className="p-4 sm:p-5">
-            <CabecalhoSecao nivel={3} icone={Filter} titulo="Funil agora" descricao="Negócios em aberto em cada etapa, hoje" />
-            {r.funil?.length ? (
-              <div className="mt-4 space-y-2.5">
-                {r.funil.slice(0, 12).map((e) => <Barra key={e.etapa} rotulo={e.etapa} valor={e.negocios} total={maiorEtapa} />)}
+      <motion.div variants={entrada} initial="oculto" animate="visivel" custom={0}>
+        <Cartao className="p-4 sm:p-5"><p className="text-sm leading-relaxed text-foreground">{r.frase}</p></Cartao>
+      </motion.div>
+      <Fileira kpis={principais} colunas={COLS[Math.min(principais.length, 4)]} inicio={1} />
+      <Fileira kpis={outros} colunas={COLS[Math.min(outros.length, 5)]} inicio={1 + principais.length} />
+      {(r.resposta || temFunil) && (
+        <div className={cn("grid gap-4", r.resposta && temFunil && "lg:grid-cols-2")}>
+          {r.resposta && (
+            <Cartao as="section" className="p-4 sm:p-5">
+              <CabecalhoSecao nivel={3} icone={Timer} titulo="Primeira resposta ao lead"
+                descricao={`${inteiro(t)} respondido${t === 1 ? "" : "s"} no período${r.resposta.p90Seg != null ? ` · 9 em cada 10 em até ${formatarDuracao(r.resposta.p90Seg)}` : ""}`} />
+              <div className="mt-3">
+                <ListaBarras rotulo="Tempo da primeira resposta" itens={[
+                  { chave: "boa", rotulo: "Menos de 5 min", valor: r.resposta.boa, texto: `${inteiro(r.resposta.boa)}${pct(r.resposta.boa)}`, icone: Zap },
+                  { chave: "atencao", rotulo: "5 a 10 min", valor: r.resposta.atencao, texto: `${inteiro(r.resposta.atencao)}${pct(r.resposta.atencao)}`, icone: Timer },
+                  { chave: "estourada", rotulo: "Mais de 10 min", valor: r.resposta.estourada, texto: `${inteiro(r.resposta.estourada)}${pct(r.resposta.estourada)}`, icone: Hourglass },
+                ]} />
               </div>
-            ) : null}
-            <div className="mt-4">
-              {r.abertos && <Linha rotulo="Em negociação agora" valor={`${inteiro(r.abertos.quantidade)}${r.abertos.valorCentavos ? ` · ${formatarCentavos(r.abertos.valorCentavos)}` : ""}`} />}
-              {r.recuperadas && <Linha rotulo="Vendas recuperadas no período" valor={`${inteiro(r.recuperadas.negocios)} · ${formatarCentavos(r.recuperadas.valorCentavos)}`} />}
-            </div>
-          </Cartao>
-        )}
-      </div>
+            </Cartao>
+          )}
+          {temFunil && (
+            <Cartao as="section" className="p-4 sm:p-5">
+              <CabecalhoSecao nivel={3} icone={Filter} titulo="Funil agora" descricao="Negócios em aberto em cada etapa, hoje" />
+              {r.funil?.length ? (
+                <div className="mt-3">
+                  <ListaBarras rotulo="Negócios por etapa do funil"
+                    itens={r.funil.slice(0, 12).map((e, i) => ({ chave: `${i}-${e.etapa}`, rotulo: e.etapa, valor: e.negocios }))}
+                    formatar={(n) => `${inteiro(n)} negócio${n === 1 ? "" : "s"}`} />
+                </div>
+              ) : null}
+              {(r.abertos || r.recuperadas) && (
+                <div className="mt-3 border-t border-border pt-1">
+                  {r.abertos && <Linha rotulo="Em negociação agora" valor={`${inteiro(r.abertos.quantidade)}${r.abertos.valorCentavos ? ` · ${formatarCentavos(r.abertos.valorCentavos)}` : ""}`} />}
+                  {r.recuperadas && <Linha rotulo="Vendas recuperadas no período" valor={`${inteiro(r.recuperadas.negocios)} · ${formatarCentavos(r.recuperadas.valorCentavos)}`} />}
+                </div>
+              )}
+            </Cartao>
+          )}
+        </div>
+      )}
     </div>
   );
 }

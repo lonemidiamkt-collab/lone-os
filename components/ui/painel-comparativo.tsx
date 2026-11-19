@@ -350,7 +350,8 @@ function CardDestaque({ destaque, grande, tomRuim }: { destaque: DestaqueCompara
   );
 }
 
-function CardKpi({ kpi, limiar, tomRuim }: { kpi: KpiComparativo; limiar: number; tomRuim: "perigo" | "atencao" }) {
+/** O cartão de número do painel. Exportado para as abas sem gráfico por dia (Atendimento e vendas) usarem o mesmo. */
+export function CardKpi({ kpi, limiar, tomRuim }: { kpi: KpiComparativo; limiar: number; tomRuim: "perigo" | "atencao" }) {
   const pct = kpi.variacaoPct;
   const temPct = pct != null && Number.isFinite(pct);
   const tom = tomDaVariacao(pct, kpi.natureza ?? "direta", limiar);
