@@ -303,7 +303,8 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
       onChange={mudarAba}
       clientName={clientName}
     >
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
+      {/* Coluna da altura da tela: página curta termina no rodapé, sem faixa vazia depois dele. */}
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:min-h-screen lg:px-10 lg:py-10">
 
         {/* ── Cabeçalho (como no protótipo): área, título, linha de apoio e as três ações ── */}
         <header className="mb-5 flex flex-wrap items-center justify-between gap-x-5 gap-y-3 lg:mb-6">
@@ -548,22 +549,55 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
               {/* Celular: um bloco embaixo do outro, na ordem de interesse do cliente (gráfico,
                   criativos, público, o que fizemos). Computador: duas colunas — os wrappers viram
                   `contents` no celular pra ordem valer entre as colunas. */}
-              <div className="flex flex-col gap-5 lg:grid lg:grid-cols-5 lg:items-start lg:gap-6">
-                <div className="contents lg:col-span-3 lg:flex lg:flex-col lg:gap-6">
+              <div className="flex flex-col gap-5 lg:grid lg:grid-cols-5 lg:gap-6">
+                {/* Computador (como no protótipo): criativos na coluna larga, à esquerda; público e "o que fizemos"
+                    na estreita, à direita — as duas colunas ficam com altura parecida, sem buraco. */}
+                {/* As duas colunas terminam juntas: o último cartão da coluna estreita cresce até o fim da larga. */}
+                <div className="contents lg:order-2 lg:col-span-2 lg:flex lg:flex-col lg:gap-6 lg:[&>*:last-child]:flex-1">
                   {mostraPublico && (
-                    <motion.div variants={entrada} initial="oculto" animate="visivel" custom={2} className="order-3 min-w-0">
+                    <motion.div variants={entrada} initial="oculto" animate="visivel" custom={2} className="order-3 min-w-0 lg:flex lg:flex-col">
                       <PublicoCard
                         titulo="Quem está vendo seus anúncios"
                         descricao="Pessoas alcançadas no período, por gênero e idade"
                         carregando={loading}
+                        className="lg:flex-1"
+                        estreito
                         genero={demo?.gender ? { mulheres: demo.gender.female_pct, homens: demo.gender.male_pct } : null}
                         idades={(demo?.age_ranges ?? []).map((r) => ({ faixa: r.label, pct: r.pct }))}
                       />
                     </motion.div>
                   )}
+                  {mostraTimeline && (
+                    <motion.section variants={entrada} initial="oculto" animate="visivel" custom={3} className="order-4 min-w-0 space-y-3 lg:flex lg:flex-col">
+                      <CabecalhoSecao icone={ClipboardList} titulo="O que fizemos" descricao="Ações da equipe nas suas campanhas neste período" />
+                      {loading ? (
+                        <Skeleton className="h-28 rounded-xl" />
+                      ) : (
+                        <Cartao className="p-4 lg:flex-1">
+                          <ol className="relative space-y-4 before:absolute before:bottom-3 before:left-[15px] before:top-3 before:w-px before:bg-border">
+                            {actions.map((a) => {
+                              const Icone = ICON_MAP[a.icon ?? ""] ?? Pin;
+                              return (
+                                <li key={a.id} className="relative flex items-start gap-3">
+                                  <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-full border border-border bg-card text-primary">
+                                    <Icone size={15} aria-hidden="true" />
+                                  </span>
+                                  <div className="min-w-0 pt-0.5">
+                                    <p className="text-lone-caption text-muted-foreground">{rotuloDia(a.action_date)}</p>
+                                    <p className="text-sm font-medium text-foreground">{a.title}</p>
+                                    {a.description && <p className="mt-0.5 text-lone-caption text-muted-foreground">{a.description}</p>}
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ol>
+                        </Cartao>
+                      )}
+                    </motion.section>
+                  )}
                 </div>
 
-                <div className="contents lg:col-span-2 lg:flex lg:flex-col lg:gap-6">
+                <div className="contents lg:order-1 lg:col-span-3 lg:flex lg:flex-col lg:gap-6">
                   {mostraCriativos && (
                     <motion.section variants={entrada} initial="oculto" animate="visivel" custom={1} className="order-2 min-w-0 space-y-3">
                       <CabecalhoSecao icone={Trophy} titulo={`Criativos com mais ${palavras.varios}`} descricao="Toque num anúncio para ver os detalhes" />
@@ -588,34 +622,6 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                     </motion.section>
                   )}
 
-                  {mostraTimeline && (
-                    <motion.section variants={entrada} initial="oculto" animate="visivel" custom={3} className="order-4 min-w-0 space-y-3">
-                      <CabecalhoSecao icone={ClipboardList} titulo="O que fizemos" descricao="Ações da equipe nas suas campanhas neste período" />
-                      {loading ? (
-                        <Skeleton className="h-28 rounded-xl" />
-                      ) : (
-                        <Cartao className="p-4">
-                          <ol className="relative space-y-4 before:absolute before:bottom-3 before:left-[15px] before:top-3 before:w-px before:bg-border">
-                            {actions.map((a) => {
-                              const Icone = ICON_MAP[a.icon ?? ""] ?? Pin;
-                              return (
-                                <li key={a.id} className="relative flex items-start gap-3">
-                                  <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-full border border-border bg-card text-primary">
-                                    <Icone size={15} aria-hidden="true" />
-                                  </span>
-                                  <div className="min-w-0 pt-0.5">
-                                    <p className="text-lone-caption text-muted-foreground">{rotuloDia(a.action_date)}</p>
-                                    <p className="text-sm font-medium text-foreground">{a.title}</p>
-                                    {a.description && <p className="mt-0.5 text-lone-caption text-muted-foreground">{a.description}</p>}
-                                  </div>
-                                </li>
-                              );
-                            })}
-                          </ol>
-                        </Cartao>
-                      )}
-                    </motion.section>
-                  )}
                 </div>
               </div>
 
@@ -624,10 +630,10 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           </motion.div>
 
         {/* Convite para ter o painel na tela do celular — no fim da página, nunca na frente dos números. */}
-        <div className="mt-10"><PortalInstalar /></div>
+        <div className="mt-auto pt-10"><PortalInstalar /></div>
 
         {/* ── Rodapé ───────────────────────────────────────────────────── */}
-        <footer className="mt-8 space-y-2 border-t border-border pb-8 pt-6 text-center lg:pb-10">
+        <footer className="mt-8 space-y-2 border-t border-border pb-2 pt-6 text-center lg:pb-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="Lone Mídia" className="mx-auto h-6 w-auto opacity-50" />
           <p className="text-lone-caption text-muted-foreground">

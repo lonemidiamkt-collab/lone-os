@@ -277,7 +277,7 @@ export default function PortalResumo({ token, clientId, periodo, anuncios, igIni
           {temAnuncios && (
             <div className="min-w-0 lg:col-span-3">
               {sitAds === "falha" ? (
-                <Cartao interativo={false} className="grid min-h-[220px] place-items-center p-6 text-center text-sm text-muted-foreground" role="status">
+                <Cartao interativo={false} className="grid h-full min-h-[220px] place-items-center p-6 text-center text-sm text-muted-foreground" role="status">
                   Estamos atualizando os números dos anúncios. Volte em alguns minutos.
                 </Cartao>
               ) : (
@@ -293,6 +293,8 @@ export default function PortalResumo({ token, clientId, periodo, anuncios, igIni
                   limiarNeutroPct={5}
                   tomRuim="atencao"
                   vazio={`Ainda não houve ${palavras.varios} neste período.`}
+                  // Mesma altura do cartão "Resultados por origem" ao lado: sem buraco embaixo do gráfico.
+                  className="h-full [&>div]:h-full [&>div]:grid-rows-1"
                 />
               )}
             </div>

@@ -12,7 +12,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
-  Bookmark, Camera, Eye, Heart, Image as ImageIcon, MessageCircle, MousePointerClick, Play, RefreshCw, UserPlus, Users,
+  ArrowUpRight, Bookmark, Camera, Eye, Heart, Image as ImageIcon, MessageCircle, MousePointerClick, Play, RefreshCw, Trophy, UserPlus, Users,
   type LucideIcon,
 } from "lucide-react";
 import { HOVER_CARTAO } from "@/components/ui/painel-comparativo";
@@ -201,6 +201,8 @@ export default function PortalInstagram({ token, clientId, period, inicial = nul
     : r ? { ...r, alcance, alcanceJanelaDias: atual?.alcance != null ? dias : r.alcanceJanelaDias, seguidoresGanhos: atual?.entraram ?? r.seguidoresGanhos } : r);
   const temAudiencia = !!a && (a.generoMascPct != null || a.idades.length > 0 || a.cidades.length > 0);
   const melhores = posts.slice(0, MELHORES_POSTS);
+  // Os posts já vêm ordenados por resultado (curtidas + comentários + salvos + compartilhamentos): o 1º é o destaque.
+  const destaquePost = !loading && posts[0] && posts[0].engajamento > 0 ? posts[0] : null;
   const botoes = m?.toquesPorBotao ?? [];
   const formatos = (m?.alcancePorFormato ?? []).filter((f) => f.formato !== "AD");
 
@@ -221,16 +223,21 @@ export default function PortalInstagram({ token, clientId, period, inicial = nul
         {!loading && frase && (
           // Como no protótipo (19/11/2026): a frase do período em destaque e, ao lado, os seguidores totais com
           // quem entrou e quem saiu.
-          <div className={cn("grid gap-3.5", temLados && "lg:grid-cols-5")}>
-            <Cartao interativo={false} className={cn("flex flex-col justify-center p-5 sm:p-7", temLados && "lg:col-span-3")}>
+          <div className={cn("grid gap-3.5", (temLados || destaquePost) && "lg:grid-cols-5")}>
+            {/* De cara, o post ou vídeo que mais rendeu no período (pedido do Roberto, 19/11). */}
+            {destaquePost && <PostDestaque post={destaquePost} />}
+            <div className={cn("flex min-w-0 flex-col gap-3.5", (temLados || destaquePost) && "lg:col-span-3")}>
+            <Cartao interativo={false} className="flex flex-1 flex-col justify-center p-5 sm:p-7">
               <p className="text-lone-eyebrow font-semibold uppercase text-lone-brand-soft">Crescimento nas redes · {dias} dias</p>
               <p className="mt-2 max-w-prose text-lone-h1 font-semibold leading-snug tracking-tight text-foreground sm:text-[24px] sm:leading-snug">{frase}</p>
             </Cartao>
             {temLados && (
-              <Cartao interativo={false} className="flex flex-col justify-between gap-3 p-5 sm:p-6 lg:col-span-2">
-                <p className="text-lone-eyebrow font-semibold uppercase text-lone-brand-soft">Seguidores totais</p>
-                <p className="text-[40px] font-semibold leading-none tabular-nums tracking-tight text-foreground">{nf(data?.conta?.seguidores ?? null)}</p>
+              <Cartao interativo={false} className={cn("flex gap-x-6 gap-y-3 p-5 sm:p-6", destaquePost ? "flex-wrap items-center" : "flex-col justify-between lg:col-span-2")}>
                 <div>
+                  <p className="text-lone-eyebrow font-semibold uppercase text-lone-brand-soft">Seguidores totais</p>
+                  <p className="mt-2 text-[40px] font-semibold leading-none tabular-nums tracking-tight text-foreground">{nf(data?.conta?.seguidores ?? null)}</p>
+                </div>
+                <div className="min-w-[200px] flex-1">
                   <div className="flex items-center justify-between gap-3 text-xs text-foreground">
                     <span>{formatarNumero(atual!.entraram!)} entraram</span>
                     <span className="font-medium">{formatarNumero(atual!.sairam!)} saíram</span>
@@ -244,6 +251,7 @@ export default function PortalInstagram({ token, clientId, period, inicial = nul
                 </div>
               </Cartao>
             )}
+            </div>
           </div>
         )}
 
@@ -415,6 +423,53 @@ function Barras({ icone, titulo, descricao, itens, formato }: {
           </li>
         ))}
       </ul>
+    </Cartao>
+  );
+}
+
+/** O post que mais rendeu no período, no topo da área: capa grande, os números dele e o caminho para abrir. */
+function PostDestaque({ post: p }: { post: Post }) {
+  const video = p.tipo === "VIDEO" || p.tipo === "REELS";
+  const candidatos: [number | null, string][] = [
+    [p.views, "visualizações"],
+    [p.alcance, "pessoas alcançadas"],
+    [p.curtidas, "curtidas"],
+    [p.comentarios, "comentários"],
+    [(p.salvos ?? 0) + (p.compartilhamentos ?? 0) || null, "salvos e compartilhados"],
+  ];
+  const numeros = candidatos.filter((x): x is [number, string] => x[0] != null);
+  return (
+    <Cartao as="section" interativo={false} aria-label="Post que mais rendeu" className="flex flex-col p-5 sm:p-6 lg:col-span-2">
+      <p className="flex items-center gap-1.5 text-lone-eyebrow font-semibold uppercase text-lone-brand-soft">
+        <Trophy size={12} aria-hidden /> {video ? "Vídeo que mais rendeu" : "Post que mais rendeu"}
+      </p>
+      <div className="mt-4 flex flex-1 gap-4">
+        <div className="relative h-36 w-28 shrink-0 overflow-hidden rounded-xl border border-border bg-muted sm:h-44 sm:w-36">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {p.thumb && <img src={p.thumb} alt="" className="h-full w-full object-cover" loading="eager" />}
+          {video && (
+            <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-overlay text-overlay-foreground" aria-label="Reels">
+              <Play size={12} aria-hidden />
+            </span>
+          )}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+            {numeros.slice(0, 4).map(([v, r]) => (
+              <div key={r} className="min-w-0">
+                <dd className="text-[22px] font-semibold leading-tight tabular-nums tracking-tight text-foreground">{nf(v)}</dd>
+                <dt className="text-[10px] leading-tight text-muted-foreground">{r}</dt>
+              </div>
+            ))}
+          </dl>
+          {p.permalink && (
+            <a href={p.permalink} target="_blank" rel="noopener noreferrer"
+              className="mt-auto inline-flex min-h-[40px] items-center gap-1.5 self-start rounded-lg border border-border bg-card px-3.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+              Ver no Instagram <ArrowUpRight size={13} aria-hidden />
+            </a>
+          )}
+        </div>
+      </div>
     </Cartao>
   );
 }

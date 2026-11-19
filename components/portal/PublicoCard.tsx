@@ -14,6 +14,8 @@ import { formatarPct, ordenarFaixas } from "@/lib/portal/formatos";
 import { Cartao, CabecalhoSecao } from "./ui";
 
 export interface PublicoCardProps {
+  /** Em coluna estreita no computador: gênero, idade e cidades um embaixo do outro. */
+  estreito?: boolean;
   titulo: string;
   descricao?: string;
   genero?: { mulheres: number | null; homens: number | null } | null;
@@ -28,7 +30,7 @@ function Subtitulo({ children }: { children: ReactNode }) {
   return <p className="mb-3 text-lone-eyebrow uppercase text-muted-foreground">{children}</p>;
 }
 
-export default function PublicoCard({ titulo, descricao, genero, idades = [], cidades = [], carregando = false, nota, className }: PublicoCardProps) {
+export default function PublicoCard({ titulo, descricao, genero, idades = [], cidades = [], carregando = false, nota, className, estreito = false }: PublicoCardProps) {
   const temGenero = !!genero && (genero.mulheres != null || genero.homens != null);
   const faixas = ordenarFaixas(idades.filter((i) => i.pct > 0));
   const maiorFaixa = Math.max(1, ...faixas.map((f) => f.pct));
@@ -44,7 +46,7 @@ export default function PublicoCard({ titulo, descricao, genero, idades = [], ci
           <Skeleton className="h-28" />
         </div>
       ) : (
-        <div className={cn("mt-4 grid gap-6", blocos >= 2 && "sm:grid-cols-2", blocos >= 3 && "lg:grid-cols-3")}>
+        <div className={cn("mt-4 grid gap-6", blocos >= 2 && "sm:grid-cols-2", estreito ? "lg:grid-cols-1" : blocos >= 3 && "lg:grid-cols-3")}>
           {temGenero && (
             <div className="min-w-0">
               <Subtitulo>Gênero</Subtitulo>
