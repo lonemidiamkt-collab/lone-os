@@ -92,3 +92,25 @@ describe("PortalInstagram — leva 1 do Painel v2", () => {
     expect(screen.getByText(/não some com o alcance do tráfego pago/)).toBeInTheDocument();
   });
 });
+
+describe("PortalInstagram — toques nos botões em zero", () => {
+  const com = (toques: number | null) => ({
+    metricas: {
+      atual: { views: 5200, alcance: 4321, interacoes: 90, toques, entraram: 40, sairam: 12, posts: 3 },
+      anterior: { views: 4000, alcance: 4500, interacoes: 60, toques: 10, entraram: 20, sairam: 5, posts: 5 },
+      toquesPorBotao: [], alcancePorFormato: [], pctNaoSeguidores: null,
+    },
+  });
+
+  it("zero no período: o cartão some (um zero em destaque passava a ideia errada), os outros ficam", () => {
+    render(<PortalInstagram token="t" clientId="c" period="7d" inicial={snap({}, com(0))} />);
+    expect(screen.queryByText("Toques nos botões")).toBeNull();
+    expect(screen.getByText("Pessoas alcançadas")).toBeInTheDocument();
+    expect(screen.getByText("Visualizações")).toBeInTheDocument();
+  });
+
+  it("com toques: o cartão aparece", () => {
+    render(<PortalInstagram token="t" clientId="c" period="7d" inicial={snap({}, com(4))} />);
+    expect(screen.getByText("Toques nos botões")).toBeInTheDocument();
+  });
+});

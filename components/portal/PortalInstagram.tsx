@@ -186,7 +186,10 @@ export default function PortalInstagram({ token, clientId, period, inicial = nul
       { rotulo: "Toques nos botões", valor: nf(atual?.toques ?? null), variacao: variacaoPct(atual?.toques, ant?.toques), destaque: true,
         dica: "Quantas vezes alguém tocou em ligar, mensagem, como chegar ou e-mail no seu perfil: gente querendo falar com a loja." },
     ]),
-  ].filter((k) => k.rotulo === "Seguidores" || k.valor !== "—");
+  ].filter((k) => k.rotulo === "Seguidores" || k.valor !== "—")
+    // "Toques nos botões" em zero some (19/11/2026): o número é real, mas em 7 dias 25 dos 39 perfis ficam em
+    // zero, e é o cartão destacado da linha — um zero em destaque passava a ideia errada. Quem tem toques vê.
+    .filter((k) => !(k.rotulo === "Toques nos botões" && !((atual?.toques ?? 0) > 0)));
 
   const secundarios: Kpi[] = [
     { rotulo: "Interações", valor: nf(interacoes), variacao: variacaoPct(atual?.interacoes, ant?.interacoes),
