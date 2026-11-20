@@ -19,8 +19,9 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { hojeSP } from "@/lib/clients/pausa";
 import { somarDias } from "@/lib/reports/relatorioCliente";
 import { normalizarIdAds } from "./marketing-auth";
-import { lerContaAds } from "./ads-api";
-import { lerMetricasDiarias, lerBuscasDoMes } from "./perfil-api";
+import { lerContaAds, lerEstadoCampanhas } from "./ads-api";
+import { lerMetricasDiarias, lerBuscasDoMes, lerAvaliacoesDoPerfil, listarPerfis } from "./perfil-api";
+import { temTrafegoGoogle } from "./colunas";
 import { lerPropriedade, PROPRIEDADE_VALIDA } from "./analytics-api";
 
 const DIAS_ADS = 30;
@@ -104,6 +105,23 @@ async function sincronizarAds(c: ClienteGoogle, primeira: boolean, hoje: string)
       if (error) console.error("[google-sync] limpeza de ações:", error.message);
     }
   }
+  // Retrato das campanhas (Tráfego › Google Ads): falha aqui não derruba os números do dia.
+  if (await temTrafegoGoogle()) {
+    const est = await lerEstadoCampanhas(conta, normalizarIdAds(c.google_ads_login_id));
+    if (!est.ok) avisos.push(`estado das campanhas: ${est.erro}`);
+    else {
+      if (est.dados.aviso) avisos.push(est.dados.aviso);
+      const erroEst = await gravarEmLotes("google_ads_campanha_estado",
+        est.dados.campanhas.map((l) => ({ customer_id: conta, ...l, lido_em: rodada })), "customer_id,campaign_id");
+      if (erroEst) avisos.push(`estado das campanhas não gravado (${erroEst})`);
+      else {
+        // Campanha removida no Google sai do retrato.
+        const { error } = await supabaseAdmin.from("google_ads_campanha_estado").delete().eq("customer_id", conta).lt("lido_em", rodada);
+        if (error) console.error("[google-sync] limpeza do estado das campanhas:", error.message);
+      }
+    }
+  }
+
   await anotar(c.id, { ads_sincronizado_em: rodada, ads_erro: avisos.length ? `Parcial — ${avisos.join("; ")}` : null, ...(r.dados.moeda ? { ads_moeda: r.dados.moeda } : {}) });
   return { ok: true, linhas: r.dados.campanhas.length, de, ate, avisos };
 }
@@ -138,6 +156,12 @@ async function sincronizarPerfil(c: ClienteGoogle, primeira: boolean, ultimoGrav
     termos += t.dados.length;
   }
 
+  // Avaliações (Tráfego › Google Meu Negócio): falha aqui não derruba os números do dia.
+  if (await temTrafegoGoogle()) {
+    const erroAv = await sincronizarAvaliacoes(local, rodada);
+    if (erroAv) avisos.push(`avaliações: ${erroAv}`);
+  }
+
   const novoUltimo = [ultimoDia, ultimoGravado].filter((x): x is string => !!x).sort().pop() ?? null;
   await anotar(c.id, {
     perfil_sincronizado_em: rodada,
@@ -147,6 +171,45 @@ async function sincronizarPerfil(c: ClienteGoogle, primeira: boolean, ultimoGrav
       : avisos.length ? `Parcial — ${avisos.join("; ")}` : null,
   });
   return { ok: true, linhas: validas.length, ultimoDia, termos };
+}
+
+// A v4 das avaliações pede a conta (accounts/<a>/locations/<l>); o cliente guarda só o local. A conta fica no resumo do
+// perfil; quando falta, a lista de perfis da conexão diz de quem é (guardada 30 min — a rodada lê vários clientes).
+let perfisConhecidos: { mapa: Map<string, string>; em: number } | null = null;
+
+async function contaDoPerfil(local: string): Promise<string | null> {
+  const { data } = await supabaseAdmin.from("google_perfil_resumo").select("conta").eq("local", local).maybeSingle();
+  if (data?.conta) return data.conta as string;
+  if (!perfisConhecidos || Date.now() - perfisConhecidos.em > 30 * 60_000) {
+    const r = await listarPerfis();
+    if (!r.ok) return null;
+    perfisConhecidos = { mapa: new Map(r.dados.map((p) => [p.local, p.conta])), em: Date.now() };
+  }
+  return perfisConhecidos.mapa.get(local) ?? null;
+}
+
+/** Lê nota, total e as avaliações recentes e grava. Devolve a frase do erro ou null. Nunca lança. */
+async function sincronizarAvaliacoes(local: string, rodada: string): Promise<string | null> {
+  try {
+    const conta = await contaDoPerfil(local);
+    if (!conta) {
+      const erro = "Não achei a conta deste perfil entre as que a Lone gerencia — confira se a Lone ainda é gerente do perfil.";
+      await supabaseAdmin.from("google_perfil_resumo").upsert({ local, erro, lido_em: rodada }, { onConflict: "local" });
+      return erro;
+    }
+    const r = await lerAvaliacoesDoPerfil(conta, local, 100);
+    if (!r.ok) {
+      await supabaseAdmin.from("google_perfil_resumo").upsert({ local, conta, erro: r.erro, lido_em: rodada }, { onConflict: "local" });
+      return r.erro;
+    }
+    const erroG = await gravarEmLotes("google_perfil_avaliacao", r.dados.avaliacoes.map((a) => ({ local, ...a, atualizado_em: rodada })), "local,review_id");
+    const { error } = await supabaseAdmin.from("google_perfil_resumo").upsert(
+      { local, conta, nota_media: r.dados.nota, total_avaliacoes: r.dados.total, lido_em: rodada, erro: erroG ? `avaliações não gravadas (${erroG})` : null },
+      { onConflict: "local" });
+    return erroG ?? (error ? `resumo não gravado (${error.message})` : null);
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
 }
 
 async function sincronizarAnalytics(c: ClienteGoogle, primeira: boolean, hoje: string): Promise<NonNullable<ResultadoSincronia["analytics"]>> {

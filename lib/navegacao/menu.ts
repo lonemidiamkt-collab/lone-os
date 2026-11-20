@@ -19,7 +19,7 @@ import {
   AlertTriangle, Target, FileSignature,
   Radar, ListOrdered, Building2, MessageSquare, Settings2, BarChart3,
   Lock, Zap, Info, CalendarCheck, ShoppingBag, DatabaseZap, MapPin,
-  Trophy, BrainCircuit, Blocks, Anchor,
+  Trophy, BrainCircuit, Blocks, Anchor, SearchCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/types";
@@ -145,6 +145,13 @@ export const MENU: readonly GrupoMenu[] = [
       { id: "trafego-saldos", rotulo: "Contas & Verba", icone: Wallet, href: "/traffic/budgets", papeis: TRAFEGO,
         descricao: "Saldo, limite e ritmo do mês de cada conta; verba e alertas",
         termos: ["saldo", "saldos", "budget", "verba", "investimento", "ritmo", "aporte", "alertas de verba"] },
+      // 19/11/2026: o Google dentro do Tráfego. Antes só aparecia no relatório e no portal do cliente.
+      { id: "trafego-google-ads", rotulo: "Google Ads", icone: SearchCheck, href: "/traffic/google-ads", papeis: TRAFEGO,
+        descricao: "Verba e ritmo do Google, buscas perdidas por verba, campanhas travadas e conversões",
+        termos: ["google", "google ads", "adwords", "pesquisa", "performance max", "pmax", "verba google", "parcela de impressões"] },
+      { id: "trafego-meu-negocio", rotulo: "Google Meu Negócio", icone: MapPin, href: "/traffic/meu-negocio", papeis: TRAFEGO,
+        descricao: "Perfil da Empresa: ligações, rotas, nota e avaliações sem resposta",
+        termos: ["google meu negócio", "meu negocio", "gmb", "perfil da empresa", "google maps", "avaliações", "avaliacoes", "reviews", "rotas", "ligações"] },
       { id: "trafego-criativos", rotulo: "Saúde dos Criativos", icone: HeartPulse, href: "/traffic/criativos", papeis: TRAFEGO,
         descricao: "Criativos cansados, o que replicar e o ranking por cliente e nicho", termos: ["criativo", "fadiga", "ranking", "melhores criativos", "nicho"] },
       { id: "grupos-clientes", rotulo: "Grupos dos Clientes", icone: MessageCircle, href: "/settings/grupos", papeis: TRAFEGO,

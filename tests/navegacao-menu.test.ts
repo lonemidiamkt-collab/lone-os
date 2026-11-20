@@ -105,11 +105,14 @@ const CENTRAL_DE_AGENTES = ["/agentes"];
 const INTEGRACOES = ["/integracoes"];
 // 12/11/2026: a aba Âncora — o acesso de cada cliente ao Âncora CRM (gestão gera o link de cadastro).
 const ANCORA = ["/ancora"];
+// 19/11/2026: o Google dentro do Tráfego (Google Ads e Google Meu Negócio) — telas novas de quem vê o Tráfego.
+const TRAFEGO_GOOGLE = ["/traffic/google-ads", "/traffic/meu-negocio"];
+
 const ACRESCIMOS: Record<Role, string[]> = {
   // /crm/rota (17/10/2026): a aba Rota do comercial — tela nova, só dos sócios.
-  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO, ...CENTRAL_DE_AGENTES, ...INTEGRACOES, ...ANCORA, "/crm/rota"],
-  manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO, ...CENTRAL_DE_AGENTES, ...INTEGRACOES, ...ANCORA],
-  traffic:   ["/settings", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
+  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO, ...CENTRAL_DE_AGENTES, ...INTEGRACOES, ...ANCORA, "/crm/rota", ...TRAFEGO_GOOGLE],
+  manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO, ...CENTRAL_DE_AGENTES, ...INTEGRACOES, ...ANCORA, ...TRAFEGO_GOOGLE],
+  traffic:   ["/settings", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA, ...TRAFEGO_GOOGLE],
   social:    ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA, "/saude"],
   designer:  ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
   comercial: ["/settings", "/"], // Início por papel (Leva 3): o comercial ganhou o dele

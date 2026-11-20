@@ -115,3 +115,72 @@ O pedido do Roberto foi saber, pelo site, quantas pessoas visitaram e quantas **
 - **Perfil da Empresa:** o Google não conta toques repetidos da mesma pessoa no mesmo dia. Os termos de busca com pouco volume vêm como "menos de N".
 - **Relatório mensal:** o `scripts/relatorio-mensal.sh` só confere o token da Meta antes de rodar. Se a Meta estiver fora, o mensal para para todos, inclusive para quem só tem Google.
 - **Relatório semanal:** a legenda personalizada da segunda (placar) continua só para a Meta. Clientes só de Google recebem o PDF com a mensagem padrão.
+
+## O Google dentro do Tráfego (19/11/2026)
+
+Até aqui o Google só aparecia no relatório e no portal. O time de tráfego não tinha onde ver a verba do Google, o ritmo do mês, a campanha travada ou a avaliação sem resposta. Agora o menu **Tráfego** tem duas telas novas, que leem só o banco, como o resto:
+
+- **Tráfego › Google Ads** (`/traffic/google-ads`). Uma linha por cliente com conta vinculada, os piores primeiro:
+  - **Ritmo do mês contra a verba do Google** (`clients.google_ads_verba_mensal`, editada na própria tela). Usa a mesma barra de Contas & Verba. É medido até ontem, porque o Google é lido até ontem.
+    - O Google pode gastar até 2x o orçamento num dia, mas no mês o teto é 30,4x. Por isso o ritmo é do mês.
+    - O modal da verba avisa quando o orçamento diário das campanhas não fecha com a verba.
+  - **Últimos 7 dias contra os 7 anteriores:** gasto, conversões e custo por conversão.
+  - **Buscas perdidas por verba × por classificação** (`search_budget_lost_impression_share` e `search_rank_lost_impression_share`).
+    - Perda por verba alta com custo por conversão bom é argumento para pedir mais verba ao cliente.
+    - Perda por classificação alta pede revisão de lance, qualidade ou anúncio.
+    - Só existe em campanha de Pesquisa: PMax não informa, e aparece "—".
+  - **Sinais:**
+    - leitura falhou ou atrasada (mais de 36 h);
+    - anúncio reprovado;
+    - campanha ativa sem impressão em 7 dias;
+    - fora do ritmo;
+    - sem conversão na semana com gasto;
+    - custo por conversão 50% ou mais acima dos 30 dias;
+    - perda por verba de 30% ou mais.
+  - **Ao abrir a linha:** o mês, o que os anúncios geraram (ligação, rota, contato…), as campanhas (situação, motivo, orçamento do dia, perdas) e o botão "Ler o Google agora".
+- **Tráfego › Google Meu Negócio** (`/traffic/meu-negocio`). Uma linha por perfil vinculado:
+  - **Contatos:** ligações, rotas, cliques no site e conversas nos últimos 28 dias que o Google já entregou, contra os 28 anteriores.
+  - **Busca × Maps** e os termos de busca do último mês fechado.
+  - **Nota e total de avaliações, e a fila de avaliações sem resposta**, com as negativas primeiro. O botão "Responder no Google" abre o perfil, porque o sistema só lê.
+  - **Sinais:**
+    - avaliação negativa sem resposta;
+    - avaliação sem resposta há mais de 48 h;
+    - nota abaixo de 4,5;
+    - menos de 20 avaliações;
+    - sem avaliação nova há 60 dias;
+    - contatos caindo 30% ou mais;
+    - Google sem número novo há mais de 8 dias (perfil suspenso ou sem verificação).
+  - A Q&A do Google foi encerrada em 03/11/2025 e não entra.
+- **Leitura (mesma rotina `google-sync`, 7h):**
+  - No Ads, mais 2 consultas por conta: o cadastro das campanhas, sem métrica, para não sumir a campanha ativa sem impressão, e os números de 7 dias com as parcelas.
+  - No Perfil, as 100 avaliações mais recentes pela **My Business API v4** (`accounts/{conta}/locations/{local}/reviews`). A conta do perfil fica em `google_perfil_resumo.conta`.
+  - Falha aqui nunca derruba os números do dia: vira "Parcial — …" no estado do cliente.
+- **Regras puras e testadas:** `lib/google/carteira.ts` (`tests/google-carteira.test.ts`). As rotas são `app/api/trafego/google-ads` e `app/api/trafego/google-perfil`.
+
+**Para ligar (uma vez):**
+
+1. Banco: aplique `supabase/migrations/20261119150000_trafego_google.sql`.
+   - Antes dela, as telas já abrem: os números do dia aparecem, e um aviso diz que a verba, as perdas e as avaliações esperam a migração.
+2. Google Cloud: ative a **Google My Business API** (v4, a das avaliações). Ela usa a mesma cota e o mesmo pedido de acesso do Perfil da Empresa.
+3. Deploy. Depois, rode `google-sync` uma vez, ou "Ler o Google agora" num cliente.
+
+## Anúncios Meta: visão Carteira (19/11/2026)
+
+A visão "Todos" da aba Anúncios Meta somava só o que alguém tinha aberto (`meta_campaign_cache`). Na produção, 51 de 53 clientes apareciam "sem leitura".
+
+- **Agora a carteira sai do que o servidor grava todo dia:**
+  - `metric_snapshots` (conta × dia);
+  - `ad_accounts` (verba, gasto do mês, saldo, status);
+  - `meta_ad_period` (frequência de 7 dias).
+- **Uma linha por cliente:** gasto, resultados e custo por resultado contra o período anterior, CTR, CPM, frequência, gasto por dia e ritmo do mês.
+- **Sinais:**
+  - conta com pagamento falhou, carência ou análise;
+  - saldo pré-pago para menos de 3 dias;
+  - 2 dias sem gasto;
+  - sem resultado com gasto;
+  - custo por resultado 50% ou mais acima do anterior;
+  - frequência acima de 3;
+  - CTR abaixo de 0,8%;
+  - fora do ritmo.
+- **A parede de 53 botões virou um seletor com busca.** As leituras por campanha, que o ZIP de PDFs usa, ficaram recolhidas embaixo.
+- **Onde está:** regras em `lib/trafego/carteira-meta.ts` (`tests/trafego-carteira-meta.test.ts`), rota em `app/api/trafego/meta-carteira`.

@@ -41,5 +41,26 @@ export async function temColunasAnalytics(): Promise<boolean> {
   }
 }
 
+// Tráfego › Google (20261119150000_trafego_google.sql): a verba do Google em `clients` e as tabelas do estado das
+// campanhas e das avaliações. Mesma pergunta, à parte: o resto do Google segue funcionando sem elas.
+let sabidoTrafego: { tem: boolean; em: number } | null = null;
+
+export async function temTrafegoGoogle(): Promise<boolean> {
+  if (sabidoTrafego && (sabidoTrafego.tem || Date.now() - sabidoTrafego.em < 5 * 60_000)) return sabidoTrafego.tem;
+  try {
+    const [cli, tab] = await Promise.all([
+      supabaseAdmin.from("clients").select("*").limit(1),
+      supabaseAdmin.from("google_perfil_resumo").select("local").limit(1),
+    ]);
+    if (cli.error) return false;
+    const linha = (cli.data ?? [])[0] as Record<string, unknown> | undefined;
+    const tem = !!linha && "google_ads_verba_mensal" in linha && !tab.error;
+    sabidoTrafego = { tem, em: Date.now() };
+    return tem;
+  } catch {
+    return false;
+  }
+}
+
 /** Para os testes. */
-export function _esquecerColunasGoogle() { sabido = null; sabidoGa = null; }
+export function _esquecerColunasGoogle() { sabido = null; sabidoGa = null; sabidoTrafego = null; }

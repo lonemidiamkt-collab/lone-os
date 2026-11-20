@@ -202,6 +202,79 @@ export async function lerContaAds(customerId: string, loginId: string | null, de
   };
 }
 
+// ── Estado das campanhas (Tráfego › Google Ads) ──────────────────────────────────────────────────────
+// Um retrato por campanha: status, orçamento do dia e — o que o gestor mais precisa — a parcela de impressões PERDIDA
+// por orçamento (falta verba: argumento para pedir mais ao cliente) × por classificação (lance/qualidade/anúncio).
+// Duas leituras: o cadastro (sem métrica — senão campanha ativa SEM impressão some do resultado, e é justamente a
+// travada que importa) e os números dos últimos 7 dias.
+
+export interface EstadoCampanhaAds {
+  campaign_id: string;
+  campanha: string | null;
+  canal: string | null;
+  status: string | null;
+  status_principal: string | null;
+  motivos_status: string[];
+  orcamento_diario: number | null;
+  impressoes_7d: number | null;
+  custo_7d: number | null;
+  parcela_impressoes: number | null;
+  perdida_orcamento: number | null;
+  perdida_classificacao: number | null;
+}
+
+interface CruaEstado {
+  campaign?: { id?: string; name?: string; status?: string; advertisingChannelType?: string; primaryStatus?: string; primaryStatusReasons?: string[] };
+  campaignBudget?: { amountMicros?: string | number };
+  metrics?: Record<string, unknown>;
+}
+
+/** Parcela do Google (0–1, double). Ausente = o Google não informa (não é zero). Pura. */
+const parcela = (v: unknown): number | null => {
+  if (v === undefined || v === null || v === "") return null;
+  const x = n(v);
+  return Math.max(0, Math.min(1, Math.round(x * 10_000) / 10_000));
+};
+
+/** Cadastro + números de 7 dias → uma linha por campanha. Pura (testada). */
+export function juntarEstadoCampanhas(cadastro: readonly CruaEstado[], numeros: readonly CruaEstado[] | null): EstadoCampanhaAds[] {
+  const nums = new Map<string, Record<string, unknown>>();
+  for (const r of numeros ?? []) if (r.campaign?.id) nums.set(String(r.campaign.id), r.metrics ?? {});
+  const out: EstadoCampanhaAds[] = [];
+  for (const c of cadastro) {
+    const id = c.campaign?.id;
+    if (!id) continue;
+    const m = nums.get(String(id));
+    const orc = c.campaignBudget?.amountMicros;
+    out.push({
+      campaign_id: String(id),
+      campanha: c.campaign?.name ?? null,
+      canal: c.campaign?.advertisingChannelType ?? null,
+      status: c.campaign?.status ?? null,
+      status_principal: c.campaign?.primaryStatus ?? null,
+      motivos_status: c.campaign?.primaryStatusReasons ?? [],
+      orcamento_diario: orc !== undefined && orc !== null ? dinheiro(orc) : null,
+      // numeros null = a leitura dos números falhou: tudo fica "não informado". Campanha sem linha nos números = 0 de verdade.
+      impressoes_7d: numeros === null ? null : n(m?.impressions),
+      custo_7d: numeros === null ? null : dinheiro(m?.costMicros),
+      parcela_impressoes: parcela(m?.searchImpressionShare),
+      perdida_orcamento: parcela(m?.searchBudgetLostImpressionShare),
+      perdida_classificacao: parcela(m?.searchRankLostImpressionShare),
+    });
+  }
+  return out;
+}
+
+/** O estado das campanhas ativas e pausadas de uma conta. */
+export async function lerEstadoCampanhas(customerId: string, loginId: string | null): Promise<Leitura<{ campanhas: EstadoCampanhaAds[]; aviso: string | null }>> {
+  const [cad, num] = await Promise.all([
+    consultar<CruaEstado>(customerId, "SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.primary_status, campaign.primary_status_reasons, campaign_budget.amount_micros FROM campaign WHERE campaign.status IN ('ENABLED', 'PAUSED')", loginId),
+    consultar<CruaEstado>(customerId, "SELECT campaign.id, metrics.impressions, metrics.cost_micros, metrics.search_impression_share, metrics.search_budget_lost_impression_share, metrics.search_rank_lost_impression_share FROM campaign WHERE segments.date DURING LAST_7_DAYS AND campaign.status IN ('ENABLED', 'PAUSED')", loginId),
+  ]);
+  if (!cad.ok) return cad;
+  return { ok: true, dados: { campanhas: juntarEstadoCampanhas(cad.dados, num.ok ? num.dados : null), aviso: num.ok ? null : `números de 7 dias das campanhas: ${num.erro}` } };
+}
+
 // ── Contas que a conexão enxerga (para vincular na ficha) ────────────────────────────────────────────
 
 export interface ContaAds {

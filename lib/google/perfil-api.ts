@@ -230,3 +230,76 @@ export async function testarPerfil(): Promise<Leitura<number>> {
   const r = await pedir(`${CONTAS}/accounts?pageSize=20`);
   return r.ok ? { ok: true, dados: ((r.dados as { accounts?: unknown[] }).accounts ?? []).length } : r;
 }
+
+// ── Avaliações (Tráfego › Google Meu Negócio) ────────────────────────────────────────────────────────
+// My Business API v4 (accounts.locations.reviews.list) — continua sendo o único jeito oficial de ler as avaliações
+// (a Q&A foi encerrada em 03/11/2025; as avaliações seguem na v4). O caminho pede a CONTA: accounts/<a>/locations/<l>.
+// A resposta já traz a nota média e o total; a lista vem da mais recente para a mais antiga.
+
+const V4 = "https://mybusiness.googleapis.com/v4";
+
+export interface AvaliacaoPerfil {
+  review_id: string;
+  nota: number | null;
+  comentario: string | null;
+  autor: string | null;
+  criada_em: string | null;
+  atualizada_em: string | null;
+  resposta: string | null;
+  respondida_em: string | null;
+}
+
+interface CruaAvaliacoes {
+  reviews?: {
+    reviewId?: string; name?: string; starRating?: string; comment?: string;
+    reviewer?: { displayName?: string; isAnonymous?: boolean };
+    createTime?: string; updateTime?: string;
+    reviewReply?: { comment?: string; updateTime?: string };
+  }[];
+  averageRating?: number;
+  totalReviewCount?: number;
+  nextPageToken?: string;
+}
+
+const NOTAS: Record<string, number> = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 };
+
+/** Uma página da v4 → avaliações. O Google acrescenta "(Translated by Google)" ao comentário traduzido: fica só o original. Pura (testada). */
+export function lerAvaliacoes(cru: CruaAvaliacoes): AvaliacaoPerfil[] {
+  return (cru.reviews ?? []).flatMap((r) => {
+    const id = r.reviewId || r.name?.split("/").pop();
+    if (!id) return [];
+    const original = r.comment?.includes("(Original)") ? r.comment.split("(Original)").pop()!.trim() : r.comment?.split("(Translated by Google)")[0].trim();
+    return [{
+      review_id: id,
+      nota: r.starRating ? NOTAS[r.starRating] ?? null : null,
+      comentario: original || null,
+      autor: r.reviewer?.isAnonymous ? "Anônimo" : r.reviewer?.displayName ?? null,
+      criada_em: r.createTime ?? null,
+      atualizada_em: r.updateTime ?? null,
+      resposta: r.reviewReply?.comment ?? null,
+      respondida_em: r.reviewReply?.updateTime ?? null,
+    }];
+  });
+}
+
+/** Nota, total e as avaliações mais recentes (até `maximo`). */
+export async function lerAvaliacoesDoPerfil(conta: string, local: string, maximo = 100): Promise<Leitura<{ nota: number | null; total: number; avaliacoes: AvaliacaoPerfil[] }>> {
+  if (!/^accounts\/\d+$/.test(conta) || !/^locations\/\d+$/.test(local)) return { ok: false, erro: "Perfil sem conta conhecida — escolha o perfil de novo na ficha." };
+  const avaliacoes: AvaliacaoPerfil[] = [];
+  let nota: number | null = null, total = 0, pagina: string | undefined;
+  for (let i = 0; i < Math.ceil(maximo / 50); i++) {
+    const q = new URLSearchParams({ pageSize: "50", orderBy: "updateTime desc" });
+    if (pagina) q.set("pageToken", pagina);
+    const r = await pedir(`${V4}/${conta}/${local}/reviews?${q.toString()}`);
+    if (!r.ok) {
+      if (i === 0) return r;
+      break; // a primeira página já deu nota e total; o resto fica para a próxima rodada
+    }
+    const d = r.dados as CruaAvaliacoes;
+    if (i === 0) { nota = typeof d.averageRating === "number" ? Math.round(d.averageRating * 100) / 100 : null; total = d.totalReviewCount ?? 0; }
+    avaliacoes.push(...lerAvaliacoes(d));
+    pagina = d.nextPageToken;
+    if (!pagina) break;
+  }
+  return { ok: true, dados: { nota, total, avaliacoes } };
+}

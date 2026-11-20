@@ -35,6 +35,9 @@ import {
 } from "@/lib/trafego/anuncios";
 import AvisoConexaoMeta from "./AvisoConexaoMeta";
 import ResumoCarteira from "./anuncios/ResumoCarteira";
+// 19/11/2026: a visão Todos virou a Carteira (do que o servidor grava todo dia) e a parede de 53 botões virou um seletor.
+import CarteiraMeta from "./anuncios/CarteiraMeta";
+import SeletorCliente from "./anuncios/SeletorCliente";
 import { useAnuncios } from "./anuncios/useAnuncios";
 
 // ─── Formatação ──────────────────────────────────────────────────────────────
@@ -102,7 +105,6 @@ const SEVERITY_CONFIG: Record<string, { color: string; bg: string; border: strin
   success: { color: "text-primary", bg: "bg-primary/5", border: "border-primary/15", icon: Sparkles },
 };
 
-const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
@@ -141,7 +143,6 @@ export default function AnunciosMeta({
     else if (selectedClient === "all" && linked.length === 1) setSelectedClient(linked[0].id);
   }, [linked, selectedClient]);
 
-  const [clientSearch, setClientSearch] = useState("");
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("active");
   const [visibleMetrics, setVisibleMetrics] = useState<MetricKey[]>(DEFAULT_VISIBLE_METRICS);
@@ -313,7 +314,7 @@ export default function AnunciosMeta({
       }
 
       if (reports.length === 0) {
-        setExportAllError(`Nenhum cliente com campanhas lidas no período.${foraDoZip.length ? ` ${foraDoZip.join("; ")}.` : ""} Use “Atualizar todos” na visão Todos e tente de novo.`);
+        setExportAllError(`Nenhum cliente com campanhas lidas no período.${foraDoZip.length ? ` ${foraDoZip.join("; ")}.` : ""} Abra “Leituras por campanha”, use “Atualizar todos” e tente de novo.`);
         setExportAllProgress("");
         return;
       }
@@ -336,7 +337,6 @@ export default function AnunciosMeta({
   const toggleMetric = (key: MetricKey) => setVisibleMetrics((prev) => prev.includes(key) ? prev.filter((m) => m !== key) : [...prev, key]);
   const toggleChartMetric = (key: string) => setChartMetrics((prev) => prev.includes(key) ? prev.filter((m) => m !== key) : [...prev, key]);
 
-  const pills = linked.filter((c) => !clientSearch || norm(c.name).includes(norm(clientSearch)));
   const atualizandoAberto = !!aberto && (dados.atualizando.has(aberto) || !!detalhe?.atualizando);
   const temLeitura = !!detalhe?.sincronizadoEm;
 
@@ -361,45 +361,7 @@ export default function AnunciosMeta({
 
       {/* ═══ FILTROS ═══ */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative">
-          <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Buscar cliente..."
-            value={clientSearch}
-            onChange={(e) => setClientSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key !== "Enter" || pills.length === 0) return;
-              setSelectedClient(pills[0].id);
-              setClientSearch("");
-            }}
-            className="w-[180px] rounded-lg border border-border bg-muted py-1.5 pl-8 pr-7 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
-          />
-          {clientSearch && (
-            <button onClick={() => setClientSearch("")} aria-label="Limpar busca" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              <X size={11} />
-            </button>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-1">
-          <button
-            onClick={() => setSelectedClient("all")}
-            className={`rounded-lg border px-2.5 py-1 text-xs transition-all ${selectedClient === "all" ? "border-primary/30 bg-primary/10 font-medium text-primary" : "border-transparent bg-muted text-muted-foreground hover:text-foreground"}`}
-          >
-            Todos
-          </button>
-          {pills.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setSelectedClient(c.id)}
-              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-all ${selectedClient === c.id ? "border-primary/30 bg-primary/10 font-medium text-primary" : "border-transparent bg-muted text-muted-foreground hover:border-border/50 hover:text-foreground"}`}
-            >
-              <Facebook size={9} className={selectedClient === c.id ? "text-primary" : "text-primary opacity-70"} />
-              <span className="max-w-[130px] truncate">{c.name}</span>
-            </button>
-          ))}
-          {clientSearch && pills.length === 0 && <span className="px-1 text-xs italic text-muted-foreground">Nenhum cliente encontrado</span>}
-        </div>
+        <SeletorCliente clientes={linked} selecionado={selectedClient} onEscolher={setSelectedClient} />
         {aberto && (
           <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5">
             {[{ key: "all", label: "Todas" }, { key: "active", label: "Ativas" }, { key: "paused", label: "Pausadas" }, { key: "completed", label: "Finalizadas" }].map((s) => (
@@ -508,6 +470,15 @@ export default function AnunciosMeta({
             <Loader2 size={14} className="animate-spin" /> Lendo o que o servidor já guardou…
           </div>
         ) : (
+          <div className="space-y-4">
+          <CarteiraMeta clientes={linked} de={rangeStartStr} ate={rangeEndStr} rotuloPeriodo={rotuloPeriodo(periodo)} onAbrir={(id) => setSelectedClient(id)} />
+          {/* As leituras por campanha (o que "Todos os Clientes" junta no ZIP de PDFs) continuam aqui, recolhidas. */}
+          <details className="group rounded-xl border border-border bg-card">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium">
+              <ChevronDown size={14} className="-rotate-90 transition-transform group-open:rotate-0" />
+              Leituras por campanha <span className="font-normal text-muted-foreground">— usadas nos PDFs de “Todos os Clientes”</span>
+            </summary>
+            <div className="border-t border-border p-4">
           <ResumoCarteira
             clientes={linked}
             itens={dados.resumo}
@@ -519,6 +490,9 @@ export default function AnunciosMeta({
             onAbrir={(id) => setSelectedClient(id)}
             onAtualizarTodos={dados.atualizarTodos}
           />
+            </div>
+          </details>
+          </div>
         )
       )}
 
