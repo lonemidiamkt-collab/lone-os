@@ -150,12 +150,17 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   const assinaturaSensivel = [
     client.id, client.cpfCnpj, client.facebookLogin, client.instagramLogin, client.googleAdsLogin,
     client.enderecoRua, client.enderecoNumero, client.enderecoBairro, client.enderecoCep, client.razaoSocial, client.cnpj,
-    client.faturamentoFaixa, client.assignedTraffic, client.assignedSocial, client.assignedDesigner,
+    client.faturamentoFaixa,
   ].join("|");
   useEffect(() => {
     if (!editing) setForm(initForm());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assinaturaSensivel]);
+  // A equipe muda por fora (outra pessoa, outra tela): mostra sem refazer o resto do formulário.
+  useEffect(() => {
+    if (!editing) setForm((p) => ({ ...p, assignedTraffic: client.assignedTraffic || "", assignedSocial: client.assignedSocial || "", assignedDesigner: client.assignedDesigner || "" }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client.assignedTraffic, client.assignedSocial, client.assignedDesigner]);
 
   // 21/10/2026 (auditoria 3.6): erro ao ler o contrato aparecia como "Nenhum contrato" + "Gerar
   // Contrato" — convite a gerar um repetido. Agora diz que não leu e oferece tentar de novo.
@@ -241,7 +246,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         : undefined;
       if (falhas.length) {
         // Os dados foram salvos; a senha não. Mantém em edição para não perder o que foi digitado.
-        toast.error(`Dados salvos, mas a senha não: ${falhas.join(" · ")}`, ofereceDesfazer);
+        toast.error(`${Object.keys(mudancas).length ? "Dados salvos, mas a senha não" : "A senha não foi salva"}: ${falhas.join(" · ")}`, ofereceDesfazer);
         return;
       }
 

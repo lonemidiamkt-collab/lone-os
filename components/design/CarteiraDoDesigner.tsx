@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRightLeft, ChevronDown, Loader2, Users } from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, ChevronDown, Loader2, Users } from "lucide-react";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { carteiraDoDesigner, clientesComNomeParecido, comQuem, podePassarJunto, type ClienteDaCarteira } from "@/lib/design/carteira";
 import { passarArtes } from "@/lib/design/passar-artes";
@@ -40,7 +40,7 @@ export default function CarteiraDoDesigner({ pessoa, minha, papel, clientes, ite
   });
   const passar = async (clientId: string, ids: string[]) => {
     setPassando(clientId);
-    try { await passarArtes(clientId, ids); } finally { setPassando(null); }
+    try { await passarArtes(clientId, ids, pessoa); } finally { setPassando(null); }
   };
 
   return (
@@ -58,10 +58,12 @@ export default function CarteiraDoDesigner({ pessoa, minha, papel, clientes, ite
           {pendentes.map((l) => {
             const levar = l.comOutros.filter((a) => podePassarJunto(papel, a));
             const presas = l.comOutros.length - levar.length;
+            const comecadas = levar.filter((a) => a.fazendo).length;
             return (
               <li key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-lone-warning-border bg-lone-warning-bg px-3 py-2">
                 <span className="min-w-0 flex-1 basis-56 text-xs text-foreground">
                   <span className="font-medium">{l.nome}</span>: {l.comOutros.length === 1 ? "1 arte aberta está" : `${l.comOutros.length} artes abertas estão`} em outra fila ({comQuem(l.comOutros)}).
+                  {comecadas > 0 && <span className="block text-muted-foreground">{comecadas === 1 ? "1 já começou" : `${comecadas} já começaram`}.</span>}
                   {presas > 0 && papel === "designer" && <span className="block text-muted-foreground">{presas === 1 ? "1 já começou" : `${presas} já começaram`}: para pegar, abra a arte e assuma.</span>}
                 </span>
                 {levar.length > 0 && (papel !== "designer" || minha) && (
@@ -78,7 +80,8 @@ export default function CarteiraDoDesigner({ pessoa, minha, papel, clientes, ite
       )}
 
       {parecidos.length > 0 && (
-        <p className="text-xs text-lone-warning">
+        <p className="text-xs text-foreground">
+          <AlertTriangle size={12} className="mr-1 inline text-lone-warning" aria-hidden="true" />
           {parecidos.map((p) => `${p.nome} (${p.gravado})`).join(", ")}: o designer gravado parece {minha ? "você" : pessoa} com outra grafia. {papel === "designer" ? "Peça à gestão para escolher seu nome na ficha do cliente." : "Escolha o nome certo na ficha do cliente."}
         </p>
       )}

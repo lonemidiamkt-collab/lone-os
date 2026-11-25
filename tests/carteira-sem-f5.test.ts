@@ -4,10 +4,12 @@ import { readFileSync } from "node:fs";
 import type { Client } from "@/lib/types";
 
 const { chamar, oferecer } = vi.hoisted(() => ({ chamar: vi.fn(), oferecer: vi.fn(async () => {}) }));
+vi.mock("sonner", () => ({ toast: { warning: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/api/chamar", () => ({ chamar }));
 vi.mock("@/lib/design/passar-artes", () => ({ oferecerPassarArtes: oferecer }));
 vi.mock("@/lib/supabase/client", () => ({ supabase: {}, REALTIME_ENABLED: false }));
 vi.mock("@/lib/supabase/authed-fetch", () => ({ authedFetch: vi.fn() }));
+const { toast } = await import("sonner");
 const { useClientsStore } = await import("@/stores/useClientsStore");
 const st = () => useClientsStore.getState();
 const cli = (id: string, assignedDesigner = "", extra = {}) => ({ id, name: id, assignedTraffic: "", assignedSocial: "", assignedDesigner, ...extra }) as unknown as Client;
@@ -76,5 +78,30 @@ describe("trocou o designer do cliente", () => {
     await expect(st().updateClient("a", { assignedDesigner: "Téo" })).rejects.toThrow("não");
     expect(st().clients[0].assignedDesigner).toBe("");
     expect(oferecer).not.toHaveBeenCalled();
+  });
+});
+
+describe("o que a revisão achou", () => {
+  it("trocou para serviço sem social: o banco tira o social, a tela mostra e avisa", async () => {
+    useClientsStore.setState({ clients: [cli("a", "Téo", { assignedSocial: "Bia" })] });
+    chamar.mockResolvedValueOnce(resp({ client: { assigned_social: null, assigned_designer: "Téo", assigned_traffic: "" } }));
+    await st().updateClient("a", { serviceType: "assessoria_trafego" });
+    expect(st().clients[0]).toMatchObject({ assignedSocial: "", assignedDesigner: "Téo" });
+    expect(toast.warning).toHaveBeenCalledWith(expect.stringMatching(/Bia saiu do social/), expect.anything());
+  });
+  it("carteira que não carregou: foco e troca de aba não viram uma rajada de pedidos", async () => {
+    useClientsStore.setState({ initialized: false });
+    chamar.mockResolvedValue({ ok: false, data: null, erro: "caiu", status: 503 });
+    for (let i = 0; i < 5; i++) await st().atualizarEquipe();
+    expect(chamar).toHaveBeenCalledTimes(1);
+  });
+  it("conferência com um cadastro em voo não duplica o cliente", async () => {
+    let solta!: (v: unknown) => void;
+    chamar.mockImplementationOnce(() => new Promise((r) => { solta = r; }));
+    const cadastrando = st().addClient({ name: "n" } as never);
+    await st().atualizarEquipe();
+    expect(chamar).toHaveBeenCalledTimes(1);
+    solta(resp({ id: "n" })); await cadastrando;
+    expect(st().clients.filter((c) => c.id === "n")).toHaveLength(1);
   });
 });

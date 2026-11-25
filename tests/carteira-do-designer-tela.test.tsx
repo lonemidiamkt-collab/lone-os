@@ -34,7 +34,7 @@ describe("Seus clientes", () => {
     expect(screen.getByRole("link", { name: /Academia Lua/ })).toHaveAttribute("href", "/clients/c2");
     expect(screen.getByText(/1 arte aberta está em outra fila \(1 com Caio Lima\)/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Passar 1 para mim/ }));
-    await waitFor(() => expect(passarArtes).toHaveBeenCalledWith("c1", ["1"]));
+    await waitFor(() => expect(passarArtes).toHaveBeenCalledWith("c1", ["1"], "Téo Braga"));
   });
   it("arte que o colega já começou: sem botão para o designer, com botão para a gestão", () => {
     tela({ itens: itens("in_progress") });
@@ -43,6 +43,10 @@ describe("Seus clientes", () => {
     cleanup();
     tela({ itens: itens("in_progress"), papel: "admin", minha: false });
     expect(screen.getByRole("button", { name: /Passar 1 para Téo/ })).toBeInTheDocument();
+  });
+  it("a gestão lê quantas já começaram antes de passar", () => {
+    tela({ itens: itens("in_progress"), papel: "admin", minha: false });
+    expect(screen.getByText(/1 já começou/)).toBeInTheDocument();
   });
   it("o social vê, mas não passa", () => {
     tela({ papel: "social", minha: false });

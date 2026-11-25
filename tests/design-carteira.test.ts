@@ -7,11 +7,11 @@ import { carteiraDoDesigner, clientesComNomeParecido, comQuem, podePassarJunto }
 import { montarItens, passaNoFiltro } from "@/lib/conteudo/quadro";
 import type { ContentCard, DesignRequest } from "@/lib/types";
 
-const { banco, quem } = vi.hoisted(() => ({ banco: {} as Banco, quem: { papel: "admin", email: "chefe@x.com" } }));
+const { banco, quem } = vi.hoisted(() => ({ banco: {} as Banco, quem: { papel: "admin", email: "chefe@x.com", id: "u" } }));
 vi.mock("@/lib/supabase/server", async () => ({ supabaseAdmin: (await import("./apoio/banco")).criarBanco(banco) }));
 vi.mock("@/lib/api/require-role", async () => {
   const { NextResponse } = await import("next/server");
-  return { GESTAO: ["admin", "manager"], requireRole: async (_: unknown, papeis: string[]) => papeis.includes(quem.papel) ? { user: { id: "u", email: quem.email }, papel: quem.papel } : NextResponse.json({ error: "Sem permissão" }, { status: 403 }) };
+  return { GESTAO: ["admin", "manager"], requireRole: async (_: unknown, papeis: string[]) => papeis.includes(quem.papel) ? { user: { id: quem.id, email: quem.email }, papel: quem.papel } : NextResponse.json({ error: "Sem permissão" }, { status: 403 }) };
 });
 const { GET, POST } = await import("@/app/api/design-requests/passar/route");
 const ver = async (id = "c1") => { const r = await GET(new NextRequest(`http://x/api?clientId=${id}`)); return { status: r.status, ...(await r.json()) }; };
@@ -21,7 +21,7 @@ const pedido = (id: string, status: string, com: string | null, p = {}) => ({ id
 const card = (id: string, p = {}) => ({ id: `k${id}`, title: `Arte ${id}`, client_id: "c1", status: "in_production", archived_at: null, designer_delivered_at: null, alteracao_pendente_em: null, design_request_id: id, ...p });
 
 beforeEach(() => {
-  quem.papel = "admin"; quem.email = "chefe@x.com";
+  quem.papel = "admin"; quem.email = "chefe@x.com"; quem.id = "u";
   zerar(banco, {
     clients: [{ id: "c1", name: "Padaria Sol", nome_fantasia: null, assigned_designer: "Téo Braga " }, { id: "c2", name: "Sem dono", assigned_designer: null }, { id: "c3", name: "Velho", assigned_designer: "Saiu Daqui" }],
     team_members: [
@@ -120,6 +120,50 @@ describe("a rota", () => {
     banco.falha.clear(); banco.falha.add("update:design_requests");
     expect(await passar({ clientId: "c1", ids: ["1"] })).toMatchObject({ status: 500, error: expect.stringMatching(/Nada mudou/) });
     expect(dono("1")).toBe("Caio Lima");
+  });
+  it("repetir depois de passar (resposta perdida) não vira 'mudou no meio': já estava", async () => {
+    await passar({ clientId: "c1", ids: ["1", "2"] });
+    const r = await passar({ clientId: "c1", ids: ["1", "2"] });
+    expect(r).toMatchObject({ status: 200, passadas: [], jaEstavam: ["1", "2"], operacao: null });
+    expect(r.aviso).toBeUndefined();
+  });
+  it("a tela dizia outro nome: recusa em vez de passar para quem a pessoa não viu", async () => {
+    expect((await passar({ clientId: "c1", ids: ["1"], para: "Ana" })).status).toBe(409);
+    expect(dono("1")).toBe("Caio Lima");
+    expect((await passar({ clientId: "c1", ids: ["1"], para: "teo braga" })).status).toBe(200);
+  });
+  it("Desfazer devolve a quem estava, avisa, e vale uma vez", async () => {
+    const { operacao } = await passar({ clientId: "c1", ids: ["1", "2"] });
+    banco.t.notifications = [];
+    expect((await passar({ desfazer: operacao })).voltaram.map((v: { id: string }) => v.id)).toEqual(["1", "2"]);
+    expect([dono("1"), dono("2")]).toEqual(["Caio Lima", "Caio Lima"]);
+    expect(banco.t.notifications).toMatchObject([{ target_user: "Caio Lima", title: "2 artes voltaram para você" }]);
+    expect((await passar({ desfazer: operacao })).status).toBe(410);
+  });
+  it("Desfazer não mexe no que mudou depois, nem serve a outra pessoa, nem com id inventado", async () => {
+    const { operacao } = await passar({ clientId: "c1", ids: ["1", "2"] });
+    quem.id = "outro";
+    expect((await passar({ desfazer: operacao })).status).toBe(410);
+    quem.id = "u";
+    expect((await passar({ desfazer: "inventado" })).status).toBe(410);
+    banco.t.design_requests[1].assigned_designer = "Ana";
+    const r = await passar({ desfazer: operacao });
+    expect(r.voltaram).toEqual([{ id: "1", para: "Caio Lima" }]);
+    expect(r.aviso).toMatch(/1 arte já mudou de novo/);
+    expect(dono("2")).toBe("Ana");
+  });
+  it("Desfazer que falha diz e pode ser tentado de novo", async () => {
+    const { operacao } = await passar({ clientId: "c1", ids: ["1"] });
+    banco.falha.add("update:design_requests");
+    expect((await passar({ desfazer: operacao })).status).toBe(500);
+    banco.falha.clear();
+    expect((await passar({ desfazer: operacao })).voltaram).toHaveLength(1);
+  });
+  it("vínculo com pedido entregue: a tela e a rota concordam que não há o que passar", async () => {
+    banco.t.design_requests.push(pedido("9", "queued", "Caio Lima", { content_card_id: "k4" }));
+    expect((await ver()).artes.map((a: { pedidoId: string }) => a.pedidoId)).toEqual(["1", "2"]);
+    banco.t.content_cards[3].alteracao_pendente_em = "2026-11-20";
+    expect((await ver()).artes.map((a: { pedidoId: string }) => a.pedidoId)).toEqual(["1", "2"]);
   });
   it("pedido sem cliente ou sem artes é 400", async () => {
     expect((await passar({ clientId: "c1", ids: [] })).status).toBe(400);

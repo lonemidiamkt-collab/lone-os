@@ -9,6 +9,7 @@
 //     assumiu — mas não entrega a demanda pra um terceiro
 //   · resto: não mexe
 
+import { mesmaPessoa } from "@/lib/equipe/pessoa";
 import { donoDaDemanda } from "@/lib/design/dono";
 import type { Papel } from "@/lib/api/require-role";
 
@@ -50,8 +51,8 @@ export function podeAtualizarDemanda(
 
   if (pedido.assignedDesigner !== undefined && !gestao) {
     const novo = String(pedido.assignedDesigner ?? "").trim();
-    const assumidaPorMim = (demanda.assignedDesigner ?? "").trim() === eu && !!eu;
-    const assumir = papel === "designer" && !!eu && novo === eu;
+    const assumidaPorMim = mesmaPessoa(demanda.assignedDesigner, eu);
+    const assumir = papel === "designer" && mesmaPessoa(novo, eu);
     const devolver = papel === "designer" && novo === "" && assumidaPorMim;
     if (!assumir && !devolver) {
       return { ok: false, status: 403, erro: "Só a gestão troca o designer de uma demanda." };
@@ -59,8 +60,8 @@ export function podeAtualizarDemanda(
   }
 
   if (papel === "designer") {
-    const assumindo = pedido.assignedDesigner !== undefined && String(pedido.assignedDesigner ?? "").trim() === eu;
-    if (!eu || (dono !== eu && !assumindo)) {
+    const assumindo = pedido.assignedDesigner !== undefined && mesmaPessoa(String(pedido.assignedDesigner ?? ""), eu);
+    if (!eu || (!mesmaPessoa(dono, eu) && !assumindo)) {
       return { ok: false, status: 403, erro: `Esta demanda é de ${dono ?? "outro designer"}. Assuma a demanda para mexer nela.` };
     }
   }

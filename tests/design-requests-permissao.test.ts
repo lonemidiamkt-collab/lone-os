@@ -37,3 +37,13 @@ describe("podeAtualizarDemanda", () => {
     expect(podeAtualizarDemanda("social", "Bia", { ...doRodrigo, anexosAtuais: ["u"] }, { status: "done" }).ok).toBe(true);
   });
 });
+
+describe("outra grafia do mesmo nome (25/11/2026)", () => {
+  const d = { clientId: "c", assignedDesigner: "teo braga ", clienteDesigner: null, anexosAtuais: [] };
+  it("pega, assume e devolve; nome parecido de outra pessoa continua barrado", () => {
+    expect(podeAtualizarDemanda("designer", "Téo Braga", d, { status: "in_progress" })).toEqual({ ok: true });
+    expect(podeAtualizarDemanda("designer", "Téo Braga", d, { assignedDesigner: "" })).toEqual({ ok: true });
+    expect(podeAtualizarDemanda("designer", "Téo Brago", d, { status: "in_progress" })).toMatchObject({ ok: false, status: 403 });
+    expect(podeAtualizarDemanda("designer", "", d, { status: "in_progress" })).toMatchObject({ ok: false });
+  });
+});

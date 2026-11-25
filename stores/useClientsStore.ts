@@ -89,10 +89,10 @@ export const useClientsStore = create<ClientsState>()(
       },
 
       atualizarEquipe: async () => {
-        if (!get().initialized) { await get().init(); return; }
         if (conferindo || gravando || Date.now() - conferidoEm < INTERVALO_EQUIPE) return;
-        conferindo = true;
         conferidoEm = Date.now();
+        if (!get().initialized) { await get().init(); return; }
+        conferindo = true;
         const antes = mutacoes;
         try {
           const r = await chamar<{ equipe?: Equipe[] }>("/api/data/clients?so=equipe");
@@ -160,7 +160,7 @@ export const useClientsStore = create<ClientsState>()(
 
       // ── addClient ─────────────────────────────────────────────────────────
       addClient: async (data) => {
-        marcar();
+        marcar(); gravando++;
         const tempId = `temp-${Date.now()}`;
         const optimistic: Client = {
           ...data,
@@ -174,13 +174,12 @@ export const useClientsStore = create<ClientsState>()(
         set((s) => ({ clients: [...s.clients, optimistic] }), false, "clients/add/optimistic");
         // 24/10/2026 (auditoria 3.8): o motivo da rota chega a quem cadastrou — antes virava
         // "HTTP 409" e o "esta conta Meta é do cliente X" se perdia no caminho.
-        const r = await chamar<{ id?: string }>("/api/data/clients", data);
+        const r = await chamar<{ id?: string }>("/api/data/clients", data).finally(() => { marcar(); gravando--; });
         const id = r.data?.id;
         if (!r.ok || !id) {
           set((s) => ({ clients: s.clients.filter((c) => c.id !== tempId) }), false, "clients/add/rollback");
           throw new Error(r.erro ?? "O servidor não devolveu o cliente criado.");
         }
-        marcar();
         const confirmed: Client = { ...optimistic, id };
         set((s) => ({
           clients: s.clients.map((c) => c.id === tempId ? confirmed : c),
@@ -198,6 +197,19 @@ export const useClientsStore = create<ClientsState>()(
         try {
           const r = await chamar<{ client?: Record<string, unknown> }>("/api/clients/update", { id, ...updates });
           if (!r.ok) throw new Error(r.erro ?? "Não consegui salvar o cliente.");
+          // O banco tem a última palavra sobre a equipe: trocar para um serviço sem social tira o social (gatilho), e a
+          // tela seguia mostrando quem saiu (25/11/2026).
+          const g = r.data?.client;
+          if (g && "assigned_social" in g) {
+            const real = {
+              assignedTraffic: (g.assigned_traffic as string) ?? "", assignedSocial: (g.assigned_social as string) ?? "",
+              assignedDesigner: (g.assigned_designer as string) ?? "",
+            };
+            set((s) => ({ clients: s.clients.map((c) => (c.id === id ? { ...c, ...real } : c)) }), false, "clients/update/equipe-real");
+            if (prev?.assignedSocial && !real.assignedSocial && updates.assignedSocial === undefined) {
+              toast.warning(`${prev.assignedSocial} saiu do social deste cliente: o serviço escolhido não tem social. Se foi engano, volte o serviço e escolha o social de novo.`, { duration: 15_000 });
+            }
+          }
           // Designer trocado: as artes já abertas continuam com quem estavam — oferece passar (25/11/2026).
           if (updates.assignedDesigner !== undefined && prev) {
             const ficou = r.data?.client ? (r.data.client.assigned_designer as string | null) : updates.assignedDesigner;

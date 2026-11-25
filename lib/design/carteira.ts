@@ -33,7 +33,7 @@ export const nomeDoCliente = (c: Pick<ClienteDaCarteira, "name" | "nomeFantasia"
 
 export function artesComOutro(itens: readonly Pick<ItemQuadro, "card" | "pedido" | "estado">[], clientId: string, dono: string): ArteComOutro[] {
   return itens
-    .filter((it) => it.card.clientId === clientId && it.pedido && arteAberta(it.estado))
+    .filter((it) => it.card.clientId === clientId && it.pedido && it.pedido.status !== "done" && arteAberta(it.estado))
     .filter((it) => (it.pedido!.assignedDesigner ?? "").trim() && !mesmaPessoa(it.pedido!.assignedDesigner, dono))
     .map((it) => ({
       pedidoId: it.pedido!.id, cardId: it.card.id, titulo: it.card.title,

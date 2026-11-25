@@ -12,6 +12,7 @@
 // Nenhuma regra nova: as ações passam por useProducao/EntregarArteModal, que chamam a mesma transição
 // do quadro (lib/conteudo/producao-server.ts). "Ver card completo" troca para o modal de sempre.
 
+import { mesmaPessoa } from "@/lib/equipe/pessoa";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle, CheckCircle, Download, FileText, FolderOpen, Loader, MessageSquare,
@@ -138,7 +139,7 @@ export default function CardDoDesigner({ card: cardProp, onClose, onVerCompleto 
     try { await acao(card, { tipo: "iniciar" }); } finally { setOcupado(false); }
   };
 
-  const meu = it.designer === eu;
+  const meu = mesmaPessoa(it.designer, eu);
   const assumida = !!(pedido?.assignedDesigner ?? "").trim();
   const assumir = async () => {
     if (!pedido) return;
