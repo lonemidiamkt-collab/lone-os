@@ -18,22 +18,24 @@ async function mostrarNoQuadro(donos: Map<string, string>) {
 const artes = (n: number, um: string, varios: string) => (n === 1 ? `1 arte ${um}` : `${n} artes ${varios}`);
 
 async function desfazer(operacao: string): Promise<void> {
-  const r = await chamar<{ voltaram: { id: string; para: string }[]; aviso?: string }>(ROTA, { desfazer: operacao });
+  const r = await chamar<{ voltaram: { id: string; para: string }[]; aviso?: string; repetir?: boolean }>(ROTA, { desfazer: operacao });
   if (!r.ok || !r.data) {
     toast.error(`Não desfiz: ${r.erro ?? "o servidor não respondeu."}`, { duration: Infinity, ...(r.status === 410 ? {} : { action: { label: "Tentar de novo", onClick: () => { void desfazer(operacao); } } }) });
     return;
   }
   await mostrarNoQuadro(new Map(r.data.voltaram.map((v) => [v.id, v.para])));
   if (r.data.voltaram.length) toast.success(`${artes(r.data.voltaram.length, "voltou", "voltaram")} para quem estava.`);
-  if (r.data.aviso) toast.warning(r.data.aviso, { duration: 12_000 });
+  else if (!r.data.aviso) toast.info("Já estava desfeito.");
+  if (r.data.aviso) toast.warning(r.data.aviso, { duration: 20_000, ...(r.data.repetir ? { action: { label: "Tentar de novo", onClick: () => { void desfazer(operacao); } } } : {}) });
 }
 
+// O resultado tem id próprio: reusar o do aviso clicado (que está saindo da tela) levava o "Desfazer" junto.
 /** Passa e conta o que houve. `para` = quem a tela disse; se a ficha mudou no meio, o servidor recusa. */
 export async function passarArtes(clientId: string, ids: string[], para: string): Promise<boolean> {
   const r = await chamar<Passadas>(ROTA, { clientId, ids, para });
   if (!r.ok || !r.data) {
     toast.error(`Não passei as artes: ${r.erro ?? "o servidor não respondeu."}`, {
-      id: `passar-${clientId}`, duration: Infinity, ...(r.status === 409 || r.status === 403 ? {} : { action: { label: "Tentar de novo", onClick: () => { void passarArtes(clientId, ids, para); } } }),
+      id: `passou-${clientId}-${Date.now()}`, duration: Infinity, ...(r.status === 409 || r.status === 403 ? {} : { action: { label: "Tentar de novo", onClick: () => { void passarArtes(clientId, ids, para); } } }),
     });
     return false;
   }
@@ -41,9 +43,9 @@ export async function passarArtes(clientId: string, ids: string[], para: string)
   await mostrarNoQuadro(new Map([...passadas, ...jaEstavam].map((id) => [id, r.data!.para])));
   if (passadas.length) {
     toast.success(`${artes(passadas.length, "passou", "passaram")} para ${r.data.para}.`, {
-      id: `passar-${clientId}`, duration: 15_000, ...(operacao ? { action: { label: "Desfazer", onClick: () => { void desfazer(operacao); } } } : {}),
+      id: `passou-${clientId}-${Date.now()}`, duration: 15_000, ...(operacao ? { action: { label: "Desfazer", onClick: () => { void desfazer(operacao); } } } : {}),
     });
-  } else if (jaEstavam.length) toast.info(`${artes(jaEstavam.length, "já estava", "já estavam")} com ${r.data.para}.`, { id: `passar-${clientId}` });
+  } else if (jaEstavam.length) toast.info(`${artes(jaEstavam.length, "já estava", "já estavam")} com ${r.data.para}.`, { id: `passou-${clientId}-${Date.now()}` });
   if (aviso) toast.warning(aviso, { duration: 12_000 });
   return passadas.length > 0;
 }

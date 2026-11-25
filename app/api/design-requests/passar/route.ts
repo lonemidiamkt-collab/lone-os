@@ -34,7 +34,7 @@ async function paginas(ler: (de: number, ate: number) => PromiseLike<{ data: unk
 
 // Passagens recentes, para o "Desfazer". Na memória do processo de propósito (um container): se ele reiniciar, o botão
 // diz que não dá mais, e ninguém consegue "desfazer" o que não fez — o dono anterior nunca vem da tela.
-interface Operacao { quem: string; em: number; cliente: { id: string; nome: string }; para: string; itens: { id: string; antes: string; titulo: string; cardId: string }[] }
+interface Operacao { quem: string; em: number; cliente: { id: string; nome: string }; para: string; itens: { id: string; antes: string; titulo: string; cardId: string; fazendo: boolean }[]; feito?: boolean }
 const VALE = 15 * 60_000;
 const g = globalThis as unknown as { __passagensDeArte?: Map<string, Operacao> };
 const operacoes = (g.__passagensDeArte ??= new Map());
@@ -82,14 +82,19 @@ export async function GET(req: NextRequest) {
 async function desfazer(id: string, quem: string): Promise<NextResponse> {
   const op = operacoes.get(id);
   if (!op || op.quem !== quem || Date.now() - op.em > VALE) return NextResponse.json({ error: "Não dá mais para desfazer por aqui. A gestão pode trocar o designer na própria arte." }, { status: 410 });
+  if (op.feito) return NextResponse.json({ voltaram: [] }); // a resposta se perdeu e a pessoa repetiu
   const porAntes = new Map<string, Operacao["itens"]>();
-  for (const i of op.itens) porAntes.set(i.antes, [...(porAntes.get(i.antes) ?? []), i]);
+  for (const i of op.itens) { const k = `${i.fazendo}|${i.antes}`; porAntes.set(k, [...(porAntes.get(k) ?? []), i]); }
   const voltaram: { id: string; para: string }[] = [];
   let falha: string | null = null;
-  for (const [antes, itens] of porAntes.entries()) {
+  for (const itens of porAntes.values()) {
+    const antes = itens[0].antes;
     for (let i = 0; i < itens.length; i += LOTE) {
       // Só a que continua com quem recebeu: assumida por outra pessoa ou entregue depois, não mexe.
-      const { data, error } = await supabaseAdmin.from("design_requests").update({ assigned_designer: antes }).in("id", itens.slice(i, i + LOTE).map((x) => x.id)).eq("assigned_designer", op.para).neq("status", "done").select("id");
+      let q = supabaseAdmin.from("design_requests").update({ assigned_designer: antes }).in("id", itens.slice(i, i + LOTE).map((x) => x.id)).eq("assigned_designer", op.para).neq("status", "done");
+      // E a que quem recebeu já começou: é trabalho de alguém agora.
+      if (!itens[0].fazendo) q = q.neq("status", "in_progress");
+      const { data, error } = await q.select("id");
       if (error) { falha = error.message; break; }
       voltaram.push(...((data ?? []) as Linha[]).map((x) => ({ id: x.id as string, para: antes })));
     }
@@ -97,17 +102,19 @@ async function desfazer(id: string, quem: string): Promise<NextResponse> {
   if (falha && !voltaram.length) return NextResponse.json({ error: `Não consegui desfazer (${falha}). Nada mudou.` }, { status: 500 });
   const foi = new Set(voltaram.map((v) => v.id));
   op.itens = op.itens.filter((i: Operacao["itens"][number]) => !foi.has(i.id));
-  if (!falha || !op.itens.length) operacoes.delete(id);
+  if (!falha) op.feito = true;
   if (voltaram.length) {
-    const avisos = [...porAntes].flatMap(([antes, itens]) => {
-      const dele = itens.filter((i) => foi.has(i.id));
+    const todos = [...porAntes.values()].flat().filter((i) => foi.has(i.id));
+    const avisos: Linha[] = [...new Set(todos.map((i) => i.antes))].flatMap((antes) => {
+      const dele = todos.filter((i) => i.antes === antes).filter((i) => foi.has(i.id));
       return dele.length ? [{ type: "content", title: dele.length === 1 ? "Uma arte voltou para você" : `${dele.length} artes voltaram para você`, body: `${op.cliente.nome}: ${dele.slice(0, 3).map((i) => i.titulo).join(", ")}${dele.length > 3 ? ` e mais ${dele.length - 3}` : ""}`, client_id: op.cliente.id, card_id: dele.length === 1 ? dele[0].cardId : null, target_user: antes.trim() }] : [];
     });
+    avisos.push({ type: "content", title: todos.length === 1 ? "Uma arte saiu da sua fila" : `${todos.length} artes saíram da sua fila`, body: `${op.cliente.nome}: a passagem foi desfeita.`, client_id: op.cliente.id, card_id: null, target_user: op.para });
     const { error } = await supabaseAdmin.from("notifications").insert(avisos);
     if (error) console.error("[design-requests/passar] aviso do desfazer:", error.message);
   }
   const ficaram = op.itens.length;
-  return NextResponse.json({ voltaram, ...(falha ? { aviso: `${ficaram} não ${ficaram === 1 ? "voltou" : "voltaram"} (${falha}).` } : ficaram ? { aviso: `${ficaram === 1 ? "1 arte já mudou" : `${ficaram} artes já mudaram`} de novo e ${ficaram === 1 ? "ficou" : "ficaram"} como ${ficaram === 1 ? "está" : "estão"}.` } : {}) });
+  return NextResponse.json({ voltaram, ...(falha ? { repetir: true, aviso: `${ficaram} não ${ficaram === 1 ? "voltou" : "voltaram"} (${falha}).` } : ficaram ? { aviso: `${ficaram === 1 ? "1 arte já mudou" : `${ficaram} artes já mudaram`} de novo e ${ficaram === 1 ? "ficou" : "ficaram"} como ${ficaram === 1 ? "está" : "estão"}.` } : {}) });
 }
 
 export async function POST(req: NextRequest) {
@@ -128,7 +135,7 @@ export async function POST(req: NextRequest) {
     const ativos = ((equipe ?? []) as Linha[]).filter((m) => m.is_active !== false && !m.deleted_at) as (Linha & { name: string })[];
     const pessoa = membroDaEquipe(s.cliente.designer, ativos.filter((m) => m.role === "designer"));
     if (!pessoa) return NextResponse.json({ error: `${s.cliente.designer} não é designer ativo na equipe. Corrija o campo Designer na ficha do cliente. Nada mudou.` }, { status: 409 });
-    if (typeof b.para === "string" && !mesmaPessoa(b.para, pessoa.name)) return NextResponse.json({ error: `O designer deste cliente agora é ${pessoa.name}. Atualize a tela e confira.` }, { status: 409 });
+    if (typeof b.para === "string" && !mesmaPessoa(b.para, pessoa.name) && !mesmaPessoa(b.para, s.cliente.designer)) return NextResponse.json({ error: `O designer deste cliente agora é ${pessoa.name}. Atualize a tela e confira.` }, { status: 409 });
     if (gate.papel === "designer") {
       const meu = (gate.user.email || "").toLowerCase();
       const eu = ativos.find((m) => String(m.email ?? "").toLowerCase() === meu)?.name;
@@ -162,7 +169,7 @@ export async function POST(req: NextRequest) {
       operacao = crypto.randomUUID();
       operacoes.set(operacao, {
         quem: gate.user.id, em: agora, cliente: { id: s.cliente.id, nome: s.cliente.nome }, para: pessoa.name,
-        itens: lista.filter((a) => passadas.includes(a.pedidoId)).map((a) => ({ id: a.pedidoId, antes: s.gravado.get(a.pedidoId)!, titulo: a.titulo, cardId: a.cardId })),
+        itens: lista.filter((a) => passadas.includes(a.pedidoId)).map((a) => ({ id: a.pedidoId, antes: s.gravado.get(a.pedidoId)!, titulo: a.titulo, cardId: a.cardId, fazendo: a.fazendo })),
       });
       const foram = lista.filter((a) => passadas.includes(a.pedidoId));
       const avisos: Linha[] = [];

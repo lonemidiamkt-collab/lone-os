@@ -160,7 +160,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   useEffect(() => {
     if (!editing) setForm((p) => ({ ...p, assignedTraffic: client.assignedTraffic || "", assignedSocial: client.assignedSocial || "", assignedDesigner: client.assignedDesigner || "" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client.assignedTraffic, client.assignedSocial, client.assignedDesigner]);
+  }, [editing, client.assignedTraffic, client.assignedSocial, client.assignedDesigner]);
 
   // 21/10/2026 (auditoria 3.6): erro ao ler o contrato aparecia como "Nenhum contrato" + "Gerar
   // Contrato" — convite a gerar um repetido. Agora diz que não leu e oferece tentar de novo.

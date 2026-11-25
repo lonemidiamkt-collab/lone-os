@@ -206,8 +206,9 @@ export const useClientsStore = create<ClientsState>()(
               assignedDesigner: (g.assigned_designer as string) ?? "",
             };
             set((s) => ({ clients: s.clients.map((c) => (c.id === id ? { ...c, ...real } : c)) }), false, "clients/update/equipe-real");
-            if (prev?.assignedSocial && !real.assignedSocial && updates.assignedSocial === undefined) {
-              toast.warning(`${prev.assignedSocial} saiu do social deste cliente: o serviço escolhido não tem social. Se foi engano, volte o serviço e escolha o social de novo.`, { duration: 15_000 });
+            const social = updates.assignedSocial === undefined ? prev?.assignedSocial : updates.assignedSocial;
+            if (social && !real.assignedSocial && updates.serviceType !== undefined) {
+              toast.warning(`${social} saiu do social deste cliente: o serviço escolhido não tem social. Se foi engano, volte o serviço e escolha o social de novo.`, { duration: 15_000 });
             }
           }
           // Designer trocado: as artes já abertas continuam com quem estavam — oferece passar (25/11/2026).

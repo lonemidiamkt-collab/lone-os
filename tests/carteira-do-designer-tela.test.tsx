@@ -77,6 +77,8 @@ describe("salvar a ficha não desfaz o que outra pessoa gravou", () => {
     fireEvent.click(screen.getByRole("button", { name: /Salvar/ }));
     await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
     expect(salvar).toHaveBeenCalledWith("c1", { phone: "11 8" });
+    // E a ficha, fora da edição, mostra quem está lá de verdade.
+    await waitFor(() => expect(screen.getByText("Téo Braga")).toBeInTheDocument());
   });
   it("nada mudou: não grava", async () => {
     const salvar = vi.fn(async () => {});

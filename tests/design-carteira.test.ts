@@ -137,8 +137,8 @@ describe("a rota", () => {
     banco.t.notifications = [];
     expect((await passar({ desfazer: operacao })).voltaram.map((v: { id: string }) => v.id)).toEqual(["1", "2"]);
     expect([dono("1"), dono("2")]).toEqual(["Caio Lima", "Caio Lima"]);
-    expect(banco.t.notifications).toMatchObject([{ target_user: "Caio Lima", title: "2 artes voltaram para você" }]);
-    expect((await passar({ desfazer: operacao })).status).toBe(410);
+    expect(banco.t.notifications).toMatchObject([{ target_user: "Caio Lima", title: "2 artes voltaram para você" }, { target_user: "Téo Braga", title: "2 artes saíram da sua fila" }]);
+    expect(await passar({ desfazer: operacao })).toMatchObject({ status: 200, voltaram: [] }); // repetir não é erro
   });
   it("Desfazer não mexe no que mudou depois, nem serve a outra pessoa, nem com id inventado", async () => {
     const { operacao } = await passar({ clientId: "c1", ids: ["1", "2"] });
@@ -151,6 +151,16 @@ describe("a rota", () => {
     expect(r.voltaram).toEqual([{ id: "1", para: "Caio Lima" }]);
     expect(r.aviso).toMatch(/1 arte já mudou de novo/);
     expect(dono("2")).toBe("Ana");
+  });
+  it("quem recebeu já começou: o desfazer não tira", async () => {
+    const { operacao } = await passar({ clientId: "c1", ids: ["1"] });
+    banco.t.design_requests[0].status = "in_progress";
+    expect((await passar({ desfazer: operacao })).voltaram).toEqual([]);
+    expect(dono("1")).toBe("Téo Braga");
+  });
+  it("ficha só com o primeiro nome: a oferta da própria rota é aceita", async () => {
+    banco.t.clients[0].assigned_designer = "Téo";
+    expect(await passar({ clientId: "c1", ids: ["1"], para: (await ver()).para })).toMatchObject({ status: 200, para: "Téo Braga" });
   });
   it("Desfazer que falha diz e pode ser tentado de novo", async () => {
     const { operacao } = await passar({ clientId: "c1", ids: ["1"] });

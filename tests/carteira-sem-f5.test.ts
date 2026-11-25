@@ -89,6 +89,14 @@ describe("o que a revisão achou", () => {
     expect(st().clients[0]).toMatchObject({ assignedSocial: "", assignedDesigner: "Téo" });
     expect(toast.warning).toHaveBeenCalledWith(expect.stringMatching(/Bia saiu do social/), expect.anything());
   });
+  it("salvar outro campo quando o social já tinha saído não culpa o serviço", async () => {
+    useClientsStore.setState({ clients: [cli("a", "", { assignedSocial: "Bia" })] });
+    vi.mocked(toast.warning).mockClear();
+    chamar.mockResolvedValueOnce(resp({ client: { assigned_social: null, assigned_designer: null, assigned_traffic: "" } }));
+    await st().updateClient("a", { notes: "x" });
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(st().clients[0].assignedSocial).toBe("");
+  });
   it("carteira que não carregou: foco e troca de aba não viram uma rajada de pedidos", async () => {
     useClientsStore.setState({ initialized: false });
     chamar.mockResolvedValue({ ok: false, data: null, erro: "caiu", status: 503 });
