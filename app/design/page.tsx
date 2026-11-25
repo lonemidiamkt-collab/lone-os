@@ -9,7 +9,9 @@
 // quadro (lib/conteudo/fila-designer.ts). O card abre no modo arte (components/design/CardDoDesigner.tsx).
 // A gestão e o social trocam para o "Quadro de produção" (as seis etapas, Por cliente, Por designer).
 
+import { mesmaPessoa } from "@/lib/equipe/pessoa";
 import Header from "@/components/Header";
+import CarteiraDoDesigner from "@/components/design/CarteiraDoDesigner";
 import SignedImage from "@/components/shared/SignedImage";
 import CsAgentInbox from "@/components/cs/CsAgentInbox";
 import ContentCardModal from "@/components/ContentCardModal";
@@ -187,16 +189,19 @@ export default function DesignPage() {
     return () => { vivo = false; };
   }, [quadro, ehDesigner, currentUser, hydrated]);
 
-  const quadroAtivo = quadro ?? (ehDesigner ? currentUser : "Todos");
+  const quadroPedido = quadro ?? (ehDesigner ? currentUser : "Todos");
+  // A preferência salva (ou o nome do login) pode ter outra grafia: vale o nome do quadro que existe.
+  const quadroAtivo = quadros.find((q) => mesmaPessoa(q, quadroPedido)) ?? quadroPedido;
   // O valor ativo TEM que existir entre as opções: senão a pessoa lê um nome e está vendo outra fila.
   // O designer sempre tem a própria fila, mesmo sem nada nela ainda.
   const opcoesQuadro = useMemo(() => {
-    const base = quadroAtivo !== "Todos" && !quadros.includes(quadroAtivo) ? [quadroAtivo, ...quadros] : quadros;
-    const comigo = ehDesigner && !base.includes(currentUser) ? [currentUser, ...base] : base;
+    const tem = (lista: string[], n: string) => lista.some((q) => q === n || mesmaPessoa(q, n));
+    const base = quadroAtivo !== "Todos" && !tem(quadros, quadroAtivo) ? [quadroAtivo, ...quadros] : quadros;
+    const comigo = ehDesigner && !tem(base, currentUser) ? [currentUser, ...base] : base;
     // A própria fila primeiro; "sem designer" por último.
-    return [...comigo].sort((a, b) => Number(b === currentUser) - Number(a === currentUser) || Number(a === SEM_DONO) - Number(b === SEM_DONO));
+    return [...comigo].sort((a, b) => Number(mesmaPessoa(b, currentUser)) - Number(mesmaPessoa(a, currentUser)) || Number(a === SEM_DONO) - Number(b === SEM_DONO));
   }, [quadros, quadroAtivo, ehDesigner, currentUser]);
-  const quadroDeOutro = ehDesigner && quadroAtivo !== currentUser;
+  const quadroDeOutro = ehDesigner && !mesmaPessoa(quadroAtivo, currentUser);
 
   // Clientes da carteira da fila ativa (para o alerta de datas e a Nova Tarefa).
   const myClientIds = useMemo(() => {
@@ -204,7 +209,7 @@ export default function DesignPage() {
     return new Set(
       clients.filter((c) => {
         const dono = (c.assignedDesigner ?? "").trim();
-        return quadroAtivo === SEM_DONO ? !dono : dono === quadroAtivo;
+        return quadroAtivo === SEM_DONO ? !dono : mesmaPessoa(dono, quadroAtivo);
       }).map((c) => c.id),
     );
   }, [clients, quadroAtivo]);
@@ -226,11 +231,11 @@ export default function DesignPage() {
     for (const p of socialPeople) map[p] = myContentCards.filter((c) => c.socialMedia === p);
     return map;
   }, [myContentCards, socialPeople]);
-  // Clientes que aparecem na fila (o filtro de cliente não lista quem não tem arte nenhuma).
+  // O filtro lista quem tem arte na fila e a carteira inteira: cliente recém-passado aparece antes da 1ª arte (25/11/2026).
   const clientesDaFila = useMemo(() => {
     const ids = new Set(itens.filter((it) => it.estado !== "sem_pedido").map((it) => it.card.clientId));
-    return clients.filter((c) => ids.has(c.id)).sort((a, b) => (a.nomeFantasia || a.name).localeCompare(b.nomeFantasia || b.name, "pt-BR"));
-  }, [itens, clients]);
+    return clients.filter((c) => ids.has(c.id) || !!myClientIds?.has(c.id)).sort((a, b) => (a.nomeFantasia || a.name).localeCompare(b.nomeFantasia || b.name, "pt-BR"));
+  }, [itens, clients, myClientIds]);
   const designersNaVista = quadroAtivo === "Todos"
     ? Math.max(1, new Set(itens.filter((it) => designerDeve(it.estado)).map((it) => it.designer ?? SEM_DONO)).size)
     : 1;
@@ -253,7 +258,7 @@ export default function DesignPage() {
     return cargaPorDesigner(todosItens, hoje, { designers: nomes });
   }, [todosItens, clients, hoje]);
 
-  const rotuloFila = (nome: string) => (nome === currentUser ? "Minha fila" : nome === SEM_DONO ? "Sem designer" : nome.split(" ")[0]);
+  const rotuloFila = (nome: string) => (mesmaPessoa(nome, currentUser) ? "Minha fila" : nome === SEM_DONO ? "Sem designer" : nome.split(" ")[0]);
   const opcoesPessoa = [...opcoesQuadro, "Todos"];
   const carregandoCarteira = !clientesCarregados && quadroAtivo !== "Todos";
 
@@ -392,6 +397,10 @@ export default function DesignPage() {
         )}
         {tab === "producao" && !carregandoCarteira && (
           <div className="space-y-5">
+            {/* O designer vê sempre a PRÓPRIA carteira, mesmo olhando a fila de um colega. */}
+            {clientesCarregados && conteudoCarregado && (ehDesigner || (quadroAtivo !== "Todos" && quadroAtivo !== SEM_DONO)) && (
+              <CarteiraDoDesigner pessoa={ehDesigner ? currentUser : quadroAtivo} minha={ehDesigner} papel={role} clientes={clients} itens={todosItens} />
+            )}
             <CsAgentInbox cards={myContentCards} onOpen={setDetailCard} titulo="CS Agente — pra produzir" />
 
             {modo === "fila" && (

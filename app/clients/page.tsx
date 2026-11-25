@@ -1,5 +1,6 @@
 "use client";
 
+import { mesmaPessoa } from "@/lib/equipe/pessoa";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
@@ -260,8 +261,8 @@ export default function ClientsPage() {
   // "Meus": quem executa, pelo campo do próprio papel; a gestão, por qualquer um dos três (há gestor
   // que também atende cliente como social ou tráfego).
   const ehMeu = (c: Client): boolean => isOperator
-    ? getAssignedField(c) === currentUser
-    : [c.assignedTraffic, c.assignedSocial, c.assignedDesigner].includes(currentUser);
+    ? mesmaPessoa(getAssignedField(c), currentUser)
+    : [c.assignedTraffic, c.assignedSocial, c.assignedDesigner].some((n) => mesmaPessoa(n, currentUser));
 
   // Collect unique responsible names for the dropdown (for operator roles) — sem vazios nem arquivados
   const responsibleNames = isOperator

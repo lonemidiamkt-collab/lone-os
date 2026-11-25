@@ -72,6 +72,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   // goals, ceo, broadcasts, sobre). Carregar uma vez, onde todo login passa, fecha as seis e a
   // sétima que alguém criar amanhã.
   const initClients = useClientsStore((s) => s.init);
+  const atualizarEquipe = useClientsStore((s) => s.atualizarEquipe);
   // MESMA LIÇÃO, TRÊS STORES A MAIS (11/09, à tarde). Depois de carregar clientes aqui, a varredura
   // achou o defeito repetido: /calendar, /my-work (a home do social), /ceo e /tarefas leem content,
   // operational e traffic e nenhuma delas chama init(). Quem entra pelo dashboard nunca vê, porque
@@ -93,6 +94,15 @@ function MainLayout({ children }: { children: React.ReactNode }) {
     document.addEventListener("visibilitychange", onVisible);
     return () => { clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
   }, [initNotifs, refreshNotifs, initClients, initContent, initOps, initTraffic]);
+
+  // Cliente recém-passado para alguém aparece sem F5 (25/11/2026): confere com a aba à vista e quando ela volta.
+  useEffect(() => {
+    const conferir = () => { if (document.visibilityState === "visible") void atualizarEquipe(); };
+    const t = setInterval(conferir, 60_000);
+    document.addEventListener("visibilitychange", conferir);
+    window.addEventListener("focus", conferir);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", conferir); window.removeEventListener("focus", conferir); };
+  }, [atualizarEquipe]);
 
   // Secondary sidebar is 240px; primary is 72px (200px com o menu expandido)
   const hasSecondaryRoute = ROTAS_COM_PAINEL_FIXO.some(

@@ -9,6 +9,8 @@
 // OLHAR (todo mundo, quando precisa ajudar). Este arquivo responde só a primeira — a segunda é da
 // interface, e é de propósito: esconder o quadro do colega quebraria o pedido de ajuda.
 
+import { chaveDaPessoa, mesmaPessoa } from "@/lib/equipe/pessoa";
+
 /** Demanda com o mínimo que a regra precisa. */
 export interface DemandaComDono {
   clientId: string;
@@ -56,7 +58,28 @@ export function ehDoQuadro(
   if (!designer || designer === "Todos") return true;
   const dono = donoDaDemanda(demanda, clientes);
   if (designer === SEM_DONO) return dono === null;
-  return dono === designer;
+  return mesmaPessoa(dono, designer);
+}
+
+/**
+ * Um nome por pessoa: "José", "Jose " e "JOSÉ" gravados em registros diferentes são UM quadro só (o rótulo
+ * é a primeira grafia encontrada). Antes cada grafia virava um quadro e o trabalho se dividia.
+ */
+function nomesDosQuadros(
+  demandas: ReadonlyArray<DemandaComDono>,
+  clientes: ReadonlyArray<ClienteComDesigner>,
+): Map<string, string> {
+  const nomes = new Map<string, string>();
+  const somar = (n: string | null | undefined) => {
+    const nome = (n ?? "").trim();
+    const k = chaveDaPessoa(nome);
+    if (k && !nomes.has(k)) nomes.set(k, nome);
+  };
+  for (const d of demandas) somar(donoDaDemanda(d, clientes));
+  // Designer da carteira sem demanda nenhuma ainda também merece quadro — senão ele abre o painel
+  // no primeiro dia e não se encontra na lista.
+  for (const c of clientes) somar(c.assignedDesigner);
+  return nomes;
 }
 
 /**
@@ -69,20 +92,8 @@ export function quadrosDisponiveis(
   demandas: ReadonlyArray<DemandaComDono>,
   clientes: ReadonlyArray<ClienteComDesigner>,
 ): string[] {
-  const nomes = new Set<string>();
-  let temOrfa = false;
-  for (const d of demandas) {
-    const dono = donoDaDemanda(d, clientes);
-    if (dono) nomes.add(dono);
-    else temOrfa = true;
-  }
-  // Designer da carteira sem demanda nenhuma ainda também merece quadro — senão ele abre o painel
-  // no primeiro dia e não se encontra na lista.
-  for (const c of clientes) {
-    const n = (c.assignedDesigner ?? "").trim();
-    if (n) nomes.add(n);
-  }
-  const ordenados = [...nomes].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const temOrfa = demandas.some((d) => donoDaDemanda(d, clientes) === null);
+  const ordenados = [...nomesDosQuadros(demandas, clientes).values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
   return temOrfa ? [...ordenados, SEM_DONO] : ordenados;
 }
 
@@ -92,9 +103,11 @@ export function contagemPorQuadro(
   clientes: ReadonlyArray<ClienteComDesigner>,
 ): Record<string, number> {
   const out: Record<string, number> = {};
+  const nomes = nomesDosQuadros(demandas, clientes);
   for (const d of demandas) {
     if (d.status === "done") continue;
-    const dono = donoDaDemanda(d, clientes) ?? SEM_DONO;
+    const gravado = donoDaDemanda(d, clientes);
+    const dono = gravado ? nomes.get(chaveDaPessoa(gravado)) ?? gravado : SEM_DONO;
     out[dono] = (out[dono] ?? 0) + 1;
   }
   return out;

@@ -96,6 +96,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
+  const [inicial, setInicial] = useState<Record<string, string>>({});
   const [showPw, setShowPw] = useState<Record<string, boolean>>({});
   const [uploading, setUploading] = useState<string | null>(null);
   const [latestContract, setLatestContract] = useState<{ status: string; endDate: string; version: number } | null>(null);
@@ -149,7 +150,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   const assinaturaSensivel = [
     client.id, client.cpfCnpj, client.facebookLogin, client.instagramLogin, client.googleAdsLogin,
     client.enderecoRua, client.enderecoNumero, client.enderecoBairro, client.enderecoCep, client.razaoSocial, client.cnpj,
-    client.faturamentoFaixa,
+    client.faturamentoFaixa, client.assignedTraffic, client.assignedSocial, client.assignedDesigner,
   ].join("|");
   useEffect(() => {
     if (!editing) setForm(initForm());
@@ -184,7 +185,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       // otimista e não avisava nada em caso de falha).
       // Campo esvaziado vira null (apaga); `|| undefined` impedia limpar qualquer dado errado.
       const v = (x: string | undefined) => (x && x.trim() ? x.trim() : null);
-      await updateClientData(client.id, {
+      const patch = (form: Record<string, string>): ClientPatch => ({
         nomeFantasia: v(form.nomeFantasia), razaoSocial: v(form.razaoSocial),
         cnpj: v(form.cnpj), nicho: v(form.nicho),
         // Só gestão vê e edita a faixa (a rota de detalhe nem a manda para os outros papéis).
@@ -208,6 +209,14 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         assignedSocial: v(form.assignedSocial),
         assignedDesigner: v(form.assignedDesigner),
       });
+      // Só o que a pessoa mudou (25/11/2026): mandando tudo, quem estava com a ficha aberta de antes apagava o
+      // designer que outra pessoa tinha acabado de pôr — salvando um telefone.
+      const antes = patch(inicial) as Record<string, unknown>;
+      const mudancas = Object.fromEntries(Object.entries(patch(form)).filter(([k, x]) => x !== undefined && x !== antes[k])) as ClientPatch;
+      if (Object.keys(mudancas).length) {
+        await updateClientData(client.id, mudancas);
+        setInicial(form);
+      }
 
       // Senhas: só envia se foi editada (evita regravar blob criptografado com string vazia).
       const pwUpdates: { field: string; value: string }[] = [];
@@ -462,7 +471,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
               </button>
             </>
           ) : isAdmin ? (
-            <button onClick={() => { setForm(initForm()); setEditing(true); }} disabled={!dadosCompletos}
+            <button onClick={() => { const f = initForm(); setForm(f); setInicial(f); setEditing(true); }} disabled={!dadosCompletos}
               title={dadosCompletos ? undefined : "Os dados completos do cliente não carregaram — editar agora apagaria CPF, endereço e logins."}
               className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-primary/30 hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed">
               <Pencil size={12} /> Editar Dados

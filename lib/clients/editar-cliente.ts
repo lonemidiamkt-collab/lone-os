@@ -67,15 +67,13 @@ export function formDoCliente(client: Client): FormEdicao {
 export function camposDaEquipe(serviceType: string, client: Client) {
   const temTraffic = !!client.assignedTraffic;
   const temSocial = !!client.assignedSocial;
-  const temDesigner = !!client.assignedDesigner;
   return {
     temSocial,
     needsTraffic: serviceType === "lone_growth" || serviceType === "assessoria_trafego" || temTraffic,
     // Social segue o contrato, não quem já estava gravado (30/09) — ver o comentário no modal.
     needsSocial: contratouSocial({ service_type: serviceType }),
-    needsDesigner: serviceType === "lone_growth" || serviceType === "assessoria_design"
-      || serviceType === "assessoria_social"   // social sem designer não produz arte
-      || temDesigner,
+    // Em todo serviço (25/11/2026): cliente só de tráfego não tinha como receber o PRIMEIRO designer.
+    needsDesigner: true,
   };
 }
 

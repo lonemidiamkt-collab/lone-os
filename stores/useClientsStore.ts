@@ -24,6 +24,8 @@ interface ClientsState {
 
   // Actions
   init: () => Promise<void>;
+  /** Confere, sem piscar a tela, quem cuida de cada cliente e se entrou cliente novo. */
+  atualizarEquipe: () => Promise<void>;
   subscribeRealtime: () => () => void;
 
   addClient: (data: Omit<Client, "id" | "status" | "attentionLevel" | "tags" | "joinDate" | "lastPostDate"> & Partial<Pick<Client, "status" | "attentionLevel" | "tags" | "joinDate" | "lastPostDate">>) => Promise<Client>;
@@ -50,6 +52,16 @@ export const selectChatsByClientId = (clientId: string) => (s: ClientsState) =>
 // Store
 // ──────────────────────────────────────────────────────────────────────────────
 
+// Conferência da carteira (25/11/2026): o realtime está desligado no servidor, e o designer recém-colocado num
+// cliente só aparecia para ele depois de um F5. Resposta que saiu antes de uma gravação local é descartada.
+const INTERVALO_EQUIPE = 45_000;
+let conferindo = false;
+let conferidoEm = 0;
+let mutacoes = 0; // quantas gravações já começaram ou terminaram
+let gravando = 0; // quantas estão em voo
+const marcar = () => { mutacoes++; };
+type Equipe = Pick<Client, "id" | "assignedTraffic" | "assignedSocial" | "assignedDesigner">;
+
 export const useClientsStore = create<ClientsState>()(
   devtools(
     subscribeWithSelector((set, get) => ({
@@ -74,6 +86,36 @@ export const useClientsStore = create<ClientsState>()(
           return;
         }
         set({ clients: r.data!.clients!, clientChats: r.data!.clientChats ?? {}, loading: false, initialized: true, erro: null }, false, "clients/init/done");
+      },
+
+      atualizarEquipe: async () => {
+        if (!get().initialized) { await get().init(); return; }
+        if (conferindo || gravando || Date.now() - conferidoEm < INTERVALO_EQUIPE) return;
+        conferindo = true;
+        conferidoEm = Date.now();
+        const antes = mutacoes;
+        try {
+          const r = await chamar<{ equipe?: Equipe[] }>("/api/data/clients?so=equipe");
+          // Falhou: fica a lista que está na tela; a próxima conferência tenta de novo.
+          if (!r.ok || !Array.isArray(r.data?.equipe) || mutacoes !== antes) return;
+          const equipe = new Map(r.data!.equipe!.map((e) => [e.id, e]));
+          const conhecidos = new Set(get().clients.map((c) => c.id));
+          let novos: Client[] = [];
+          if ([...equipe.keys()].some((id) => !conhecidos.has(id))) {
+            const t = await chamar<{ clients?: Client[] }>("/api/data/clients");
+            if (mutacoes !== antes) return;
+            novos = (t.data?.clients ?? []).filter((c) => !conhecidos.has(c.id));
+          }
+          let mudou = novos.length > 0;
+          // Só os responsáveis: o resto da ficha continua o que a pessoa está vendo (e talvez editando).
+          const clients = get().clients.map((c) => {
+            const e = equipe.get(c.id);
+            if (!e || (e.assignedTraffic === c.assignedTraffic && e.assignedSocial === c.assignedSocial && e.assignedDesigner === c.assignedDesigner)) return c;
+            mudou = true;
+            return { ...c, assignedTraffic: e.assignedTraffic, assignedSocial: e.assignedSocial, assignedDesigner: e.assignedDesigner };
+          });
+          if (mudou) set({ clients: [...clients, ...novos] }, false, "clients/equipe");
+        } finally { conferindo = false; }
       },
 
       // ── Supabase Realtime subscription ───────────────────────────────────
@@ -118,6 +160,7 @@ export const useClientsStore = create<ClientsState>()(
 
       // ── addClient ─────────────────────────────────────────────────────────
       addClient: async (data) => {
+        marcar();
         const tempId = `temp-${Date.now()}`;
         const optimistic: Client = {
           ...data,
@@ -137,6 +180,7 @@ export const useClientsStore = create<ClientsState>()(
           set((s) => ({ clients: s.clients.filter((c) => c.id !== tempId) }), false, "clients/add/rollback");
           throw new Error(r.erro ?? "O servidor não devolveu o cliente criado.");
         }
+        marcar();
         const confirmed: Client = { ...optimistic, id };
         set((s) => ({
           clients: s.clients.map((c) => c.id === tempId ? confirmed : c),
@@ -147,12 +191,18 @@ export const useClientsStore = create<ClientsState>()(
       // ── updateClient ──────────────────────────────────────────────────────
       updateClient: async (id, updates) => {
         const prev = get().clients.find((c) => c.id === id);
+        marcar(); gravando++;
         set((s) => ({
           clients: s.clients.map((c) => c.id === id ? ({ ...c, ...updates } as Client) : c),
         }), false, "clients/update/optimistic");
         try {
-          const r = await chamar("/api/clients/update", { id, ...updates });
+          const r = await chamar<{ client?: Record<string, unknown> }>("/api/clients/update", { id, ...updates });
           if (!r.ok) throw new Error(r.erro ?? "Não consegui salvar o cliente.");
+          // Designer trocado: as artes já abertas continuam com quem estavam — oferece passar (25/11/2026).
+          if (updates.assignedDesigner !== undefined && prev) {
+            const ficou = r.data?.client ? (r.data.client.assigned_designer as string | null) : updates.assignedDesigner;
+            void import("@/lib/design/passar-artes").then((m) => m.oferecerPassarArtes(id, prev.assignedDesigner, ficou)).catch(() => {});
+          }
         } catch (err) {
           if (prev) {
             set((s) => ({
@@ -160,10 +210,11 @@ export const useClientsStore = create<ClientsState>()(
             }), false, "clients/update/rollback");
           }
           throw err;
-        }
+        } finally { marcar(); gravando--; }
       },
 
       patchClientLocal: (id, patch) => {
+        marcar();
         set((s) => ({
           clients: s.clients.map((c) => c.id === id ? ({ ...c, ...patch } as Client) : c),
         }), false, "clients/patch/local");

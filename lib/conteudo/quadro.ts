@@ -8,6 +8,7 @@
 //   · Por designer — cada designer é uma coluna com a fila de arte dele.
 
 import type { ContentCard, DesignRequest } from "@/lib/types";
+import { chaveDaPessoa, mesmaPessoa } from "@/lib/equipe/pessoa";
 import { donoDaDemanda, SEM_DONO, type ClienteComDesigner } from "@/lib/design/dono";
 import { ETAPAS, etapaDoStatus, ordemDoStatus, type Etapa } from "./etapas";
 import { estadoDoDesign, designerDeve, type EstadoDesign, type PedidoDesign } from "./producao";
@@ -103,10 +104,9 @@ function semAcento(s: string): string {
 export function passaNoFiltro(it: ItemQuadro, f: Filtro): boolean {
   if (f.clientId && it.card.clientId !== f.clientId) return false;
   if (f.pessoa && f.pessoa !== "Todos") {
-    if (f.modo === "social" && it.card.socialMedia !== f.pessoa) return false;
+    if (f.modo === "social" && !mesmaPessoa(it.card.socialMedia, f.pessoa)) return false;
     if (f.modo === "designer") {
-      const dono = it.designer ?? SEM_DONO;
-      if (dono !== f.pessoa) return false;
+      if (f.pessoa === SEM_DONO ? !!it.designer : !mesmaPessoa(it.designer, f.pessoa)) return false;
     }
   }
   const q = semAcento((f.busca ?? "").trim());
@@ -185,12 +185,17 @@ export function colunasPorCliente(itens: readonly ItemQuadro[], clientes: readon
  */
 export function colunasPorDesigner(itens: readonly ItemQuadro[], designers: readonly string[]): Coluna[] {
   const naFila = itens.filter((it) => it.etapa === "com_designer");
-  const nomes = [...new Set([...designers, ...naFila.map((it) => it.designer ?? SEM_DONO)])]
-    .sort((a, b) => (a === SEM_DONO ? 1 : b === SEM_DONO ? -1 : a.localeCompare(b, "pt-BR")));
+  // Um por pessoa: outra grafia do mesmo nome não abre coluna nova.
+  const porChave = new Map<string, string>();
+  for (const n of [...designers, ...naFila.map((it) => it.designer ?? SEM_DONO)]) {
+    const k = n === SEM_DONO ? SEM_DONO : chaveDaPessoa(n);
+    if (!porChave.has(k)) porChave.set(k, n);
+  }
+  const nomes = [...porChave.values()].sort((a, b) => (a === SEM_DONO ? 1 : b === SEM_DONO ? -1 : a.localeCompare(b, "pt-BR")));
   return nomes.map((nome) => ({
     id: nome,
     titulo: nome,
-    itens: naFila.filter((it) => (it.designer ?? SEM_DONO) === nome).sort(compararItens),
+    itens: naFila.filter((it) => (nome === SEM_DONO ? !it.designer : mesmaPessoa(it.designer, nome))).sort(compararItens),
   }));
 }
 

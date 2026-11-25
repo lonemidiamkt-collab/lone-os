@@ -274,6 +274,16 @@ async function completarDriveLink(clientes: Client[]): Promise<Client[]> {
   return clientes.map((c) => (!c.driveLink && link.has(c.id) ? { ...c, driveLink: link.get(c.id) } : c));
 }
 
+/** Quem cuida de cada cliente da carteira, sem o resto da ficha: a tela confere de tempos em tempos (25/11/2026). */
+export async function fetchEquipeDaCarteira(): Promise<{ id: string; assignedTraffic: string; assignedSocial: string; assignedDesigner: string }[]> {
+  const { data, error } = await db.from("clients").select("id, assigned_traffic, assigned_social, assigned_designer").is("draft_status", null).neq("active", false);
+  if (error) { console.error("[DB] fetchEquipeDaCarteira:", error); throw error; }
+  return (data ?? []).map((r) => ({
+    id: r.id as string, assignedTraffic: (r.assigned_traffic as string) ?? "",
+    assignedSocial: (r.assigned_social as string) ?? "", assignedDesigner: (r.assigned_designer as string) ?? "",
+  }));
+}
+
 // Ex-clientes (churned). Para a aba "Arquivados" e métricas de carteira. Erro lança (mesma razão
 // de fetchClients): "Nenhum cliente arquivado" só quando o banco respondeu que não há nenhum.
 export async function fetchChurnedClients(): Promise<Client[]> {

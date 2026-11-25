@@ -9,6 +9,7 @@
 //
 // Esta página só carrega os dados, monta o contexto e escolhe a aba.
 
+import { mesmaPessoa } from "@/lib/equipe/pessoa";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -273,7 +274,7 @@ export default function ClientDetailPage() {
   const naMinhaCarteira =
     (role === "traffic" && client.assignedTraffic === currentUser) ||
     (role === "social" && client.assignedSocial === currentUser) ||
-    (role === "designer" && client.assignedDesigner === currentUser);
+    (role === "designer" && mesmaPessoa(client.assignedDesigner, currentUser));
   // Uma régua só — a da Saúde da carteira (lib/saude/carteira.ts): nível do escritor único
   // (/api/scores), sem estimativa local. Sem nota, "Sem dado suficiente", nunca um número inventado.
   const nivelSaude = nivelDoCliente(client);

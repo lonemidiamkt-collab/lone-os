@@ -1,5 +1,6 @@
 "use client";
 
+import { mesmaPessoa } from "@/lib/equipe/pessoa";
 import { useMemo, useState, useEffect } from "react";
 import {
   Inbox, Check, Clock, AlertTriangle, FileText, Palette,
@@ -122,7 +123,7 @@ export default function Hoje() {
     montarItens(contentCards, designRequests, clients.map((c) => ({ id: c.id, assignedDesigner: c.assignedDesigner })))
       .filter((it) => it.etapa === "com_designer" && (designerDeve(it.estado) || it.estado === "bloqueado"))
       .filter((it) => isAdmin
-        || (role === "designer" ? it.designer === currentUser : (it.card.socialMedia === currentUser || it.pedido?.requestedBy === currentUser))),
+        || (role === "designer" ? mesmaPessoa(it.designer, currentUser) : (it.card.socialMedia === currentUser || it.pedido?.requestedBy === currentUser))),
     [contentCards, designRequests, clients, currentUser, role, isAdmin]
   );
   // Sem a carteira, a regra de dono não sabe o que é do designer — não pode afirmar "tudo em dia".
@@ -131,7 +132,7 @@ export default function Hoje() {
   const agendaArte = useMemo(() => {
     if (!ehDesigner) return null;
     const meus = montarItens(contentCards, designRequests, clients.map((c) => ({ id: c.id, assignedDesigner: c.assignedDesigner })))
-      .filter((it) => it.designer === currentUser);
+      .filter((it) => mesmaPessoa(it.designer, currentUser));
     return agendaDoDesigner(meus, todaySP());
   }, [ehDesigner, contentCards, designRequests, clients, currentUser]);
   const [verTodasTarefas, setVerTodasTarefas] = useState(false);

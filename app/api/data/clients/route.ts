@@ -15,6 +15,16 @@ export async function GET(req: NextRequest) {
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Só a equipe de cada cliente: é o que a tela confere a cada minuto (lista inteira só quando entra cliente novo).
+  if (req.nextUrl.searchParams.get("so") === "equipe") {
+    try {
+      return NextResponse.json({ equipe: await db.fetchEquipeDaCarteira() });
+    } catch (e) {
+      console.error("[api/data/clients] equipe não carregou:", e);
+      return NextResponse.json({ error: "Não consegui conferir a carteira agora." }, { status: 503 });
+    }
+  }
+
   // 24/10/2026 (auditoria 3.11): fetchClients devolvia [] quando o banco falhava, e a carteira
   // aparecia "Nenhum cliente" com cara de verdade. Agora a falha sai como falha (503) e a tela
   // oferece "Tentar de novo".
