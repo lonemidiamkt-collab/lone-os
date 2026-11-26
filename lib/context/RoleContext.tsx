@@ -3,9 +3,11 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { estadoDuasEtapas, verificarCodigo } from "@/lib/auth/duas-etapas";
-import { falhaDeLogin, fraseDoLogin, type ErroDeLogin, type ResultadoLogin } from "@/lib/auth/login-erro";
+import { falhaDeLogin, fraseDoLogin, FRASE_EMAIL_OU_SENHA, type ErroDeLogin, type ResultadoLogin } from "@/lib/auth/login-erro";
 import { faseDaInatividade, lerAtividadeCompartilhada } from "@/lib/auth/inatividade";
 import { registrarReentrada } from "@/lib/auth/reentrada";
+import { emailParaEntrar, lembrarEmail, lerEmailLembrado } from "@/lib/auth/email-do-aparelho";
+import { corDoPapel, iniciaisDe } from "@/lib/equipe/roster";
 import type { Role } from "@/lib/types";
 
 export interface UserProfile {
@@ -14,6 +16,10 @@ export interface UserProfile {
   role: Role;
   initials: string;
   color: string;
+  /**
+   * "" = ainda não conhecido. A lista pública da tela de login não traz e-mail (Fase 0, leva 0B,
+   * 25/11/2026); ele chega com a lista completa, depois de entrar.
+   */
   email: string;
   teamMemberId?: string; // UUID from team_members table
   /** Últimos 4 dígitos do WhatsApp cadastrado (null = a pessoa é MUDA para o agente). */
@@ -29,20 +35,23 @@ export interface UserProfile {
 // NÃO ADICIONE GENTE AQUI. Cadastro é na tela de Equipe, que grava em team_members e cria o login
 // junto. Foi manter esta lista em paralelo com a tabela que fez a saída do Pedro Henrique virar
 // caça a cinco arquivos — e por pouco não deixou o substituto sem acesso.
+//
+// SEM E-MAIL (Fase 0, leva 0B, 25/11/2026): esta lista vai no pacote que qualquer navegador baixa. Ela
+// só mostra as fotos; quem usa a reserva digita o e-mail no login, e quem a pessoa É vem do servidor
+// depois de entrar (lista completa ou /api/auth/team-member).
 export const USER_PROFILES: UserProfile[] = [
   // Socios ADM (Full Access)
-  { id: "roberto",  name: "Roberto Lino",    role: "admin",    initials: "RL", color: "text-[#0d4af5]", email: "lonemidiamkt@gmail.com" },
-  { id: "lucas",    name: "Lucas Bueno",     role: "admin",    initials: "LB", color: "text-[#0d4af5]", email: "lucas@lonemidia.com" },
+  { id: "roberto",  name: "Roberto Lino",    role: "admin",    initials: "RL", color: "text-[#0d4af5]", email: "" },
+  { id: "lucas",    name: "Lucas Bueno",     role: "admin",    initials: "LB", color: "text-[#0d4af5]", email: "" },
   // Gestao e Operacao
-  { id: "julio",    name: "Julio",           role: "manager",  initials: "JL", color: "text-[#0d4af5]", email: "julio@lonemidia.com" },
-  { id: "carlos",   name: "Carlos Augusto",  role: "social",   initials: "CA", color: "text-[#3b6ff5]", email: "carlos@lonemidia.com" },
+  { id: "julio",    name: "Julio",           role: "manager",  initials: "JL", color: "text-[#0d4af5]", email: "" },
+  { id: "carlos",   name: "Carlos Augusto",  role: "social",   initials: "CA", color: "text-[#3b6ff5]", email: "" },
   // Thiago assumiu a carteira do Pedro Henrique em 10/08/2026 (mesmo registro, renomeado, pra não
-  // perder os 17 clientes). Esta lista é o mapa de login: nome errado aqui = pessoa entra e o
-  // sistema não sabe quem ela é.
-  { id: "thiago",   name: "Thiago",          role: "social",   initials: "TH", color: "text-[#3b6ff5]", email: "thiago@lonemidia.com" },
-  { id: "rodrigo",  name: "Rodrigo",         role: "designer", initials: "RD", color: "text-[#3b6ff5]", email: "rodrigo@lonemidia.com" },
+  // perder os 17 clientes).
+  { id: "thiago",   name: "Thiago",          role: "social",   initials: "TH", color: "text-[#3b6ff5]", email: "" },
+  { id: "rodrigo",  name: "Rodrigo",         role: "designer", initials: "RD", color: "text-[#3b6ff5]", email: "" },
   // Comercial (SDR) — login escopado que vê SÓ o CRM.
-  { id: "maria",    name: "Maria Luiza",     role: "comercial", initials: "ML", color: "text-[#0d4af5]", email: "marialuiza@lonemidia.com" },
+  { id: "maria",    name: "Maria Luiza",     role: "comercial", initials: "ML", color: "text-[#0d4af5]", email: "" },
 ];
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -79,8 +88,12 @@ interface RoleContextValue {
   roleLabel: string;
   isAuthenticated: boolean;
   hydrated: boolean;
-  /** Entrar pela tela de login. A falha diz POR QUÊ (senha × rede × limite × servidor) — 8.5. */
-  login: (userId: string, password: string) => Promise<ResultadoLogin>;
+  /**
+   * Entrar pela tela de login. A falha diz POR QUÊ (senha × rede × limite × servidor) — 8.5.
+   * `email`: o que a pessoa digitou (1ª vez neste aparelho). Sem ele, usa o lembrado; sem nenhum,
+   * devolve motivo "email" (25/11/2026, leva 0B).
+   */
+  login: (userId: string, password: string, email?: string) => Promise<ResultadoLogin>;
   /** "Sair" de propósito: fecha a sessão SÓ neste navegador e volta para a tela de login. */
   logout: () => Promise<void>;
   /**
@@ -128,13 +141,18 @@ const RoleContext = createContext<RoleContextValue>({
  * 25/10/2026 (8.12): antes ia SEM o token e a rota procurava `team_members.auth_id` (coluna que não
  * existe) — o id da equipe voltava sempre nulo.
  */
-async function quemSouEu(token: string | null | undefined): Promise<{ status: number; teamMemberId?: string }> {
+async function quemSouEu(token: string | null | undefined): Promise<{ status: number; teamMemberId?: string; nome?: string; papel?: string }> {
   if (!token) return { status: 401 };
   try {
     const res = await fetch("/api/auth/team-member", { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return { status: res.status };
     const d = await res.json().catch(() => null);
-    return { status: res.status, teamMemberId: (d?.id as string | null) ?? undefined };
+    return {
+      status: res.status,
+      teamMemberId: (d?.id as string | null) ?? undefined,
+      nome: (d?.nome as string | null) ?? undefined,
+      papel: (d?.papel as string | null) ?? undefined,
+    };
   } catch {
     return { status: 0 };
   }
@@ -143,6 +161,12 @@ async function quemSouEu(token: string | null | undefined): Promise<{ status: nu
 async function tokenAtual(): Promise<string | null> {
   try { return (await supabase.auth.getSession()).data.session?.access_token ?? null; } catch { return null; }
 }
+
+/** localStorage deste navegador, por função: quem lê faz try/catch (lib/auth/email-do-aparelho.ts). */
+const armazenamento = () => window.localStorage;
+/** Chave do e-mail lembrado: o id da equipe (igual na lista pública e na completa). */
+const chaveDoAparelho = (p: UserProfile) => p.teamMemberId ?? p.id;
+const ehPapel = (p: unknown): p is Role => typeof p === "string" && p in ROLE_LABELS;
 
 /** Quanto um pedido espera a pessoa entrar de novo antes de desistir e devolver o 401. */
 const ESPERA_REENTRADA_MS = 30 * 60 * 1000;
@@ -208,17 +232,20 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     void abrirRetomada();
   }, [abrirRetomada, marcarAutenticado, marcarInterrompida]);
 
-  /** Quem é o dono deste e-mail. Tenta a lista viva; cai na reserva se não achar. */
+  /** Quem é o dono deste e-mail na lista viva (só a completa tem e-mail). */
   const acharPorEmail = useCallback((email?: string | null): UserProfile | undefined => {
     const e = (email ?? "").trim().toLowerCase();
     if (!e) return undefined;
-    return profilesRef.current.find((p) => p.email.toLowerCase() === e)
-        ?? USER_PROFILES.find((p) => p.email.toLowerCase() === e);
+    return profilesRef.current.find((p) => !!p.email && p.email.toLowerCase() === e);
   }, []);
 
-  // A lista viva é carregada UMA vez e quem restaura a sessão espera por ela: quem não está na
-  // reserva (Gabriel entrou depois da lista) caía na tela de login a cada reload — a sessão existia,
-  // mas `acharPorEmail` rodava antes do roster chegar e não achava o perfil.
+  // DUAS LISTAS (Fase 0, leva 0B, 25/11/2026). A pública (sem sessão) tem só id, nome, iniciais e
+  // função — é o que a tela de login mostra. A completa (com e-mail, id da equipe e final do WhatsApp)
+  // vem do MESMO endereço com o token, depois de entrar, e substitui a pública. Antes a pública trazia
+  // o e-mail de todo mundo para qualquer um na internet.
+  const rosterPublicoRef = useRef<UserProfile[] | null>(null);
+  /** A lista viva é a completa: a pública que chegar atrasada não pode apagar os e-mails. */
+  const completaRef = useRef(false);
   const rosterPronto = useRef<Promise<void> | null>(null);
   const carregarRoster = useCallback((): Promise<void> => {
     if (rosterPronto.current) return rosterPronto.current;
@@ -227,43 +254,96 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       .then((d) => {
         const lista = d?.profiles as UserProfile[] | undefined;
         // Lista vazia = consulta falhou. Fica na reserva: melhor nome velho que tela sem ninguém.
-        if (lista?.length) { profilesRef.current = lista; setProfiles(lista); }
+        if (!lista?.length) return;
+        const publica = lista.map((p) => ({ ...p, email: "" }));
+        rosterPublicoRef.current = publica;
+        if (!completaRef.current) { profilesRef.current = publica; setProfiles(publica); }
       })
       .catch(() => { /* sem rede: segue na reserva */ });
     return rosterPronto.current;
   }, []);
   useEffect(() => { void carregarRoster(); }, [carregarRoster]);
 
+  const completaPendente = useRef<{ token: string; promessa: Promise<boolean> } | null>(null);
+  const carregarRosterCompleto = useCallback((token: string | null): Promise<boolean> => {
+    if (!token) return Promise.resolve(false);
+    if (completaPendente.current?.token === token) return completaPendente.current.promessa;
+    const promessa = fetch("/api/team/roster", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const lista = d?.profiles as UserProfile[] | undefined;
+        // Sessão recusada devolve a forma pública (sem e-mail): não serve para reconhecer ninguém.
+        if (!lista?.length || !lista.some((p) => !!p.email)) return false;
+        completaRef.current = true;
+        profilesRef.current = lista;
+        setProfiles(lista);
+        return true;
+      })
+      .catch(() => false)
+      .then((ok) => { if (!ok) completaPendente.current = null; return ok; }); // falha não fica guardada
+    completaPendente.current = { token, promessa };
+    return promessa;
+  }, []);
+
+  /**
+   * Quem é esta sessão: a lista completa (pelo e-mail do login); se ela estiver fora do ar, o servidor
+   * diz (/api/auth/team-member: id, nome, papel). O e-mail do perfil é SEMPRE o do login.
+   */
+  const resolverPerfil = useCallback(async (user: { email?: string | null }, token?: string | null): Promise<UserProfile | undefined> => {
+    const email = (user.email ?? "").trim().toLowerCase();
+    if (!email) return undefined;
+    let p = acharPorEmail(email);
+    if (!p) {
+      const t = token ?? await tokenAtual();
+      if (await carregarRosterCompleto(t)) p = acharPorEmail(email);
+      if (!p) {
+        const eu = await quemSouEu(t);
+        if (eu.status === 200 && eu.teamMemberId) {
+          const base = profilesRef.current.find((x) => x.teamMemberId === eu.teamMemberId || x.id === eu.teamMemberId);
+          const nome = eu.nome ?? base?.name;
+          const papel = eu.papel ?? base?.role;
+          if (nome && ehPapel(papel)) {
+            p = { id: base?.id ?? eu.teamMemberId, name: nome, role: papel, initials: iniciaisDe(nome, base?.initials), color: corDoPapel(papel), email, teamMemberId: eu.teamMemberId };
+          }
+        }
+      }
+    }
+    return p ? { ...p, email } : undefined;
+  }, [acharPorEmail, carregarRosterCompleto]);
+
+  /** Entrou de vez: põe o perfil para dentro e o aparelho passa a lembrar o e-mail desta pessoa. */
+  const entrarComo = useCallback((perfil: UserProfile) => {
+    setCurrentProfileState(perfil);
+    perfilAtualRef.current = perfil;
+    lembrarEmail(armazenamento, chaveDoAparelho(perfil), perfil.email);
+    marcarAutenticado(true);
+    marcarInterrompida(null);
+    fecharRetomada(true);
+  }, [fecharRetomada, marcarAutenticado, marcarInterrompida]);
+
   /**
    * Põe esta sessão para dentro: perfil, id da equipe e — se a conta tem autenticador e a sessão está
    * em aal1 — o pedido do código. Um caminho só para restaurar, login, reentrada e outra aba.
    */
   const aplicarSessao = useCallback(async (user: { id: string; email?: string | null }, token?: string | null): Promise<"ok" | "codigo" | "sem-perfil"> => {
-    if (!acharPorEmail(user.email)) await carregarRoster(); // fora da reserva: espera a lista viva
-    const profile = acharPorEmail(user.email);
-    if (!profile) return "sem-perfil";
-    // O roster já traz o id da equipe (team_members.id). Só a lista de reserva (roster fora do ar) não
-    // tem — aí pergunta ao servidor, junto com o estado das duas etapas, sem somar espera na entrada.
-    const [eu, de] = await Promise.all([
-      profile.teamMemberId ? Promise.resolve({ status: 200, teamMemberId: profile.teamMemberId }) : (async () => quemSouEu(token ?? await tokenAtual()))(),
+    const [profile, de] = await Promise.all([
+      resolverPerfil(user, token),
       // Sessão de quem tem autenticador precisa estar em aal2 — senão o servidor recusa tudo
       // (auth-server.ts). Pede o código antes de deixar entrar.
       estadoDuasEtapas(),
     ]);
-    const teamMemberId = eu.teamMemberId ?? profile.teamMemberId;
     if (de.precisaCodigo) {
-      perfilEmEsperaRef.current = { ...profile, teamMemberId };
+      // Em aal1 o servidor ainda não reconhece a pessoa (a lista completa volta pública): o perfil
+      // pode faltar aqui e é resolvido de novo depois do código (confirmarDuasEtapas).
+      perfilEmEsperaRef.current = profile ?? null;
       setDuasEtapasPendente(true);
       return "codigo";
     }
+    if (!profile) return "sem-perfil";
     usuarioAtivoRef.current = user.id;
-    setCurrentProfileState({ ...profile, teamMemberId });
-    perfilAtualRef.current = { ...profile, teamMemberId };
-    marcarAutenticado(true);
-    marcarInterrompida(null);
-    fecharRetomada(true);
+    entrarComo(profile);
     return "ok";
-  }, [acharPorEmail, carregarRoster, fecharRetomada, marcarAutenticado, marcarInterrompida]);
+  }, [resolverPerfil, entrarComo]);
 
   // O authedFetch pergunta aqui quando o servidor recusa a sessão mesmo depois de renovar (8.4).
   useEffect(() => {
@@ -378,12 +458,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setRole = useCallback((role: Role) => {
-    const found = USER_PROFILES.find((p) => p.role === role);
+    const found = profilesRef.current.find((p) => p.role === role) ?? USER_PROFILES.find((p) => p.role === role);
     if (found) setCurrentProfileState(found);
   }, []);
 
   const setCurrentUser = useCallback((name: string) => {
-    const found = USER_PROFILES.find((p) => p.name === name);
+    const found = profilesRef.current.find((p) => p.name === name) ?? USER_PROFILES.find((p) => p.name === name);
     if (found) setCurrentProfileState(found);
   }, []);
 
@@ -411,7 +491,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     }
   }, [aplicarSessao]);
 
-  const login = useCallback(async (userId: string, password: string): Promise<ResultadoLogin> => {
+  const login = useCallback(async (userId: string, password: string, email?: string): Promise<ResultadoLogin> => {
     // PROCURA NA LISTA VIVA, não na de reserva. Quando a equipe passou a vir do banco, o id de
     // cada perfil mudou (o do Roberto era "roberto" e virou "lonemidiamkt", derivado do e-mail) —
     // e esta busca continuou na lista chumbada. Resultado: o perfil não era encontrado, a função
@@ -421,7 +501,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     // Casa por id OU por e-mail: o e-mail é o que não muda quando a forma do id mudar de novo.
     const acha = (lista: UserProfile[]) =>
       lista.find((p) => p.id === userId) ??
-      lista.find((p) => p.email.toLowerCase() === userId.toLowerCase());
+      lista.find((p) => !!p.email && p.email.toLowerCase() === userId.toLowerCase());
     const profile = acha(profilesRef.current) ?? acha(USER_PROFILES);
     if (!profile) {
       // Distingue "não achei esse perfil" de "senha errada". Dizer senha incorreta quando o
@@ -429,8 +509,15 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       console.error("[login] perfil não encontrado:", userId);
       return { ok: false, motivo: "perfil", frase: fraseDoLogin("perfil") };
     }
+    // 25/11/2026 (leva 0B): a lista pública não traz e-mail. Vale o digitado agora; senão o lembrado
+    // neste aparelho. Sem nenhum, pede o e-mail — em vez de mandar ao login um e-mail vazio.
+    const alvo = emailParaEntrar({ digitado: email, conhecido: profile.email, lembrado: lerEmailLembrado(armazenamento, chaveDoAparelho(profile)) });
+    if (!alvo) return { ok: false, motivo: "email", frase: fraseDoLogin("email") };
     // 25/10/2026 (8.5): cada falha com o seu motivo — antes toda falha virava "Senha incorreta".
-    return entrarComSenha(profile.email, password, false);
+    const r = await entrarComSenha(alvo, password, false);
+    // O e-mail veio da pessoa: a recusa pode ser dele, não só da senha.
+    if (!r.ok && r.motivo === "credencial") return { ...r, frase: FRASE_EMAIL_OU_SENHA };
+    return r;
   }, [entrarComSenha]);
 
   const reentrar = useCallback(async (senha: string): Promise<ResultadoLogin> => {
@@ -452,6 +539,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     marcarInterrompida(null);
     fecharRetomada(false); // pedidos esperando a reentrada desistem (devolvem o 401)
     setCurrentProfileState(DEFAULT_PROFILE);
+    // A tela de login volta para a lista pública: os e-mails da equipe não ficam na memória da aba.
+    completaRef.current = false;
+    completaPendente.current = null;
+    const publica = rosterPublicoRef.current ?? USER_PROFILES;
+    profilesRef.current = publica;
+    setProfiles(publica);
   }, [fecharRetomada, marcarAutenticado, marcarInterrompida]);
 
   const encerrarPorInatividade = useCallback(async () => {
@@ -467,19 +560,20 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     try {
       const r = await verificarCodigo(codigo);
       if (!r.ok) return r;
-      const perfil = perfilEmEsperaRef.current;
+      let sessao: { user: { id: string; email?: string | null }; access_token: string } | null = null;
+      try { sessao = (await supabase.auth.getSession()).data.session; } catch { /* sem sessão */ }
+      // Em aal1 o servidor não reconhecia a pessoa; agora (aal2) a lista completa responde.
+      const perfil = perfilEmEsperaRef.current ?? (sessao ? await resolverPerfil(sessao.user, sessao.access_token) : undefined);
+      if (!perfil) return { ok: false, erro: fraseDoLogin("perfil") };
       perfilEmEsperaRef.current = null;
       setDuasEtapasPendente(false);
-      if (perfil) { setCurrentProfileState(perfil); perfilAtualRef.current = perfil; }
-      try { const { data } = await supabase.auth.getSession(); usuarioAtivoRef.current = data.session?.user.id ?? null; } catch { /* sem sessão */ }
-      marcarAutenticado(true);
-      marcarInterrompida(null);
-      fecharRetomada(true);
+      usuarioAtivoRef.current = sessao?.user.id ?? null;
+      entrarComo(perfil);
       return { ok: true };
     } finally {
       entrandoRef.current = false;
     }
-  }, [fecharRetomada, marcarAutenticado, marcarInterrompida]);
+  }, [resolverPerfil, entrarComo]);
 
   return (
     <RoleContext.Provider

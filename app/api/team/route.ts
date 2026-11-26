@@ -300,7 +300,7 @@ export async function PATCH(req: NextRequest) {
   // O servidor guarda "quem está bloqueado / qual a função" por 60 s: esquece esta pessoa para a
   // mudança valer na próxima chamada dela, não em até um minuto.
   _limparCacheEquipe(alvo.email);
-  const aviso = patch.role !== undefined ? avisoAdminFixo((data?.name as string) ?? alvo.name, alvo.email, patch.role as string) : null;
+  const aviso = patch.role !== undefined ? avisoAdminFixo((data?.name as string) ?? alvo.name, ehAdminFixo(alvo.email), patch.role as string) : null;
   const login = await loginsPorEmail();
   return NextResponse.json({ ok: true, member: paraTela(data as Record<string, unknown>, login), ...(aviso ? { aviso } : {}) });
 }

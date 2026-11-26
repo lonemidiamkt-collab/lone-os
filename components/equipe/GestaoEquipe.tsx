@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 import { useRole } from "@/lib/context/RoleContext";
-import { ehAdminFixo } from "@/lib/auth/admins-fixos";
 import MedievalAvatar, { AVATAR_OPTIONS, getUserAvatar, setUserAvatar, type AvatarType } from "@/components/MedievalAvatars";
 import {
   SENHA_MINIMA, confirmacaoDesativar, confirmacaoRemover, separarEquipe, validarSenhaNova, type Situacao,
@@ -63,8 +62,6 @@ interface Membro {
   adminFixo: boolean;
 }
 
-/** id legível do avatar (o mesmo que o Header usa): parte antes do @, só letras e números. */
-const slugDoEmail = (email: string) => email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
 
 const campo = "w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary";
 
@@ -72,10 +69,12 @@ type Confirmacao = { tipo: "desativar" | "remover" | "duas-etapas"; id: string }
 
 export default function GestaoEquipe() {
   const { currentProfile, role } = useRole();
-  const souAdmin = role === "admin" || ehAdminFixo(currentProfile.email);
   const euEmail = currentProfile.email.toLowerCase();
 
   const [equipe, setEquipe] = useState<Membro[] | null>(null);
+  // Sócio da lista fixa (admin no servidor mesmo sem a função "admin"): quem diz é o servidor, na marca
+  // `adminFixo` de /api/team — a lista de e-mails não vem para o navegador (Fase 0, leva 0B).
+  const souAdmin = role === "admin" || !!equipe?.some((m) => m.adminFixo && m.email.toLowerCase() === euEmail);
   const [erroCarga, setErroCarga] = useState<string | null>(null);
   const [avisoLogins, setAvisoLogins] = useState<string | null>(null);
   const [erroEquipe, setErroEquipe] = useState<string | null>(null);
@@ -150,7 +149,7 @@ export default function GestaoEquipe() {
     setEditingId(m.id);
     setEditName(m.name);
     setEditRole(m.role);
-    setEditAvatar(getUserAvatar(slugDoEmail(m.email)));
+    setEditAvatar(getUserAvatar(m.id)); // mesmo id do perfil (team_members.id) que a foto usa
     setEditPassword(""); // começa VAZIO — "deixe vazio para manter". Pré-preencher confundia e quebrava a troca.
     setEditWhatsapp("");
     setErroEdicao(null);
@@ -165,7 +164,7 @@ export default function GestaoEquipe() {
     const senha = validarSenhaNova(editPassword);
     if (!senha.ok) { setErroEdicao(senha.erro); return; }
     setOcupado(m.id); setErroEdicao(null);
-    setUserAvatar(slugDoEmail(m.email), editAvatar); // avatar mora no navegador
+    setUserAvatar(m.id, editAvatar); // avatar mora no navegador
 
     const mudouAlgo = editName.trim() !== m.name || editRole !== m.role || !!editWhatsapp.trim();
     if (mudouAlgo) {

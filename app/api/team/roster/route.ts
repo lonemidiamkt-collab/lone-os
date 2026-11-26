@@ -1,40 +1,34 @@
 // app/api/team/roster/route.ts — quem está na equipe, pra tela de login montar a lista.
 //
-// PÚBLICA POR NECESSIDADE: a tela de login precisa da lista ANTES de alguém entrar. Não é
-// exposição nova — hoje essa mesma lista (nome, papel, e-mail) já vai chumbada no pacote que o
-// navegador baixa. A diferença é que aqui ela está CERTA.
+// PÚBLICA POR NECESSIDADE: a tela de login precisa da lista ANTES de alguém entrar.
+//
+// SEM SESSÃO, SÓ O MÍNIMO (Fase 0, leva 0B, 25/11/2026). Até aqui saía, para qualquer um na internet,
+// o e-mail de cada pessoa da equipe e o final do WhatsApp — e o id era o começo do e-mail. Agora, sem
+// sessão: id da equipe, nome, iniciais e função (a tela de login só mostra isso). Com sessão válida
+// (getServerUser): a lista completa, que o painel usa depois de entrar. A pessoa digita o e-mail no
+// login uma vez por aparelho (lib/auth/email-do-aparelho.ts). Formato em lib/equipe/roster.ts.
 //
 // POR QUE EXISTE (10/08). O Pedro Henrique saiu e o Thiago assumiu. O banco foi atualizado, mas o
-// nome estava chumbado em cinco arquivos — incluindo o mapa de login. Se eu não tivesse caçado
-// todos, o Thiago entraria e o sistema não saberia quem ele é: sem papel, sem carteira. Equipe em
-// arquivo, em paralelo com a tabela, garante que uma hora as duas discordam.
+// nome estava chumbado em cinco arquivos — incluindo o mapa de login. Equipe em arquivo, em paralelo
+// com a tabela, garante que uma hora as duas discordam.
 //
 // SÓ ATIVOS: quem foi desativado some da tela de login, que é o efeito esperado de desativar.
-// Nada aqui é segredo — nenhum dado sensível, nenhuma senha, nenhuma informação de cliente.
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/auth-server";
+import { perfilCompleto, perfilPublico, type LinhaDaEquipe } from "@/lib/equipe/roster";
 
-/** Cor por papel — o banco guarda quem a pessoa é, a aparência é decisão da interface. */
-const COR: Record<string, string> = {
-  admin: "text-[#0d4af5]",
-  manager: "text-[#0d4af5]",
-  comercial: "text-[#0d4af5]",
-  social: "text-[#3b6ff5]",
-  designer: "text-[#3b6ff5]",
-  traffic: "text-[#3b6ff5]",
-};
+export async function GET(req: NextRequest) {
+  // Sessão recusada ou erro ao conferir = sem sessão: devolve a forma pública, nunca a completa.
+  const user = await getServerUser(req).catch(() => null);
 
-/** id estável e legível a partir do e-mail (`thiago@lonemidia.com` → `thiago`). */
-const idDoEmail = (email: string) => email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
-
-export async function GET() {
   const { data, error } = await supabaseAdmin
     .from("team_members")
-    .select("id, name, email, role, initials, whatsapp_phone")
+    .select(user ? "id, name, email, role, initials, whatsapp_phone" : "id, name, role, initials")
     .eq("is_active", true)
     .is("deleted_at", null)
     .order("role")
@@ -47,18 +41,10 @@ export async function GET() {
     return NextResponse.json({ profiles: [], erro: true });
   }
 
-  return NextResponse.json({
-    profiles: (data ?? []).map((m) => ({
-      id: idDoEmail(m.email as string),
-      name: m.name as string,
-      role: m.role as string,
-      initials: (m.initials as string) || (m.name as string).slice(0, 2).toUpperCase(),
-      color: COR[m.role as string] ?? "text-[#3b6ff5]",
-      email: m.email as string,
-      teamMemberId: m.id as string,
-      // O roster é público (tela de login). O número inteiro não sai daqui: só se existe, e o
-      // final, para a Gestão da Equipe mostrar quem está mudo para o agente.
-      whatsappFinal: m.whatsapp_phone ? String(m.whatsapp_phone).slice(-4) : null,
-    })),
-  });
+  const linhas = (data ?? []) as unknown as LinhaDaEquipe[];
+  return NextResponse.json(
+    { profiles: linhas.map((m) => (user ? perfilCompleto(m) : perfilPublico(m))) },
+    // A resposta muda com a sessão: nada de cache compartilhado servir a lista completa a quem não entrou.
+    { headers: { "Cache-Control": "private, no-store", Vary: "Authorization, Cookie" } },
+  );
 }

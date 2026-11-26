@@ -3,7 +3,9 @@
 //  · 8.3 a sessão que cai (outra aba saiu, inatividade) NÃO troca a página pelo login: o formulário
 //        aberto fica montado por baixo do pedido de senha; "Sair" e a inatividade usam signOut LOCAL;
 //  · 8.4 o pedido que voltou 401 espera a pessoa entrar de novo e é repetido sozinho;
-//  · 8.5 o login diz por que não entrou (senha × rede × limite), e só a senha errada apaga o campo.
+//  · 8.5 o login diz por que não entrou (senha × rede × limite), e só a senha errada apaga o campo;
+//  · 0B (Fase 0, 25/11/2026) a lista pública não tem e-mail: na 1ª vez no aparelho a pessoa digita o
+//        e-mail; depois o aparelho lembra.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -26,9 +28,9 @@ vi.mock("@/lib/supabase/client", () => ({
       getSession: async () => ({ data: { session: sb.sessao } }),
       refreshSession: async () => ({ data: { session: null } }),
       onAuthStateChange: (cb: (e: string, s: unknown) => void) => { sb.ouvinte = cb; return { data: { subscription: { unsubscribe: () => {} } } }; },
-      signInWithPassword: async ({ password }: { email: string; password: string }) => {
+      signInWithPassword: async ({ email, password }: { email: string; password: string }) => {
         if (sb.falhaDeRede) return { data: { session: null, user: null }, error: { name: "AuthRetryableFetchError", status: 0, message: "Failed to fetch" } };
-        if (password !== sb.senhaCerta) return { data: { session: null, user: null }, error: { status: 400, code: "invalid_credentials", message: "Invalid login credentials" } };
+        if (password !== sb.senhaCerta || email !== "thiago@lonemidia.com") return { data: { session: null, user: null }, error: { status: 400, code: "invalid_credentials", message: "Invalid login credentials" } };
         sb.sessao = novaSessao("token-novo");
         sb.ouvinte?.("SIGNED_IN", sb.sessao);
         return { data: { session: sb.sessao, user: sb.sessao!.user }, error: null };
@@ -46,7 +48,10 @@ const servidor = vi.hoisted(() => ({ tokensValidos: new Set<string>(), chamadasS
 vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
   const auth = new Headers(init?.headers).get("Authorization")?.replace("Bearer ", "") ?? "";
   if (url === "/api/team/roster") {
-    return new Response(JSON.stringify({ profiles: [{ id: "thiago", name: "Thiago", role: "social", initials: "TH", color: "", email: "thiago@lonemidia.com", teamMemberId: "tm-thiago" }] }), { status: 200 });
+    // Como a rota de verdade (leva 0B): sem sessão válida, só id, nome, iniciais e função.
+    const base = { id: "tm-thiago", name: "Thiago", role: "social", initials: "TH", color: "" };
+    const completo = servidor.tokensValidos.has(auth);
+    return new Response(JSON.stringify({ profiles: [completo ? { ...base, email: "thiago@lonemidia.com", teamMemberId: "tm-thiago" } : base] }), { status: 200 });
   }
   if (url === "/api/auth/team-member") {
     return servidor.tokensValidos.has(auth) ? new Response(JSON.stringify({ id: "tm-thiago" }), { status: 200 }) : new Response("{}", { status: 401 });
@@ -68,7 +73,7 @@ function Pagina() {
     <div>
       <label>Legenda do post <input aria-label="legenda" defaultValue="" /></label>
       <button onClick={() => void logout()}>Sair</button>
-      <button onClick={() => void login("thiago", "x")}>noop</button>
+      <button onClick={() => void login("tm-thiago", "x")}>noop</button>
     </div>
   );
 }
@@ -76,6 +81,7 @@ function Pagina() {
 const montar = () => render(<RoleProvider><AuthGate><Pagina /></AuthGate></RoleProvider>);
 
 beforeEach(() => {
+  localStorage.clear();
   sb.sessao = novaSessao("token-1");
   sb.signOuts.length = 0;
   sb.falhaDeRede = false;
@@ -155,6 +161,7 @@ describe("8.5: login diz o motivo", () => {
     montar();
     fireEvent.click(await screen.findByText(/Selecione um usuário/));
     fireEvent.click(await screen.findByRole("button", { name: /Thiago/ }));
+    fireEvent.change(screen.getByLabelText("Seu e-mail"), { target: { value: "thiago@lonemidia.com" } });
     const senha = screen.getByPlaceholderText("Sua senha");
     fireEvent.change(senha, { target: { value: "minha-senha" } });
     sb.falhaDeRede = true;
@@ -163,5 +170,62 @@ describe("8.5: login diz o motivo", () => {
     expect(screen.queryByText(/Senha incorreta/)).not.toBeInTheDocument();
     expect(screen.queryByText(/modo local/i)).not.toBeInTheDocument();
     expect(senha).toHaveValue("minha-senha");
+  });
+});
+
+describe("0B: e-mail uma vez por aparelho", () => {
+  const CHAVE = "lone-os:email-login:tm-thiago";
+  const escolherThiago = async () => {
+    fireEvent.click(await screen.findByText(/Selecione um usuário/));
+    fireEvent.click(await screen.findByRole("button", { name: /Thiago/ }));
+  };
+
+  it("1ª vez pede o e-mail; entrou, o aparelho lembra; depois de sair, é só a senha", async () => {
+    sb.sessao = null;
+    servidor.tokensValidos.add("token-novo");
+    montar();
+    await escolherThiago();
+    fireEvent.change(screen.getByPlaceholderText("Sua senha"), { target: { value: "certa" } });
+    expect(screen.getByRole("button", { name: /entrar/i })).toBeDisabled(); // falta o e-mail
+    fireEvent.change(screen.getByLabelText("Seu e-mail"), { target: { value: "  Thiago@LoneMidia.com " } });
+    fireEvent.click(screen.getByRole("button", { name: /entrar/i }));
+    expect(await screen.findByLabelText("legenda")).toBeInTheDocument();
+    expect(localStorage.getItem(CHAVE)).toBe("thiago@lonemidia.com");
+
+    fireEvent.click(screen.getByRole("button", { name: "Sair" }));
+    await screen.findByText(/Bem-vindo de volta/);
+    await escolherThiago();
+    expect(screen.queryByLabelText("Seu e-mail")).not.toBeInTheDocument();
+    expect(screen.getByText(/Entrando como/)).toHaveTextContent("thiago@lonemidia.com");
+    fireEvent.change(screen.getByPlaceholderText("Sua senha"), { target: { value: "certa" } });
+    fireEvent.click(screen.getByRole("button", { name: /entrar/i }));
+    expect(await screen.findByLabelText("legenda")).toBeInTheDocument();
+  });
+
+  it("quem já estava logado (sessão restaurada) não precisa digitar: o aparelho aprende sozinho", async () => {
+    montar();
+    await screen.findByLabelText("legenda");
+    expect(localStorage.getItem(CHAVE)).toBe("thiago@lonemidia.com");
+  });
+
+  it("e-mail errado diz 'E-mail ou senha incorretos' e o campo do e-mail continua lá", async () => {
+    sb.sessao = null;
+    montar();
+    await escolherThiago();
+    fireEvent.change(screen.getByLabelText("Seu e-mail"), { target: { value: "outro@exemplo.test" } });
+    fireEvent.change(screen.getByPlaceholderText("Sua senha"), { target: { value: "certa" } });
+    fireEvent.click(screen.getByRole("button", { name: /entrar/i }));
+    expect(await screen.findByText(/E-mail ou senha incorretos/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Seu e-mail")).toHaveValue("outro@exemplo.test");
+    expect(localStorage.getItem(CHAVE)).toBeNull(); // só lembra depois de entrar
+  });
+
+  it("'Trocar' volta a pedir o e-mail", async () => {
+    sb.sessao = null;
+    localStorage.setItem(CHAVE, "thiago@lonemidia.com");
+    montar();
+    await escolherThiago();
+    fireEvent.click(screen.getByRole("button", { name: "Trocar" }));
+    expect(screen.getByLabelText("Seu e-mail")).toHaveValue("");
   });
 });

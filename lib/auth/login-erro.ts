@@ -6,7 +6,9 @@
 // ou desistia. E o ramo "Sem conexão… modo local" prometia um modo que não existe.
 // Testado em tests/login-erro.test.ts.
 
-export type MotivoLogin = "credencial" | "bloqueado" | "limite" | "rede" | "servidor" | "perfil" | "desconhecido";
+// "email" (25/11/2026, Fase 0, leva 0B): a lista pública do login não traz mais o e-mail; na primeira
+// vez em cada aparelho a pessoa digita. Faltou o e-mail = pede o e-mail, não diz "senha incorreta".
+export type MotivoLogin = "credencial" | "bloqueado" | "limite" | "rede" | "servidor" | "perfil" | "email" | "desconhecido";
 
 export type FalhaLogin = { ok: false; motivo: MotivoLogin; frase: string };
 export type ResultadoLogin = { ok: true } | FalhaLogin;
@@ -43,6 +45,7 @@ export function fraseDoLogin(motivo: MotivoLogin, status?: number): string {
     case "rede": return "Sem conexão com o servidor. Confira a internet e tente de novo — a senha continua aí.";
     case "servidor": return "O login do painel não está respondendo agora (pode ser uma atualização). Tente em alguns minutos; se continuar, avise o administrador.";
     case "perfil": return "Não encontrei esse perfil no sistema. Recarregue a página — se continuar, avise o administrador.";
+    case "email": return "Digite o seu e-mail de acesso. Só é preciso na primeira vez neste aparelho.";
     default: return `Não consegui entrar agora${status ? ` (erro ${status})` : ""}. Tente de novo; se repetir, avise o administrador.`;
   }
 }
@@ -51,6 +54,12 @@ export function falhaDeLogin(e: ErroDeLogin | null | undefined): FalhaLogin {
   const motivo = motivoDoErroDeLogin(e);
   return { ok: false, motivo, frase: fraseDoLogin(motivo, e?.status) };
 }
+
+/**
+ * Senha recusada quando o e-mail veio da pessoa (digitado agora ou lembrado no aparelho): pode ser
+ * qualquer um dos dois — dizer só "senha incorreta" mandaria trocar a senha à toa.
+ */
+export const FRASE_EMAIL_OU_SENHA = "E-mail ou senha incorretos. Confira os dois e tente de novo.";
 
 /** Só a senha errada apaga o campo. Rede, limite e servidor guardam o que foi digitado. */
 export function apagaSenha(motivo: MotivoLogin): boolean {

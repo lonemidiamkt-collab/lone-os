@@ -8,7 +8,6 @@
 //  · rebaixar um admin fixo dizia "salvo" e ele seguia admin (8.8).
 // Testado em tests/equipe-gestao.test.ts.
 
-import { ehAdminFixo } from "@/lib/auth/admins-fixos";
 import { normalizarEmail } from "@/lib/equipe/email";
 
 export const SENHA_MINIMA = 6;
@@ -81,8 +80,10 @@ export function validarSenhaNova(senha: string): { ok: true; trocar: boolean } |
  * Aviso quando a função de um admin fixo deixa de ser admin: a tela não pode dizer "salvo" como se o
  * acesso tivesse mudado (8.8). Devolve null quando não há o que avisar.
  */
-export function avisoAdminFixo(nome: string, email: string, papelNovo: string): string | null {
-  if (!ehAdminFixo(email) || papelNovo === "admin") return null;
+// Recebe "é admin fixo?" pronto (o servidor confere em lib/auth/admins-fixos.ts): este arquivo vai para a
+// tela, e a lista de e-mails dos sócios não pode ir junto no pacote do navegador (Fase 0, leva 0B).
+export function avisoAdminFixo(nome: string, adminFixo: boolean, papelNovo: string): string | null {
+  if (!adminFixo || papelNovo === "admin") return null;
   return `${nome} continua administrador no servidor: o e-mail está na lista fixa dos sócios. A função muda o menu e as carteiras, não esse acesso.`;
 }
 

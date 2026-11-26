@@ -5,6 +5,7 @@ import { useRole } from "@/lib/context/RoleContext";
 import { Logo } from "@/components/ui/Logo";
 import { fotoDaPessoa } from "@/lib/equipe/fotos";
 import { apagaSenha } from "@/lib/auth/login-erro";
+import { lerEmailLembrado, pareceEmail } from "@/lib/auth/email-do-aparelho";
 import { Eye, EyeOff, ArrowRight, ChevronDown, Check, Loader2 } from "lucide-react";
 
 // Login: vídeo de fundo (handoff LoneHub) + card. Regras da Lone PRESERVADAS: fonte Montserrat,
@@ -25,7 +26,13 @@ const ROLE_LABELS: Record<string, string> = {
   traffic: "Gestor de Tráfego",
   social: "Social Media",
   designer: "Designer",
+  comercial: "Comercial (SDR)",
 };
+
+// E-mail 1x por aparelho (Fase 0, leva 0B, 25/11/2026): a lista pública não traz mais o e-mail da
+// equipe. Na primeira vez em cada aparelho a pessoa digita o e-mail junto com a senha; depois o aparelho
+// lembra (lib/auth/email-do-aparelho.ts) e a tela volta a ser só foto + senha.
+const emailLembradoDe = (p: { id: string; teamMemberId?: string }) => lerEmailLembrado(() => window.localStorage, p.teamMemberId ?? p.id);
 
 export default function LoginScreen() {
   const { login, profiles, duasEtapasPendente, confirmarDuasEtapas, logout } = useRole();
@@ -38,6 +45,10 @@ export default function LoginScreen() {
   const [welcomeState, setWelcomeState] = useState<{ show: boolean; name: string; role: string } | null>(null);
   const [mounted, setMounted] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const [email, setEmail] = useState("");
+  /** true = este aparelho ainda não sabe o e-mail desta pessoa (ou ela pediu para trocar). */
+  const [pedirEmail, setPedirEmail] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
   // Segunda etapa: senha passou, a conta tem autenticador, falta o código de 6 dígitos.
   const [codigo, setCodigo] = useState("");
   const [erroCodigo, setErroCodigo] = useState("");
@@ -74,21 +85,33 @@ export default function LoginScreen() {
     setSelectedUser(userId);
     setShowDropdown(false);
     setError("");
-    // Foca a senha na hora — tudo na mesma tela
-    setTimeout(() => passwordRef.current?.focus(), 60);
+    const p = profiles.find((x) => x.id === userId);
+    const lembrado = p ? emailLembradoDe(p) : null;
+    setEmail(lembrado ?? "");
+    setPedirEmail(!lembrado);
+    // Foca o que falta — tudo na mesma tela
+    setTimeout(() => (lembrado ? passwordRef : emailRef).current?.focus(), 60);
+  };
+
+  const trocarEmail = () => {
+    setEmail("");
+    setPedirEmail(true);
+    setError("");
+    setTimeout(() => emailRef.current?.focus(), 30);
   };
 
   const handleLogin = async () => {
-    if (!selectedUser || !password || loading) return;
+    if (!selectedUser || !password || loading || (pedirEmail && !pareceEmail(email))) return;
     setLoading(true);
     setError("");
     try {
       // 25/10/2026 (onda 6, 8.5): o login diz POR QUE não entrou. Antes rede caída, deploy no meio, o Kong
       // recusando as chaves e o limite de tentativas viravam "Senha incorreta" — e a senha era apagada.
       // Só a senha errada apaga o campo; o "modo local" prometido aqui nunca existiu e saiu.
-      const r = await login(selectedUser, password);
+      const r = await login(selectedUser, password, email || undefined);
       if (!r.ok) {
         setError(r.frase);
+        if (r.motivo === "email") { setPedirEmail(true); setTimeout(() => emailRef.current?.focus(), 30); return; }
         if (apagaSenha(r.motivo)) setPassword("");
         setTimeout(() => passwordRef.current?.focus(), 30);
       } else if (!duasEtapasPendenteRef.current) {
@@ -141,7 +164,7 @@ export default function LoginScreen() {
     );
   }
 
-  const canLogin = !!selectedUser && !!password && !loading;
+  const canLogin = !!selectedUser && !!password && !loading && (!pedirEmail || pareceEmail(email));
 
   // ─── Login (vídeo de fundo + card) ───
   return (
@@ -270,7 +293,38 @@ export default function LoginScreen() {
                 </div>
               )}
             </div>
+            {selectedProfile && !pedirEmail && email && (
+              <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+                <span>Entrando como <span className="break-all text-foreground">{email}</span></span>
+                <button type="button" onClick={trocarEmail} className="rounded font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                  Trocar
+                </button>
+              </p>
+            )}
           </div>
+
+          {/* E-mail — só na primeira vez neste aparelho (ou ao trocar) */}
+          {selectedProfile && pedirEmail && (
+            <div className="space-y-2">
+              <label htmlFor="email-login" className="block text-sm font-medium text-muted-foreground">Seu e-mail</label>
+              <input
+                ref={emailRef}
+                id="email-login"
+                type="email"
+                inputMode="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(""); }}
+                onKeyDown={(e) => { if (e.key === "Enter") { if (password) void handleLogin(); else passwordRef.current?.focus(); } }}
+                placeholder="voce@lonemidia.com"
+                aria-describedby="email-login-ajuda"
+                className="h-[54px] w-full rounded-xl border border-input bg-secondary px-4 text-[15px] text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+              <p id="email-login-ajuda" className="text-xs text-muted-foreground">Só na primeira vez neste aparelho. Depois ele lembra.</p>
+            </div>
+          )}
 
           {/* Senha — sempre visível, na mesma tela */}
           <div className="space-y-2">

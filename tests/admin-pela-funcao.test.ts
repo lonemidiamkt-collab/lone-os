@@ -71,9 +71,9 @@ describe("isAdmin vem da função na equipe", () => {
     membro("julio@lonemidia.com", "manager");
     expect((await getServerUser(req()))?.isAdmin).toBe(true);
     expect(ehAdminFixo("Julio@lonemidia.com")).toBe(true);
-    expect(avisoAdminFixo("Julio", "julio@lonemidia.com", "manager")).toMatch(/continua administrador/);
-    expect(avisoAdminFixo("Julio", "julio@lonemidia.com", "admin")).toBeNull();
-    expect(avisoAdminFixo("Gabriel", "gabriel@lonemidia.com", "social")).toBeNull();
+    expect(avisoAdminFixo("Julio", ehAdminFixo("julio@lonemidia.com"), "manager")).toMatch(/continua administrador/);
+    expect(avisoAdminFixo("Julio", ehAdminFixo("julio@lonemidia.com"), "admin")).toBeNull();
+    expect(avisoAdminFixo("Gabriel", ehAdminFixo("gabriel@lonemidia.com"), "social")).toBeNull();
   });
 
   it("rebaixado deixa de ser admin assim que a Gestão da Equipe esquece o cache dele", async () => {
