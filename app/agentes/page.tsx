@@ -304,6 +304,7 @@ export default function AgentesPage() {
                 <p className="text-xs text-muted-foreground">
                   O inventário de 25/10/2026 contou {central.inventario.contados} capacidades com IA.{" "}
                   {central.inventario.removidos.map((r) => `${r.nome} saiu na faxina: ${r.motivo}`).join(" ")}{" "}
+                  {(central.inventario.adicionados ?? []).map((a) => `Entrou depois (${a.em.split("-").reverse().join("/")}): ${a.motivo}`).join(" ")}{" "}
                   Ficam {linhas.length}.
                 </p>
               </section>

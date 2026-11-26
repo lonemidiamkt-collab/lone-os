@@ -22,6 +22,10 @@ export const MODELO_RAPIDO = "gpt-4o-mini";
 export const MODELO_FORTE = "gpt-4o";
 /** Voz dos avisos em áudio. */
 export const MODELO_VOZ = "gpt-4o-mini-tts";
+/** Substituto indicado do MODELO_VOZ (sai em 06/01/2027). Só funciona na API em tempo real (WebSocket):
+ *  lib/avisos/voz-tempo-real.ts. Para trocar: ouvir a amostra (POST /api/avisos/audio com amostra) e
+ *  passar MODELO_VOZ para este valor. */
+export const MODELO_VOZ_TEMPO_REAL = "gpt-realtime-2.1-mini";
 /** Transcrição de áudio (WhatsApp, reunião). */
 export const MODELO_TRANSCRICAO = "whisper-1";
 
@@ -39,7 +43,7 @@ export const MODELO_IMAGEM = "gpt-image-2.5-sunburst";
  * apertado (500) pode acabar antes da resposta. Conferir no conjunto de teste.
  */
 export function usaContratoNovo(modelo: string): boolean {
-  return /^(gpt-5|gpt-6|o[34])/.test(modelo.trim().toLowerCase());
+  return /^(gpt-5|gpt-6|o[34])/.test(String(modelo ?? "").trim().toLowerCase());
 }
 
 export function limiteDeSaida(modelo: string, maxTokens: number, temperature = 0): { max_tokens: number; temperature: number } | { max_completion_tokens: number } {

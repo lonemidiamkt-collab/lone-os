@@ -12,7 +12,7 @@ import { montarPainel } from "@/lib/automacoes/painel";
 import { iaFora, type FalhaIa, type IaFora } from "@/lib/ia/saude-ia";
 import { rotuloDaOrigem } from "@/lib/ia/causa-erro";
 import {
-  AGENTES, CONTADOS_NO_INVENTARIO, REMOVIDOS_NA_FAXINA, agenteDaExecucao, agenteDaOrigem, type Agente,
+  ADICIONADOS_DEPOIS, AGENTES, CONTADOS_NO_INVENTARIO, REMOVIDOS_NA_FAXINA, agenteDaExecucao, agenteDaOrigem, type Agente,
 } from "./catalogo";
 import {
   USO_VAZIO, avaliarAgente, estadoDoInterruptor, type Ambiente, type Avaliacao, type EstadoInterruptor,
@@ -45,7 +45,7 @@ export interface CentralDeAgentes {
   parcial: boolean;
   /** Partes que não carregaram (a tela mostra o resto e diz o que faltou). */
   avisos: string[];
-  inventario: { contados: number; removidos: readonly { nome: string; motivo: string }[] };
+  inventario: { contados: number; removidos: readonly { nome: string; motivo: string }[]; adicionados?: readonly { id: string; em: string; motivo: string }[] };
   geradoEm: string;
 }
 
@@ -198,7 +198,7 @@ export async function montarCentralDeAgentes(agora = new Date()): Promise<Centra
     semEtiqueta: { total: [...semDono.values()].reduce((s, n) => s + n, 0), porOrigem },
     parcial: !!chamadas?.parcial || runs.parcial,
     avisos,
-    inventario: { contados: CONTADOS_NO_INVENTARIO, removidos: REMOVIDOS_NA_FAXINA },
+    inventario: { contados: CONTADOS_NO_INVENTARIO, removidos: REMOVIDOS_NA_FAXINA, adicionados: ADICIONADOS_DEPOIS },
     geradoEm: agora.toISOString(),
   };
 }

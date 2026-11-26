@@ -563,6 +563,15 @@ export const AGENTES = [
     origens: ["gestao:redator-processos"],
     modelo: MODELO_RAPIDO, arquivos: ["lib/processos/redator.ts", "app/api/processos/route.ts"],
   },
+  {
+    id: "comparador-modelos", nome: "Comparador de modelos",
+    faz: "Reenvia pedidos reais guardados a um modelo candidato e mede se o JSON e os campos batem e quanto demora, para trocar o gpt-4o sem quebrar agente.",
+    area: "Gestão", dono: "Sócios", alcance: "grava",
+    gatilhos: [{ tipo: "manual", como: "POST /api/system/comparar-modelos (só admin), com origem e candidato" }],
+    interruptores: [{ tipo: "constante", onde: "agency_settings.ia_amostra (N = guardar 1 de cada N chamadas; sem a chave, nada é guardado)", significado: "Sem amostra guardada não há o que comparar." }],
+    origens: ["ia:comparar-modelos"],
+    modelo: "o candidato informado no lote", arquivos: ["lib/ai/amostra.ts", "lib/ai/comparar.ts", "app/api/system/comparar-modelos/route.ts"],
+  },
 ] as const satisfies readonly Agente[];
 
 /** Quantos o inventário de 25/10/2026 contou, antes da faxina. */
@@ -570,6 +579,10 @@ export const CONTADOS_NO_INVENTARIO = 50;
 /** O que saiu na faxina de 25/10/2026, para a tela explicar a diferença. */
 export const REMOVIDOS_NA_FAXINA = [
   { nome: "Morning Briefing", motivo: "A tela foi desmontada e a rota não tinha mais quem chamasse." },
+] as const;
+/** O que entrou depois do inventário de 25/10/2026. */
+export const ADICIONADOS_DEPOIS = [
+  { id: "comparador-modelos", em: "2026-11-26", motivo: "Troca do gpt-4o/4o-mini (saem da API em 14/01/2027), leva 1-M." },
 ] as const;
 
 type Curinga<T> = T extends `${infer P}:*` ? `${P}:${string}` : T;

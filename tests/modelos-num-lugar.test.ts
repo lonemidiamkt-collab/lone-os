@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { DESLIGAMENTO_NA_API, MODELO_FORTE, MODELO_IMAGEM, MODELO_RAPIDO, MODELO_TRANSCRICAO, MODELO_VOZ } from "@/lib/ai/modelos";
 
 const PERMITIDOS = new Set(["lib/ai/modelos.ts", "lib/obs/preco-llm.ts", "lib/obs/llm.ts"]);
-const NOME = /["'`](gpt-4o-mini-tts|gpt-4o-mini|gpt-4o|whisper-1|gpt-image-[\w.-]+)["'`]/;
+const NOME = /["'`](gpt-4o-mini-tts|gpt-4o-mini|gpt-4o|whisper-1|gpt-image-[\w.-]+|gpt-realtime-[\w.-]+)["'`]/;
 
 function arquivos(dir: string): string[] {
   return readdirSync(dir).flatMap((n) => {

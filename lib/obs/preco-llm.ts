@@ -26,6 +26,9 @@ const POR_MILHAO: Record<string, PrecoModelo> = {
   "gpt-image-2.5-flare": { entrada: 8.00, cache: 2.00, saida: 30.00, estimado: true },
   // gpt-6-luna: página do modelo (26/11/2026) — substituto indicado do gpt-4o e do gpt-4o-mini.
   "gpt-6-luna": { entrada: 0.10, cache: 0.01, saida: 0.50 },
+  // gpt-realtime-2.1-mini (voz dos avisos, página do modelo 26/11/2026): texto de entrada US$ 0,60;
+  // saída de ÁUDIO US$ 20 (texto US$ 2,40). O usage não separa: cobro a saída como áudio e marco estimado.
+  "gpt-realtime-2.1-mini": { entrada: 0.60, cache: 0.06, saida: 20.00, estimado: true },
   "o3": { entrada: 2.00, cache: 0.50, saida: 8.00 },
   "o4-mini": { entrada: 1.10, cache: 0.275, saida: 4.40 },
 };

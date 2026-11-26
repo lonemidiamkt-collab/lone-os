@@ -83,7 +83,7 @@ describe("montar a Central", () => {
   it("cada chamada cai no agente da etiqueta; a sem etiqueta aparece separada", async () => {
     const c = await montarCentralDeAgentes(agora);
     const por = (id: string) => c.agentes.find((l) => l.agente.id === id)!;
-    expect(c.agentes).toHaveLength(49);
+    expect(c.agentes).toHaveLength(50);
     expect(por("classificador").uso.chamadas7d).toBe(2);
     expect(por("revisor-arte").uso).toMatchObject({ chamadas7d: 2, falhasIa7d: 1 });
     // A chamada mais recente do revisor falhou e nada deu certo depois.
@@ -121,7 +121,7 @@ describe("montar a Central", () => {
   it("parte do banco fora: mostra o resto e diz o que faltou, sem inventar 'IA fora'", async () => {
     banco.falhas.add("agent_runs");
     const c = await montarCentralDeAgentes(agora);
-    expect(c.agentes).toHaveLength(49);
+    expect(c.agentes).toHaveLength(50);
     expect(c.avisos.join(" ")).toMatch(/execuções/);
     banco.falhas.add("llm_calls");
     const d = await montarCentralDeAgentes(agora);
@@ -137,7 +137,7 @@ vi.mock("@/lib/context/RoleContext", () => ({ useRole: () => ({ role: "admin", h
 vi.mock("@/components/Header", () => ({ default: ({ title }: { title: string }) => <h1>{title}</h1> }));
 
 describe("a tela", () => {
-  it("lista os 49 por área, com o interruptor do Loninho e sem dinheiro", async () => {
+  it("lista os 50 por área, com o interruptor do Loninho e sem dinheiro", async () => {
     chamada.resposta = await montarCentralDeAgentes(agora);
     const { default: Pagina } = await import("@/app/agentes/page");
     render(<Pagina />);
@@ -146,7 +146,7 @@ describe("a tela", () => {
     expect(screen.getByText(/O Loninho está desligado/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Religar o Loninho/ })).toBeTruthy();
     const total = screen.getByText("Agentes de IA").closest("button") as HTMLElement;
-    expect(within(total).getByText("49")).toBeTruthy();
+    expect(within(total).getByText("50")).toBeTruthy();
     for (const area of ["Atendimento", "Social e conteúdo", "Design", "Tráfego", "Comercial", "Gestão"]) {
       expect(screen.getByRole("heading", { name: area })).toBeTruthy();
     }

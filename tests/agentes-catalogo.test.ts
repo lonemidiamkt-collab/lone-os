@@ -8,7 +8,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import {
-  AGENTES, ALCANCES, AREAS, CONTADOS_NO_INVENTARIO, REMOVIDOS_NA_FAXINA, agenteDaExecucao, agenteDaOrigem, type Agente,
+  ADICIONADOS_DEPOIS, AGENTES, ALCANCES, AREAS, CONTADOS_NO_INVENTARIO, REMOVIDOS_NA_FAXINA, agenteDaExecucao, agenteDaOrigem, type Agente,
 } from "@/lib/agentes/catalogo";
 import { automacaoPorId } from "@/lib/automacoes/registro";
 
@@ -30,9 +30,10 @@ function codigo(): string {
 }
 
 describe("catálogo de agentes", () => {
-  it("são 49: os 50 do inventário menos o que saiu na faxina", () => {
-    expect(agentes.length).toBe(CONTADOS_NO_INVENTARIO - REMOVIDOS_NA_FAXINA.length);
-    expect(agentes.length).toBe(49);
+  it("são 50: os 50 do inventário, menos o que saiu na faxina, mais o que entrou depois", () => {
+    expect(agentes.length).toBe(CONTADOS_NO_INVENTARIO - REMOVIDOS_NA_FAXINA.length + ADICIONADOS_DEPOIS.length);
+    expect(agentes.length).toBe(50);
+    for (const a of ADICIONADOS_DEPOIS) expect(agentes.some((x) => x.id === a.id), a.id).toBe(true);
   });
 
   it("id e nome únicos", () => {

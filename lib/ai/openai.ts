@@ -7,6 +7,7 @@
 import { registrarChamadaLlm } from "@/lib/obs/llm";
 import type { OrigemIa } from "@/lib/agentes/catalogo";
 import { limiteDeSaida } from "@/lib/ai/modelos";
+import { guardarAmostra } from "@/lib/ai/amostra";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -79,18 +80,18 @@ export async function chatJson<T = unknown>(p: ChatJsonParams): Promise<OpenAiRe
   if (!key) return { ok: false, error: "OPENAI_API_KEY não configurada" };
 
   const t0 = Date.now();
+  let corpo: Record<string, unknown> | null = null;
   const recibo = (r: OpenAiResult<T>): OpenAiResult<T> => {
     registrarChamadaLlm({ modelo: p.model, usage: r.usage, ms: Date.now() - t0, ok: r.ok, erro: r.ok ? null : r.error, origem: p.origem, tipo: p.imagens?.length ? "vision" : "chat" });
+    // Amostra para a troca de modelo (lib/ai/amostra.ts) — desligada por padrão; nunca atrapalha.
+    if (corpo) guardarAmostra({ origem: p.origem, modelo: p.model, corpo, resposta: r.raw ?? null, ok: r.ok });
     return r;
   };
 
   const imagens = p.imagens?.length ? await Promise.all(p.imagens.map(imagemInline)) : [];
   let res: Response;
   try {
-    res = await fetch(OPENAI_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
+    corpo = {
         model: p.model,
         messages: [
           { role: "system", content: p.system },
@@ -113,7 +114,11 @@ export async function chatJson<T = unknown>(p: ChatJsonParams): Promise<OpenAiRe
           type: "json_schema",
           json_schema: { name: p.schemaName, strict: true, schema: p.schema },
         },
-      }),
+      };
+    res = await fetch(OPENAI_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify(corpo),
       signal: AbortSignal.timeout(45_000), // não pendura o webhook/handler se a OpenAI travar
     });
   } catch (err) {
