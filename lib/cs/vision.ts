@@ -3,7 +3,7 @@
 // preços) → aqui a imagem vira TEXTO, que segue pro A1/A3 como qualquer demanda. Provider: OpenAI
 // gpt-4o-mini com detail "high" (lê preço/texto fino; a leitura da arte é valor central). Nunca lança.
 
-import { MODELO_RAPIDO } from "@/lib/ai/modelos";
+import { limiteDeSaida, MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { registrarChamadaLlm } from "@/lib/obs/llm";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -61,8 +61,7 @@ export async function describeImage(base64: string, mimetype?: string): Promise<
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model: MODELO_RAPIDO,
-        max_tokens: 900, // tabela de preços com muitos itens não pode truncar
-        temperature: 0,
+        ...limiteDeSaida(MODELO_RAPIDO, 900), // tabela de preços com muitos itens não pode truncar
         messages: [
           { role: "system", content: VISION_SYSTEM },
           {

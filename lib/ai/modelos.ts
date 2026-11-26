@@ -30,6 +30,22 @@ export const MODELO_TRANSCRICAO = "whisper-1";
  *  parte da referência e da logo do cliente. Esta família não aceita `input_fidelity` — não mandar. */
 export const MODELO_IMAGEM = "gpt-image-2.5-sunburst";
 
+/**
+ * Contrato de parâmetros de saída. As famílias GPT-5, GPT-6 e o3/o4 são de raciocínio: trocaram
+ * `max_tokens` por `max_completion_tokens`, recusam o nome antigo ("Unsupported parameter") e não
+ * aceitam `temperature` livre. Toda chamada à OpenAI monta o limite por aqui — senão, no dia da troca,
+ * o ponto esquecido passa a dar 400 só em produção.
+ * Atenção na troca: em modelo de raciocínio o limite conta também os tokens de raciocínio — um teto
+ * apertado (500) pode acabar antes da resposta. Conferir no conjunto de teste.
+ */
+export function usaContratoNovo(modelo: string): boolean {
+  return /^(gpt-5|gpt-6|o[34])/.test(modelo.trim().toLowerCase());
+}
+
+export function limiteDeSaida(modelo: string, maxTokens: number, temperature = 0): { max_tokens: number; temperature: number } | { max_completion_tokens: number } {
+  return usaContratoNovo(modelo) ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens, temperature };
+}
+
 /** Quando cada modelo em uso sai da API (data do aviso da OpenAI). Mostrado na Central de Agentes. */
 export const DESLIGAMENTO_NA_API: Readonly<Record<string, string>> = {
   [MODELO_RAPIDO]: "2027-01-14",

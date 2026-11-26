@@ -6,6 +6,7 @@
 
 import { registrarChamadaLlm } from "@/lib/obs/llm";
 import type { OrigemIa } from "@/lib/agentes/catalogo";
+import { limiteDeSaida } from "@/lib/ai/modelos";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -53,10 +54,6 @@ export interface ChatJsonParams {
   origem: OrigemIa;
 }
 
-/** Modelos que usam o contrato novo de parâmetros (max_completion_tokens, sem temperature livre). */
-function ehGpt5(modelo: string): boolean {
-  return /^(gpt-5|o[34])/.test(modelo);
-}
 
 // IMAGEM INLINE: o buscador da OpenAI leva 403 no CDN da Meta (fbcdn) — a URL assinada é servida
 // só a quem ela "conhece". Baixamos aqui (o servidor consegue) e mandamos como data URL. Falha
@@ -111,9 +108,7 @@ export async function chatJson<T = unknown>(p: ChatJsonParams): Promise<OpenAiRe
         // ("Unsupported parameter"). Como o modelo vem por parâmetro, o helper precisa escolher o
         // nome certo — senão toda chamada a um modelo novo falha, e falha só em produção, na
         // primeira vez que alguém trocar o modelo.
-        ...(ehGpt5(p.model)
-          ? { max_completion_tokens: p.maxTokens ?? 2048 }
-          : { max_tokens: p.maxTokens ?? 2048, temperature: p.temperature ?? 0 }),
+        ...limiteDeSaida(p.model, p.maxTokens ?? 2048, p.temperature ?? 0),
         response_format: {
           type: "json_schema",
           json_schema: { name: p.schemaName, strict: true, schema: p.schema },

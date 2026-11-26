@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { MODELO_RAPIDO } from "@/lib/ai/modelos";
+import { limiteDeSaida, MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { aiCache } from "@/lib/ai/cache";
@@ -115,8 +115,7 @@ Campanhas com erro: ${compactData.filter((c: Record<string, unknown>) => c.statu
               { role: "system", content: SYSTEM_PROMPT },
               { role: "user", content: userMessage },
             ],
-            temperature: 0.3,
-            max_tokens: 600,
+            ...limiteDeSaida(MODELO_RAPIDO, 600, 0.3),
           }),
         });
 

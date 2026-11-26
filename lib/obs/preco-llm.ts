@@ -24,6 +24,8 @@ const POR_MILHAO: Record<string, PrecoModelo> = {
   // quase toda referência/logo/artes) e marco estimado.
   "gpt-image-2.5-sunburst": { entrada: 8.00, cache: 2.00, saida: 30.00, estimado: true },
   "gpt-image-2.5-flare": { entrada: 8.00, cache: 2.00, saida: 30.00, estimado: true },
+  // gpt-6-luna: página do modelo (26/11/2026) — substituto indicado do gpt-4o e do gpt-4o-mini.
+  "gpt-6-luna": { entrada: 0.10, cache: 0.01, saida: 0.50 },
   "o3": { entrada: 2.00, cache: 0.50, saida: 8.00 },
   "o4-mini": { entrada: 1.10, cache: 0.275, saida: 4.40 },
 };

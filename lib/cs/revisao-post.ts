@@ -4,7 +4,7 @@
 // contato divergente e erro de português — ANTES de sair. Provider: OpenAI gpt-4o (visão +
 // julgamento). Funciona com ou sem arte (sem arte revisa só a legenda). Nunca lança.
 
-import { MODELO_FORTE } from "@/lib/ai/modelos";
+import { limiteDeSaida, MODELO_FORTE } from "@/lib/ai/modelos";
 import { fichaDoCliente } from "@/lib/cs/guia-legendas";
 
 import { registrarChamadaLlm } from "@/lib/obs/llm";
@@ -139,8 +139,7 @@ export async function revisarPost(inp: RevisaoPostInput): Promise<RevisaoPostRes
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model: MODELO_FORTE,
-        max_tokens: 1400, // teto folgado: legenda_corrigida longa + vários problemas não trunca o JSON
-        temperature: 0,
+        ...limiteDeSaida(MODELO_FORTE, 1400), // teto folgado: legenda_corrigida longa + vários problemas não trunca o JSON
         response_format: { type: "json_schema", json_schema: { name: "cs_revisao_post", strict: true, schema: SCHEMA } },
         messages: [
           { role: "system", content: SYSTEM },
