@@ -102,11 +102,18 @@ export const HOJE_TTL_MS = 15 * 60 * 1000;
 export const HOJE_STALE_MAX_MS = 60 * 60 * 1000;
 const MEMORIA_HOJE = new Map<string, { data: SnapshotData; em: number }>();
 
-/** O "Hoje" guardado ainda serve? Pura (testada). */
+/**
+ * O "Hoje" guardado ainda serve? Pura (testada).
+ *
+ * INCOMPLETO NUNCA É FRESCO (26/11/2026). Quando a Meta recusava os criativos ou a lista de anúncios ativos,
+ * o "Hoje" pela metade ficava 15 min como "fresco". A tela busca de novo sozinha (20 s e 40 s depois,
+ * PortalDashboard) para completar — e recebia sempre o mesmo painel incompleto, sem nova chamada à Meta.
+ * Agora incompleto é só "reserva": a próxima busca vai à Meta e, se ela cair, o incompleto volta com aviso.
+ */
 export function decidirHoje(guardado: { data: SnapshotData; em: number } | undefined, agora: Date): "fresco" | "reserva" | "buscar" {
   if (!guardado || guardado.data.period?.start !== hojeSP(agora)) return "buscar";
   const idade = agora.getTime() - guardado.em;
-  if (idade >= 0 && idade < HOJE_TTL_MS) return "fresco";
+  if (idade >= 0 && idade < HOJE_TTL_MS && snapshotCompleto(guardado.data)) return "fresco";
   if (idade >= 0 && idade < HOJE_STALE_MAX_MS) return "reserva";
   return "buscar";
 }
