@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { requireCronOrRole } from "@/lib/api/cron-guard"; // 0D: só cron, gestão ou tráfego
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { comExecucao, anotar } from "@/lib/obs/correlacao";
 import { temTrafego } from "@/lib/clients/servico";
@@ -15,7 +15,7 @@ import { montarBrief, escolherProposta, type ContaDoBrief } from "@/lib/traffic/
 // precisão do rótulo ≥ 80% com ≥ 20 rótulos, ou agency_settings traffic_brief_whatsapp = 'on'.
 // ?dry=1 não envia · ?forcar=1 envia mesmo sem a sombra (uso consciente).
 export async function POST(req: NextRequest) {
-  const gate = await requireCronOrUser(req);
+  const gate = await requireCronOrRole(req, ["admin", "manager", "traffic"]);
   if (gate) return gate;
   const dry = req.nextUrl.searchParams.get("dry") !== null;
   const forcar = req.nextUrl.searchParams.get("forcar") !== null;

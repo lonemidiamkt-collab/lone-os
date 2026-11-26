@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { requireCronOrRole } from "@/lib/api/cron-guard"; // 0D: só cron, gestão ou tráfego
 import { getAccountInsights } from "@/lib/meta/api";
 import { countMessagesFromActions } from "@/lib/meta/messages";
 import {
@@ -52,7 +52,7 @@ function asNumber(v: string | undefined | null): number {
 }
 
 export async function POST(req: NextRequest) {
-  const denied = await requireCronOrUser(req);
+  const denied = await requireCronOrRole(req, ["admin", "manager", "traffic"]);
   if (denied) return denied;
 
   // Padrão 8: o suficiente pra baseline de 7 dias. Sobe pra recuperar histórico de conta nova.

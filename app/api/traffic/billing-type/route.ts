@@ -2,10 +2,10 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { requireCronOrRole } from "@/lib/api/cron-guard"; // 0D: só cron, gestão ou tráfego
 
 export async function POST(req: NextRequest) {
-  const denied = await requireCronOrUser(req);
+  const denied = await requireCronOrRole(req, ["admin", "manager", "traffic"]);
   if (denied) return denied;
   try {
     const { accountId, isPrepaid } = await req.json();
