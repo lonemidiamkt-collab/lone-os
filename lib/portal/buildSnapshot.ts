@@ -358,7 +358,11 @@ export async function buildSnapshot(params: {
   const curSpend    = sumNum(cur, "spend");
   // Alcance: usa o dedup da conta; só cai na soma diária (super-conta) se a API falhar. Hoje não tem
   // soma de reserva (por hora a Meta manda zero): falhou, fica sem número — nunca um zero falso.
-  const curReach: number | null = ehHoje ? curReachDedup : (curReachDedup ?? sumNum(cur, "reach"));
+  // Exceção (26/11/2026): hoje sem nenhuma veiculação (madrugada, conta que ainda não entregou) a Meta devolve
+  // alcance 0 e fetchAccountReach responde null — a tela mostrava "sem número", como se fosse falha. Sem gasto
+  // e sem clique, alcance zero é a verdade.
+  const nadaRodouHoje = ehHoje && curSpend === 0 && sumNum(cur, "clicks") === 0;
+  const curReach: number | null = ehHoje ? (curReachDedup ?? (nadaRodouHoje ? 0 : null)) : (curReachDedup ?? sumNum(cur, "reach"));
   const curCpa: number | null  = curMessages > 0 ? curSpend / curMessages : null;
 
   const prevMessages = prev.reduce((acc, r) => acc + contarResultado(r.actions), 0);

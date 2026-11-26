@@ -112,7 +112,7 @@ describe("período Hoje", () => {
 
 describe("cache do Hoje", () => {
   it("15 min fresco, até 1h só de reserva (Meta fora), e nunca o de ontem", () => {
-    const data = { period: { start: "2026-11-05" } } as Parameters<typeof cache.decidirHoje>[0] extends infer G ? G extends { data: infer D } ? D : never : never;
+    const data = { period: { start: "2026-11-05" }, ads_status: "ok", active_ads: { items: [], total: 0, with_messages: 0 } } as unknown as Parameters<typeof cache.decidirHoje>[0] extends infer G ? G extends { data: infer D } ? D : never : never;
     const em = AGORA.getTime();
     expect(cache.decidirHoje({ data, em }, new Date(em + 10 * 60_000))).toBe("fresco");
     expect(cache.decidirHoje({ data, em }, new Date(em + 30 * 60_000))).toBe("reserva");
