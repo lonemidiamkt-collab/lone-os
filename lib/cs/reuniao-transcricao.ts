@@ -16,6 +16,7 @@
 // A distinção importa porque as duas alimentam lugares diferentes: ponto de atenção vai para o
 // painel do cliente e o raio-x; sugestão de briefing vira regra que o gerador de arte lê.
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { chatJson, isOpenAIConfigured, type OpenAiResult } from "@/lib/ai/openai";
 
 export interface AnaliseReuniao {
@@ -112,7 +113,7 @@ export async function analisarTranscricao(
   }
   return chatJson<AnaliseReuniao>({
     origem: "cs:reuniao-transcricao",
-    model: "gpt-4o",
+    model: MODELO_FORTE,
     system: SISTEMA,
     user: `Cliente: ${cliente}${nicho ? ` (${nicho})` : ""}\n\nTRANSCRIÇÃO:\n${texto}`,
     schema: SCHEMA,

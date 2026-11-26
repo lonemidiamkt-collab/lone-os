@@ -2,6 +2,7 @@
 // de férias até dia 15" / "Lone, o Carlos voltou"). O agente usa pra não rotear demanda pra
 // quem está fora (avisa na sugestão).
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson } from "@/lib/ai/openai";
 
 export function ehComandoAusencia(text: string): boolean {
@@ -23,7 +24,7 @@ const SCHEMA: Record<string, unknown> = {
 export async function parseAusencia(text: string, hojeISO: string): Promise<{ nome: string | null; disponivel: boolean; ate: string | null; falhou?: boolean }> {
   const res = await chatJson<{ nome: string | null; disponivel: boolean; ate: string | null }>({
     origem: "cs:ausencia",
-    model: "gpt-4o-mini", schemaName: "cs_ausencia", schema: SCHEMA, maxTokens: 120, temperature: 0,
+    model: MODELO_RAPIDO, schemaName: "cs_ausencia", schema: SCHEMA, maxTokens: 120, temperature: 0,
     system:
       `Hoje é ${hojeISO}. Extraia da mensagem da equipe quem da equipe está saindo de FÉRIAS/AUSÊNCIA ou ` +
       `VOLTANDO. disponivel=false se está saindo (férias/ausente/folga/licença); disponivel=true se voltou/` +

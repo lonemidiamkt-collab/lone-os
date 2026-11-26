@@ -2,11 +2,12 @@
 // Usa o briefing do cliente (fixed_briefing / estruturado) + do's & don'ts. NÃO inventa preço,
 // oferta ou claim — respeita os "⚠️ nunca fazer" do briefing. Provider: OpenAI gpt-4o (tom/copy).
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { METODO_LEGENDA, fichaDoCliente } from "@/lib/cs/guia-legendas";
 import { NUCLEO_CONTEUDO } from "@/lib/cs/estrategista";
 
-export const LEGENDA_MODEL = "gpt-4o";
+export const LEGENDA_MODEL = MODELO_FORTE;
 
 export interface LegendaInput {
   clienteNome: string;

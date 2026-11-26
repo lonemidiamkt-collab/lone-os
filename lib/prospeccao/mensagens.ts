@@ -9,6 +9,7 @@
 // O que nunca sai daqui: emoji, preço, desconto, garantia, "faturamento", promessa de resultado,
 // familiaridade inventada, dado que não está em FATOS, e "presente" sem `gift_reserved`.
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import type { ProspectRow, IntentLida } from "./tipos";
 import type { OrigemIa } from "@/lib/agentes/catalogo";
 import { preencher, type ProspectConfig, type ChaveTemplate, type Template } from "./config";
@@ -157,7 +158,7 @@ export async function redigirComDiretriz(chave: ChaveTemplate, t: Template, ctx:
     (ctx.intent ? `INTENÇÃO LIDA: ${ctx.intent.intent}\n\n` : "") +
     `Escreva a mensagem.`;
   const r = await chatJson<{ mensagem: string }>({
-    model: cfg.modelo_redacao || "gpt-4o", system, user, schemaName: "mensagem_sdr",
+    model: cfg.modelo_redacao || MODELO_FORTE, system, user, schemaName: "mensagem_sdr",
     schema: { type: "object", additionalProperties: false, properties: { mensagem: { type: "string" } }, required: ["mensagem"] },
     maxTokens: 400, temperature: 0.5, origem: ctx.origem ?? `prospeccao:redigir:${chave}`,
   });

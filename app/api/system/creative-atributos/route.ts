@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
       if (!r.ok && erroDeImagemIndisponivel(r.error)) { semImagem++; continue; }
       if (!r.ok || !r.data) { erros.push(`${c.ad_id}: ${r.error ?? "?"}`); continue; }
       const { error: e } = await supabaseAdmin.from("creative_attributes").upsert({
-        ad_id: c.ad_id, hash: c.hash, client_id: c.client_id, ...r.data, tags: (r.data.tags ?? []).slice(0, 8), formato: c.tipo ?? null, modelo: "gpt-4o-mini",
+        ad_id: c.ad_id, hash: c.hash, client_id: c.client_id, ...r.data, tags: (r.data.tags ?? []).slice(0, 8), formato: c.tipo ?? null, modelo: MODELO_RAPIDO,
       }, { onConflict: "ad_id,hash" });
       if (e) erros.push(`${c.ad_id}: gravar: ${e.message.slice(0, 60)}`); else gerados++;
     }

@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCron } from "@/lib/api/cron-guard";
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     const r = await chatJson<{ ideias: { cliente: string; ideia: string }[] }>({
       origem: "social:datas-comemorativas",
-      model: "gpt-4o-mini", schemaName: "cs_datas_ideias", schema: IDEIAS_SCHEMA,
+      model: MODELO_RAPIDO, schemaName: "cs_datas_ideias", schema: IDEIAS_SCHEMA,
       maxTokens: 800, temperature: 0.7, system: IDEIAS_SYSTEM,
       user: [
         `Data: ${d.nome}${d.obs ? ` — dica: ${d.obs}` : ""}`,

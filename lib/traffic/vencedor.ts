@@ -9,6 +9,7 @@
 // resto — senão o teste não ensina nada. O roteiro sai pelo gerador da casa (Método Lone), com o
 // vencedor como contexto factual.
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { chatJson } from "@/lib/ai/openai";
 import { gerarRoteiros, type BriefingCliente, type Roteiro } from "@/lib/cs/criativo";
 
@@ -66,7 +67,7 @@ export async function analisarVencedor(p: { criativo: CriativoVencedor; resultad
     p.criativo.thumbUrl ? "A miniatura do anúncio está anexada." : "Sem miniatura disponível — analise só pelo texto e diga isso nos elementos.",
   ].filter(Boolean).join("\n");
   return chatJson<AnaliseVencedor>({
-    model: "gpt-4o", schemaName: "vencedor_analise", schema: SCHEMA, maxTokens: 1400, temperature: 0.3,
+    model: MODELO_FORTE, schemaName: "vencedor_analise", schema: SCHEMA, maxTokens: 1400, temperature: 0.3,
     system: SYSTEM, user, imagens: p.criativo.thumbUrl ? [p.criativo.thumbUrl] : undefined, origem: "trafego:vencedor",
   });
 }

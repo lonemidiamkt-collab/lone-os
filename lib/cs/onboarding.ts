@@ -1,6 +1,7 @@
 // lib/cs/onboarding.ts — Onboarding conduzido pelo agente Lone NO grupo do cliente novo.
 // Conversa multi-turno (uma pergunta por vez); ao fim, a IA estrutura as respostas no briefing.
 
+import { MODELO_FORTE, MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 
 // Gatilho no grupo da equipe: "Lone, entrou um novo cliente, o cliente X no grupo Y".
@@ -19,7 +20,7 @@ const TRIGGER_SCHEMA: Record<string, unknown> = {
 export async function parseOnboardingTrigger(text: string): Promise<{ cliente: string | null; grupo: string | null }> {
   const res = await chatJson<{ cliente: string | null; grupo: string | null }>({
     origem: "cs:onboarding",
-    model: "gpt-4o-mini", schemaName: "cs_onboarding_trigger", schema: TRIGGER_SCHEMA,
+    model: MODELO_RAPIDO, schemaName: "cs_onboarding_trigger", schema: TRIGGER_SCHEMA,
     maxTokens: 120, temperature: 0,
     system:
       "Extraia da mensagem da equipe o NOME DO CLIENTE e o NOME DO GRUPO de WhatsApp onde fazer o " +
@@ -117,7 +118,7 @@ export async function estruturarBriefing(
   const conversa = qa.map((x) => `P: ${x.pergunta}\nR: ${x.resposta}`).join("\n\n");
   return chatJson<BriefingEstruturado>({
     origem: "cs:onboarding",
-    model: "gpt-4o",
+    model: MODELO_FORTE,
     schemaName: "cs_onboarding_briefing",
     schema: BRIEFING_SCHEMA,
     maxTokens: 1500,

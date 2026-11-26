@@ -4,6 +4,7 @@
 // campanha, regras ativas com produto/preço) e devolve o que falta no catálogo. Fato, não invenção:
 // só entra o que está NOMEADO no texto.
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson } from "@/lib/ai/openai";
 
 export interface ProdutoExtraido { nome: string; categoria: string | null; marca: string | null; preco: number | null; descricao: string | null }
@@ -54,7 +55,7 @@ export function montarTexto(p: { resumo?: string | null; destaques?: string[] | 
 
 export async function extrairProdutos(p: { cliente: string; nicho?: string | null; texto: string; existentes: string[] }) {
   const user = [`Cliente: ${p.cliente}${p.nicho ? ` · ramo: ${p.nicho}` : ""}`, `Já no catálogo: ${p.existentes.length ? p.existentes.join("; ") : "(vazio)"}`, `--- TEXTO ---`, p.texto].join("\n");
-  const r = await chatJson<{ produtos: ProdutoExtraido[] }>({ model: "gpt-4o-mini", schemaName: "produtos_briefing", schema: SCHEMA, maxTokens: 1500, temperature: 0.1, system: SYSTEM, user, origem: "cliente:produtos-briefing" });
+  const r = await chatJson<{ produtos: ProdutoExtraido[] }>({ model: MODELO_RAPIDO, schemaName: "produtos_briefing", schema: SCHEMA, maxTokens: 1500, temperature: 0.1, system: SYSTEM, user, origem: "cliente:produtos-briefing" });
   if (!r.ok || !r.data) return { ok: false as const, erro: r.ok ? "resposta vazia" : r.error };
   return { ok: true as const, produtos: apenasNovos(r.data.produtos ?? [], p.existentes) };
 }

@@ -1,3 +1,4 @@
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 // lib/prospeccao/config.ts — o que o Roberto edita na página (ICP, cidades, pesos, templates).
 //
 // Vive em agency_settings (key `prospect_config`, JSON). Os defaults abaixo são o treinamento
@@ -221,7 +222,7 @@ export const CONFIG_PADRAO: ProspectConfig = {
     empresas_atendidas: "mais de 70 empresas",
     persona: PERSONA_PADRAO,
   },
-  modelo_redacao: "gpt-4o",
+  modelo_redacao: MODELO_FORTE,
   handoff_numero: "5522981530700",
   gift_available: false,
   intervalo_min_s: 240,

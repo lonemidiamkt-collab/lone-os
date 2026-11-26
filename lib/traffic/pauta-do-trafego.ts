@@ -6,6 +6,7 @@
 // porcelanato". Mesma inteligência comercial, outra função. Cai no Radar de Oportunidades
 // (radar_pautas) do /planejamento, onde o social já decide usar/guardar/descartar.
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson } from "@/lib/ai/openai";
 
 export interface AnguloOrganico { titulo: string; hook: string; formato: string; roteiro: string[]; cta: string; angulo: "educativo" | "curiosidade" | "erros" | "bastidor" | "prova" }
@@ -41,5 +42,5 @@ export async function pautasDoVencedor(p: { cliente: string; nicho?: string | nu
     p.produtosDestaque?.length ? `Outros produtos em destaque: ${p.produtosDestaque.join(", ")}` : "",
     `Gere 3 pautas orgânicas.`,
   ].filter(Boolean).join("\n");
-  return chatJson<PautasDoVencedor>({ model: "gpt-4o-mini", schemaName: "pautas_do_trafego", schema: SCHEMA, maxTokens: 1200, temperature: 0.7, system: SYSTEM, user, origem: "social:pauta-do-trafego" });
+  return chatJson<PautasDoVencedor>({ model: MODELO_RAPIDO, schemaName: "pautas_do_trafego", schema: SCHEMA, maxTokens: 1200, temperature: 0.7, system: SYSTEM, user, origem: "social:pauta-do-trafego" });
 }

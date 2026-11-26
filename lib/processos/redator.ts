@@ -12,6 +12,7 @@
 //
 // Base: SKILL.md §6 (contrato mínimo), §7 (escrita operacional) e §12 (antipadrões).
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 
 export type AreaProcesso = "social" | "traffic" | "cs" | "comercial" | "geral";
@@ -175,7 +176,7 @@ export async function redigirProcesso(inp: EntradaRedator): Promise<OpenAiResult
 
   return chatJson<ProcessoRascunho>({
     origem: "gestao:redator-processos",
-    model: "gpt-4o-mini", system: SYSTEM, user,
+    model: MODELO_RAPIDO, system: SYSTEM, user,
     schema: SCHEMA, schemaName: "processo", maxTokens: 3500, temperature: 0.3,
   });
 }

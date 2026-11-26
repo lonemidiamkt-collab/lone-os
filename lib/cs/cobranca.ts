@@ -2,6 +2,7 @@
 // por que cada pendência trava a operação, sem culpar o cliente, com um próximo passo. Regras de
 // comunicação da visão de CS da Lone. SEM financeiro (não cobra pagamento — só material/info/aprovação).
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 
 export interface PendCobranca { item: string; impacto?: string }
@@ -27,5 +28,5 @@ export async function gerarCobrancaPendencias(nome: string, nicho: string | unde
   const lista = pendencias.map((p) => `- ${p.item}${p.impacto ? ` (impacto: ${p.impacto})` : ""}`).join("\n");
   const user = `Cliente: ${nome}${nicho ? ` (${nicho})` : ""}\nPendências que dependem do cliente:\n${lista}\n\n` +
     `Escreva a mensagem pro cliente cobrando essas pendências com o impacto de cada uma. Se algum item não tem "impacto" descrito, você deduz o impacto real pra operação de marketing/campanha.`;
-  return chatJson({ origem: "cs:cobranca", model: "gpt-4o", system: SYSTEM, user, schema: SCHEMA, schemaName: "cs_cobranca", maxTokens: 500, temperature: 0.5 });
+  return chatJson({ origem: "cs:cobranca", model: MODELO_FORTE, system: SYSTEM, user, schema: SCHEMA, schemaName: "cs_cobranca", maxTokens: 500, temperature: 0.5 });
 }

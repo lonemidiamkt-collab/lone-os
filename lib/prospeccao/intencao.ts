@@ -4,6 +4,7 @@
 // ler "quarta às 15h"), IA depois (gpt-4o-mini, JSON estrito). A IA classifica; ela NÃO decide
 // o que fazer — isso é a máquina (lib/prospeccao/maquina.ts) e a conversa (conversa.ts).
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import type { Intent, IntentLida } from "./tipos";
 import { lerIntencaoReuniao } from "@/lib/cs/agendar-reuniao";
 import { telefoneDigitos } from "./normalizar";
@@ -160,7 +161,7 @@ export async function lerIntencao(texto: string, historico: { autor: string; tex
     if (!isOpenAIConfigured()) return { intent: "OUTRO", confianca: 0, resumo: texto.slice(0, 200) };
     const hist = historico.slice(-6).map((h) => `${h.autor === "prospect" ? "PROSPECT" : "AGENTE"}: ${h.texto}`).join("\n");
     const r = await chatJson<IntentLida>({
-      model: "gpt-4o-mini", system: SISTEMA_INTENT, schemaName: "intent_sdr", schema: SCHEMA_INTENT,
+      model: MODELO_RAPIDO, system: SISTEMA_INTENT, schemaName: "intent_sdr", schema: SCHEMA_INTENT,
       user: `ESTÁGIO DA CONVERSA: ${ctx.estagio ?? "?"}\nHISTÓRICO:\n${hist || "(vazio)"}\n\nMENSAGEM DO PROSPECT: ${texto}`,
       maxTokens: 250, temperature: 0, origem: "prospeccao:intencao",
     });

@@ -5,11 +5,13 @@
 // escolhida mora em agency_settings.voz_avisos e as instruções em voz_avisos_instrucoes (trocam sem deploy). Custo registrado em llm_calls.
 // Se a OpenAI falhar, quem chamou recebe null e o painel cai na voz do navegador.
 
+import { MODELO_VOZ } from "@/lib/ai/modelos";
 import { createHash } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { registrarChamadaLlm } from "@/lib/obs/llm";
 
-export const MODELO_VOZ = "gpt-4o-mini-tts";
+// O nome do modelo mora em lib/ai/modelos.ts (leva 1-M); reexportado aqui por quem já importava daqui.
+export { MODELO_VOZ };
 export const VOZ_PADRAO = "nova"; // escolhida pelo Roberto em 05/10, depois de ouvir 6 amostras
 const VOZES = new Set(["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"]);
 // Versão C, a que o Roberto aprovou (05/10) entre amostras A/B/C. Troca sem deploy gravando outro texto

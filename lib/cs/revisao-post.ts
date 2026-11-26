@@ -4,6 +4,7 @@
 // contato divergente e erro de português — ANTES de sair. Provider: OpenAI gpt-4o (visão +
 // julgamento). Funciona com ou sem arte (sem arte revisa só a legenda). Nunca lança.
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { fichaDoCliente } from "@/lib/cs/guia-legendas";
 
 import { registrarChamadaLlm } from "@/lib/obs/llm";
@@ -137,7 +138,7 @@ export async function revisarPost(inp: RevisaoPostInput): Promise<RevisaoPostRes
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: MODELO_FORTE,
         max_tokens: 1400, // teto folgado: legenda_corrigida longa + vários problemas não trunca o JSON
         temperature: 0,
         response_format: { type: "json_schema", json_schema: { name: "cs_revisao_post", strict: true, schema: SCHEMA } },
@@ -154,15 +155,15 @@ export async function revisarPost(inp: RevisaoPostInput): Promise<RevisaoPostRes
       let msg = `HTTP ${res.status}`;
       try { msg = JSON.parse(body)?.error?.message ?? msg; } catch { /* corpo não-JSON */ }
       console.error("[CS/revisao-post]", res.status, msg);
-      registrarChamadaLlm({ modelo: "gpt-4o", ms: Date.now() - t0, ok: false, erro: String(msg), origem: "cs:revisao-post", tipo: "vision" });
+      registrarChamadaLlm({ modelo: MODELO_FORTE, ms: Date.now() - t0, ok: false, erro: String(msg), origem: "cs:revisao-post", tipo: "vision" });
       return { ok: false, data: null, error: String(msg) };
     }
     const j = JSON.parse(body) as { choices?: Array<{ message?: { content?: string } }>; usage?: import("@/lib/obs/preco-llm").UsageOpenAi };
-    registrarChamadaLlm({ modelo: "gpt-4o", usage: j.usage, ms: Date.now() - t0, ok: true, origem: "cs:revisao-post", tipo: "vision" });
+    registrarChamadaLlm({ modelo: MODELO_FORTE, usage: j.usage, ms: Date.now() - t0, ok: true, origem: "cs:revisao-post", tipo: "vision" });
     const content = j.choices?.[0]?.message?.content ?? "";
     return { ok: true, data: JSON.parse(content) as RevisaoPostOutput };
   } catch (err) {
-    registrarChamadaLlm({ modelo: "gpt-4o", ms: Date.now() - t0, ok: false, erro: err instanceof Error ? err.message : "erro de conexão", origem: "cs:revisao-post", tipo: "vision" });
+    registrarChamadaLlm({ modelo: MODELO_FORTE, ms: Date.now() - t0, ok: false, erro: err instanceof Error ? err.message : "erro de conexão", origem: "cs:revisao-post", tipo: "vision" });
     return { ok: false, data: null, error: err instanceof Error ? err.message : "erro de conexão" };
   }
 }

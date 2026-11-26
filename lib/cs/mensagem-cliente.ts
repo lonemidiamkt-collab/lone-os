@@ -14,6 +14,7 @@
 //   • nunca cobra o cliente nem sugere que ele está devendo algo
 //   • falhou a IA? cai no texto neutro. Nunca deixa o cliente sem mensagem nem manda meia-frase.
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { statusNaEtapa } from "@/lib/conteudo/etapas";
 import { chatJson } from "@/lib/ai/openai";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -567,7 +568,7 @@ export async function montarMensagemCliente(
 
   const r = await chatJson<{ mensagem: string }>({
     origem: "cs:mensagem-cliente",
-    model: "gpt-4o-mini", system: SYSTEM, user: contexto,
+    model: MODELO_RAPIDO, system: SYSTEM, user: contexto,
     schema: SCHEMA, schemaName: "mensagem_cliente", maxTokens: 300,
   });
   if (!r.ok || !r.data?.mensagem) {

@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
       const chunk = lote.slice(i, i + 40);
       const r = await chatJson<{ itens: { i: number; manter: boolean; tipo: string }[] }>({
         origem: "cs:faxina-regras",
-        model: "gpt-4o-mini", schemaName: "faxina_regras", schema: SCHEMA_TRIAGEM,
+        model: MODELO_RAPIDO, schemaName: "faxina_regras", schema: SCHEMA_TRIAGEM,
         maxTokens: 1500, temperature: 0,
         system:
           `Você faz a triagem da memória que uma agência guardou sobre seus clientes. Para cada ` +

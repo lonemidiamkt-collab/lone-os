@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 600;
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
 
     const r = await chatJson<{ regras: { texto: string; tipo: string }[] }>({
       origem: "cs:releitura",
-      model: "gpt-4o-mini",
+      model: MODELO_RAPIDO,
       schemaName: "releitura_cliente",
       schema: SCHEMA_REGRAS,
       maxTokens: 800,

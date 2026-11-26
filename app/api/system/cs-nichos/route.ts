@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
       try {
         const resp = await chatJson<{ nicho: string; confianca: string }>({
           origem: "cs:nichos",
-          model: "gpt-4o-mini", schemaName: "nicho_cliente", schema: SCHEMA,
+          model: MODELO_RAPIDO, schemaName: "nicho_cliente", schema: SCHEMA,
           maxTokens: 60, temperature: 0,
           system: "Você classifica o RAMO DE ATUAÇÃO de uma empresa a partir do material dado. " +
             "Responda só com a categoria. Se o material não deixar claro, use \"outro\" e confiança baixa — " +

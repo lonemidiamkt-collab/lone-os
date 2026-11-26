@@ -10,6 +10,7 @@
 // O ponto NÃO é registrar o conserto: é responder "o que isso ensina que vale pra sempre?".
 // "Não gostei dessa arte" não ensina nada. "O endereço está errado" ensina o endereço certo.
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson } from "@/lib/ai/openai";
 import { DEFINICAO_DE_REGRA, SCHEMA_REGRAS, filtrarRegras, type RegraExtraida } from "@/lib/cs/regras";
 
@@ -43,7 +44,7 @@ export async function aprenderDaCorrecao(inp: EntradaCorrecao): Promise<RegraExt
 
   const r = await chatJson<{ regras: { texto: string; tipo: string }[] }>({
     origem: "cs:aprende-correcao",
-    model: "gpt-4o-mini",
+    model: MODELO_RAPIDO,
     schemaName: "regra_da_correcao",
     schema: SCHEMA_REGRAS,
     maxTokens: 400,

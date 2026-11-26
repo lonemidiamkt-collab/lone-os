@@ -4,9 +4,10 @@
 // devolve a ação + um complemento pro briefing + uma resposta calorosa na VOZ da Lone.
 // Provider: OpenAI gpt-4o (reusa OPENAI_API_KEY). Fonte: pedido do Roberto (linguagem + humor).
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 
-export const INTERP_MODEL = "gpt-4o";
+export const INTERP_MODEL = MODELO_FORTE;
 
 export interface InterpInput {
   clienteNome: string;

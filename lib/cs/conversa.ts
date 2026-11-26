@@ -2,12 +2,13 @@
 // agente ("Lone, ...") e não é um comando específico, ele responde no tom da casa (não fica mudo).
 // Provider: gpt-4o (tom + julgamento). Suggest-only: fala SÓ no grupo interno, nunca com o cliente.
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { pedidosParaOAgente } from "@/lib/loninho/pedidos/catalogo";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { getEstiloTime } from "./estilo";
 import { treinamentoBase } from "./treinamento";
 
-export const CONVERSA_MODEL = "gpt-4o";
+export const CONVERSA_MODEL = MODELO_FORTE;
 
 export interface ConversaInput {
   mensagem: string;        // o que a equipe falou

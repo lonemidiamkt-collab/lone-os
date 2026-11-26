@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
         const { error: e } = await supabaseAdmin.from("creative_hypotheses").upsert({
           ad_id: v.ad_id, hash: c.hash, client_id: v.client_id, data: dia.data, resultado,
           elementos: an.data.elementos, hipoteses: an.data.hipoteses, variacoes: an.data.variacoes, resumo: an.data.resumo_para_o_time,
-          roteiros, modelo: "gpt-4o",
+          roteiros, modelo: MODELO_FORTE,
         }, { onConflict: "ad_id,hash" });
         if (e) { erros.push(`${nome}: gravar: ${e.message.slice(0, 60)}`); continue; }
         gerados++;

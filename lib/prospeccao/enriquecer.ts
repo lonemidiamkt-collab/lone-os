@@ -5,6 +5,7 @@
 // fatos) → score → estágio. Cada campo lembra de onde veio (`fontes`); o que não confirmou
 // fica null — "NÃO CONFIRMADO" é uma resposta válida (§31).
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { chatJson, isOpenAIConfigured } from "@/lib/ai/openai";
 import { metaProvider } from "@/lib/radar/provider";
@@ -109,7 +110,7 @@ Receberá os FATOS pesquisados sobre uma empresa. Produza um mini diagnóstico c
 async function gerarDiagnostico(p: ProspectRow, fatos: string[]): Promise<Diagnostico | null> {
   if (!isOpenAIConfigured()) return null;
   const r = await chatJson<Diagnostico>({
-    model: "gpt-4o", system: SISTEMA_DIAG, schemaName: "diagnostico_prospect",
+    model: MODELO_FORTE, system: SISTEMA_DIAG, schemaName: "diagnostico_prospect",
     schema: {
       type: "object", additionalProperties: false,
       properties: {

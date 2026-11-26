@@ -3,11 +3,12 @@
 // diagnóstico com SWOT, prioridades de 90 dias e scripts prontos pro time comercial (SDR).
 // Provider: OpenAI gpt-4o (raciocínio de negócio). Texto puro (sem imagem). Nunca lança.
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { DIAG_QUESTIONS } from "@/lib/fichaViva/questions";
 import { BASE_COMERCIAL_LONE } from "@/lib/cs/base-comercial";
 
-export const DIAGNOSTICO_MODEL = "gpt-4o";
+export const DIAGNOSTICO_MODEL = MODELO_FORTE;
 
 export interface DiagnosticoInput {
   clienteNome: string;

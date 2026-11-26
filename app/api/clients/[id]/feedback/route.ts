@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const r = await chatJson<{ sentimento: "positivo" | "neutro" | "negativo"; resumo: string }>({
     origem: "cs:feedback-cliente",
-    model: "gpt-4o-mini",
+    model: MODELO_RAPIDO,
     system: "Você classifica o SENTIMENTO de um feedback de cliente de uma agência de marketing sobre os RESULTADOS (vendas, leads, movimento). Responda só o JSON. 'vendas caíram/parou/tá fraco' = negativo; 'vendas aumentaram/tá bombando/muito bom' = positivo; sem sinal claro = neutro.",
     user: texto.trim(),
     schema: SCHEMA, schemaName: "feedback_sentimento", maxTokens: 200,

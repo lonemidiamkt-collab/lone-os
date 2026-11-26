@@ -1,3 +1,4 @@
+import { MODELO_FORTE, MODELO_RAPIDO, MODELO_TRANSCRICAO, MODELO_VOZ } from "@/lib/ai/modelos";
 // lib/agentes/catalogo.ts — OS AGENTES DE IA DA LONE, UM POR ENTRADA.
 //
 // 25/10/2026: o Roberto não sabia quais nem quantos agentes o Lone OS tem. Contados no código e
@@ -110,7 +111,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Social media", alcance: "time",
     gatilhos: [MSG_CLIENTE], interruptores: [LONINHO, GRUPOS_LIDOS],
     origens: ["cs:classificador"], noLoninho: true, silencioMaxHoras: 72,
-    modelo: "gpt-4o-mini", arquivos: ["lib/cs/classifier.ts", "app/api/cs/inbound/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/cs/classifier.ts", "app/api/cs/inbound/route.ts"],
   },
   {
     id: "verificador", nome: "Verificador",
@@ -119,7 +120,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "webhook", quando: "Mensagem de cliente que o classificador marcou com confiança média" }],
     interruptores: [LONINHO, GRUPOS_LIDOS],
     origens: ["cs:verificador"], noLoninho: true,
-    modelo: "gpt-4o", arquivos: ["lib/cs/verifier.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/verifier.ts"],
   },
   {
     id: "redator-pedido", nome: "Redator do pedido",
@@ -127,7 +128,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Social media", alcance: "time",
     gatilhos: [{ tipo: "webhook", quando: "Mensagem de cliente que virou pedido" }], interruptores: [LONINHO, GRUPOS_LIDOS],
     origens: ["cs:redator-pedido"], noLoninho: true,
-    modelo: "gpt-4o", arquivos: ["lib/cs/briefing.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/briefing.ts"],
   },
   {
     id: "rascunho-resposta", nome: "Rascunho de resposta",
@@ -135,7 +136,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Social media", alcance: "time",
     gatilhos: [{ tipo: "webhook", quando: "Dúvida, cobrança de prazo ou reclamação do cliente" }], interruptores: [LONINHO, GRUPOS_LIDOS],
     origens: ["cs:rascunho-resposta"], noLoninho: true,
-    modelo: "gpt-4o-mini", arquivos: ["lib/cs/resposta.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/cs/resposta.ts"],
   },
   {
     id: "transcricao-audio", nome: "Transcrição de áudio",
@@ -143,7 +144,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Social media", alcance: "grava",
     gatilhos: [{ tipo: "webhook", quando: "Todo áudio nos grupos que o Loninho lê" }], interruptores: [LONINHO, GRUPOS_LIDOS],
     origens: ["cs:transcribe"], noLoninho: true, silencioMaxHoras: 72,
-    modelo: "whisper-1", arquivos: ["lib/cs/transcribe.ts"],
+    modelo: MODELO_TRANSCRICAO, arquivos: ["lib/cs/transcribe.ts"],
   },
   {
     id: "leitura-imagem", nome: "Leitura de imagem",
@@ -151,7 +152,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Social media", alcance: "grava",
     gatilhos: [{ tipo: "webhook", quando: "Toda imagem nos grupos que o Loninho lê" }], interruptores: [LONINHO, GRUPOS_LIDOS],
     origens: ["cs:vision"], noLoninho: true, silencioMaxHoras: 72,
-    modelo: "gpt-4o-mini", arquivos: ["lib/cs/vision.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/cs/vision.ts"],
   },
   {
     id: "termometro", nome: "Termômetro",
@@ -159,7 +160,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Sócios", alcance: "time",
     gatilhos: [MSG_CLIENTE], interruptores: [LONINHO, GRUPOS_LIDOS],
     origens: ["cs:termometro"], noLoninho: true, silencioMaxHoras: 72,
-    modelo: "gpt-4o-mini", arquivos: ["lib/cs/sentimento.ts", "lib/cs/portao-satisfacao.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/cs/sentimento.ts", "lib/cs/portao-satisfacao.ts"],
   },
   {
     id: "detector-aprovacao", nome: "Detector de aprovação",
@@ -167,7 +168,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Social media", alcance: "grava",
     gatilhos: [{ tipo: "webhook", quando: "Mensagem do cliente com arte aguardando aprovação dele" }], interruptores: [LONINHO, GRUPOS_LIDOS],
     origens: ["cs:aprovacao"], noLoninho: true,
-    modelo: "gpt-4o-mini", arquivos: ["lib/cs/aprovacao.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/cs/aprovacao.ts"],
   },
   {
     id: "datas-eventos", nome: "Datas e eventos",
@@ -175,7 +176,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Social media", alcance: "time",
     gatilhos: [{ tipo: "webhook", quando: "Mensagem de cliente que menciona uma data" }], interruptores: [LONINHO, GRUPOS_LIDOS],
     origens: ["cs:evento"], noLoninho: true,
-    modelo: "gpt-4o-mini", arquivos: ["lib/cs/evento.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/cs/evento.ts"],
   },
   {
     id: "aprende-correcao", nome: "Aprende com a correção",
@@ -184,7 +185,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "webhook", quando: "Pedido de ajuste ou reclamação do cliente" }], interruptores: [LONINHO, GRUPOS_LIDOS],
     origens: ["cs:aprende-correcao"], noLoninho: true,
     atencao: "Desde 26/10/2026 a regra só vale com o ok de um gestor (ok + código); sem resposta em 14 dias, some.",
-    modelo: "gpt-4o-mini", arquivos: ["lib/cs/aprender-correcao.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/cs/aprender-correcao.ts"],
   },
   {
     id: "leitor-resposta-time", nome: "Leitor da resposta do time",
@@ -192,7 +193,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Social media", alcance: "grava",
     gatilhos: [{ tipo: "webhook", quando: "Resposta no grupo do time a uma sugestão do Loninho" }], interruptores: [LONINHO],
     origens: ["cs:leitor-resposta-time"], noLoninho: true,
-    modelo: "gpt-4o", arquivos: ["lib/cs/interpreter.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/interpreter.ts"],
   },
   {
     id: "conversa-time", nome: "Conversa com o time",
@@ -200,7 +201,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Sócios", alcance: "time",
     gatilhos: [COMANDO("Loninho, …")], interruptores: [LONINHO],
     origens: ["cs:conversa"], noLoninho: true,
-    modelo: "gpt-4o", arquivos: ["lib/cs/conversa.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/conversa.ts"],
   },
   {
     id: "ferias-ausencia", nome: "Férias e ausência",
@@ -208,7 +209,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Sócios", alcance: "grava",
     gatilhos: [COMANDO("Loninho, o Fulano está de férias até dia 15")], interruptores: [LONINHO],
     origens: ["cs:ausencia"], noLoninho: true,
-    modelo: "gpt-4o-mini", arquivos: ["lib/cs/ausencia.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/cs/ausencia.ts"],
   },
   {
     id: "onboarding", nome: "Onboarding",
@@ -224,7 +225,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Social media", alcance: "cliente",
     gatilhos: [COMANDO("Loninho, cobra as pendências do X")], interruptores: [LONINHO],
     origens: ["cs:cobranca"], noLoninho: true,
-    modelo: "gpt-4o", arquivos: ["lib/cs/cobranca.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/cobranca.ts"],
   },
   {
     id: "preparo-reuniao", nome: "Preparo de reunião",
@@ -233,7 +234,7 @@ export const AGENTES = [
     gatilhos: [COMANDO("Loninho, prepara a reunião do X"), { tipo: "botao", onde: "Reuniões do cliente e agenda" }],
     interruptores: [LONINHO],
     origens: ["cs:reuniao-preparo"],
-    modelo: "gpt-4o-mini", arquivos: ["lib/cs/reuniao.ts", "app/api/reunioes/gerenciar/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/cs/reuniao.ts", "app/api/reunioes/gerenciar/route.ts"],
   },
   {
     id: "resumo-reuniao", nome: "Resumo de reunião",
@@ -241,7 +242,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Gestor do cliente", alcance: "grava",
     gatilhos: [COMANDO("Loninho, resumo da reunião do X: …")], interruptores: [LONINHO],
     origens: ["cs:reuniao-resumo"], noLoninho: true,
-    modelo: "gpt-4o", arquivos: ["lib/cs/reuniao.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/reuniao.ts"],
   },
   {
     id: "transcricao-reuniao", nome: "Transcrição de reunião",
@@ -250,7 +251,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "botao", onde: "Reuniões do cliente" }],
     interruptores: [],
     origens: ["cs:reuniao-transcricao"],
-    modelo: "gpt-4o", arquivos: ["lib/cs/reuniao-transcricao.ts", "app/api/reunioes/transcricao/route.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/reuniao-transcricao.ts", "app/api/reunioes/transcricao/route.ts"],
   },
   {
     id: "mensagem-quarta-sexta", nome: "Mensagem de quarta e sexta",
@@ -263,7 +264,7 @@ export const AGENTES = [
       { tipo: "automacao", job: "client-messages-wed" }, { tipo: "automacao", job: "client-messages-fri" },
     ],
     origens: ["cs:mensagem-cliente", "cs:leu-a-arte"],
-    modelo: "gpt-4o-mini", arquivos: ["lib/cs/mensagem-cliente.ts", "lib/cs/leu-a-arte.ts", "app/api/system/client-messages/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/cs/mensagem-cliente.ts", "lib/cs/leu-a-arte.ts", "app/api/system/client-messages/route.ts"],
   },
   {
     id: "revisor", nome: "Revisor",
@@ -271,7 +272,7 @@ export const AGENTES = [
     area: "Atendimento", dono: "Sócios", alcance: "sugere",
     gatilhos: [{ tipo: "webhook", quando: "Dentro dos comandos de roteiro e calendário" }], interruptores: [LONINHO],
     origens: ["cs:revisor"], noLoninho: true,
-    modelo: "gpt-4o-mini", arquivos: ["lib/cs/revisor.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/cs/revisor.ts"],
   },
   {
     id: "regras-semana", nome: "Regras da semana",
@@ -281,7 +282,7 @@ export const AGENTES = [
     interruptores: [{ tipo: "automacao", job: "cs-briefing-update" }],
     origens: ["cs:regras-semana"],
     atencao: "Desde 26/10/2026 só propõe: a regra vale depois do ok de um gestor no resumo de segunda (Regras esperando ok).",
-    modelo: "gpt-4o-mini", arquivos: ["app/api/system/cs-briefing-update/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["app/api/system/cs-briefing-update/route.ts"],
   },
   {
     id: "releitura-ciclo", nome: "Releitura do ciclo",
@@ -291,7 +292,7 @@ export const AGENTES = [
     interruptores: [{ tipo: "automacao", job: "cs-releitura" }],
     origens: ["cs:releitura"],
     atencao: "Desde 26/10/2026 só propõe: a regra vale depois do ok de um gestor no resumo de segunda (Regras esperando ok).",
-    modelo: "gpt-4o-mini", arquivos: ["app/api/system/cs-releitura/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["app/api/system/cs-releitura/route.ts"],
   },
   {
     id: "faxina-regras", nome: "Faxina de regras",
@@ -300,7 +301,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "manual", como: "Chamando /api/system/cs-faxina-regras (não tem agenda nem botão)" }],
     interruptores: [],
     origens: ["cs:faxina-regras"],
-    modelo: "gpt-4o-mini", arquivos: ["app/api/system/cs-faxina-regras/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["app/api/system/cs-faxina-regras/route.ts"],
   },
   {
     id: "estilo-comunicacao", nome: "Estilo de comunicação",
@@ -309,7 +310,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "cron", automacao: "cs-estilo" }],
     interruptores: [{ tipo: "automacao", job: "cs-estilo" }],
     origens: ["cs:estilo"],
-    modelo: "gpt-4o-mini", arquivos: ["app/api/system/cs-estilo/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["app/api/system/cs-estilo/route.ts"],
   },
   {
     id: "ramo-cliente", nome: "Ramo do cliente",
@@ -318,7 +319,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "cron", automacao: "cs-nichos" }],
     interruptores: [{ tipo: "automacao", job: "cs-nichos" }],
     origens: ["cs:nichos"],
-    modelo: "gpt-4o-mini", arquivos: ["app/api/system/cs-nichos/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["app/api/system/cs-nichos/route.ts"],
   },
   {
     id: "briefing-estrategico", nome: "Briefing inicial",
@@ -328,7 +329,7 @@ export const AGENTES = [
     interruptores: [{ tipo: "automacao", job: "cs-briefing-inicial" }],
     origens: ["cs:briefing-estrategico"],
     atencao: "A rotina de terça grava o briefing de quem não tem direto, marcado como gerado por IA. Pelo botão, só grava quando alguém salva.",
-    modelo: "gpt-4o", arquivos: ["lib/cs/enriquecer-briefing.ts", "app/api/system/cs-briefing-inicial/route.ts", "app/api/cs/enriquecer-briefing/route.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/enriquecer-briefing.ts", "app/api/system/cs-briefing-inicial/route.ts", "app/api/cs/enriquecer-briefing/route.ts"],
   },
   {
     id: "feedback-cliente", nome: "Feedback do cliente",
@@ -337,7 +338,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "botao", onde: "Ficha do cliente › Relacionamento e etapa de design" }],
     interruptores: [],
     origens: ["cs:feedback-cliente"],
-    modelo: "gpt-4o-mini", arquivos: ["app/api/clients/[id]/feedback/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["app/api/clients/[id]/feedback/route.ts"],
   },
   {
     id: "diagnostico-comercial", nome: "Diagnóstico comercial",
@@ -346,7 +347,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "botao", onde: "Ficha Viva 360 › Analisar" }],
     interruptores: [],
     origens: ["cs:diagnostico-comercial"],
-    modelo: "gpt-4o", arquivos: ["lib/cs/diagnostico-comercial.ts", "app/api/clients/[id]/ficha-viva/analyze/route.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/diagnostico-comercial.ts", "app/api/clients/[id]/ficha-viva/analyze/route.ts"],
   },
   {
     id: "produtos-briefing", nome: "Produtos do briefing",
@@ -355,7 +356,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "manual", como: "Chamando /api/system/produtos-do-briefing (não está no crontab)" }],
     interruptores: [],
     origens: ["cliente:produtos-briefing"], execucoes: ["cron:produtos-do-briefing"],
-    modelo: "gpt-4o-mini", arquivos: ["lib/clients/produtos-do-briefing.ts", "app/api/system/produtos-do-briefing/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/clients/produtos-do-briefing.ts", "app/api/system/produtos-do-briefing/route.ts"],
   },
 
   // ── Social e conteúdo ────────────────────────────────────────────────────────────────────────
@@ -370,7 +371,7 @@ export const AGENTES = [
         significado: "A rotina de segunda só roda para 7 clientes de teste fixos no código." },
     ],
     origens: ["social:roteiros"],
-    modelo: "gpt-4o", arquivos: ["lib/cs/criativo.ts", "lib/cs/roteiro-pdf.ts", "app/api/system/cs-roteiro-semanal/route.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/criativo.ts", "lib/cs/roteiro-pdf.ts", "app/api/system/cs-roteiro-semanal/route.ts"],
   },
   {
     id: "pauta-semanal", nome: "Pauta semanal",
@@ -382,7 +383,7 @@ export const AGENTES = [
       { tipo: "env", variavel: "CS_PAUTA_CLIENT_IDS", modo: "lista", significado: "Clientes da rotina de sexta. Vazia, entram os 3 primeiros com briefing (piloto)." },
     ],
     origens: ["social:pauta-semanal"],
-    modelo: "gpt-4o", arquivos: ["lib/cs/pauta.ts", "app/api/system/cs-pauta/route.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/pauta.ts", "app/api/system/cs-pauta/route.ts"],
   },
   {
     id: "calendario-estrategico", nome: "Calendário estratégico",
@@ -391,7 +392,7 @@ export const AGENTES = [
     gatilhos: [COMANDO("Loninho, calendário do X"), { tipo: "botao", onde: "Planejamento e ficha do cliente › Marca" }],
     interruptores: [LONINHO],
     origens: ["social:calendario"],
-    modelo: "gpt-4o", arquivos: ["lib/cs/motor.ts", "app/api/cs/calendario/route.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/motor.ts", "app/api/cs/calendario/route.ts"],
   },
   {
     id: "datas-comemorativas", nome: "Datas comemorativas",
@@ -400,7 +401,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "cron", automacao: "cs-datas" }],
     interruptores: [{ tipo: "automacao", job: "cs-datas" }],
     origens: ["social:datas-comemorativas"],
-    modelo: "gpt-4o-mini", arquivos: ["app/api/system/cs-datas/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["app/api/system/cs-datas/route.ts"],
   },
   {
     id: "legendas", nome: "Legendas",
@@ -409,7 +410,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "botao", onde: "Card de conteúdo › Legenda e Social › Legendas da semana" }],
     interruptores: [],
     origens: ["social:legenda"], execucoes: ["conteudo:legendas-em-lote"],
-    modelo: "gpt-4o", arquivos: ["lib/cs/legenda.ts", "app/api/cs/legenda/route.ts", "app/api/conteudo/legendas/route.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/legenda.ts", "app/api/cs/legenda/route.ts", "app/api/conteudo/legendas/route.ts"],
   },
   {
     id: "revisao-post", nome: "Revisão do post",
@@ -418,7 +419,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "botao", onde: "Card de conteúdo › Revisar post" }],
     interruptores: [],
     origens: ["cs:revisao-post"],
-    modelo: "gpt-4o", arquivos: ["lib/cs/revisao-post.ts", "app/api/cs/revisar-post/route.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/revisao-post.ts", "app/api/cs/revisar-post/route.ts"],
   },
   {
     id: "radar-descoberta", nome: "Trend Radar: descoberta",
@@ -445,7 +446,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "cron", automacao: "creative-social" }],
     interruptores: [{ tipo: "automacao", job: "creative-social" }],
     origens: ["social:pauta-do-trafego"], execucoes: ["cron:creative-social"],
-    modelo: "gpt-4o-mini", arquivos: ["lib/traffic/pauta-do-trafego.ts", "app/api/system/creative-social/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/traffic/pauta-do-trafego.ts", "app/api/system/creative-social/route.ts"],
   },
 
   // ── Design ───────────────────────────────────────────────────────────────────────────────────
@@ -456,7 +457,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "evento", quando: "Quando o pedido de arte nasce" }, { tipo: "botao", onde: "Card de conteúdo › Briefing da arte" }],
     interruptores: [],
     origens: ["design:briefing-arte"],
-    modelo: "gpt-4o", arquivos: ["lib/cs/briefing-design.ts", "lib/cs/briefing-design-card.ts", "app/api/cs/briefing-design/route.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/briefing-design.ts", "lib/cs/briefing-design-card.ts", "app/api/cs/briefing-design/route.ts"],
   },
   {
     id: "revisor-arte", nome: "Revisor de arte",
@@ -468,7 +469,7 @@ export const AGENTES = [
     ],
     interruptores: [],
     origens: ["cs:revisao-arte"], execucoes: ["cs:revisar-entrega"],
-    modelo: "gpt-4o", arquivos: ["lib/cs/revisao-arte.ts", "lib/cs/verificar-arte.ts", "app/api/cs/revisar-entrega/route.ts", "app/api/cs/revisar-arte/route.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/cs/revisao-arte.ts", "lib/cs/verificar-arte.ts", "app/api/cs/revisar-entrega/route.ts", "app/api/cs/revisar-arte/route.ts"],
   },
   {
     id: "estilo-visual", nome: "Estilo visual",
@@ -477,7 +478,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "cron", automacao: "creative-estilo" }, { tipo: "botao", onde: "Ficha do cliente › Estilo visual" }],
     interruptores: [{ tipo: "automacao", job: "creative-estilo" }],
     origens: ["cliente:estilo-visual"], execucoes: ["cron:creative-estilo", "api:estilo-visual", "api:estilo-visual-artes"],
-    modelo: "gpt-4o", arquivos: ["lib/traffic/estilo-visual.ts", "app/api/system/creative-estilo/route.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/traffic/estilo-visual.ts", "app/api/system/creative-estilo/route.ts"],
   },
   {
     id: "arte-ia", nome: "Arte por IA",
@@ -498,7 +499,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "cron", automacao: "creative-atributos" }],
     interruptores: [{ tipo: "automacao", job: "creative-atributos" }],
     origens: ["trafego:atributos"], execucoes: ["cron:creative-atributos"],
-    modelo: "gpt-4o-mini", arquivos: ["lib/traffic/atributos.ts", "app/api/system/creative-atributos/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/traffic/atributos.ts", "app/api/system/creative-atributos/route.ts"],
   },
   {
     id: "analise-vencedores", nome: "Análise de vencedores",
@@ -508,7 +509,7 @@ export const AGENTES = [
     interruptores: [{ tipo: "automacao", job: "creative-vencedores" }],
     origens: ["trafego:vencedor"], execucoes: ["cron:creative-vencedores", "api:replicar-vencedor"],
     situacao: "sombra",
-    modelo: "gpt-4o", arquivos: ["lib/traffic/vencedor.ts", "app/api/system/creative-vencedores/route.ts"],
+    modelo: MODELO_FORTE, arquivos: ["lib/traffic/vencedor.ts", "app/api/system/creative-vencedores/route.ts"],
   },
   {
     id: "analisar-anuncios", nome: "Analisar anúncios",
@@ -517,7 +518,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "botao", onde: "Tráfego › Anúncios Meta › Analisar" }],
     interruptores: [],
     origens: ["ai:analyze-ads"],
-    modelo: "gpt-4o-mini", arquivos: ["app/api/ai/analyze-ads/route.ts", "components/AdsInsightCard.tsx"],
+    modelo: MODELO_RAPIDO, arquivos: ["app/api/ai/analyze-ads/route.ts", "components/AdsInsightCard.tsx"],
   },
   {
     id: "voz-avisos", nome: "Voz dos avisos",
@@ -526,7 +527,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "evento", quando: "Quando o painel vai falar um aviso (conta parada, saldo zerado)" }],
     interruptores: [{ tipo: "automacao", job: "avisos-falados" }],
     origens: ["avisos:voz"],
-    modelo: "gpt-4o-mini-tts", arquivos: ["lib/avisos/audio-server.ts", "app/api/avisos/audio/route.ts"],
+    modelo: MODELO_VOZ, arquivos: ["lib/avisos/audio-server.ts", "app/api/avisos/audio/route.ts"],
   },
 
   // ── Comercial ────────────────────────────────────────────────────────────────────────────────
@@ -537,7 +538,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "webhook", quando: "Sócio chama o Loninho no grupo de vendas" }],
     interruptores: [LONINHO, { tipo: "env", variavel: "CS_VENDAS_GROUP_JID", modo: "existe", significado: "O grupo de vendas. Sem ele, o Loninho não atende vendas." }],
     origens: ["crm:assistente"], noLoninho: true,
-    modelo: "gpt-4o-mini", arquivos: ["lib/crm/assistente-server.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/crm/assistente-server.ts"],
   },
   {
     id: "sdr-rafaela", nome: "SDR Rafaela",
@@ -560,7 +561,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "botao", onde: "Processos › Novo processo" }],
     interruptores: [],
     origens: ["gestao:redator-processos"],
-    modelo: "gpt-4o-mini", arquivos: ["lib/processos/redator.ts", "app/api/processos/route.ts"],
+    modelo: MODELO_RAPIDO, arquivos: ["lib/processos/redator.ts", "app/api/processos/route.ts"],
   },
 ] as const satisfies readonly Agente[];
 

@@ -2,6 +2,7 @@
 // Suggest-only: o AGENTE nunca fala com o cliente; ele só entrega o texto pronto no grupo interno.
 // Roda em tipos onde o cliente ESPERA resposta (dúvida, cobrança, reclamação). Provider: gpt-4o-mini.
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { getEstiloCliente } from "./estilo";
 
@@ -60,7 +61,7 @@ export async function sugerirResposta(inp: RespostaInput): Promise<OpenAiResult<
   ].filter(Boolean).join("\n");
   return chatJson<RespostaOutput>({
     origem: "cs:rascunho-resposta",
-    model: "gpt-4o-mini", schemaName: "cs_resposta", schema: SCHEMA,
+    model: MODELO_RAPIDO, schemaName: "cs_resposta", schema: SCHEMA,
     maxTokens: 220, temperature: 0.5, system: SYSTEM, user,
   });
 }

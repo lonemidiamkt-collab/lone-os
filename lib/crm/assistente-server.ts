@@ -10,6 +10,7 @@
 // com dia, hora, formato e convidados e pede "ok". Só a resposta de sócio que CITA essa pergunta cria
 // (lib/crm/reuniao-loninho.ts). Essa porta vem antes do "foi chamado pelo nome?": o "ok" não chama o Loninho.
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import * as db from "@/lib/supabase/queries";
 import { chatJson, isOpenAIConfigured } from "@/lib/ai/openai";
@@ -146,7 +147,7 @@ export async function interpretar(texto: string, autorNome: string, hoje: string
   const lista = leadsDoPedido(todos);
   const pedido = montarPedido({ texto: texto.slice(0, 1500), autor: autorNome, hoje, leads: lista });
   const ia = await chatJson<RespostaIA>({
-    model: "gpt-4o-mini", system: pedido.system, user: pedido.user, schema: SCHEMA_ASSISTENTE, schemaName: "crm_assistente",
+    model: MODELO_RAPIDO, system: pedido.system, user: pedido.user, schema: SCHEMA_ASSISTENTE, schemaName: "crm_assistente",
     maxTokens: 600, temperature: 0, origem: "crm:assistente",
   });
   if (!ia.ok) return { ok: false, erro: ia.error ?? "IA sem resposta", motivo: "ia" };

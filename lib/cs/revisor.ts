@@ -20,6 +20,7 @@
 // 25/10/2026 (11.5): revisor que caiu vira "nao_revisado" e o roteiro sai com "não consegui revisar —
 // confere antes de mandar", nunca com "revisei aqui e tá pronto pro cliente".
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson } from "@/lib/ai/openai";
 
 /**
@@ -103,7 +104,7 @@ export async function revisarComoCS(p: PedidoRevisao): Promise<RevisaoCS> {
 
   const r = await chatJson<RevisaoCS>({
     origem: "cs:revisor",
-    model: "gpt-4o-mini", system: SYSTEM, user,
+    model: MODELO_RAPIDO, system: SYSTEM, user,
     schema: SCHEMA, schemaName: "revisao_cs", maxTokens: 700, temperature: 0.2,
   });
 

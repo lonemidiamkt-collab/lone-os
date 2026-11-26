@@ -1,6 +1,7 @@
 // lib/traffic/estilo-ler.ts — lê o estilo visual de UM cliente a partir das artes entregues
 // (usado pelo cron creative-estilo e pelo botão "Reler das artes" na ficha).
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { statusDasEtapas } from "@/lib/conteudo/etapas";
 import { analisarEstiloVisual } from "@/lib/traffic/estilo-visual";
@@ -32,7 +33,7 @@ export async function lerEstiloDasArtes(p: { clientId: string; por: string; forc
     if (!d.reler) return { clientId: p.clientId, cliente, lido: false, motivo: artes.length < 2 ? "poucas_artes" : d.motivo, artes: artes.length };
     const r = await analisarEstiloVisual({ imagens: artes, cliente, nicho: (cli?.nicho as string) ?? null });
     if (!r.ok || !r.data) return { clientId: p.clientId, cliente, lido: false, motivo: "erro", artes: artes.length, erro: r.ok ? "resposta vazia" : r.error };
-    const { error } = await supabaseAdmin.from("client_visual_style").insert({ client_id: p.clientId, fonte: "artes", imagens: artes, analise: r.data, resumo: r.data.resumo, modelo: "gpt-4o", created_by: p.por });
+    const { error } = await supabaseAdmin.from("client_visual_style").insert({ client_id: p.clientId, fonte: "artes", imagens: artes, analise: r.data, resumo: r.data.resumo, modelo: MODELO_FORTE, created_by: p.por });
     if (error) return { clientId: p.clientId, cliente, lido: false, motivo: "erro", artes: artes.length, erro: error.message };
     return { clientId: p.clientId, cliente, lido: true, motivo: d.motivo, artes: artes.length };
   } catch (err) {

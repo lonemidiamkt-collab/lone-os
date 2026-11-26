@@ -3,11 +3,12 @@
 // Método Lone Mídia (Playbook de Criação de Anúncios). SUGGEST-ONLY: o social (Carlos/Pedro)
 // avalia, ajusta ou refaz. Nunca inventa fato do cliente. gpt-4o (julgamento + tom).
 
+import { MODELO_FORTE, MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { FOCO_NA_DOR } from "@/lib/cs/estrategista";
 import type { OrigemIa } from "@/lib/agentes/catalogo";
 
-export const CRIATIVO_MODEL = "gpt-4o";
+export const CRIATIVO_MODEL = MODELO_FORTE;
 
 export interface BriefingCliente {
   nome: string;
@@ -258,7 +259,7 @@ const PREF_SCHEMA: Record<string, unknown> = {
 export async function extrairPreferenciaRoteiro(mensagem: string): Promise<string | null> {
   const res = await chatJson<{ preferencia: string | null }>({
     origem: "social:roteiros",
-    model: "gpt-4o-mini", schemaName: "cs_roteiro_pref", schema: PREF_SCHEMA,
+    model: MODELO_RAPIDO, schemaName: "cs_roteiro_pref", schema: PREF_SCHEMA,
     maxTokens: 120, temperature: 0,
     system:
       "Você extrai PREFERÊNCIAS DURÁVEIS de estilo de roteiro de anúncio a partir de uma mensagem da " +

@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
     // é outra: isso muda o que a gente faz na PRÓXIMA peça deste cliente?
     const r = await chatJson<{ regras: { texto: string; tipo: string }[] }>({
       origem: "cs:regras-semana",
-      model: "gpt-4o-mini",
+      model: MODELO_RAPIDO,
       system: `Você lê mensagens do GRUPO de WhatsApp de um cliente de uma agência de marketing e extrai as REGRAS duráveis daquele cliente.\n\n${DEFINICAO_DE_REGRA}\n\nMáximo 5 regras. O normal é voltar pouca coisa ou nada — só devolva o que passar no teste.`,
       user: conversa,
       schema: SCHEMA_REGRAS, schemaName: "briefing_regras", maxTokens: 600,

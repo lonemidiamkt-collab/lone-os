@@ -3,6 +3,7 @@
 // data absoluta (resolve "dia 12", "próximo mês", "semana que vem" a partir de hoje). Vira um lembrete
 // no calendário do social responsável, com aviso faltando 5 e 2 dias. Provider: gpt-4o-mini.
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 
 export interface EventoOutput {
@@ -44,7 +45,7 @@ export async function detectarEventoFuturo(text: string, hojeISO: string, diaSem
   const user = `HOJE: ${diaSemana}, ${hojeISO}\n\nMensagem do cliente:\n"${text.slice(0, 800)}"\n\nExtraia o evento futuro (JSON).`;
   return chatJson<EventoOutput>({
     origem: "cs:evento",
-    model: "gpt-4o-mini", schemaName: "cs_evento", schema: SCHEMA,
+    model: MODELO_RAPIDO, schemaName: "cs_evento", schema: SCHEMA,
     maxTokens: 200, temperature: 0.2, system: SYSTEM, user,
   });
 }

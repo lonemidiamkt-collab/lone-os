@@ -5,12 +5,13 @@
 // NÃO chuta — escreve curto e lista o que perguntar ao cliente. gpt-4o (julgamento + tom natural).
 // Blueprint A3.
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { NUCLEO_CONTEUDO } from "@/lib/cs/estrategista";
 
 // gpt-4o (não o mini): o A3 precisa INTERPRETAR o pedido e julgar se dá pra produzir ou se
 // falta info — o mini assumia "promoção" e despejava o rulebook do cliente em qualquer pedido.
-export const A3_MODEL = "gpt-4o";
+export const A3_MODEL = MODELO_FORTE;
 
 export interface BriefingInput {
   clienteNome: string;

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { aiCache } from "@/lib/ai/cache";
@@ -96,7 +97,7 @@ Campanhas com erro: ${compactData.filter((c: Record<string, unknown>) => c.statu
       tokens: number;
     }>({
       category: "analyze-ads",
-      model: "gpt-4o-mini",
+      model: MODELO_RAPIDO,
       payload: { clientId, compactData, period },
       ttlMinutes: 60 * 24, // 24h
       bucketGranularity: "day",
@@ -109,7 +110,7 @@ Campanhas com erro: ${compactData.filter((c: Record<string, unknown>) => c.statu
             Authorization: `Bearer ${OPENAI_API_KEY}`,
           },
           body: JSON.stringify({
-            model: "gpt-4o-mini",
+            model: MODELO_RAPIDO,
             messages: [
               { role: "system", content: SYSTEM_PROMPT },
               { role: "user", content: userMessage },
@@ -127,7 +128,7 @@ Campanhas com erro: ${compactData.filter((c: Record<string, unknown>) => c.statu
 
         const data = await response.json();
         const content = data.choices?.[0]?.message?.content;
-        registrarChamadaLlm({ modelo: "gpt-4o-mini", usage: data.usage, ms: Date.now() - t0, ok: true, origem: "ai:analyze-ads" });
+        registrarChamadaLlm({ modelo: MODELO_RAPIDO, usage: data.usage, ms: Date.now() - t0, ok: true, origem: "ai:analyze-ads" });
 
         if (!content) throw new Error("Resposta vazia da IA");
 

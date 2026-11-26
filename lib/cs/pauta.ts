@@ -4,12 +4,13 @@
 // cria os CARDS no board com due_date — decisão do Roberto: o card é a fonte de verdade; o agente
 // propõe e cobra, mas a operação vive no board. Suggest-only: nada é criado sem humano.
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { addDays, ymd } from "@/lib/cs/vigilancia";
 import { NUCLEO_PLANEJAMENTO } from "@/lib/cs/estrategista";
 import { blocoNichoParaPrompt } from "@/lib/cs/nicho";
 
-export const PAUTA_MODEL = "gpt-4o";
+export const PAUTA_MODEL = MODELO_FORTE;
 
 export interface PautaItem {
   dia: string;      // YYYY-MM-DD (uma das datas oferecidas)

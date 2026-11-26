@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const r = await analisarEstiloVisual({ imagens: urls, cliente, nicho: (cli?.nicho as string) ?? null });
     if (!r.ok || !r.data) return NextResponse.json({ error: `A visão não conseguiu ler os prints: ${r.ok ? "resposta vazia" : r.error}` }, { status: 502 });
     const { data, error } = await supabaseAdmin.from("client_visual_style")
-      .insert({ client_id: id, fonte: "print", imagens: urls, analise: r.data, resumo: r.data.resumo, modelo: "gpt-4o", created_by: user.email })
+      .insert({ client_id: id, fonte: "print", imagens: urls, analise: r.data, resumo: r.data.resumo, modelo: MODELO_FORTE, created_by: user.email })
       .select("id, fonte, imagens, analise, resumo, created_by, created_at").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     anotar(`estilo visual lido: ${cliente} (${urls.length} prints)`);

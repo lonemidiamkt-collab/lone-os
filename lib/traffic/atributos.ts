@@ -4,6 +4,7 @@
 // anúncios (gpt-4o-mini: centavos), uma vez por versão. É a base do Creative Pattern e da memória
 // em três níveis (cliente · segmento · Lone).
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson } from "@/lib/ai/openai";
 
 export interface AtributosCriativo {
@@ -46,7 +47,7 @@ export async function extrairAtributos(p: { thumbUrl?: string | null; body?: str
     p.thumbUrl ? "A miniatura está anexada." : "Sem miniatura.",
   ].filter(Boolean).join("\n");
   return chatJson<AtributosCriativo>({
-    model: "gpt-4o-mini", schemaName: "criativo_atributos", schema: SCHEMA, maxTokens: 500, temperature: 0.1,
+    model: MODELO_RAPIDO, schemaName: "criativo_atributos", schema: SCHEMA, maxTokens: 500, temperature: 0.1,
     system: SYSTEM, user, imagens: p.thumbUrl ? [p.thumbUrl] : undefined, origem: "trafego:atributos",
   });
 }

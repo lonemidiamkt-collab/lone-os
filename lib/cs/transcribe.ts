@@ -6,6 +6,7 @@
 // "não consegui ler". Agora `transcreverAudio` diz o erro, e `ouvirAudio` faz o caminho inteiro
 // (baixar → limite → transcrever) dizendo o MOTIVO da falha, que vai para a fila de não lidas.
 
+import { MODELO_TRANSCRICAO } from "@/lib/ai/modelos";
 import { registrarChamadaLlm } from "@/lib/obs/llm";
 import { LIMITE_AUDIO_BASE64, type MotivoAudio } from "@/lib/cs/audio-nao-lido";
 
@@ -42,7 +43,7 @@ export async function transcreverAudio(base64: string, mimetype?: string, contex
     const type = mimetype || "audio/ogg";
     const form = new FormData();
     form.append("file", new Blob([bytes], { type }), `audio.${extFromMime(type)}`);
-    form.append("model", "whisper-1");
+    form.append("model", MODELO_TRANSCRICAO);
     form.append("language", "pt");
     form.append("prompt", promptDominio(contexto));
     const t0 = Date.now();
@@ -58,12 +59,12 @@ export async function transcreverAudio(base64: string, mimetype?: string, contex
       // O corpo vai junto (25/10/2026): "HTTP 429" sozinho não diz se é limite de velocidade ou crédito
       // acabado; com "insufficient_quota" o vigia da IA reconhece a causa.
       const erro = `HTTP ${res.status}${corpo ? `: ${corpo}` : ""}`;
-      registrarChamadaLlm({ modelo: "whisper-1", ms: Date.now() - t0, ok: false, erro, origem: "cs:transcribe", tipo: "transcription" });
+      registrarChamadaLlm({ modelo: MODELO_TRANSCRICAO, ms: Date.now() - t0, ok: false, erro, origem: "cs:transcribe", tipo: "transcription" });
       return { texto: "", erro };
     }
     const data = (await res.json()) as { text?: string };
     // whisper cobra por minuto de áudio, não por token — fica a contagem e a duração; custo null.
-    registrarChamadaLlm({ modelo: "whisper-1", ms: Date.now() - t0, ok: true, origem: "cs:transcribe", tipo: "transcription" });
+    registrarChamadaLlm({ modelo: MODELO_TRANSCRICAO, ms: Date.now() - t0, ok: true, origem: "cs:transcribe", tipo: "transcription" });
     return { texto: (data.text || "").trim(), erro: null };
   } catch (err) {
     const erro = err instanceof Error ? err.message : String(err);

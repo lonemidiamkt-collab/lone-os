@@ -5,10 +5,11 @@
 // Fonte: blueprint Seção A2. NÃO é gate duro: se o A2 falhar (erro de API), o fluxo segue
 // (fail-open) — A2 melhora a precisão, não pode derrubar o pipeline.
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import type { CsDemandType } from "@/lib/cs/taxonomy";
 
-export const A2_MODEL = "gpt-4o";
+export const A2_MODEL = MODELO_FORTE;
 
 // Banda ambígua: só vale a pena pagar o A2 quando o A1 não está confiante.
 // >= A2_TRUST_FROM o A1 é confiável o bastante → pula o A2. Abaixo disso, o verificador cético

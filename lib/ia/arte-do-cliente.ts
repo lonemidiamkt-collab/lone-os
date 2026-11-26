@@ -8,6 +8,7 @@
 //   5. os TEXTOS EXATOS (transcritos da referência pela visão, ou do briefing)
 // gpt-image-1 não tem fine-tuning: "treinar" = dar o contexto certo toda vez + medir se serviu.
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson } from "@/lib/ai/openai";
 import { registrarChamadaLlm } from "@/lib/obs/llm";
 import type { OrigemIa } from "@/lib/agentes/catalogo";
@@ -65,7 +66,7 @@ export async function kitDoCliente(clientId: string): Promise<KitDoCliente> {
 /** Transcreve os textos que estão NA IMAGEM (preço, produto, chamada) — para a variação não inventar. */
 export async function textosDaImagem(url: string, origem: OrigemIa): Promise<string[]> {
   const r = await chatJson<{ textos: string[] }>({
-    model: "gpt-4o-mini", schemaName: "textos_imagem", maxTokens: 400, temperature: 0,
+    model: MODELO_RAPIDO, schemaName: "textos_imagem", maxTokens: 400, temperature: 0,
     schema: { type: "object", additionalProperties: false, properties: { textos: { type: "array", maxItems: 20, items: { type: "string" } } }, required: ["textos"] },
     system: "Transcreva EXATAMENTE os textos visíveis nesta peça publicitária, um item por bloco de texto (título, preço, medidas, chamada, rodapé). Não corrija, não traduza, não invente. Ignore a logo.",
     user: "Transcreva os textos da imagem anexada.", imagens: [url], origem,

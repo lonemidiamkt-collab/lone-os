@@ -6,10 +6,11 @@
 // structured outputs (json_schema strict). Prompt caching é automático na OpenAI: o prefixo
 // estável (instruções+taxonomia+exemplos) vem primeiro → cacheia sozinho. Fonte: blueprint Seção 2 (A1).
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { CS_DEMAND_TYPES, type CsDemandType, type CsUrgencia } from "@/lib/cs/taxonomy";
 
-export const A1_MODEL = "gpt-4o-mini";
+export const A1_MODEL = MODELO_RAPIDO;
 
 export interface CsBlockMessage {
   author: string;

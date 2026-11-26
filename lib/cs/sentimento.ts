@@ -9,6 +9,7 @@
 // lib/cs/portao-satisfacao.ts. Julgar "sobre quem é isso" é uma pergunta que o modelo acerta;
 // julgar "isso é risco médio ou alto" não é.
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson } from "@/lib/ai/openai";
 import type { OpenAiResult } from "@/lib/ai/openai";
 import type { SobreOQue } from "@/lib/cs/portao-satisfacao";
@@ -103,7 +104,7 @@ coisa? Se for outra coisa, o campo "sobre" tem que dizer qual. Responda APENAS n
 export async function analisarSentimentoCliente(mensagem: string): Promise<OpenAiResult<SentimentoOutput>> {
   return chatJson<SentimentoOutput>({
     origem: "cs:termometro",
-    model: "gpt-4o-mini",
+    model: MODELO_RAPIDO,
     schemaName: "cs_sentimento",
     schema: SCHEMA,
     maxTokens: 200,

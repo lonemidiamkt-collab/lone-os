@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -25,7 +26,7 @@ async function resumirEstilo(amostra: string[]): Promise<string | null> {
   const texto = amostra.map((t) => `- ${t.slice(0, 240)}`).join("\n").slice(0, 6000);
   const r = await chatJson<{ estilo: string }>({
     origem: "cs:estilo",
-    model: "gpt-4o-mini",
+    model: MODELO_RAPIDO,
     system: "Você analisa mensagens de WhatsApp e descreve o ESTILO de comunicação de quem escreve, pra outro assistente conseguir imitar o tom. Foque em: formalidade, emojis, gírias/expressões, comprimento típico, saudações/fechamentos. 1 parágrafo objetivo, sem inventar.",
     user: texto,
     schema: SCHEMA, schemaName: "perfil_estilo", maxTokens: 400,

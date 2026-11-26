@@ -3,6 +3,7 @@
 // Consome o briefing enriquecido (Trilha A) e as bibliotecas. Ver docs/lone-marketing-os.md.
 // Preview-first: planejarPeriodo devolve o plano; persistir cards/plano é o passo seguinte.
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { NUCLEO_PLANEJAMENTO, NUCLEO_CONTEUDO } from "@/lib/cs/estrategista";
 import { ESTRUTURAS_FORMATO, estruturaDoFormato, ARQUITETURA_CONTEUDO } from "@/lib/cs/bibliotecas";
@@ -15,7 +16,7 @@ import type {
   DiagnosticoEstrategico, ObjetivoPeriodo, DecisaoDeConteudo, PlanoDePeriodo, MixPilares,
 } from "@/lib/cs/pipeline";
 
-const MODEL = "gpt-4o";
+const MODEL = MODELO_FORTE;
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
 // Datas de postagem do período (seg/qua/sex), conforme o calendário do playbook (§2).

@@ -7,6 +7,7 @@
 //    pendências das notas e ISSO ALIMENTA A FICHA (client_journey) — fecha o loop.
 // montarPrepReuniao e formatResumoReuniao são PUROS (testáveis). SEM financeiro (não fala preço/pagamento).
 
+import { MODELO_FORTE, MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson, isOpenAIConfigured, type OpenAiResult } from "@/lib/ai/openai";
 
 export interface FichaPrep {
@@ -57,7 +58,7 @@ export async function pontosPraReuniao(nome: string, nicho: string | undefined, 
   if (!isOpenAIConfigured()) return [];
   const r = await chatJson<{ pontos: string[] }>({
     origem: "cs:reuniao-preparo",
-    model: "gpt-4o-mini",
+    model: MODELO_RAPIDO,
     system:
       "Você é o CS de uma agência de marketing. Dado o ESTADO do cliente, sugira 3 a 4 PONTOS objetivos pra " +
       "puxar numa reunião de acompanhamento — foco em relacionamento, reforçar percepção de valor e destravar " +
@@ -82,7 +83,7 @@ export interface ResumoReuniao {
 export async function resumirReuniao(nome: string, nicho: string | undefined, notas: string): Promise<OpenAiResult<ResumoReuniao>> {
   return chatJson<ResumoReuniao>({
     origem: "cs:reuniao-resumo",
-    model: "gpt-4o",
+    model: MODELO_FORTE,
     system:
       "Você é o CS de uma agência de marketing. Recebe as NOTAS de uma reunião com o cliente e extrai o " +
       "essencial. NÃO invente — use SÓ o que está nas notas. Distinção importante: `proximas_acoes` = o que a " +

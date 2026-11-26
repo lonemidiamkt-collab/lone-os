@@ -8,12 +8,13 @@
 // DIAGNÓSTICO (desejos/objeções/crença/ângulos) o estrategista INFERE do nicho+dores+posicionamento.
 // O que não dá pra preencher com segurança → campos_faltando (pro time coletar).
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { NUCLEO_CONTEUDO } from "@/lib/cs/estrategista";
 import { fichaDoCliente } from "@/lib/cs/guia-legendas";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
-export const ENRIQUECER_MODEL = "gpt-4o";
+export const ENRIQUECER_MODEL = MODELO_FORTE;
 
 export interface MateriaPrimaBriefing {
   clienteId: string;

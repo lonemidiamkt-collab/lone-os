@@ -3,11 +3,12 @@
 // completo (objetivo, texto que vai NA arte, elementos visuais, o que não pode, especificações)
 // no padrão da casa. Provider: OpenAI gpt-4o (é copy + direção de arte). Texto puro (sem imagem).
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { fichaDoCliente } from "@/lib/cs/guia-legendas";
 import { NUCLEO_CONTEUDO } from "@/lib/cs/estrategista";
 
-export const BRIEFING_DESIGN_MODEL = "gpt-4o";
+export const BRIEFING_DESIGN_MODEL = MODELO_FORTE;
 
 export interface BriefingDesignInput {
   clienteNome: string;

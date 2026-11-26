@@ -3,6 +3,7 @@
 // composição e elementos recorrentes. Isso vira parte do DNA e entra no briefing de toda replicação.
 // Fato ≠ gosto: o modelo descreve o que VÊ; quem decide se aquilo é "a cara da marca" é a equipe.
 
+import { MODELO_FORTE } from "@/lib/ai/modelos";
 import { chatJson } from "@/lib/ai/openai";
 
 export interface EstiloVisual {
@@ -42,7 +43,7 @@ Descreva o ESTILO VISUAL que está de fato nas imagens — não invente o que n�
 export async function analisarEstiloVisual(p: { imagens: string[]; cliente: string; nicho?: string | null }) {
   const user = [`Cliente: ${p.cliente}${p.nicho ? ` · ramo: ${p.nicho}` : ""}`, `${p.imagens.length} print(s) anexado(s).`].join("\n");
   return chatJson<EstiloVisual>({
-    model: "gpt-4o", schemaName: "estilo_visual", schema: SCHEMA, maxTokens: 900, temperature: 0.2,
+    model: MODELO_FORTE, schemaName: "estilo_visual", schema: SCHEMA, maxTokens: 900, temperature: 0.2,
     system: SYSTEM, user, imagens: p.imagens, origem: "cliente:estilo-visual",
   });
 }
