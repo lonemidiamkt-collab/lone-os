@@ -16,6 +16,7 @@ export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { linkDaPrevia } from "@/lib/storage/link-da-previa";
 import { requireCron } from "@/lib/api/cron-guard";
 import { sendMediaDocument } from "@/lib/whatsapp/evolution";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
@@ -57,8 +58,10 @@ export async function POST(req: NextRequest) {
       const path = `preview/time-${todayKeyBRT()}.pdf`;
       const up = await supabaseAdmin.storage.from(REPORTS_BUCKET).upload(path, pdf.buffer, { contentType: "application/pdf", upsert: true });
       if (up.error) return NextResponse.json({ ok: false, status: "failed", error: `Storage: ${up.error.message}` }, { status: 200 });
-      const pub = supabaseAdmin.storage.from(REPORTS_BUCKET).getPublicUrl(path);
-      return NextResponse.json({ ok: true, status: "preview", bytes: pdf.buffer.length, url: pub.data.publicUrl, resumo: { entregues: data.totalEntregues, publicados: data.publicados, designers: data.designers.length, socials: data.socials.length, rotina: data.rotina.length, verba: data.verba.length } });
+      // Bucket privado: link assinado de 7 dias (Fase 0, 0C — o link público dava 400).
+      const link = await linkDaPrevia(supabaseAdmin, REPORTS_BUCKET, path);
+      if (!link.ok) return NextResponse.json({ ok: false, status: "failed", error: link.erro }, { status: 200 });
+      return NextResponse.json({ ok: true, status: "preview", bytes: pdf.buffer.length, url: link.url, venceEm: link.venceEm, resumo: { entregues: data.totalEntregues, publicados: data.publicados, designers: data.designers.length, socials: data.socials.length, rotina: data.rotina.length, verba: data.verba.length } });
     }
 
     // Envio real → grupo interno

@@ -24,6 +24,7 @@ export const maxDuration = 800;
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { linkDaPrevia } from "@/lib/storage/link-da-previa";
 import { sendEmail } from "@/lib/email/emailService";
 import { requireCron } from "@/lib/api/cron-guard";
 import {
@@ -181,12 +182,16 @@ export async function POST(req: NextRequest) {
     if (dryRun) {
       const path = `preview/${fileName}`;
       const up = await supabaseAdmin.storage.from(REPORTS_BUCKET).upload(path, pdf, { contentType: "application/pdf", upsert: true });
-      const pub = up.error ? null : supabaseAdmin.storage.from(REPORTS_BUCKET).getPublicUrl(path).data.publicUrl;
+      // Bucket privado: link assinado de 7 dias (Fase 0, 0C — o link público dava 400). A prévia é só
+      // um extra do dryRun: sem link, segue com previewUrl null e diz por quê.
+      const link = up.error ? null : await linkDaPrevia(supabaseAdmin, REPORTS_BUCKET, path);
+      const pub = link?.ok ? link.url : null;
+      const previewErro = up.error ? `Storage: ${up.error.message}` : link && !link.ok ? link.erro : null;
       const clients = await selectActiveClientsWithGroup(onlyClientId);
       const withGroup = clients.filter((c) => c.whatsapp_group_jid);
       return NextResponse.json({
         ok: true, status: "dry_run", mes: `${mesNome}/${target.year}`,
-        isSendDay, sendDay, dateKey, pdfBytes: pdf.length, previewUrl: pub,
+        isSendDay, sendDay, dateKey, pdfBytes: pdf.length, previewUrl: pub, previewErro,
         eligible: withGroup.length,
         withGroup: withGroup.map(clientDisplayName),
         semGrupo: clients.filter((c) => !c.whatsapp_group_jid).map(clientDisplayName),

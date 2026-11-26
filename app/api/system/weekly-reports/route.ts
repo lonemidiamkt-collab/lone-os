@@ -29,6 +29,7 @@ export const maxDuration = 800;
 import { detectarAncora } from "@/lib/crm-externo/servidor";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { linkDaPrevia } from "@/lib/storage/link-da-previa";
 import { sendEmail } from "@/lib/email/emailService";
 import { requireCron } from "@/lib/api/cron-guard";
 import { getMetaToken, getAlertSettings } from "@/lib/traffic/sync-core";
@@ -279,8 +280,11 @@ export async function POST(req: NextRequest) {
       if (up.error) {
         return NextResponse.json({ ok: false, status: "failed", error: `Storage: ${up.error.message}` }, { status: 200 });
       }
-      const pub = supabaseAdmin.storage.from(REPORTS_BUCKET).getPublicUrl(path);
-      return NextResponse.json({ ok: true, status: "preview", client: c.nome_fantasia || c.name, bytes: pdf.buffer.length, url: pub.data.publicUrl });
+      // Bucket privado: link assinado de 7 dias (Fase 0, 0C — o link público dava 400 e, com o bucket
+      // público, o PDF do cliente seria baixável por endereço adivinhável).
+      const link = await linkDaPrevia(supabaseAdmin, REPORTS_BUCKET, path);
+      if (!link.ok) return NextResponse.json({ ok: false, status: "failed", error: link.erro }, { status: 200 });
+      return NextResponse.json({ ok: true, status: "preview", client: c.nome_fantasia || c.name, bytes: pdf.buffer.length, url: link.url, venceEm: link.venceEm });
     }
 
     // Envio real → precisa do grupo
