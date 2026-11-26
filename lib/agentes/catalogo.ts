@@ -1,4 +1,4 @@
-import { MODELO_FORTE, MODELO_RAPIDO, MODELO_TRANSCRICAO, MODELO_VOZ } from "@/lib/ai/modelos";
+import { MODELO_FORTE, MODELO_IMAGEM, MODELO_RAPIDO, MODELO_TRANSCRICAO, MODELO_VOZ } from "@/lib/ai/modelos";
 // lib/agentes/catalogo.ts — OS AGENTES DE IA DA LONE, UM POR ENTRADA.
 //
 // 25/10/2026: o Roberto não sabia quais nem quantos agentes o Lone OS tem. Contados no código e
@@ -487,7 +487,7 @@ export const AGENTES = [
     gatilhos: [{ tipo: "botao", onde: "Etapa de design › Variações por IA e Saúde dos criativos › Prévia" }],
     interruptores: [{ tipo: "agency_settings", chave: "ia_imagem", modo: "on", significado: "Liga a geração de imagem. Desligada, os botões avisam e não geram." }],
     origens: ["design:variacoes-ia", "trafego:previa"], execucoes: ["api:variacoes-ia", "api:previa-variacao"],
-    modelo: "gpt-image-1 (e gpt-4o-mini para ler o texto da referência)",
+    modelo: `${MODELO_IMAGEM} (e ${MODELO_RAPIDO} para ler o texto da referência)`,
     arquivos: ["lib/ia/arte-do-cliente.ts", "app/api/design-requests/[id]/variacoes-ia/route.ts", "app/api/traffic/criativos/previa/route.ts"],
   },
 

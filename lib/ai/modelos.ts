@@ -25,6 +25,11 @@ export const MODELO_VOZ = "gpt-4o-mini-tts";
 /** Transcrição de áudio (WhatsApp, reunião). */
 export const MODELO_TRANSCRICAO = "whisper-1";
 
+/** Arte por IA (edição com referência + logo). gpt-image-1 saiu da API em 23/10/2026; a OpenAI indica
+ *  gpt-image-2.5-sunburst ("edição com precisão") ou -flare ("o mais rápido"). Sunburst porque a arte
+ *  parte da referência e da logo do cliente. Esta família não aceita `input_fidelity` — não mandar. */
+export const MODELO_IMAGEM = "gpt-image-2.5-sunburst";
+
 /** Quando cada modelo em uso sai da API (data do aviso da OpenAI). Mostrado na Central de Agentes. */
 export const DESLIGAMENTO_NA_API: Readonly<Record<string, string>> = {
   [MODELO_RAPIDO]: "2027-01-14",

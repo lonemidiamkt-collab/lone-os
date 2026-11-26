@@ -19,6 +19,11 @@ const POR_MILHAO: Record<string, PrecoModelo> = {
   // estimado — o painel mostra o "~". Confirmar em platform.openai.com/docs/pricing.
   "gpt-5.4-mini": { entrada: 0.25, cache: 0.025, saida: 2.00, estimado: true },
   "gpt-5.4-nano": { entrada: 0.05, cache: 0.005, saida: 0.40, estimado: true },
+  // Imagem (26/11/2026, página do modelo): texto US$ 5, imagem de entrada US$ 8 (cache 2), saída US$ 30.
+  // O usage do /images/edits não separa texto de imagem no total: cobro tudo como imagem (a entrada é
+  // quase toda referência/logo/artes) e marco estimado.
+  "gpt-image-2.5-sunburst": { entrada: 8.00, cache: 2.00, saida: 30.00, estimado: true },
+  "gpt-image-2.5-flare": { entrada: 8.00, cache: 2.00, saida: 30.00, estimado: true },
   "o3": { entrada: 2.00, cache: 0.50, saida: 8.00 },
   "o4-mini": { entrada: 1.10, cache: 0.275, saida: 4.40 },
 };

@@ -6,10 +6,10 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { DESLIGAMENTO_NA_API, MODELO_FORTE, MODELO_RAPIDO, MODELO_TRANSCRICAO, MODELO_VOZ } from "@/lib/ai/modelos";
+import { DESLIGAMENTO_NA_API, MODELO_FORTE, MODELO_IMAGEM, MODELO_RAPIDO, MODELO_TRANSCRICAO, MODELO_VOZ } from "@/lib/ai/modelos";
 
 const PERMITIDOS = new Set(["lib/ai/modelos.ts", "lib/obs/preco-llm.ts", "lib/obs/llm.ts"]);
-const NOME = /["'`](gpt-4o-mini-tts|gpt-4o-mini|gpt-4o|whisper-1)["'`]/;
+const NOME = /["'`](gpt-4o-mini-tts|gpt-4o-mini|gpt-4o|whisper-1|gpt-image-[\w.-]+)["'`]/;
 
 function arquivos(dir: string): string[] {
   return readdirSync(dir).flatMap((n) => {
@@ -37,5 +37,10 @@ describe("modelo da OpenAI num lugar só", () => {
     expect(DESLIGAMENTO_NA_API[MODELO_RAPIDO]).toBe("2027-01-14");
     expect(DESLIGAMENTO_NA_API[MODELO_VOZ]).toBe("2027-01-06");
     expect(DESLIGAMENTO_NA_API[MODELO_TRANSCRICAO]).toBe("2027-02-26");
+  });
+
+  it("imagem: gpt-image-1 saiu da API em 23/10/2026 — a arte usa o substituto indicado pela OpenAI", () => {
+    expect(MODELO_IMAGEM).not.toBe("gpt-image-1");
+    expect(MODELO_IMAGEM).toMatch(/^gpt-image-2\.5-(sunburst|flare)$/);
   });
 });

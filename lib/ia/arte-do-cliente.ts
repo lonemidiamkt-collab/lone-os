@@ -6,9 +6,11 @@
 //   3. até 3 artes recentes que a Lone entregou — o estilo real, não descrito
 //   4. paleta/tipografia/composição lidas das artes + instruções fixas da equipe
 //   5. os TEXTOS EXATOS (transcritos da referência pela visão, ou do briefing)
-// gpt-image-1 não tem fine-tuning: "treinar" = dar o contexto certo toda vez + medir se serviu.
+// O modelo de imagem não tem fine-tuning: "treinar" = dar o contexto certo toda vez + medir se serviu.
+// MODELO (26/11/2026): gpt-image-1 saiu da API em 23/10/2026 — a geração passou a dar erro. Agora usa
+// MODELO_IMAGEM (lib/ai/modelos.ts). Esta família cobra por token: o custo vem do `usage` da resposta.
 
-import { MODELO_RAPIDO } from "@/lib/ai/modelos";
+import { MODELO_IMAGEM, MODELO_RAPIDO } from "@/lib/ai/modelos";
 import { chatJson } from "@/lib/ai/openai";
 import { registrarChamadaLlm } from "@/lib/obs/llm";
 import type { OrigemIa } from "@/lib/agentes/catalogo";
@@ -114,6 +116,15 @@ async function baixar(url: string): Promise<{ buf: Buffer; tipo: string } | null
   } catch { return null; }
 }
 
+/** `usage` do /images/edits: input_tokens (texto + imagens anexadas) e output_tokens (a imagem gerada). */
+interface UsoDaImagem { input_tokens?: number; output_tokens?: number }
+
+/** Converte para o formato do recibo (lib/obs/llm.ts). Sem usage → null (o recibo marca custo incompleto). */
+export function usoParaRecibo(u: UsoDaImagem | null | undefined): { prompt_tokens: number; completion_tokens: number } | null {
+  if (!u || (typeof u.input_tokens !== "number" && typeof u.output_tokens !== "number")) return null;
+  return { prompt_tokens: u.input_tokens ?? 0, completion_tokens: u.output_tokens ?? 0 };
+}
+
 export async function gerarArteDoCliente(p: PedidoArte): Promise<{ ok: true; imagens: Buffer[]; prompt: string; entradas: Record<string, unknown> } | { ok: false; erro: string; prompt?: string }> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return { ok: false, erro: "OPENAI_API_KEY ausente" };
@@ -130,7 +141,7 @@ export async function gerarArteDoCliente(p: PedidoArte): Promise<{ ok: true; ima
   const entradas = { referencia: !!ref, logo: !!logo, estilos: estilosOk.length, textos, estiloLido: !!p.kit.estilo, instrucoes: !!p.kit.instrucoes };
 
   const fd = new FormData();
-  fd.append("model", "gpt-image-1");
+  fd.append("model", MODELO_IMAGEM);
   const anexar = (x: { buf: Buffer; tipo: string }, nome: string) => fd.append("image[]", new Blob([new Uint8Array(x.buf)], { type: x.tipo }), nome);
   if (ref) anexar(ref, "referencia.png");
   if (logo) anexar(logo, "logo.png");
@@ -139,16 +150,15 @@ export async function gerarArteDoCliente(p: PedidoArte): Promise<{ ok: true; ima
   fd.append("n", String(Math.min(3, Math.max(1, p.n ?? 2))));
   fd.append("size", "1024x1536");
   fd.append("quality", p.qualidade ?? "medium");
-  fd.append("input_fidelity", "high"); // preserva logo e detalhes das imagens de entrada
   const t0 = Date.now();
   try {
     const r = await fetch("https://api.openai.com/v1/images/edits", { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: fd, signal: AbortSignal.timeout(170_000) });
-    const json = await r.json().catch(() => null) as { data?: { b64_json?: string }[]; error?: { message?: string } } | null;
-    registrarChamadaLlm({ modelo: "gpt-image-1", ms: Date.now() - t0, ok: r.ok, erro: r.ok ? null : json?.error?.message ?? `HTTP ${r.status}`, origem: p.origem, tipo: "image" });
+    const json = await r.json().catch(() => null) as { data?: { b64_json?: string }[]; error?: { message?: string }; usage?: UsoDaImagem } | null;
+    registrarChamadaLlm({ modelo: MODELO_IMAGEM, usage: usoParaRecibo(json?.usage), ms: Date.now() - t0, ok: r.ok, erro: r.ok ? null : json?.error?.message ?? `HTTP ${r.status}`, origem: p.origem, tipo: "image" });
     if (!r.ok || !json?.data?.length) return { ok: false, erro: `OpenAI: ${json?.error?.message ?? `HTTP ${r.status}`}`, prompt };
     return { ok: true, imagens: json.data.filter((d) => d.b64_json).map((d) => Buffer.from(d.b64_json as string, "base64")), prompt, entradas };
   } catch (err) {
-    registrarChamadaLlm({ modelo: "gpt-image-1", ms: Date.now() - t0, ok: false, erro: err instanceof Error ? err.message : "erro", origem: p.origem, tipo: "image" });
+    registrarChamadaLlm({ modelo: MODELO_IMAGEM, ms: Date.now() - t0, ok: false, erro: err instanceof Error ? err.message : "erro", origem: p.origem, tipo: "image" });
     return { ok: false, erro: err instanceof Error ? err.message : "erro de conexão", prompt };
   }
 }
